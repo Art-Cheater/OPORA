@@ -45,9 +45,11 @@ from app.models.auth.position import Position
 from app.models.auth.role import Role
 from app.models.auth.system_module import SystemModule
 from app.models.requests.request_status import RequestStatus
+from app.models.requests.request_dispatcher import RequestDispatcher
 from app.seed.security_catalog import (
     MODULE_FIELDS,
     POSITIONS,
+    REQUEST_DISPATCHERS,
     SYSTEM_MODULES,
     build_permission_catalog,
 )
@@ -127,6 +129,7 @@ class ReferenceDataService:
     @classmethod
     def seed_all(cls) -> None:
         cls._seed_request_statuses()
+        cls._seed_request_dispatchers()
         cls._seed_security_catalog()
         cls._seed_roles_and_permissions()
         db.session.commit()
@@ -272,6 +275,25 @@ class ReferenceDataService:
         for code, status in existing.items():
             if code not in desired:
                 status.is_active = False
+        db.session.flush()
+
+    @classmethod
+    def _seed_request_dispatchers(cls) -> None:
+        """Справочник ФИО диспетчеров для выбора в заявке."""
+        existing = {
+            item.name: item
+            for item in db.session.scalars(
+                db.select(RequestDispatcher).where(RequestDispatcher.active_filter())
+            )
+        }
+        for name, sort_order in REQUEST_DISPATCHERS:
+            if name in existing:
+                existing[name].sort_order = sort_order
+                existing[name].is_active = True
+            else:
+                db.session.add(
+                    RequestDispatcher(name=name, sort_order=sort_order, is_active=True)
+                )
         db.session.flush()
 
     @classmethod

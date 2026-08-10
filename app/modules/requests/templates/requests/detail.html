@@ -10,7 +10,7 @@
 {% endblock %}
 
 {% block page_header %}
-{% call page_header(req.number ~ " — " ~ req.title, req.address, "geo-alt") %}
+{% call page_header(req.number ~ " — " ~ req.address, (req.pp or ''), "geo-alt") %}
 {% if current_user.has_permission('requests.edit') %}
 <a href="{{ url_for('requests.edit', request_id=req.id) }}" class="btn btn-outline-primary">
     <i class="bi bi-pencil-square"></i> Редактировать
@@ -56,15 +56,29 @@
                         <div class="fw-medium">{{ req.priority }}</div>
                     </div>
                     <div class="col-md-4">
+                        <small class="text-muted">ПП (пункт питания)</small>
+                        <div class="fw-medium">{{ req.pp or "—" }}</div>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted">Дата и время получения</small>
+                        <div class="fw-medium">
+                            {% if req.received_at %}
+                                {{ req.received_at.strftime('%d.%m.%Y %H:%M') }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
                         <small class="text-muted">Заявитель</small>
                         <div class="fw-medium">{{ req.applicant_name }}</div>
                     </div>
                     <div class="col-md-6">
                         <small class="text-muted">Диспетчер</small>
-                        <div>{{ dispatcher.full_name if dispatcher else "—" }}</div>
+                        <div>{{ req.dispatcher_name or (dispatcher.full_name if dispatcher else "—") }}</div>
                     </div>
                     <div class="col-md-6">
-                        <small class="text-muted">Ответственный мастер</small>
+                        <small class="text-muted">Районный мастер</small>
                         <div class="fw-semibold">{{ req.responsible.full_name if req.responsible else "—" }}</div>
                     </div>
                     <div class="col-md-6">

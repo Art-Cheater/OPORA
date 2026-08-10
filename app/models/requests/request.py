@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, ForeignKey, Index, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Numeric, String, Text
 from app.models.types import GUID, SearchVectorType
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -35,12 +35,17 @@ class Request(BaseModel):
         Index("ix_requests_due_date", "due_date"),
         Index("ix_requests_address", "address"),
         Index("ix_requests_number", "number", unique=True),
+        Index("ix_requests_received_at", "received_at"),
+        Index("ix_requests_dispatcher_name", "dispatcher_name"),
     )
 
     number: Mapped[str] = mapped_column(String(50), nullable=False)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     address: Mapped[str] = mapped_column(String(500), nullable=False)
+    pp: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dispatcher_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)

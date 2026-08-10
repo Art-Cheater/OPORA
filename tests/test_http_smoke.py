@@ -42,16 +42,18 @@ def test_request_lifecycle_and_upload(admin_client, app):
         "/requests/new",
         data={
             "number": number,
-            "title": "Pytest заявка",
-            "description": "d",
             "address": "Адрес 1",
+            "pp": "ТП-12",
+            "received_at": "2026-08-10T12:00",
+            "dispatcher_name": "Иванова А.С.",
+            "description": "d",
             "applicant_name": "Тест",
             "priority": "medium",
             "submit": "Сохранить",
         },
         follow_redirects=False,
     )
-    assert resp.status_code == 302
+    assert resp.status_code == 302, resp.get_data(as_text=True)[:500]
     location = resp.headers["Location"]
     request_id = location.rstrip("/").split("/")[-1]
 
@@ -102,8 +104,10 @@ def test_reject_forbidden_upload_extension(admin_client, app):
         "/requests/new",
         data={
             "number": number,
-            "title": "Bad file",
             "address": "A",
+            "pp": "ТП-1",
+            "received_at": "2026-08-10T12:00",
+            "dispatcher_name": "Иванова А.С.",
             "applicant_name": "T",
             "priority": "low",
             "submit": "Сохранить",

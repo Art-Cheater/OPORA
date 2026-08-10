@@ -46,6 +46,9 @@ class RequestPayload:
     title: str
     description: str | None
     address: str
+    pp: str | None
+    received_at: Any
+    dispatcher_name: str | None
     latitude: Decimal | None
     longitude: Decimal | None
     phone: str | None
@@ -64,6 +67,9 @@ class RequestService:
         "title",
         "description",
         "address",
+        "pp",
+        "received_at",
+        "dispatcher_name",
         "latitude",
         "longitude",
         "phone",
@@ -109,12 +115,13 @@ class RequestService:
     def validate_payload(cls, payload: RequestPayload) -> None:
         if not payload.number.strip():
             raise ValidationError("Номер заявки обязателен.")
-        if not payload.title.strip():
-            raise ValidationError("Название заявки обязательно.")
         if not payload.address.strip():
             raise ValidationError("Адрес обязателен.")
-        if not payload.applicant_name.strip():
-            raise ValidationError("ФИО заявителя обязательно.")
+        # title заполняется из адреса автоматически
+        if not (payload.title or "").strip():
+            payload.title = payload.address.strip()[:500]
+        if not (payload.applicant_name or "").strip():
+            payload.applicant_name = "—"
 
         status = db.session.get(RequestStatus, payload.status_id)
         if status is None or status.deleted_at is not None:
@@ -129,6 +136,8 @@ class RequestService:
                 data[field] = str(value)
             elif isinstance(value, Decimal):
                 data[field] = float(value)
+            elif hasattr(value, "isoformat"):
+                data[field] = value.isoformat()
             else:
                 data[field] = value
         return data
@@ -289,16 +298,19 @@ class RequestService:
 
         req = Request(
             number=payload.number.strip(),
-            title=payload.title.strip(),
+            title=payload.title.strip() or payload.address.strip()[:500],
             description=cls._normalize_text(payload.description),
             address=payload.address.strip(),
+            pp=cls._normalize_text(payload.pp),
+            received_at=payload.received_at,
+            dispatcher_name=cls._normalize_text(payload.dispatcher_name),
             latitude=payload.latitude,
             longitude=payload.longitude,
             phone=cls._normalize_text(payload.phone),
-            applicant_name=payload.applicant_name.strip(),
+            applicant_name=(payload.applicant_name or "—").strip(),
             priority=payload.priority,
             status_id=new_status.id,
-            responsible_id=None,
+            responsible_id=payload.responsible_id,
             executor_id=payload.executor_id,
             created_by=user_id,
             updated_by=user_id,
@@ -339,16 +351,19 @@ class RequestService:
 
         # Статус меняется только через workflow-методы
         req.number = payload.number.strip()
-        req.title = payload.title.strip()
+        req.title = (payload.title.strip() or payload.address.strip())[:500]
         req.description = cls._normalize_text(payload.description)
         req.address = payload.address.strip()
+        req.pp = cls._normalize_text(payload.pp)
+        req.received_at = payload.received_at
+        req.dispatcher_name = cls._normalize_text(payload.dispatcher_name)
         req.latitude = payload.latitude
         req.longitude = payload.longitude
         req.phone = cls._normalize_text(payload.phone)
-        req.applicant_name = payload.applicant_name.strip()
+        req.applicant_name = (payload.applicant_name or "—").strip()
         req.priority = payload.priority
         req.executor_id = payload.executor_id
-        # responsible и status_id из формы не принимаем произвольно
+        req.responsible_id = payload.responsible_id
         req.updated_by = user_id
 
         new_snapshot = cls._snapshot(req)

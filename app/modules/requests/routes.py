@@ -81,6 +81,8 @@ def _resolve_uuid_field(field_name: str, form_value: str, entity=None):
 
 
 def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload:
+    from datetime import datetime, timezone
+
     from app.core.builtin_field_service import BuiltinFieldService as BFS
     from app.models.enums import Priority
 
@@ -99,44 +101,75 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
             raise ValueError("Статус «Новая» не найден. Выполните миграцию/сиды.")
         status_id = status.id
 
+    address = field("address", form.address.data, default="") or ""
+    received_at = field(
+        "received_at",
+        form.received_at.data,
+        default=datetime.now(timezone.utc) if entity is None else getattr(entity, "received_at", None),
+    )
+    if isinstance(received_at, datetime) and received_at.tzinfo is None:
+        received_at = received_at.replace(tzinfo=timezone.utc)
+
+    responsible_raw = field(
+        "responsible_id",
+        form.responsible_id.data or "",
+        default=str(entity.responsible_id) if entity and entity.responsible_id else "",
+    )
+    responsible_id = _uuid_or_none(str(responsible_raw) if responsible_raw else "")
+
     return RequestPayload(
         number=field("number", form.number.data, default=RequestRepository.next_number()),
-        title=field("title", form.title.data, default="Без названия"),
+        title=address.strip()[:500] or "Без адреса",
         description=field("description", form.description.data, default=""),
-        address=field("address", form.address.data, default=""),
+        address=address,
+        pp=field("pp", form.pp.data, default=None),
+        received_at=received_at,
+        dispatcher_name=field("dispatcher_name", form.dispatcher_name.data, default=None),
         latitude=field("latitude", form.latitude.data, default=None),
         longitude=field("longitude", form.longitude.data, default=None),
         phone=field("phone", form.phone.data, default=None),
-        applicant_name=field("applicant_name", form.applicant_name.data, default=""),
+        applicant_name=field("applicant_name", form.applicant_name.data, default="—"),
         priority=field("priority", form.priority.data, default=Priority.MEDIUM.value),
         status_id=status_id,
-        responsible_id=entity.responsible_id if entity is not None else None,
+        responsible_id=responsible_id,
         executor_id=_resolve_uuid_field("executor_id", form.executor_id.data or "", entity),
     )
 
 
 def _prepare_filter_form(form: RequestFilterForm) -> None:
     statuses = RequestRepository.get_statuses()
+    masters = RequestRepository.get_masters()
+    dispatchers = RequestRepository.get_dispatchers()
     users = RequestRepository.get_users()
 
     form.status_id.choices = [("", "Все статусы")] + [
         (str(item.id), item.name) for item in statuses
     ]
-    user_choices = [("", "Любой")] + [(str(item.id), item.full_name) for item in users]
-    form.responsible_id.choices = user_choices
-    form.executor_id.choices = user_choices
+    form.responsible_id.choices = [("", "Любой")] + [
+        (str(item.id), item.full_name) for item in masters
+    ]
+    form.dispatcher_name.choices = [("", "Любой")] + [(d.name, d.name) for d in dispatchers]
+    form.executor_id.choices = [("", "Любой")] + [(str(item.id), item.full_name) for item in users]
 
 
 def _prepare_request_form(form: RequestForm) -> None:
     from app.core.builtin_field_service import BuiltinFieldService
 
     statuses = RequestRepository.get_statuses()
+    masters = RequestRepository.get_masters()
+    dispatchers = RequestRepository.get_dispatchers()
     users = RequestRepository.get_users()
 
     form.status_id.choices = [(str(item.id), item.name) for item in statuses]
-    user_choices = [("", "Не назначен")] + [(str(item.id), item.full_name) for item in users]
-    form.responsible_id.choices = user_choices
-    form.executor_id.choices = user_choices
+    form.responsible_id.choices = [("", "Не назначен")] + [
+        (str(item.id), item.full_name) for item in masters
+    ]
+    form.dispatcher_name.choices = [("", "Выберите диспетчера")] + [
+        (d.name, d.name) for d in dispatchers
+    ]
+    form.executor_id.choices = [("", "Не назначен")] + [
+        (str(item.id), item.full_name) for item in users
+    ]
     BuiltinFieldService.apply_to_form(form, "requests")
 
 
@@ -148,18 +181,22 @@ def _prepare_assign_master_form(form: AssignMasterForm) -> None:
 
 
 def _apply_request_create_defaults(form: RequestForm) -> None:
+    from datetime import datetime, timezone
+
     if request.method != "GET":
         return
     form.number.data = RequestRepository.next_number()
-    form.title.data = "Новая заявка"
     form.description.data = ""
     form.address.data = ""
+    form.pp.data = ""
     form.applicant_name.data = ""
     form.priority.data = Priority.MEDIUM.value
+    form.received_at.data = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     status = RequestRepository.get_status_by_code(STATUS_NEW)
     if status is not None:
         form.status_id.data = str(status.id)
     form.responsible_id.data = ""
+    form.dispatcher_name.data = ""
 
 
 def _build_filters() -> RequestFilter:
@@ -168,9 +205,10 @@ def _build_filters() -> RequestFilter:
         status_id=request.args.get("status_id", ""),
         priority=request.args.get("priority", ""),
         responsible_id=request.args.get("responsible_id", ""),
+        dispatcher_name=request.args.get("dispatcher_name", ""),
         executor_id=request.args.get("executor_id", ""),
         preset=request.args.get("preset", ""),
-        sort_by=request.args.get("sort_by", "created_at"),
+        sort_by=request.args.get("sort_by", "received_at"),
         sort_dir=request.args.get("sort_dir", "desc"),
     )
 
@@ -395,6 +433,10 @@ def edit(request_id: uuid.UUID):
         form.status_id.data = str(req.status_id)
         form.responsible_id.data = str(req.responsible_id) if req.responsible_id else ""
         form.executor_id.data = str(req.executor_id) if req.executor_id else ""
+        form.dispatcher_name.data = req.dispatcher_name or ""
+        form.pp.data = req.pp or ""
+        if req.received_at is not None:
+            form.received_at.data = req.received_at
 
     if form.validate_on_submit():
         try:

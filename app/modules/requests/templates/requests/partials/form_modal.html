@@ -4,15 +4,18 @@
     {{ form.hidden_tag() }}
     {{ form_errors_alert(form) }}
     <div class="row g-3">
-        {{ modal_field(form.number, col=3, module='requests') }}
-        {{ modal_field(form.title, col=9, module='requests') }}
-        {{ modal_field(form.description, col=12, rows=3, module='requests') }}
+        {{ modal_field(form.number, col=4, module='requests') }}
         {{ modal_field(form.address, col=8, placeholder="Город, улица, дом", module='requests') }}
-        {{ modal_field(form.latitude, col=2, module='requests') }}
-        {{ modal_field(form.longitude, col=2, module='requests') }}
+        {{ modal_field(form.pp, col=6, placeholder="Пункт питания", module='requests') }}
+        {{ modal_field(form.received_at, col=6, module='requests') }}
+        {{ modal_field(form.dispatcher_name, col=6, module='requests') }}
+        {{ modal_field(form.responsible_id, col=6, module='requests') }}
+        {{ modal_field(form.description, col=12, rows=3, module='requests') }}
         {{ modal_field(form.phone, col=4, module='requests') }}
         {{ modal_field(form.applicant_name, col=4, module='requests') }}
         {{ modal_field(form.priority, col=4, module='requests') }}
+        {{ modal_field(form.latitude, col=3, module='requests') }}
+        {{ modal_field(form.longitude, col=3, module='requests') }}
         {{ modal_field(form.executor_id, col=6, module='requests') }}
         {{ custom_fields_form(custom_fields, custom_field_values, custom_field_module) }}
     </div>

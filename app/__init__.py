@@ -86,6 +86,7 @@ def _init_extensions(app: Flask) -> None:
         Project,
         ProjectMember,
         Request,
+        RequestDispatcher,
         RequestHistory,
         RequestStatus,
         Role,

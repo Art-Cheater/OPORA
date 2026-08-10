@@ -14,6 +14,7 @@ from app.models.auth.position import Position
 from app.models.auth.role import Role
 from app.models.auth.user import User
 from app.models.requests.request import Request
+from app.models.requests.request_dispatcher import RequestDispatcher
 from app.models.requests.request_status import RequestStatus
 from app.modules.requests.workflow import (
     PRESET_AWAITING_MASTER,
@@ -35,9 +36,10 @@ class RequestFilter:
     status_id: str = ""
     priority: str = ""
     responsible_id: str = ""
+    dispatcher_name: str = ""
     executor_id: str = ""
     preset: str = ""
-    sort_by: str = "created_at"
+    sort_by: str = "received_at"
     sort_dir: str = "desc"
 
 
@@ -47,8 +49,10 @@ class RequestRepository:
     SORT_FIELDS = {
         "created_at": Request.created_at,
         "updated_at": Request.updated_at,
+        "received_at": Request.received_at,
         "number": Request.number,
         "priority": Request.priority,
+        "address": Request.address,
         "title": Request.title,
     }
 
@@ -145,6 +149,19 @@ class RequestRepository:
                     or_(User.position_id.in_(position_ids), User.id.in_(role_user_ids)),
                 )
                 .order_by(User.full_name.asc())
+            )
+        )
+
+    @staticmethod
+    def get_dispatchers() -> list[RequestDispatcher]:
+        return list(
+            db.session.scalars(
+                db.select(RequestDispatcher)
+                .where(
+                    RequestDispatcher.active_filter(),
+                    RequestDispatcher.is_active.is_(True),
+                )
+                .order_by(RequestDispatcher.sort_order.asc(), RequestDispatcher.name.asc())
             )
         )
 
@@ -248,6 +265,8 @@ class RequestRepository:
                     Request.number.ilike(q),
                     Request.title.ilike(q),
                     Request.address.ilike(q),
+                    Request.pp.ilike(q),
+                    Request.dispatcher_name.ilike(q),
                     Request.applicant_name.ilike(q),
                     Request.phone.ilike(q),
                 )
@@ -267,6 +286,9 @@ class RequestRepository:
                 stmt = stmt.where(Request.responsible_id == uuid.UUID(filters.responsible_id))
             except ValueError:
                 pass
+
+        if filters.dispatcher_name:
+            stmt = stmt.where(Request.dispatcher_name == filters.dispatcher_name)
 
         if filters.executor_id:
             try:

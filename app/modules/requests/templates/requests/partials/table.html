@@ -5,13 +5,12 @@
         <thead>
             <tr>
                 <th>№</th>
-                <th>Название</th>
-                <th>Статус</th>
-                <th>Приоритет</th>
-                <th>Мастер</th>
-                <th>Исполнитель</th>
                 <th>Адрес</th>
-                <th>Обновлено</th>
+                <th>ПП (пункт питания)</th>
+                <th>Статус</th>
+                <th>Диспетчер</th>
+                <th>Районный мастер</th>
+                <th>Получена</th>
                 <th class="text-end">Действия</th>
             </tr>
         </thead>
@@ -27,25 +26,22 @@
                 {% endif %}">
                 <td class="fw-semibold">{{ req.number }}</td>
                 <td>
-                    <div class="fw-medium">{{ req.title }}</div>
+                    <div class="fw-medium">{{ req.address }}</div>
+                    {% if req.applicant_name and req.applicant_name != '—' %}
                     <div class="small text-muted">{{ req.applicant_name }}</div>
-                </td>
-                <td>{{ request_status_badge(req.status) }}</td>
-                <td>
-                    {% if req.priority == 'critical' %}
-                        {{ status_badge('not_ready', 'Критический') }}
-                    {% elif req.priority == 'high' %}
-                        {{ status_badge('in_progress', 'Высокий') }}
-                    {% elif req.priority == 'medium' %}
-                        {{ status_badge('in_progress', 'Средний') }}
-                    {% else %}
-                        {{ status_badge('done', 'Низкий') }}
                     {% endif %}
                 </td>
+                <td>{{ req.pp or '—' }}</td>
+                <td>{{ request_status_badge(req.status) }}</td>
+                <td>{{ req.dispatcher_name or '—' }}</td>
                 <td>{{ req.responsible.full_name if req.responsible else '—' }}</td>
-                <td>{{ req.executor.full_name if req.executor else '—' }}</td>
-                <td class="text-muted">{{ req.address }}</td>
-                <td class="text-muted">{{ req.updated_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                <td class="text-muted">
+                    {% if req.received_at %}
+                        {{ req.received_at.strftime('%d.%m.%Y %H:%M') }}
+                    {% else %}
+                        {{ req.created_at.strftime('%d.%m.%Y %H:%M') }}
+                    {% endif %}
+                </td>
                 <td class="text-end">
                     {{ table_actions(
                         view_url=url_for('requests.detail', request_id=req.id),
@@ -58,7 +54,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="9" class="table-empty">
+                <td colspan="8" class="table-empty">
                     <i class="bi bi-inbox"></i> Заявки не найдены
                 </td>
             </tr>

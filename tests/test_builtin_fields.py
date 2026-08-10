@@ -79,17 +79,17 @@ def test_seed_does_not_overwrite_manual_settings(app):
 
 def test_apply_to_form_removes_required_for_hidden(app):
     with app.app_context():
-        field = _find_field("requests", "title")
+        field = _find_field("requests", "address")
         BuiltinFieldService.hide_field(field)
         BuiltinFieldService.clear_cache()
 
         form = RequestForm()
         BuiltinFieldService.apply_to_form(form, "requests")
-        assert form.title.label.text  # label still set
-        assert not any(isinstance(v, DataRequired) for v in form.title.validators)
+        assert form.address.label.text  # label still set
+        assert not any(isinstance(v, DataRequired) for v in form.address.validators)
         assert BuiltinFieldService.value_or_default(
-            "requests", "title", "", default="Без названия"
-        ) == "Без названия"
+            "requests", "address", "", default="Без адреса"
+        ) == "Без адреса"
 
 
 def test_field_builder_edit_builtin_http(admin_client, app):

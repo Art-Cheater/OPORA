@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from flask_wtf import FlaskForm
 from wtforms import (
+    DateTimeLocalField,
     DecimalField,
     MultipleFileField,
     SelectField,
@@ -33,7 +34,8 @@ class RequestFilterForm(FlaskForm):
         ],
         validators=[Optional()],
     )
-    responsible_id = SelectField("Ответственный мастер", choices=[], validators=[Optional()])
+    responsible_id = SelectField("Районный мастер", choices=[], validators=[Optional()])
+    dispatcher_name = SelectField("Диспетчер", choices=[], validators=[Optional()])
     executor_id = SelectField("Исполнитель", choices=[], validators=[Optional()])
     preset = SelectField(
         "Быстрый фильтр",
@@ -51,13 +53,14 @@ class RequestFilterForm(FlaskForm):
     sort_by = SelectField(
         "Сортировка",
         choices=[
+            ("received_at", "По дате получения"),
             ("created_at", "По дате создания"),
             ("updated_at", "По дате обновления"),
             ("number", "По номеру"),
             ("priority", "По приоритету"),
-            ("title", "По названию"),
+            ("address", "По адресу"),
         ],
-        default="created_at",
+        default="received_at",
     )
     sort_dir = SelectField(
         "Направление",
@@ -67,14 +70,31 @@ class RequestFilterForm(FlaskForm):
 
 
 class RequestForm(FlaskForm):
-    number = StringField("Номер", validators=[DataRequired(), Length(max=50)])
-    title = StringField("Название", validators=[DataRequired(), Length(max=500)])
-    description = TextAreaField("Описание", validators=[Optional(), Length(max=10000)])
+    number = StringField("Номер заявки", validators=[DataRequired(), Length(max=50)])
     address = StringField("Адрес", validators=[DataRequired(), Length(max=500)])
+    pp = StringField("ПП (пункт питания)", validators=[Optional(), Length(max=255)])
+    received_at = DateTimeLocalField(
+        "Дата и время получения",
+        format="%Y-%m-%dT%H:%M",
+        validators=[DataRequired(message="Укажите дату и время получения")],
+    )
+    dispatcher_name = SelectField(
+        "Диспетчер",
+        choices=[],
+        validators=[DataRequired(message="Выберите диспетчера")],
+        validate_choice=False,
+    )
+    responsible_id = SelectField(
+        "Районный мастер",
+        choices=[],
+        validators=[Optional()],
+        validate_choice=False,
+    )
+    description = TextAreaField("Описание", validators=[Optional(), Length(max=10000)])
     latitude = DecimalField("Широта", validators=[Optional()], places=7)
     longitude = DecimalField("Долгота", validators=[Optional()], places=7)
     phone = TelField("Телефон", validators=[Optional(), Length(max=30)])
-    applicant_name = StringField("ФИО заявителя", validators=[DataRequired(), Length(max=255)])
+    applicant_name = StringField("ФИО заявителя", validators=[Optional(), Length(max=255)])
     priority = SelectField(
         "Приоритет",
         choices=[
@@ -87,12 +107,6 @@ class RequestForm(FlaskForm):
     )
     status_id = SelectField(
         "Статус",
-        choices=[],
-        validators=[Optional()],
-        validate_choice=False,
-    )
-    responsible_id = SelectField(
-        "Ответственный мастер",
         choices=[],
         validators=[Optional()],
         validate_choice=False,
@@ -123,18 +137,16 @@ class RequestMaterialForm(FlaskForm):
         "Количество",
         validators=[DataRequired(), NumberRange(min=Decimal("0.001"))],
         places=3,
-        default=Decimal("1"),
     )
     price = DecimalField(
         "Цена",
         validators=[DataRequired(), NumberRange(min=Decimal("0"))],
         places=2,
-        default=Decimal("0"),
     )
     notes = StringField("Примечание", validators=[Optional(), Length(max=1000)])
-    submit = SubmitField("Добавить материал")
+    submit = SubmitField("Добавить")
 
 
 class RequestAttachmentForm(FlaskForm):
     files = MultipleFileField("Файлы", validators=[DataRequired(message="Выберите хотя бы один файл")])
-    submit = SubmitField("Загрузить файлы")
+    submit = SubmitField("Загрузить")

@@ -29,6 +29,7 @@ from app.models.custom_fields.custom_field import CustomField
 from app.models.custom_fields.custom_field_value import CustomFieldValue
 from app.models.custom_fields.field_option import FieldOption
 from app.models.requests.request import Request
+from app.models.requests.request_dispatcher import RequestDispatcher
 from app.models.requests.request_history import RequestHistory
 from app.models.requests.request_material import RequestMaterial
 from app.models.requests.request_status import RequestStatus
@@ -48,6 +49,7 @@ __all__ = [
     "RolePermission",
     "LoginLog",
     "Request",
+    "RequestDispatcher",
     "RequestStatus",
     "RequestHistory",
     "RequestMaterial",
