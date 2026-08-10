@@ -140,8 +140,10 @@ class ProductionConfig(Config):
 
     DEBUG = False
     TESTING = False
-    SESSION_COOKIE_SECURE = True
-    REMEMBER_COOKIE_SECURE = True
+    # По умолчанию False: сайт в локальной сети по HTTP.
+    # За HTTPS выставьте SESSION_COOKIE_SECURE=True в .env
+    SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "False").lower() == "true"
+    REMEMBER_COOKIE_SECURE = os.getenv("REMEMBER_COOKIE_SECURE", "False").lower() == "true"
 
 
 class TestingConfig(Config):
