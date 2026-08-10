@@ -37,7 +37,7 @@ class Role(ActiveRecordMixin, BaseModel):
     user_roles: Mapped[list[UserRole]] = relationship(
         "UserRole",
         back_populates="role",
-        lazy="selectin",
+        lazy="select",
     )
     role_permissions: Mapped[list[RolePermission]] = relationship(
         "RolePermission",
@@ -47,7 +47,7 @@ class Role(ActiveRecordMixin, BaseModel):
     field_permissions: Mapped[list[RoleFieldPermission]] = relationship(
         "RoleFieldPermission",
         back_populates="role",
-        lazy="selectin",
+        lazy="select",
     )
 
     def __repr__(self) -> str:

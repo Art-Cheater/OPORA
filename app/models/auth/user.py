@@ -72,7 +72,8 @@ class User(UserMixin, BaseModel):
         "LoginLog",
         back_populates="user",
         foreign_keys="LoginLog.user_id",
-        lazy="selectin",
+        # Не selectin: иначе при любом списке пользователей тянется весь журнал входов
+        lazy="select",
     )
     blocker: Mapped[User | None] = relationship(
         "User",

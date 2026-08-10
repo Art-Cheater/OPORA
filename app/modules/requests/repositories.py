@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass
 
 from sqlalchemy import or_
-from sqlalchemy.orm import contains_eager, joinedload
+from sqlalchemy.orm import contains_eager, joinedload, load_only, noload
 
 from app.extensions import db
 from app.models.auth.associations import UserRole
@@ -88,6 +88,18 @@ class RequestRepository:
         return list(
             db.session.scalars(
                 db.select(User)
+                .options(
+                    load_only(
+                        User.id,
+                        User.full_name,
+                        User.email,
+                        User.is_active,
+                        User.is_blocked,
+                        User.deleted_at,
+                    ),
+                    noload(User.user_roles),
+                    noload(User.login_logs),
+                )
                 .where(User.active_filter(), User.is_active.is_(True), User.is_blocked.is_(False))
                 .order_by(User.full_name.asc())
             )
@@ -113,6 +125,19 @@ class RequestRepository:
         return list(
             db.session.scalars(
                 db.select(User)
+                .options(
+                    load_only(
+                        User.id,
+                        User.full_name,
+                        User.email,
+                        User.is_active,
+                        User.is_blocked,
+                        User.deleted_at,
+                        User.position_id,
+                    ),
+                    noload(User.user_roles),
+                    noload(User.login_logs),
+                )
                 .where(
                     User.active_filter(),
                     User.is_active.is_(True),
@@ -201,8 +226,18 @@ class RequestRepository:
             .join(Request.status)
             .options(
                 contains_eager(Request.status),
-                joinedload(Request.responsible),
-                joinedload(Request.executor),
+                joinedload(Request.responsible).options(
+                    load_only(User.id, User.full_name, User.email, User.deleted_at, User.is_active),
+                    noload(User.user_roles),
+                    noload(User.login_logs),
+                ),
+                joinedload(Request.executor).options(
+                    load_only(User.id, User.full_name, User.email, User.deleted_at, User.is_active),
+                    noload(User.user_roles),
+                    noload(User.login_logs),
+                ),
+                noload(Request.history),
+                noload(Request.materials),
             )
         )
 

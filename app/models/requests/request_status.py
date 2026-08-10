@@ -40,13 +40,13 @@ class RequestStatus(ActiveRecordMixin, BaseModel):
         "Request",
         back_populates="status",
         foreign_keys="Request.status_id",
-        lazy="selectin",
+        lazy="select",
     )
     history_entries: Mapped[list[RequestHistory]] = relationship(
         "RequestHistory",
         back_populates="status",
         foreign_keys="RequestHistory.status_id",
-        lazy="selectin",
+        lazy="select",
     )
 
     def __repr__(self) -> str:

@@ -96,14 +96,15 @@ class Request(BaseModel):
         "RequestHistory",
         back_populates="request",
         foreign_keys="RequestHistory.request_id",
-        lazy="selectin",
+        # select, не selectin: в списке заявок история не нужна
+        lazy="select",
         order_by="RequestHistory.created_at.desc()",
     )
     materials: Mapped[list[RequestMaterial]] = relationship(
         "RequestMaterial",
         back_populates="request",
         foreign_keys="RequestMaterial.request_id",
-        lazy="selectin",
+        lazy="select",
         order_by="RequestMaterial.created_at.desc()",
     )
 
