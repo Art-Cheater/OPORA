@@ -27,7 +27,7 @@ def login():
                 password=form.password.data,
                 remember=form.remember.data,
             )
-            flash("Добро пожаловать в систему!", "success")
+            flash("Вход кайф!", "success")
             next_page = request.args.get("next")
             # Только относительные URL (защита от open redirect)
             if next_page and next_page.startswith("/") and not next_page.startswith("//"):
