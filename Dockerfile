@@ -19,7 +19,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 EXPOSE 5000
 
 COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "wsgi:app"]
