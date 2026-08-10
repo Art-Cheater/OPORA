@@ -1,0 +1,37 @@
+{# Макросы CRUD: действия в таблице, кнопка создания #}
+
+{% macro create_button(text="Создать", icon="plus-lg") %}
+<button type="button" class="btn btn-primary" data-opora-create>
+    <i class="bi bi-{{ icon }}"></i> {{ text }}
+</button>
+{% endmacro %}
+
+{% macro table_actions(view_url, edit_url, delete_id, can_edit=true, can_delete=false, entity_id="") %}
+<div class="table-actions">
+    <button type="button" class="table-actions__btn" title="Просмотр"
+            data-opora-action="view" data-id="{{ entity_id }}" data-url="{{ view_url }}">
+        <i class="bi bi-eye"></i>
+    </button>
+    {% if can_edit %}
+    <button type="button" class="table-actions__btn" title="Редактировать"
+            data-opora-action="edit" data-id="{{ entity_id }}" data-url="{{ edit_url }}">
+        <i class="bi bi-pencil"></i>
+    </button>
+    {% endif %}
+    {% if can_delete %}
+    <button type="button" class="table-actions__btn table-actions__btn--danger" title="Удалить"
+            data-opora-action="delete" data-id="{{ delete_id or entity_id }}">
+        <i class="bi bi-trash"></i>
+    </button>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{% macro list_filters_card(form_id, reset_id, icon="funnel") %}
+<div class="card mb-4 list-filters">
+    <div class="card-header"><i class="bi bi-{{ icon }}"></i>Поиск и фильтры</div>
+    <div class="card-body">
+        {{ caller() }}
+    </div>
+</div>
+{% endmacro %}

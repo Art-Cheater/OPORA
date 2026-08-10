@@ -1,0 +1,609 @@
+{
+  "started_at": "2026-08-09T14:13:52.961026+00:00",
+  "finished_at": "2026-08-09T14:14:26.422145+00:00",
+  "env": {
+    "config": "testing",
+    "db": "sqlite-temp",
+    "csrf": false,
+    "max_upload_mb": 64,
+    "python": "3.14.7"
+  },
+  "summary": {
+    "total": 48,
+    "passed": 48,
+    "failed": 0,
+    "suites": {
+      "unit": {
+        "total": 3,
+        "passed": 3,
+        "failed": 0
+      },
+      "auth": {
+        "total": 3,
+        "passed": 3,
+        "failed": 0
+      },
+      "smoke_get": {
+        "total": 15,
+        "passed": 15,
+        "failed": 0
+      },
+      "requests": {
+        "total": 9,
+        "passed": 9,
+        "failed": 0
+      },
+      "projects": {
+        "total": 3,
+        "passed": 3,
+        "failed": 0
+      },
+      "contracts": {
+        "total": 2,
+        "passed": 2,
+        "failed": 0
+      },
+      "messenger": {
+        "total": 3,
+        "passed": 3,
+        "failed": 0
+      },
+      "system": {
+        "total": 4,
+        "passed": 4,
+        "failed": 0
+      },
+      "uploads": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0
+      },
+      "rbac": {
+        "total": 4,
+        "passed": 4,
+        "failed": 0
+      },
+      "load": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0
+      }
+    }
+  },
+  "cases": [
+    {
+      "suite": "unit",
+      "name": "workflow happy path",
+      "ok": true,
+      "detail": "happy path ok",
+      "ms": 0.0,
+      "severity": "info"
+    },
+    {
+      "suite": "unit",
+      "name": "workflow cancel",
+      "ok": true,
+      "detail": "cancel ok",
+      "ms": 0.0,
+      "severity": "info"
+    },
+    {
+      "suite": "unit",
+      "name": "workflow forbidden",
+      "ok": true,
+      "detail": "forbidden ok",
+      "ms": 0.0,
+      "severity": "info"
+    },
+    {
+      "suite": "auth",
+      "name": "anonymous redirect",
+      "ok": true,
+      "detail": "HTTP 302",
+      "ms": 1.8,
+      "severity": "info"
+    },
+    {
+      "suite": "auth",
+      "name": "bad password rejected",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 14.3,
+      "severity": "info"
+    },
+    {
+      "suite": "auth",
+      "name": "admin login",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 262.0,
+      "severity": "info"
+    },
+    {
+      "suite": "smoke_get",
+      "name": "main.index",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 7.0,
+      "severity": "info"
+    },
+    {
+      "suite": "smoke_get",
+      "name": "main.about",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 8.9,
+      "severity": "info"
+    },
+    {
+      "suite": "smoke_get",
+      "name": "requests.index",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 32.2,
+      "severity": "info"
+    },
+    {
+      "suite": "smoke_get",
+      "name": "projects.index",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 25.0,
+      "severity": "info"
+    },
+    {
+      "suite": "smoke_get",
+      "name": "contracts.index",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 22.6,
+      "severity": "info"
+    },
+    {
+      "suite": "smoke_get",
+      "name": "employees.index",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 28.6,
+      "severity": "info"
+    },
+    {
+      "suite": "smoke_get",
+      "name": "roles.index",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 86.7,
+      "severity": "info"
+    },
+    {
+      "suite": "smoke_get",
+      "name": "positions.index",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 11.3,
+      "severity": "info"
+    },
+    {
+      "suite": "smoke_get",
+      "name": "field_builder.index",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 15.8,
+      "severity": "info"
+    },
+    {
+      "suite": "smoke_get",
+      "name": "messenger.index",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 16.1,
+      "severity": "info"
+    },
+    {
+      "suite": "smoke_get",
+      "name": "search.index",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 13.0,
+      "severity": "info"
+    },
+    {
+      "suite": "smoke_get",
+      "name": "audit.index",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 23.8,
+      "severity": "info"
+    },
+    {
+      "suite": "smoke_get",
+      "name": "reports.requests",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 17.0,
+      "severity": "info"
+    },
+    {
+      "suite": "smoke_get",
+      "name": "auth.profile",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 17.1,
+      "severity": "info"
+    },
+    {
+      "suite": "smoke_get",
+      "name": "auth.login_logs",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 12.3,
+      "severity": "info"
+    },
+    {
+      "suite": "requests",
+      "name": "create",
+      "ok": true,
+      "detail": "created 5c26c1e4-d412-470a-8a66-b14096733763",
+      "ms": 30.4,
+      "severity": "info"
+    },
+    {
+      "suite": "requests",
+      "name": "detail",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 78.1,
+      "severity": "info"
+    },
+    {
+      "suite": "requests",
+      "name": "emergency departed",
+      "ok": true,
+      "detail": "HTTP 302",
+      "ms": 13.8,
+      "severity": "info"
+    },
+    {
+      "suite": "requests",
+      "name": "assign master",
+      "ok": true,
+      "detail": "HTTP 302",
+      "ms": 21.7,
+      "severity": "info"
+    },
+    {
+      "suite": "requests",
+      "name": "comment",
+      "ok": true,
+      "detail": "HTTP 302",
+      "ms": 12.5,
+      "severity": "info"
+    },
+    {
+      "suite": "requests",
+      "name": "material",
+      "ok": true,
+      "detail": "HTTP 302",
+      "ms": 11.2,
+      "severity": "info"
+    },
+    {
+      "suite": "requests",
+      "name": "multi upload",
+      "ok": true,
+      "detail": "HTTP 302",
+      "ms": 38.9,
+      "severity": "info"
+    },
+    {
+      "suite": "requests",
+      "name": "complete",
+      "ok": true,
+      "detail": "HTTP 302",
+      "ms": 12.0,
+      "severity": "info"
+    },
+    {
+      "suite": "requests",
+      "name": "illegal transition handled",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 26.8,
+      "severity": "info"
+    },
+    {
+      "suite": "projects",
+      "name": "create",
+      "ok": true,
+      "detail": "0acdd565-926b-487a-95ec-23764ee3e921",
+      "ms": 30.5,
+      "severity": "info"
+    },
+    {
+      "suite": "projects",
+      "name": "upload",
+      "ok": true,
+      "detail": "HTTP 302",
+      "ms": 18.2,
+      "severity": "info"
+    },
+    {
+      "suite": "projects",
+      "name": "detail",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 26.8,
+      "severity": "info"
+    },
+    {
+      "suite": "contracts",
+      "name": "create",
+      "ok": true,
+      "detail": "b28fc799-57ba-4f41-a910-fbd79a17f99a",
+      "ms": 22.7,
+      "severity": "info"
+    },
+    {
+      "suite": "contracts",
+      "name": "document upload",
+      "ok": true,
+      "detail": "HTTP 302",
+      "ms": 14.2,
+      "severity": "info"
+    },
+    {
+      "suite": "messenger",
+      "name": "api users",
+      "ok": true,
+      "detail": "users=3",
+      "ms": 12.6,
+      "severity": "info"
+    },
+    {
+      "suite": "messenger",
+      "name": "open + send text",
+      "ok": true,
+      "detail": "HTTP 201",
+      "ms": 37.4,
+      "severity": "info"
+    },
+    {
+      "suite": "messenger",
+      "name": "multi file messages",
+      "ok": true,
+      "detail": "uploaded 3",
+      "ms": 39.2,
+      "severity": "info"
+    },
+    {
+      "suite": "system",
+      "name": "search api",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 19.9,
+      "severity": "info"
+    },
+    {
+      "suite": "system",
+      "name": "reports week",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 9.9,
+      "severity": "info"
+    },
+    {
+      "suite": "system",
+      "name": "reports custom",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 11.0,
+      "severity": "info"
+    },
+    {
+      "suite": "system",
+      "name": "audit table",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 5.8,
+      "severity": "info"
+    },
+    {
+      "suite": "uploads",
+      "name": "oversize handled",
+      "ok": true,
+      "detail": "HTTP 200 (limit enforced)",
+      "ms": 16.1,
+      "severity": "info"
+    },
+    {
+      "suite": "rbac",
+      "name": "executor denied reports",
+      "ok": true,
+      "detail": "HTTP 403",
+      "ms": 213.2,
+      "severity": "info"
+    },
+    {
+      "suite": "rbac",
+      "name": "executor can view requests",
+      "ok": true,
+      "detail": "HTTP 200",
+      "ms": 20.0,
+      "severity": "info"
+    },
+    {
+      "suite": "rbac",
+      "name": "dispatcher create + emergency",
+      "ok": true,
+      "detail": "HTTP 302",
+      "ms": 247.4,
+      "severity": "info"
+    },
+    {
+      "suite": "rbac",
+      "name": "master complete assigned",
+      "ok": true,
+      "detail": "HTTP 302",
+      "ms": 442.8,
+      "severity": "info"
+    },
+    {
+      "suite": "load",
+      "name": "concurrent burst success rate",
+      "ok": true,
+      "detail": "160/160 ok, p95=615.4ms, rps=18.75",
+      "ms": 0.0,
+      "severity": "info"
+    }
+  ],
+  "load": {
+    "sequential": {
+      "requests": 40,
+      "ok": 40,
+      "rps": 4.55,
+      "avg_ms": 220.0,
+      "p95_ms": 228.2
+    },
+    "concurrent": {
+      "requests": 160,
+      "workers": 8,
+      "ok": 160,
+      "duration_s": 8.54,
+      "rps": 18.75,
+      "avg_ms": 419.3,
+      "p50_ms": 401.3,
+      "p95_ms": 615.4,
+      "p99_ms": 648.1,
+      "max_ms": 712.2,
+      "status_counts": {
+        "200": 160
+      },
+      "note": "Flask test_client + SQLite in-process; не замена gunicorn+PostgreSQL в проде"
+    },
+    "by_endpoint_sample": [
+      {
+        "path": "/",
+        "n": 20,
+        "ok": 20,
+        "avg_ms": 451.3,
+        "p95_ms": 567.5
+      },
+      {
+        "path": "/requests/",
+        "n": 20,
+        "ok": 20,
+        "avg_ms": 595.9,
+        "p95_ms": 769.9
+      },
+      {
+        "path": "/projects/",
+        "n": 20,
+        "ok": 20,
+        "avg_ms": 491.8,
+        "p95_ms": 716.8
+      },
+      {
+        "path": "/contracts/",
+        "n": 20,
+        "ok": 20,
+        "avg_ms": 549.9,
+        "p95_ms": 1003.7
+      },
+      {
+        "path": "/reports/requests?period=week",
+        "n": 20,
+        "ok": 20,
+        "avg_ms": 512.1,
+        "p95_ms": 784.1
+      },
+      {
+        "path": "/search/api?q=QA",
+        "n": 20,
+        "ok": 20,
+        "avg_ms": 598.8,
+        "p95_ms": 786.4
+      },
+      {
+        "path": "/messenger/api/unread-count",
+        "n": 20,
+        "ok": 20,
+        "avg_ms": 427.8,
+        "p95_ms": 650.5
+      },
+      {
+        "path": "/audit/",
+        "n": 20,
+        "ok": 20,
+        "avg_ms": 608.7,
+        "p95_ms": 730.7
+      }
+    ]
+  },
+  "strengths": [
+    "Модульная структура (blueprint registry) и единый RBAC по permission codes",
+    "Workflow заявок формализован (can_transition) и покрыт unit-тестами переходов",
+    "Мультизагрузка файлов + предпросмотр + лимит MAX_CONTENT_LENGTH с обработчиком 413",
+    "Админ-контур: роли, конструктор полей, аудит, журнал входов",
+    "Отчёты по заявкам с настраиваемым периодом",
+    "Функциональный прогон: 48/48 кейсов успешно",
+    "Нагрузка (in-process): 160/160 OK, ~18.75 RPS, p95=615.4 ms"
+  ],
+  "weaknesses": [
+    "Почти нет автотестов на HTTP/сервисы (только workflow unit) — регрессии ловятся вручную",
+    "SQLite локально ≠ PostgreSQL прод: FTS, FOR UPDATE, UUID/миграции — риск расхождений",
+    "CSRF-ошибка редиректит на login — выглядит как проблема авторизации",
+    "Маршруты accept/start-work есть, но не в UI available_actions — мёртвый/скрытый код",
+    "Нагрузка на test_client не отражает gunicorn workers / пул PG / сеть",
+    "Мессенджер: polling, без websockets — при росте чатов вырастет нагрузка"
+  ],
+  "recommendations": [
+    {
+      "priority": "P0",
+      "title": "Автотесты HTTP + RBAC в CI",
+      "why": "Сейчас один unit-файл; без CI ломаются uploads/workflow/права",
+      "how": "pytest + TestingConfig, матрица ролей, fixture users, прогон в GitHub Actions"
+    },
+    {
+      "priority": "P0",
+      "title": "Нагрузочный прогон на PostgreSQL + gunicorn",
+      "why": "Текущие цифры — in-process SQLite; прод-профиль другой",
+      "how": "Locust/k6: login, список заявок, detail, messenger unread; цели p95/ошибок"
+    },
+    {
+      "priority": "P1",
+      "title": "Выравнять workflow UI и маршруты",
+      "why": "accept/start-work расходятся с available_actions и правами complete",
+      "how": "Либо убрать мёртвые роуты, либо добавить в UI и унифицировать permission checks"
+    },
+    {
+      "priority": "P1",
+      "title": "Улучшить UX ошибок CSRF/413",
+      "why": "CSRF→login путает; большие файлы должны явно подсказывать лимит",
+      "how": "Отдельная flash-страница CSRF; на форме upload показывать MAX_UPLOAD_MB"
+    },
+    {
+      "priority": "P1",
+      "title": "Индексы и N+1 на списках",
+      "why": "При росте заявок/аудита списки и отчёты могут деградировать",
+      "how": "EXPLAIN на /requests, /audit; selectin/joinedload; пагинация везде"
+    },
+    {
+      "priority": "P2",
+      "title": "Мессенджер: long-poll/SSE или WS",
+      "why": "Частый polling умножается на пользователей",
+      "how": "Снизить частоту + условный ETag; позже SSE"
+    },
+    {
+      "priority": "P2",
+      "title": "Антивирус/whitelist MIME + квоты",
+      "why": "Сейчас сохранение по имени/mimetype клиента",
+      "how": "Проверка magic bytes, blacklist исполняемых, per-user quota"
+    },
+    {
+      "priority": "P2",
+      "title": "Расширить отчёты",
+      "why": "Пока только заявки; бизнесу нужны SLA и нагрузка по мастерам",
+      "how": "Время до complete, топ адресов, загрузка мастеров, экспорт CSV"
+    }
+  ]
+}

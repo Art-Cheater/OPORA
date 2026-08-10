@@ -1,0 +1,29 @@
+{# Макросы журнала действий #}
+
+{% macro audit_action_badge(action) %}
+    {% set labels = {
+        'create': 'Создание',
+        'update': 'Изменение',
+        'delete': 'Удаление',
+        'login': 'Вход',
+        'logout': 'Выход',
+        'view': 'Просмотр',
+        'export': 'Экспорт',
+        'status_change': 'Смена статуса',
+    } %}
+    <span class="badge badge-status badge-neutral">{{ labels.get(action, action) }}</span>
+{% endmacro %}
+
+{% macro audit_entity_badge(entity_type) %}
+    {% set labels = {
+        'user': 'Пользователь',
+        'request': 'Заявка',
+        'project': 'Проект',
+        'contract': 'Контракт',
+        'comment': 'Комментарий',
+        'attachment': 'Файл',
+        'system': 'Система',
+        'audit': 'Журнал',
+    } %}
+    <span class="badge badge-status badge-neutral">{{ labels.get(entity_type, entity_type or '—') }}</span>
+{% endmacro %}

@@ -1,0 +1,63 @@
+{% from "macros/forms.html" import form_errors_alert %}
+<form method="POST" action="{{ form_action }}" class="opora-modal-form" id="customFieldForm">
+    {{ form.hidden_tag() }}
+    {{ form_errors_alert(form) }}
+    <div class="row g-3">
+        <div class="col-md-6">
+            {{ form.module_code.label(class="form-label") }}
+            {{ form.module_code(class="form-select", disabled=is_edit) }}
+        </div>
+        <div class="col-md-6">
+            {{ form.code.label(class="form-label") }}
+            {{ form.code(class="form-control", readonly=is_edit, placeholder="support_number") }}
+            {% if is_edit %}<div class="form-text">Код нельзя изменить.</div>{% endif %}
+        </div>
+        <div class="col-md-8">
+            {{ form.name.label(class="form-label") }}
+            {{ form.name(class="form-control") }}
+        </div>
+        <div class="col-md-4">
+            {{ form.field_type.label(class="form-label") }}
+            {{ form.field_type(class="form-select", id="fieldTypeSelect") }}
+        </div>
+        <div class="col-12">
+            {{ form.description.label(class="form-label") }}
+            {{ form.description(class="form-control", rows=2) }}
+        </div>
+        <div class="col-md-4">
+            <div class="form-check mt-4">
+                {{ form.is_required(class="form-check-input") }}
+                {{ form.is_required.label(class="form-check-label") }}
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="form-check mt-4">
+                {{ form.is_visible(class="form-check-input") }}
+                {{ form.is_visible.label(class="form-check-label") }}
+            </div>
+        </div>
+        <div class="col-md-4">
+            {{ form.sort_order.label(class="form-label") }}
+            {{ form.sort_order(class="form-control") }}
+        </div>
+        <div class="col-12" id="optionsBlock">
+            {{ form.options_text.label(class="form-label") }}
+            {{ form.options_text(class="form-control font-monospace", rows=4, placeholder="new|Новый\nin_progress|В работе") }}
+            <div class="form-text">Только для типа «Выпадающий список». Формат: <code>код|Название</code></div>
+        </div>
+    </div>
+    <div class="modal-form-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+        {{ form.submit(class="btn btn-primary") }}
+    </div>
+</form>
+<script>
+(() => {
+  const sel = document.getElementById("fieldTypeSelect");
+  const block = document.getElementById("optionsBlock");
+  if (!sel || !block) return;
+  const toggle = () => { block.style.display = sel.value === "select" ? "" : "none"; };
+  sel.addEventListener("change", toggle);
+  toggle();
+})();
+</script>

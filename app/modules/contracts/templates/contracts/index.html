@@ -1,0 +1,86 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+{% from "macros/crud.html" import create_button %}
+
+{% block title %}Контракты — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Контракты", "Управление договорами предприятия", "file-earmark-text") %}
+{% if current_user.has_permission('contracts.create') %}
+{{ create_button("Создать", "plus-lg") }}
+{% endif %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4 list-filters">
+    <div class="card-header"><i class="bi bi-search"></i>Поиск и фильтры</div>
+    <div class="card-body">
+        <form id="contractFilterForm" class="row g-3">
+            <div class="col-lg-3">
+                <label class="form-label">{{ filter_form.q.label.text }}</label>
+                {{ filter_form.q(class="form-control", placeholder="Номер, название...") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.contract_type.label.text }}</label>
+                {{ filter_form.contract_type(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.status.label.text }}</label>
+                {{ filter_form.status(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.responsible_id.label.text }}</label>
+                {{ filter_form.responsible_id(class="form-select") }}
+            </div>
+            <div class="col-lg-1 d-flex align-items-end">
+                <button type="button" id="contractFilterReset" class="btn btn-outline-primary w-100">Сброс</button>
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.date_from.label.text }}</label>
+                {{ filter_form.date_from(class="form-control", type="date") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.date_to.label.text }}</label>
+                {{ filter_form.date_to(class="form-control", type="date") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.sort_by.label.text }}</label>
+                {{ filter_form.sort_by(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.sort_dir.label.text }}</label>
+                {{ filter_form.sort_dir(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">На странице</label>
+                <select class="form-select" name="per_page">
+                    <option value="10">10</option>
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="contractsTableContainer">
+    {% include "contracts/partials/table.html" %}
+</div>
+<div id="contractsPaginationContainer" class="mt-3">
+    {% include "contracts/partials/pagination.html" %}
+</div>
+
+<div id="oporaListConfig" class="d-none"
+     data-base-url="/contracts"
+     data-filter-form-id="contractFilterForm"
+     data-table-container-id="contractsTableContainer"
+     data-pagination-container-id="contractsPaginationContainer"
+     data-reset-btn-id="contractFilterReset"
+     data-page-link-class="contract-page-link"
+     data-create-title="Новый контракт"
+     data-edit-title="Редактирование контракта"
+     data-delete-message="Вы уверены, что хотите удалить этот контракт?"
+     data-can-edit="{{ 'true' if current_user.has_permission('contracts.edit') else 'false' }}">
+</div>
+{% endblock %}

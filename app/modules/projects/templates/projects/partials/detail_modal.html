@@ -1,0 +1,107 @@
+{% from "macros/badges.html" import project_status_badge %}
+{% from "macros/custom_fields.html" import custom_fields_detail with context %}
+<span class="d-none" data-opora-card-title>{{ project.code }} — {{ project.name }}</span>
+<span class="d-none" data-opora-card-badge>{{ project_status_badge(project.status) }}</span>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Статус</div>
+                    <div>{{ project_status_badge(project.status) }}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Готовность</div>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="progress flex-grow-1" style="height: 8px;">
+                            <div class="progress-bar bg-primary" style="width: {{ project.progress_percent }}%"></div>
+                        </div>
+                        <span>{{ project.progress_percent }}%</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Ответственный</div>
+                    <div>{{ project.responsible.full_name if project.responsible else "—" }}</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Дата начала</div>
+                    <div>{{ project.start_date.strftime('%d.%m.%Y') if project.start_date else "—" }}</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Дата окончания</div>
+                    <div>{{ project.end_date.strftime('%d.%m.%Y') if project.end_date else "—" }}</div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Исполнители</div>
+                    <div>
+                        {% if project.executors %}
+                            {% for executor in project.executors %}
+                                <span class="badge badge-status badge-neutral me-1">{{ executor.full_name }}</span>
+                            {% endfor %}
+                        {% else %}—{% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Описание</div>
+                    <div>{{ project.description or "—" }}</div>
+                </div>
+            </div>
+            {{ custom_fields_detail(custom_field_details) }}
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <ul class="nav nav-tabs opora-card-tabs mb-3" role="tablist">
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#projTabComments" type="button">Комментарии</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#projTabFiles" type="button">Файлы</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#projTabHistory" type="button">История</button></li>
+        </ul>
+        <div class="tab-content">
+            <div class="tab-pane fade show active" id="projTabComments">
+                {% for item in comments %}
+                <div class="border rounded-3 p-3 mb-2">
+                    <div class="d-flex justify-content-between">
+                        <strong>{{ item.author.full_name if item.author else "Пользователь" }}</strong>
+                        <small class="text-muted">{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</small>
+                    </div>
+                    <div class="mt-2">{{ item.body }}</div>
+                </div>
+                {% else %}
+                <div class="text-muted small">Комментариев пока нет.</div>
+                {% endfor %}
+            </div>
+            <div class="tab-pane fade" id="projTabFiles">
+                {% for file in attachments %}
+                <div class="border rounded-2 p-2 mb-2">
+                    <div class="fw-medium text-truncate">{{ file.file_name }}</div>
+                    <div class="text-muted small">{{ file.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                </div>
+                {% else %}
+                <div class="text-muted small">Файлы не загружены.</div>
+                {% endfor %}
+            </div>
+            <div class="tab-pane fade" id="projTabHistory">
+                {% for h in project.history %}
+                <div class="border-start border-2 ps-3 mb-3">
+                    <div class="fw-medium small">{{ h.comment or h.action }}</div>
+                    <div class="text-muted small">{{ h.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                </div>
+                {% else %}
+                <div class="text-muted small">История пока пуста.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>

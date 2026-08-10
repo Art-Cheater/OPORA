@@ -1,0 +1,38 @@
+{% extends "layouts/base.html" %}
+
+{% block body_class %}app-body{% endblock %}
+
+{% block body %}
+<div class="app-shell" id="appShell">
+    {% include "components/sidebar.html" %}
+
+    <div class="app-main">
+        {% include "components/topbar.html" %}
+
+        <main class="app-content">
+            {% include "components/flash_messages.html" %}
+            {% block page_header %}{% endblock %}
+            {% block content %}{% endblock %}
+        </main>
+
+        <footer class="app-footer">
+            <span>&copy; {{ app_name }} v{{ app_version }}</span>
+            <span class="text-muted">Корпоративная информационная система</span>
+        </footer>
+    </div>
+</div>
+
+{% include "components/crud_modals.html" %}
+{% from "macros/files.html" import file_preview_modal %}
+{{ file_preview_modal() }}
+{% endblock %}
+
+{% block extra_css %}
+<link href="{{ url_for('static', filename='css/search.css') }}" rel="stylesheet">
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/phone-mask.js') }}"></script>
+<script src="{{ url_for('static', filename='js/opora-list.js') }}"></script>
+<script src="{{ url_for('static', filename='js/search.js') }}"></script>
+{% endblock %}

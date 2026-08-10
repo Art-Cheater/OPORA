@@ -1,0 +1,38 @@
+{% from "macros/audit.html" import audit_action_badge, audit_entity_badge %}
+<div class="table-card">
+    <table class="table table-opora table-sm">
+        <thead>
+            <tr>
+                <th>Время</th>
+                <th>Пользователь</th>
+                <th>IP</th>
+                <th>Действие</th>
+                <th>Объект</th>
+                <th>Описание</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in audit_pagination.items %}
+            <tr>
+                <td class="text-muted text-nowrap">{{ entry.created_at.strftime('%d.%m.%Y %H:%M:%S') }}</td>
+                <td>{{ entry.user.full_name if entry.user else '—' }}</td>
+                <td class="text-muted">{{ entry.ip_address or '—' }}</td>
+                <td>{{ audit_action_badge(entry.action) }}</td>
+                <td>{{ audit_entity_badge(entry.entity_type) }}</td>
+                <td>
+                    <div class="fw-medium">{{ entry.description or '—' }}</div>
+                    {% if entry.entity_id %}
+                    <div class="small text-muted">ID: {{ entry.entity_id }}</div>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6" class="table-empty">
+                    <i class="bi bi-journal-x"></i>Записи не найдены
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

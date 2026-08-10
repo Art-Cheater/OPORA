@@ -1,0 +1,68 @@
+{% from "macros/badges.html" import request_status_badge, status_badge %}
+{% from "macros/crud.html" import table_actions %}
+<div class="table-card">
+    <table class="table table-opora">
+        <thead>
+            <tr>
+                <th>№</th>
+                <th>Название</th>
+                <th>Статус</th>
+                <th>Приоритет</th>
+                <th>Мастер</th>
+                <th>Исполнитель</th>
+                <th>Адрес</th>
+                <th>Обновлено</th>
+                <th class="text-end">Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for req in requests_pagination.items %}
+            <tr data-opora-id="{{ req.id }}"
+                class="table-row-lifecycle
+                {% if req.status.code == 'emergency_dispatched' %}table-row-brigade
+                {% elif req.status.code in ['accepted_by_master', 'in_progress'] %}table-row-master
+                {% elif req.status.code == 'completed' %}table-row-done
+                {% elif req.status.code == 'new' %}table-row-new
+                {% elif req.status.code == 'cancelled' %}table-row-cancelled
+                {% endif %}">
+                <td class="fw-semibold">{{ req.number }}</td>
+                <td>
+                    <div class="fw-medium">{{ req.title }}</div>
+                    <div class="small text-muted">{{ req.applicant_name }}</div>
+                </td>
+                <td>{{ request_status_badge(req.status) }}</td>
+                <td>
+                    {% if req.priority == 'critical' %}
+                        {{ status_badge('not_ready', 'Критический') }}
+                    {% elif req.priority == 'high' %}
+                        {{ status_badge('in_progress', 'Высокий') }}
+                    {% elif req.priority == 'medium' %}
+                        {{ status_badge('in_progress', 'Средний') }}
+                    {% else %}
+                        {{ status_badge('done', 'Низкий') }}
+                    {% endif %}
+                </td>
+                <td>{{ req.responsible.full_name if req.responsible else '—' }}</td>
+                <td>{{ req.executor.full_name if req.executor else '—' }}</td>
+                <td class="text-muted">{{ req.address }}</td>
+                <td class="text-muted">{{ req.updated_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                <td class="text-end">
+                    {{ table_actions(
+                        view_url=url_for('requests.detail', request_id=req.id),
+                        edit_url=url_for('requests.edit', request_id=req.id),
+                        entity_id=req.id,
+                        can_edit=current_user.has_permission('requests.edit'),
+                        can_delete=current_user.has_permission('requests.delete')
+                    ) }}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="9" class="table-empty">
+                    <i class="bi bi-inbox"></i> Заявки не найдены
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

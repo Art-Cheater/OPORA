@@ -1,0 +1,67 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}Журнал действий — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Журнал действий", "Универсальный аудит всех операций в системе", "journal-text") %}
+{% if can_export %}
+<a href="{{ url_for('audit.export', **request.args) }}" class="btn btn-outline-primary">
+    <i class="bi bi-download"></i> Экспорт CSV
+</a>
+{% endif %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="alert alert-light border mb-4">
+    <i class="bi bi-shield-lock text-warning"></i>
+    Записи журнала <strong>не могут быть удалены</strong>. Все действия пользователей фиксируются автоматически.
+</div>
+
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-funnel"></i>Фильтры и поиск</div>
+    <div class="card-body">
+        <form id="auditFilterForm" class="row g-3">
+            <div class="col-lg-3">
+                <label class="form-label">{{ filter_form.q.label.text }}</label>
+                {{ filter_form.q(class="form-control", placeholder="Описание, IP, объект...") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.user_id.label.text }}</label>
+                {{ filter_form.user_id(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.action.label.text }}</label>
+                {{ filter_form.action(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.entity_type.label.text }}</label>
+                {{ filter_form.entity_type(class="form-select") }}
+            </div>
+            <div class="col-lg-1 d-flex align-items-end">
+                <button type="button" id="auditFilterReset" class="btn btn-outline-primary w-100">Сброс</button>
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.date_from.label.text }}</label>
+                {{ filter_form.date_from(class="form-control", type="date") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.date_to.label.text }}</label>
+                {{ filter_form.date_to(class="form-control", type="date") }}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="auditTableContainer">
+    {% include "audit/partials/table.html" %}
+</div>
+<div id="auditPaginationContainer" class="mt-3">
+    {% include "audit/partials/pagination.html" %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/audit.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,113 @@
+{% from "macros/badges.html" import request_status_badge %}
+{% from "macros/custom_fields.html" import custom_fields_detail with context %}
+<span class="d-none" data-opora-card-title>{{ req.number }} — {{ req.title }}</span>
+<span class="d-none" data-opora-card-badge>{{ request_status_badge(req.status) }}</span>
+<a class="d-none" data-opora-page-url="{{ url_for('requests.detail', request_id=req.id, full=1) }}"></a>
+
+<div class="mb-3">
+    <a href="{{ url_for('requests.detail', request_id=req.id, full=1) }}" class="btn btn-primary">
+        <i class="bi bi-box-arrow-up-right"></i> Открыть страницу заявки
+    </a>
+    <span class="text-muted small ms-2">Полная карточка: действия, файлы, история</span>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Статус</div>
+                    <div>{{ request_status_badge(req.status) }}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Приоритет</div>
+                    <div class="fw-medium">{{ req.priority }}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Заявитель</div>
+                    <div>{{ req.applicant_name }}</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Диспетчер</div>
+                    <div>{{ dispatcher.full_name if dispatcher else "—" }}</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Ответственный мастер</div>
+                    <div>{{ req.responsible.full_name if req.responsible else "—" }}</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Исполнитель</div>
+                    <div>{{ req.executor.full_name if req.executor else "—" }}</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Телефон</div>
+                    <div>{{ req.phone or "—" }}</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Адрес</div>
+                    <div>{{ req.address }}</div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Описание</div>
+                    <div>{{ req.description or "—" }}</div>
+                </div>
+            </div>
+            {{ custom_fields_detail(custom_field_details) }}
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <ul class="nav nav-tabs opora-card-tabs mb-3" role="tablist">
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#reqTabComments" type="button">Комментарии</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#reqTabFiles" type="button">Файлы</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#reqTabHistory" type="button">История</button></li>
+        </ul>
+        <div class="tab-content">
+            <div class="tab-pane fade show active" id="reqTabComments">
+                {% for item in comments %}
+                <div class="border rounded-3 p-3 mb-2">
+                    <div class="d-flex justify-content-between">
+                        <strong>{{ item.author.full_name if item.author else "Пользователь" }}</strong>
+                        <small class="text-muted">{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</small>
+                    </div>
+                    <div class="mt-2">{{ item.body }}</div>
+                </div>
+                {% else %}
+                <div class="text-muted small">Комментариев пока нет.</div>
+                {% endfor %}
+            </div>
+            <div class="tab-pane fade" id="reqTabFiles">
+                {% from "macros/files.html" import file_gallery %}
+                {{ file_gallery(file_items) }}
+            </div>
+            <div class="tab-pane fade" id="reqTabHistory">
+                {% for h in req.history %}
+                <div class="border-start border-2 ps-3 mb-3">
+                    <div class="fw-medium small">{{ h.comment or h.action }}</div>
+                    <div class="text-muted small">{{ h.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                    {% if h.changed_by_user %}
+                    <div class="text-muted small">Автор: {{ h.changed_by_user.full_name }}</div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="text-muted small">История пока пуста.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,38 @@
+<span class="d-none" data-opora-card-title>{{ role.name }}</span>
+<span class="d-none" data-opora-card-badge>
+    {% if role.is_system %}<span class="badge badge-status badge-in-progress">Системная</span>{% else %}<span class="badge badge-status badge-neutral">Пользовательская</span>{% endif %}
+</span>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-4"><small class="text-muted">Код</small><div><code>{{ role.code }}</code></div></div>
+    <div class="col-md-8"><small class="text-muted">Описание</small><div>{{ role.description or "—" }}</div></div>
+    <div class="col-md-4"><small class="text-muted">Сотрудников с ролью</small><div>{{ users_count }}</div></div>
+</div>
+
+<h6 class="fw-semibold">Разрешения</h6>
+<div class="mb-3">
+    {% for module, perms in permissions_by_module.items() %}
+        {% for perm in perms %}
+            {% if perm.id in role_perm_ids %}
+                <span class="badge badge-role me-1 mb-1">{{ module_labels.get(module, module) }}: {{ perm.name }}</span>
+            {% endif %}
+        {% endfor %}
+    {% endfor %}
+</div>
+
+<h6 class="fw-semibold">Права на поля</h6>
+<div class="small">
+    {% for module, fields in module_fields.items() %}
+        {% for field_name, field_label in fields.items() %}
+            {% set fr = field_rules_map.get(module, {}).get(field_name, {}) %}
+            {% if fr.view or fr.edit %}
+            <div class="border-bottom py-1">
+                <strong>{{ module_labels.get(module, module) }}</strong> — {{ field_label }}:
+                {% if fr.view %}<span class="badge badge-done">Просмотр</span>{% endif %}
+                {% if fr.edit %}<span class="badge badge-in-progress">Редактирование</span>{% endif %}
+            </div>
+            {% endif %}
+        {% endfor %}
+    {% endfor %}
+    <p class="text-muted mt-2 mb-0">Если правила полей не заданы — действуют общие разрешения раздела.</p>
+</div>

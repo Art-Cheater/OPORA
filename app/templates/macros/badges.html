@@ -1,0 +1,91 @@
+{# Макросы статусных бейджей #}
+
+{% macro status_badge(status, label=none) %}
+    {% set s = status | lower %}
+    {% if s in ['not_ready', 'draft', 'rejected', 'cancelled', 'не готово', 'new'] %}
+        <span class="badge badge-status badge-not-ready">{{ label or 'Не готово' }}</span>
+    {% elif s in ['in_progress', 'in_review', 'submitted', 'approved', 'accepted_by_master', 'emergency_dispatched', 'в работе'] %}
+        <span class="badge badge-status badge-in-progress">{{ label or 'В работе' }}</span>
+    {% elif s in ['done', 'completed', 'готово'] %}
+        <span class="badge badge-status badge-done">{{ label or 'Готово' }}</span>
+    {% else %}
+        <span class="badge badge-status badge-neutral">{{ label or status }}</span>
+    {% endif %}
+{% endmacro %}
+
+{% macro request_status_badge(status) %}
+    {# Цвет из справочника request_statuses.color #}
+    {% if status %}
+    <span class="badge badge-status request-status-badge"
+          style="background-color: color-mix(in srgb, {{ status.color }} 16%, white); color: {{ status.color }}; border: 1px solid color-mix(in srgb, {{ status.color }} 35%, white);">
+        {{ status.name }}
+    </span>
+    {% else %}
+    <span class="badge badge-status badge-neutral">—</span>
+    {% endif %}
+{% endmacro %}
+
+{% macro success_badge(success) %}
+    {% if success %}
+        <span class="badge badge-status badge-done">Успешно</span>
+    {% else %}
+        <span class="badge badge-status badge-not-ready">Отказ</span>
+    {% endif %}
+{% endmacro %}
+
+{% macro project_status_badge(status) %}
+    {% set s = status | lower %}
+    {% if s == 'draft' %}
+        <span class="badge badge-status badge-neutral">Черновик</span>
+    {% elif s == 'active' %}
+        <span class="badge badge-status badge-in-progress">В работе</span>
+    {% elif s == 'on_hold' %}
+        <span class="badge badge-status badge-not-ready">Приостановлен</span>
+    {% elif s == 'completed' %}
+        <span class="badge badge-status badge-done">Завершён</span>
+    {% elif s == 'archived' %}
+        <span class="badge badge-status badge-neutral">Архив</span>
+    {% else %}
+        <span class="badge badge-status badge-neutral">{{ status }}</span>
+    {% endif %}
+{% endmacro %}
+
+{% macro contract_status_badge(status) %}
+    {% set s = status | lower %}
+    {% if s == 'draft' %}
+        <span class="badge badge-status badge-neutral">Черновик</span>
+    {% elif s == 'active' %}
+        <span class="badge badge-status badge-in-progress">Действует</span>
+    {% elif s == 'completed' %}
+        <span class="badge badge-status badge-done">Завершён</span>
+    {% elif s == 'terminated' %}
+        <span class="badge badge-status badge-not-ready">Расторгнут</span>
+    {% else %}
+        <span class="badge badge-status badge-neutral">{{ status }}</span>
+    {% endif %}
+{% endmacro %}
+
+{% macro contract_type_badge(contract_type) %}
+    {% set t = contract_type | lower %}
+    {% if t == 'supply' %}
+        <span class="badge badge-status badge-neutral">Поставка</span>
+    {% elif t == 'service' %}
+        <span class="badge badge-status badge-in-progress">Услуги</span>
+    {% elif t == 'work' %}
+        <span class="badge badge-status badge-in-progress">Подряд</span>
+    {% elif t == 'lease' %}
+        <span class="badge badge-status badge-neutral">Аренда</span>
+    {% else %}
+        <span class="badge badge-status badge-neutral">Прочее</span>
+    {% endif %}
+{% endmacro %}
+
+{% macro user_status_badge(user) %}
+    {% if user.is_blocked %}
+        <span class="badge badge-status badge-not-ready">Заблокирован</span>
+    {% elif user.is_active %}
+        <span class="badge badge-status badge-done">Активен</span>
+    {% else %}
+        <span class="badge badge-status badge-neutral">Деактивирован</span>
+    {% endif %}
+{% endmacro %}

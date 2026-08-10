@@ -1,0 +1,60 @@
+{# Поля формы в модальных окнах с подсветкой ошибок и правами на поля #}
+
+{% macro modal_field(field, col=6, placeholder='', rows=3, multiple=false, size=none, module=none) %}
+{% if module and not current_user.can_view_field(module, field.name) %}
+{% elif module and not current_user.can_edit_field(module, field.name) %}
+<div class="col-md-{{ col }}">
+    {{ field.label(class="form-label") }}
+    <div class="form-control-plaintext border rounded px-3 py-2 bg-light">
+        {% if field.type in ['SelectField', 'SelectMultipleField'] %}
+            {% if field.data is iterable and field.data is not string %}
+                {% for choice_val, choice_label in field.choices if choice_val in field.data %}{{ choice_label }}{% if not loop.last %}, {% endif %}{% endfor %}
+            {% else %}
+                {% for choice_val, choice_label in field.choices if choice_val|string == field.data|string %}{{ choice_label }}{% endfor %}
+            {% endif %}
+        {% elif field.data is not none and field.data != '' %}
+            {{ field.data }}
+        {% else %}
+            —
+        {% endif %}
+    </div>
+</div>
+{% else %}
+<div class="col-md-{{ col }}">
+    {{ field.label(class="form-label") }}
+    {% set has_err = field.errors|length > 0 %}
+    {% if field.type == 'SelectField' %}
+        {{ field(class="form-select" + (" is-invalid" if has_err else "")) }}
+    {% elif field.type == 'SelectMultipleField' %}
+        {{ field(class="form-select" + (" is-invalid" if has_err else ""), multiple=true, size=size or 4) }}
+    {% elif field.type == 'TextAreaField' %}
+        {{ field(class="form-control" + (" is-invalid" if has_err else ""), rows=rows, placeholder=placeholder) }}
+    {% elif field.type == 'PasswordField' %}
+        {{ field(class="form-control" + (" is-invalid" if has_err else ""), placeholder=placeholder) }}
+    {% elif field.type == 'DateField' %}
+        {{ field(class="form-control" + (" is-invalid" if has_err else ""), type="date") }}
+    {% elif field.name == 'phone' %}
+        {{ field(class="form-control opora-phone-mask" + (" is-invalid" if has_err else ""), placeholder="+7 (___) ___-__-__") }}
+    {% else %}
+        {{ field(class="form-control" + (" is-invalid" if has_err else ""), placeholder=placeholder) }}
+    {% endif %}
+    {% for error in field.errors %}
+        <div class="invalid-feedback d-block">{{ error }}</div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro form_errors_alert(form) %}
+{% if form.errors %}
+<div class="alert alert-danger py-2 px-3 small mb-3" role="alert">
+    <i class="bi bi-exclamation-circle me-1"></i>
+    {% for field_name, errors in form.errors.items() if field_name != 'csrf_token' %}
+        {% set field = form[field_name] if field_name in form else none %}
+        {% for error in errors %}
+            <div>{% if field %}{{ field.label.text }}: {% endif %}{{ error }}</div>
+        {% endfor %}
+    {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}

@@ -1,0 +1,77 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}{% if mode == 'create' %}Новая заявка{% else %}Редактирование заявки{% endif %} — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% if mode == 'create' %}
+{% call page_header("Новая заявка", "Создание обращения", "plus-circle") %}{% endcall %}
+{% else %}
+{% call page_header("Редактирование заявки", req.number, "pencil-square") %}{% endcall %}
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<form method="POST" class="card">
+    <div class="card-body">
+        {{ form.hidden_tag() }}
+        <div class="row g-3">
+            <div class="col-md-3">
+                {{ form.number.label(class="form-label") }}
+                {{ form.number(class="form-control") }}
+            </div>
+            <div class="col-md-9">
+                {{ form.title.label(class="form-label") }}
+                {{ form.title(class="form-control") }}
+            </div>
+            <div class="col-md-12">
+                {{ form.description.label(class="form-label") }}
+                {{ form.description(class="form-control", rows=4) }}
+            </div>
+            <div class="col-md-8">
+                {{ form.address.label(class="form-label") }}
+                {{ form.address(class="form-control", placeholder="Город, улица, дом") }}
+            </div>
+            <div class="col-md-2">
+                {{ form.latitude.label(class="form-label") }}
+                {{ form.latitude(class="form-control") }}
+            </div>
+            <div class="col-md-2">
+                {{ form.longitude.label(class="form-label") }}
+                {{ form.longitude(class="form-control") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.phone.label(class="form-label") }}
+                {{ form.phone(class="form-control opora-phone-mask", placeholder="+7 (___) ___-__-__") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.applicant_name.label(class="form-label") }}
+                {{ form.applicant_name(class="form-control") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.priority.label(class="form-label") }}
+                {{ form.priority(class="form-select") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.executor_id.label(class="form-label") }}
+                {{ form.executor_id(class="form-select") }}
+            </div>
+            {% if mode == 'edit' and req %}
+            <div class="col-md-4">
+                <label class="form-label">Статус</label>
+                <input class="form-control" value="{{ req.status.name }}" disabled>
+                <div class="form-text">Статус меняется только через действия workflow.</div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Ответственный мастер</label>
+                <input class="form-control" value="{{ req.responsible.full_name if req.responsible else '—' }}" disabled>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card-footer bg-white d-flex gap-2">
+        {{ form.submit(class="btn btn-primary") }}
+        <a href="{% if mode == 'create' %}{{ url_for('requests.index') }}{% else %}{{ url_for('requests.detail', request_id=req.id) }}{% endif %}" class="btn btn-outline-primary">Отмена</a>
+    </div>
+</form>
+{% endblock %}

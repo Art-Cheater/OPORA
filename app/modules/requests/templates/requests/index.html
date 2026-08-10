@@ -1,0 +1,86 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+{% from "macros/crud.html" import create_button %}
+
+{% block title %}Заявки — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Заявки", "Диспетчеризация: АБ → мастер → исполнение", "clipboard-check") %}
+{% if current_user.has_permission('requests.create') %}
+{{ create_button("Создать", "plus-lg") }}
+{% endif %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4 list-filters">
+    <div class="card-header"><i class="bi bi-search"></i>Поиск и фильтры</div>
+    <div class="card-body">
+        <form id="requestFilterForm" class="row g-3">
+            <div class="col-lg-3">
+                <label class="form-label">{{ filter_form.q.label.text }}</label>
+                {{ filter_form.q(class="form-control", placeholder="№, название, адрес, заявитель...") }}
+            </div>
+            <div class="col-lg-3">
+                <label class="form-label">{{ filter_form.preset.label.text }}</label>
+                {{ filter_form.preset(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.status_id.label.text }}</label>
+                {{ filter_form.status_id(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.priority.label.text }}</label>
+                {{ filter_form.priority(class="form-select") }}
+            </div>
+            <div class="col-lg-2 d-flex align-items-end">
+                <button type="button" id="requestFilterReset" class="btn btn-outline-primary w-100">Сброс</button>
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.responsible_id.label.text }}</label>
+                {{ filter_form.responsible_id(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.executor_id.label.text }}</label>
+                {{ filter_form.executor_id(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.sort_by.label.text }}</label>
+                {{ filter_form.sort_by(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.sort_dir.label.text }}</label>
+                {{ filter_form.sort_dir(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">На странице</label>
+                <select class="form-select" name="per_page">
+                    <option value="10">10</option>
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="requestsTableContainer">
+    {% include "requests/partials/table.html" %}
+</div>
+<div id="requestsPaginationContainer" class="mt-3">
+    {% include "requests/partials/pagination.html" %}
+</div>
+
+<div id="oporaListConfig" class="d-none"
+     data-base-url="/requests"
+     data-filter-form-id="requestFilterForm"
+     data-table-container-id="requestsTableContainer"
+     data-pagination-container-id="requestsPaginationContainer"
+     data-reset-btn-id="requestFilterReset"
+     data-page-link-class="request-page-link"
+     data-create-title="Новая заявка"
+     data-edit-title="Редактирование заявки"
+     data-delete-message="Вы уверены, что хотите удалить эту заявку?"
+     data-can-edit="{{ 'true' if current_user.has_permission('requests.edit') else 'false' }}">
+</div>
+{% endblock %}

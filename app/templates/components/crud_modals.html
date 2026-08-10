@@ -1,0 +1,66 @@
+{# Глобальные модальные окна CRUD — единый стиль для всех модулей #}
+
+<div class="modal fade" id="oporaFormModal" tabindex="-1" aria-labelledby="oporaFormModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content opora-modal">
+            <div class="modal-header opora-modal__header">
+                <h5 class="modal-title" id="oporaFormModalLabel">Форма</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body opora-modal__body" id="oporaFormModalBody">
+                <div class="text-center py-5 text-muted">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="oporaDetailModal" tabindex="-1" aria-labelledby="oporaDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content opora-modal">
+            <div class="modal-header opora-modal__header" id="oporaDetailModalHeader">
+                <div class="opora-modal__title-wrap">
+                    <h5 class="modal-title" id="oporaDetailModalLabel">Карточка</h5>
+                    <div id="oporaDetailModalBadge"></div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <a href="#" class="btn btn-sm btn-primary d-none" id="oporaDetailOpenPageBtn">
+                        <i class="bi bi-box-arrow-up-right"></i> Открыть страницу
+                    </a>
+                    <button type="button" class="btn btn-sm btn-outline-primary d-none" id="oporaDetailEditBtn">
+                        <i class="bi bi-pencil"></i> Редактировать
+                    </button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                </div>
+            </div>
+            <div class="modal-body opora-modal__body" id="oporaDetailModalBody">
+                <div class="text-center py-5 text-muted">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="oporaConfirmModal" tabindex="-1" aria-labelledby="oporaConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content opora-modal">
+            <div class="modal-header opora-modal__header border-0 pb-0">
+                <h5 class="modal-title" id="oporaConfirmModalLabel">
+                    <i class="bi bi-exclamation-triangle text-danger me-2"></i>Подтверждение
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body pt-2" id="oporaConfirmModalBody">
+                Вы уверены, что хотите выполнить это действие?
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-danger" id="oporaConfirmModalBtn">Удалить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="oporaToastContainer"></div>

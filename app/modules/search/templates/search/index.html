@@ -1,0 +1,64 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}Поиск{% if query %}: {{ query }}{% endif %} — {{ app_name }}{% endblock %}
+
+{% block extra_css %}
+<link href="{{ url_for('static', filename='css/search.css') }}" rel="stylesheet">
+{% endblock %}
+
+{% block page_header %}
+{% call page_header("Глобальный поиск", "Без учёта регистра и раскладки клавиатуры", "search") %}{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body">
+        <form action="{{ url_for('search.index') }}" method="GET" class="global-search-page__form">
+            <div class="input-group input-group-lg">
+                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                <input type="search" name="q" class="form-control" value="{{ query }}" placeholder="ФИО, заявки, проекты, адреса… (регистр и раскладка не важны)" autofocus>
+                <button class="btn btn-primary" type="submit">Найти</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if query and query|length >= 2 %}
+<div class="search-results-page" id="searchResultsPage">
+    {% if results.total == 0 %}
+    <div class="card">
+        <div class="card-body text-center text-muted py-5">
+            <i class="bi bi-search display-4 d-block mb-3"></i>
+            По запросу «{{ query }}» ничего не найдено
+        </div>
+    </div>
+    {% else %}
+    <div class="search-meta text-muted mb-3">
+        Найдено {{ results.total }} результат(ов) за {{ results.took_ms }} мс
+    </div>
+    {% for cat in results.categories %}
+    <div class="card mb-3">
+        <div class="card-header d-flex align-items-center gap-2">
+            <i class="bi bi-{{ cat.icon }}"></i>
+            <span>{{ cat.label }}</span>
+            <span class="badge badge-status badge-neutral ms-auto">{{ cat.total }}</span>
+        </div>
+        <div class="list-group list-group-flush">
+            {% for item in cat.hits %}
+            <a href="{{ item.url }}" class="list-group-item list-group-item-action">
+                <div class="fw-medium">{{ item.title }}</div>
+                {% if item.subtitle %}
+                <div class="small text-muted">{{ item.subtitle }}</div>
+                {% endif %}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+</div>
+{% elif query %}
+<div class="alert alert-warning">Введите минимум 2 символа для поиска.</div>
+{% endif %}
+{% endblock %}

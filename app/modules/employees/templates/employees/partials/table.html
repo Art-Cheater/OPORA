@@ -1,0 +1,51 @@
+{% from "macros/badges.html" import user_status_badge %}
+{% from "macros/crud.html" import table_actions %}
+<div class="table-card">
+    <table class="table table-opora">
+        <thead>
+            <tr>
+                <th>ФИО</th>
+                <th>Email</th>
+                <th>Должность</th>
+                <th>Подразделение</th>
+                <th>Роли</th>
+                <th>Статус</th>
+                <th class="text-end">Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for employee in employees_pagination.items %}
+            <tr data-opora-id="{{ employee.id }}">
+                <td class="fw-medium">{{ employee.full_name }}</td>
+                <td class="text-muted">{{ employee.email }}</td>
+                <td>{{ employee.position or '—' }}</td>
+                <td>{{ employee.department or '—' }}</td>
+                <td>
+                    {% for role in employee.roles[:2] %}
+                        <span class="badge badge-role">{{ role.name }}</span>
+                    {% endfor %}
+                    {% if employee.roles|length > 2 %}
+                        <span class="small text-muted">+{{ employee.roles|length - 2 }}</span>
+                    {% endif %}
+                </td>
+                <td>{{ user_status_badge(employee) }}</td>
+                <td class="text-end">
+                    {{ table_actions(
+                        view_url=url_for('employees.detail', employee_id=employee.id),
+                        edit_url=url_for('employees.edit', employee_id=employee.id),
+                        entity_id=employee.id,
+                        can_edit=current_user.has_permission('users.edit'),
+                        can_delete=current_user.has_permission('users.delete')
+                    ) }}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="7" class="table-empty">
+                    <i class="bi bi-inbox"></i> Сотрудники не найдены
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

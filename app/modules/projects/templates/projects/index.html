@@ -1,0 +1,86 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+{% from "macros/crud.html" import create_button %}
+
+{% block title %}Проекты — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Проекты", "Управление проектами предприятия", "folder2-open") %}
+{% if current_user.has_permission('projects.create') %}
+{{ create_button("Создать", "plus-lg") }}
+{% endif %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4 list-filters">
+    <div class="card-header"><i class="bi bi-search"></i>Поиск и фильтры</div>
+    <div class="card-body">
+        <form id="projectFilterForm" class="row g-3">
+            <div class="col-lg-3">
+                <label class="form-label">{{ filter_form.q.label.text }}</label>
+                {{ filter_form.q(class="form-control", placeholder="Код, название, описание...") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.status.label.text }}</label>
+                {{ filter_form.status(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.responsible_id.label.text }}</label>
+                {{ filter_form.responsible_id(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.executor_id.label.text }}</label>
+                {{ filter_form.executor_id(class="form-select") }}
+            </div>
+            <div class="col-lg-1 d-flex align-items-end">
+                <button type="button" id="projectFilterReset" class="btn btn-outline-primary w-100">Сброс</button>
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.date_from.label.text }}</label>
+                {{ filter_form.date_from(class="form-control", type="date") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.date_to.label.text }}</label>
+                {{ filter_form.date_to(class="form-control", type="date") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.sort_by.label.text }}</label>
+                {{ filter_form.sort_by(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.sort_dir.label.text }}</label>
+                {{ filter_form.sort_dir(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">На странице</label>
+                <select class="form-select" name="per_page">
+                    <option value="10">10</option>
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="projectsTableContainer">
+    {% include "projects/partials/table.html" %}
+</div>
+<div id="projectsPaginationContainer" class="mt-3">
+    {% include "projects/partials/pagination.html" %}
+</div>
+
+<div id="oporaListConfig" class="d-none"
+     data-base-url="/projects"
+     data-filter-form-id="projectFilterForm"
+     data-table-container-id="projectsTableContainer"
+     data-pagination-container-id="projectsPaginationContainer"
+     data-reset-btn-id="projectFilterReset"
+     data-page-link-class="project-page-link"
+     data-create-title="Новый проект"
+     data-edit-title="Редактирование проекта"
+     data-delete-message="Вы уверены, что хотите удалить этот проект?"
+     data-can-edit="{{ 'true' if current_user.has_permission('projects.edit') else 'false' }}">
+</div>
+{% endblock %}

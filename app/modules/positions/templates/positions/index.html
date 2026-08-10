@@ -1,0 +1,26 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}Должности — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Администрирование", "Справочник должностей", "briefcase") %}{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">Должности не влияют на права доступа — только отображаются в карточке сотрудника.</div>
+    <div class="table-card">
+        <table class="table table-opora">
+            <thead><tr><th>Код</th><th>Название</th></tr></thead>
+            <tbody>
+                {% for p in positions %}
+                <tr><td><code>{{ p.code }}</code></td><td>{{ p.name }}</td></tr>
+                {% else %}
+                <tr><td colspan="2" class="table-empty">Справочник пуст. Запустите seed-reference-data.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

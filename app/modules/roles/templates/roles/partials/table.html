@@ -1,0 +1,48 @@
+{% from "macros/badges.html" import badge_role %}
+{% from "macros/crud.html" import table_actions %}
+<div class="table-card">
+    <table class="table table-opora">
+        <thead>
+            <tr>
+                <th>Код</th>
+                <th>Название</th>
+                <th>Тип</th>
+                <th>Сотрудников</th>
+                <th>Разрешений</th>
+                <th class="text-end">Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for role in roles_pagination.items %}
+            <tr data-opora-id="{{ role.id }}">
+                <td class="fw-semibold"><code>{{ role.code }}</code></td>
+                <td>{{ role.name }}</td>
+                <td>
+                    {% if role.is_system %}
+                        <span class="badge badge-status badge-in-progress">Системная</span>
+                    {% else %}
+                        <span class="badge badge-status badge-neutral">Пользовательская</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% set uc = namespace(n=0) %}
+                    {% for ur in role.user_roles %}{% if ur.deleted_at is none %}{% set uc.n = uc.n + 1 %}{% endif %}{% endfor %}
+                    {{ uc.n }}
+                </td>
+                <td>{{ role.role_permissions|selectattr('deleted_at', 'none')|list|length }}</td>
+                <td class="text-end">
+                    {{ table_actions(
+                        view_url=url_for('roles.detail', role_id=role.id),
+                        edit_url=url_for('roles.edit', role_id=role.id),
+                        entity_id=role.id,
+                        can_edit=current_user.has_permission('roles.manage'),
+                        can_delete=current_user.has_permission('roles.manage') and not role.is_system
+                    ) }}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="table-empty"><i class="bi bi-inbox"></i> Роли не найдены</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

@@ -1,0 +1,55 @@
+{% extends "layouts/app.html" %}
+{% from "macros/badges.html" import success_badge %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}Журнал входов — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Журнал входов", "История авторизаций в системе", "shield-check") %}
+    <a href="{{ url_for('auth.profile') }}" class="btn btn-outline-primary">
+        <i class="bi bi-arrow-left"></i> Профиль
+    </a>
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="table-card">
+    <table class="table table-opora">
+        <thead>
+            <tr>
+                <th>Дата и время</th>
+                <th>Email</th>
+                <th>Пользователь</th>
+                <th>IP-адрес</th>
+                <th>Статус</th>
+                <th>Причина отказа</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in login_logs %}
+            <tr>
+                <td class="text-muted">{{ log.created_at.strftime('%d.%m.%Y %H:%M:%S') }}</td>
+                <td>{{ log.email }}</td>
+                <td>{{ log.user.full_name if log.user else '—' }}</td>
+                <td>{{ log.ip_address or '—' }}</td>
+                <td>{{ success_badge(log.success) }}</td>
+                <td class="text-muted">
+                    {% if log.failure_reason == 'invalid_password' %}Неверный пароль
+                    {% elif log.failure_reason == 'user_blocked' %}Заблокирован
+                    {% elif log.failure_reason == 'user_inactive' %}Деактивирован
+                    {% elif log.failure_reason == 'user_not_found' %}Не найден
+                    {% else %}{{ log.failure_reason or '—' }}
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6" class="table-empty">
+                    <i class="bi bi-inbox"></i>Записей нет
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,129 @@
+{# Макросы предпросмотра и списка файлов #}
+
+{% macro file_thumb(item) %}
+{# item: name, mime, download_url, preview_url, delete_url?, created_at? #}
+{% set mime = (item.mime or '')|lower %}
+{% set is_image = mime.startswith('image/') %}
+{% set is_pdf = mime == 'application/pdf' %}
+<div class="file-card">
+    <div class="file-card__preview">
+        {% if is_image and item.preview_url %}
+        <button type="button"
+                class="file-card__thumb-btn"
+                data-bs-toggle="modal"
+                data-bs-target="#filePreviewModal"
+                data-preview-url="{{ item.preview_url }}"
+                data-preview-name="{{ item.name }}"
+                data-preview-type="image">
+            <img src="{{ item.preview_url }}" alt="{{ item.name }}" class="file-card__img" loading="lazy">
+        </button>
+        {% elif is_pdf and item.preview_url %}
+        <button type="button"
+                class="file-card__thumb-btn file-card__thumb-btn--icon"
+                data-bs-toggle="modal"
+                data-bs-target="#filePreviewModal"
+                data-preview-url="{{ item.preview_url }}"
+                data-preview-name="{{ item.name }}"
+                data-preview-type="pdf">
+            <i class="bi bi-file-earmark-pdf"></i>
+            <span>PDF</span>
+        </button>
+        {% else %}
+        <div class="file-card__thumb-btn file-card__thumb-btn--icon file-card__thumb-btn--static">
+            <i class="bi bi-file-earmark"></i>
+        </div>
+        {% endif %}
+    </div>
+    <div class="file-card__meta">
+        <a href="{{ item.download_url }}" class="file-card__name text-truncate" title="{{ item.name }}">
+            {{ item.name }}
+        </a>
+        {% if item.created_at %}
+        <div class="file-card__date">{{ item.created_at }}</div>
+        {% endif %}
+        <div class="file-card__actions">
+            {% if item.preview_url and (is_image or is_pdf) %}
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    data-bs-toggle="modal"
+                    data-bs-target="#filePreviewModal"
+                    data-preview-url="{{ item.preview_url }}"
+                    data-preview-name="{{ item.name }}"
+                    data-preview-type="{{ 'image' if is_image else 'pdf' }}">
+                Просмотр
+            </button>
+            {% endif %}
+            <a href="{{ item.download_url }}" class="btn btn-sm btn-outline-primary">Скачать</a>
+            {% if item.delete_url and item.can_delete %}
+            <form method="POST" action="{{ item.delete_url }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-outline-secondary"
+                        onclick="return confirm('Удалить файл?')">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+
+{% macro file_gallery(items, empty_text="Файлы не загружены.") %}
+{% if items %}
+<div class="file-gallery">
+    {% for item in items %}
+        {{ file_thumb(item) }}
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-muted small">{{ empty_text }}</div>
+{% endif %}
+{% endmacro %}
+
+
+{% macro file_preview_modal() %}
+<div class="modal fade" id="filePreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="filePreviewModalTitle">Просмотр</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body text-center" id="filePreviewModalBody">
+                <div class="text-muted">Загрузка…</div>
+            </div>
+            <div class="modal-footer">
+                <a href="#" class="btn btn-outline-primary" id="filePreviewDownload" target="_blank" rel="noopener">
+                    Открыть / скачать
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+  const modal = document.getElementById("filePreviewModal");
+  if (!modal || modal.dataset.bound === "1") return;
+  modal.dataset.bound = "1";
+  modal.addEventListener("show.bs.modal", function (event) {
+    const btn = event.relatedTarget;
+    if (!btn) return;
+    const url = btn.getAttribute("data-preview-url") || "";
+    const name = btn.getAttribute("data-preview-name") || "Файл";
+    const type = btn.getAttribute("data-preview-type") || "";
+    document.getElementById("filePreviewModalTitle").textContent = name;
+    const body = document.getElementById("filePreviewModalBody");
+    const dl = document.getElementById("filePreviewDownload");
+    dl.href = url;
+    if (type === "image") {
+      body.innerHTML = '<img src="' + url + '" alt="" class="img-fluid rounded" style="max-height:70vh">';
+    } else if (type === "pdf") {
+      body.innerHTML = '<iframe src="' + url + '" title="PDF" style="width:100%;height:70vh;border:0;border-radius:8px"></iframe>';
+    } else {
+      body.innerHTML = '<div class="text-muted">Предпросмотр недоступен. Используйте скачивание.</div>';
+    }
+  });
+})();
+</script>
+{% endmacro %}

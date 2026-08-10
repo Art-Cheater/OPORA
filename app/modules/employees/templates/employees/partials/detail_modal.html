@@ -1,0 +1,62 @@
+{% from "macros/badges.html" import user_status_badge %}
+{% from "macros/custom_fields.html" import custom_fields_detail with context %}
+<span class="d-none" data-opora-card-title>{{ employee.full_name }}</span>
+<span class="d-none" data-opora-card-badge>{{ user_status_badge(employee) }}</span>
+
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="opora-detail-field">
+            <div class="opora-detail-field__label">Статус</div>
+            <div>{{ user_status_badge(employee) }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="opora-detail-field">
+            <div class="opora-detail-field__label">Email</div>
+            <div>{{ employee.email }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="opora-detail-field">
+            <div class="opora-detail-field__label">Телефон</div>
+            <div>{{ employee.phone or "—" }}</div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="opora-detail-field">
+            <div class="opora-detail-field__label">Должность</div>
+            <div>{{ employee.position_title or "—" }}</div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="opora-detail-field">
+            <div class="opora-detail-field__label">Подразделение</div>
+            <div>{{ employee.department or "—" }}</div>
+        </div>
+    </div>
+    <div class="col-12">
+        <div class="opora-detail-field">
+            <div class="opora-detail-field__label">Роли</div>
+            <div>
+                {% for role in employee.roles %}
+                    <span class="badge badge-role me-1">{{ role.name }}</span>
+                {% else %}
+                    <span class="text-muted">Роли не назначены</span>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="opora-detail-field">
+            <div class="opora-detail-field__label">Последний вход</div>
+            <div>{{ employee.last_login_at.strftime('%d.%m.%Y %H:%M') if employee.last_login_at else "—" }}</div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="opora-detail-field">
+            <div class="opora-detail-field__label">Создан</div>
+            <div>{{ employee.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+        </div>
+    </div>
+    {{ custom_fields_detail(custom_field_details) }}
+</div>

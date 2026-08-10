@@ -1,0 +1,114 @@
+/* Глобальный поиск — выпадающая панель и страница результатов */
+
+.global-search-wrap {
+  position: relative;
+  flex: 1;
+  max-width: 480px;
+}
+
+.global-search-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  border: 1px solid #e9ecef;
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  z-index: 1050;
+  display: none;
+}
+
+.global-search-dropdown.show {
+  display: block;
+}
+
+.global-search-dropdown__meta {
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #6c757d;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+}
+
+.global-search-dropdown__empty,
+.global-search-dropdown__hint {
+  padding: 20px 14px;
+  text-align: center;
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.global-search-category {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.global-search-category:last-child {
+  border-bottom: none;
+}
+
+.global-search-category__title {
+  padding: 8px 14px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #f57c00;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.global-search-item {
+  display: block;
+  padding: 10px 14px;
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.12s;
+}
+
+.global-search-item:hover,
+.global-search-item.active {
+  background: #fff8f0;
+}
+
+.global-search-item__title {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.global-search-item__subtitle {
+  font-size: 12px;
+  color: #6c757d;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.global-search-dropdown__footer {
+  padding: 8px 14px;
+  border-top: 1px solid #f0f0f0;
+  text-align: center;
+}
+
+.global-search-dropdown__footer a {
+  font-size: 13px;
+  font-weight: 500;
+  color: #f57c00;
+  text-decoration: none;
+}
+
+.search-meta {
+  font-size: 13px;
+}
+
+.search-results-page .list-group-item {
+  border-left: none;
+  border-right: none;
+}

@@ -1,0 +1,24 @@
+{% extends "layouts/public.html" %}
+
+{% block title %}Сессия формы — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="error-page">
+    <div class="error-page__code">CSRF</div>
+    <h2 class="error-page__title">Сессия формы устарела</h2>
+    <p class="text-muted mb-4">
+        Страница была открыта слишком долго или токен защиты формы истёк.
+        Вы по-прежнему можете быть в системе — просто обновите страницу и повторите действие.
+    </p>
+    <div class="d-flex flex-wrap gap-2 justify-content-center">
+        {% if back_url %}
+        <a href="{{ back_url }}" class="btn btn-primary">
+            <i class="bi bi-arrow-counterclockwise"></i> Вернуться и обновить
+        </a>
+        {% endif %}
+        <a href="{{ url_for('main.index') }}" class="btn btn-outline-primary">
+            <i class="bi bi-house"></i> На главную
+        </a>
+    </div>
+</div>
+{% endblock %}

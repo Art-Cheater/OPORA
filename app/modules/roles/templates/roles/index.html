@@ -1,0 +1,84 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}Роли — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Администрирование", "Роли и права доступа", "shield-lock") %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="roles-admin" id="rolesAdmin"
+     data-can-manage="{{ 'true' if can_manage else 'false' }}"
+     data-csrf="{{ csrf_token() }}">
+
+    <div class="row g-3">
+        <div class="col-lg-4">
+            <div class="card roles-admin__list-card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-shield-lock me-1"></i>Роли</span>
+                    {% if can_manage %}
+                    <button type="button" class="btn btn-sm btn-primary" id="roleCreateBtn">
+                        <i class="bi bi-plus-lg"></i>
+                    </button>
+                    {% endif %}
+                </div>
+                <div class="card-body p-2">
+                    <input type="search" class="form-control form-control-sm mb-2" id="roleSearchInput" placeholder="Поиск роли...">
+                    <div class="list-group list-group-flush roles-admin__list" id="rolesList">
+                        {% for r in roles %}
+                        <a href="#"
+                           class="list-group-item list-group-item-action roles-admin__item {% if selected_role and selected_role.id == r.id %}active{% endif %}"
+                           data-role-id="{{ r.id }}">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <div class="fw-semibold">{{ r.name }}</div>
+                                    <code class="small">{{ r.code }}</code>
+                                </div>
+                                {% if r.is_system %}
+                                <span class="badge badge-status badge-in-progress">Системная</span>
+                                {% endif %}
+                            </div>
+                        </a>
+                        {% else %}
+                        <div class="text-muted small p-3 text-center">Роли не найдены</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card roles-admin__editor-card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span id="roleEditorTitle">{{ selected_role.name if selected_role else 'Новая роль' }}</span>
+                    {% if can_manage and selected_role %}
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-outline-primary" id="roleDuplicateBtn" data-role-id="{{ selected_role.id }}">
+                            <i class="bi bi-copy"></i> Дублировать
+                        </button>
+                        {% if not selected_role.is_system %}
+                        <button type="button" class="btn btn-outline-danger" id="roleDeleteBtn" data-role-id="{{ selected_role.id }}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="card-body" id="roleEditorPanel">
+                    {% if selected_role or can_manage %}
+                        {% include "roles/partials/role_editor.html" %}
+                    {% else %}
+                        <div class="text-muted text-center py-5">Выберите роль для просмотра</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/roles-admin.js') }}"></script>
+{% endblock %}

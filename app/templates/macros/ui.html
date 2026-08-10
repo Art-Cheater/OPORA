@@ -1,0 +1,23 @@
+{# Заголовок страницы #}
+{% macro page_header(title, subtitle=none, icon=none) %}
+<div class="page-header">
+    <div class="page-header__content">
+        {% if icon %}
+        <div class="page-header__icon">
+            <i class="bi bi-{{ icon }}"></i>
+        </div>
+        {% endif %}
+        <div>
+            <h1 class="page-header__title">{{ title }}</h1>
+            {% if subtitle %}
+            <p class="page-header__subtitle">{{ subtitle }}</p>
+            {% endif %}
+        </div>
+    </div>
+    {% if caller %}
+    <div class="page-header__actions">
+        {{ caller() }}
+    </div>
+    {% endif %}
+</div>
+{% endmacro %}

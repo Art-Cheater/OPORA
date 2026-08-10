@@ -1,0 +1,79 @@
+{# Рендер пользовательских полей в формах и карточках #}
+
+{% macro custom_fields_form(fields, values, module, col=6) %}
+{% if fields %}
+<div class="col-12"><hr class="my-1"><small class="text-muted text-uppercase fw-semibold">Дополнительные поля</small></div>
+{% for field in fields %}
+    {% if current_user.can_view_field(module, field.code) %}
+        {% set val = values.get(field.code, '') %}
+        {% set fname = 'cf_' ~ field.code %}
+        {% if current_user.can_edit_field(module, field.code) %}
+        <div class="col-md-{{ col }}">
+            <label class="form-label" for="{{ fname }}">
+                {{ field.name }}{% if field.is_required %}<span class="text-danger">*</span>{% endif %}
+            </label>
+            {% if field.field_type == 'textarea' %}
+                <textarea class="form-control" id="{{ fname }}" name="{{ fname }}" rows="3"
+                          {% if field.is_required %}required{% endif %}>{{ val or '' }}</textarea>
+            {% elif field.field_type == 'number' %}
+                <input type="number" step="any" class="form-control" id="{{ fname }}" name="{{ fname }}"
+                       value="{{ val or '' }}" {% if field.is_required %}required{% endif %}>
+            {% elif field.field_type == 'date' %}
+                <input type="date" class="form-control" id="{{ fname }}" name="{{ fname }}"
+                       value="{{ val or '' }}" {% if field.is_required %}required{% endif %}>
+            {% elif field.field_type == 'datetime' %}
+                <input type="datetime-local" class="form-control" id="{{ fname }}" name="{{ fname }}"
+                       value="{{ val or '' }}" {% if field.is_required %}required{% endif %}>
+            {% elif field.field_type == 'boolean' %}
+                <div class="form-check mt-2">
+                    <input type="checkbox" class="form-check-input" id="{{ fname }}" name="{{ fname }}" value="1"
+                           {% if val in ['1', 'true', 'on', 'yes'] %}checked{% endif %}>
+                    <label class="form-check-label" for="{{ fname }}">Да</label>
+                </div>
+            {% elif field.field_type == 'select' %}
+                <select class="form-select" id="{{ fname }}" name="{{ fname }}" {% if field.is_required %}required{% endif %}>
+                    <option value="">—</option>
+                    {% for opt in field.options if opt.deleted_at is none %}
+                    <option value="{{ opt.value }}" {% if val|string == opt.value|string %}selected{% endif %}>{{ opt.label }}</option>
+                    {% endfor %}
+                </select>
+            {% else %}
+                <input type="text" class="form-control" id="{{ fname }}" name="{{ fname }}"
+                       value="{{ val or '' }}" {% if field.is_required %}required{% endif %}>
+            {% endif %}
+            {% if field.description %}<div class="form-text">{{ field.description }}</div>{% endif %}
+        </div>
+        {% else %}
+        <div class="col-md-{{ col }}">
+            <label class="form-label">{{ field.name }}</label>
+            <div class="form-control-plaintext border rounded px-3 py-2 bg-light">
+                {% if field.field_type == 'boolean' %}
+                    {{ 'Да' if val in ['1', 'true', 'on', 'yes'] else ('Нет' if val else '—') }}
+                {% elif field.field_type == 'select' %}
+                    {% set ns = namespace(lbl='—') %}
+                    {% for opt in field.options if opt.deleted_at is none and opt.value|string == val|string %}{% set ns.lbl = opt.label %}{% endfor %}
+                    {{ ns.lbl }}
+                {% else %}
+                    {{ val or '—' }}
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    {% endif %}
+{% endfor %}
+{% endif %}
+{% endmacro %}
+
+{% macro custom_fields_detail(items) %}
+{% if items %}
+<div class="col-12 mt-2"><hr><small class="text-muted text-uppercase fw-semibold">Дополнительные поля</small></div>
+{% for item in items %}
+<div class="col-md-6">
+    <div class="opora-detail-field">
+        <div class="opora-detail-field__label">{{ item.field.name }}</div>
+        <div>{{ item.display }}</div>
+    </div>
+</div>
+{% endfor %}
+{% endif %}
+{% endmacro %}

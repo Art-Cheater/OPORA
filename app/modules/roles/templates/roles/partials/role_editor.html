@@ -1,0 +1,142 @@
+{% from "macros/forms.html" import form_errors_alert %}
+<form method="POST" action="{{ form_action }}" class="opora-modal-form" id="roleEditorForm">
+    {{ form.hidden_tag() if form else '' }}
+    {{ form_errors_alert(form) if form else '' }}
+
+    {% if is_admin_role %}
+    <div class="alert alert-info py-2 small mb-3">
+        Роль «Администратор» имеет полный доступ ко всем модулям и полям системы.
+    </div>
+    {% endif %}
+
+    <ul class="nav nav-tabs opora-card-tabs mb-3" role="tablist">
+        <li class="nav-item"><button class="nav-link active" type="button" data-bs-toggle="tab" data-bs-target="#roleTabMain">Основное</button></li>
+        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="tab" data-bs-target="#roleTabModules">Права модулей</button></li>
+        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="tab" data-bs-target="#roleTabFields">Права полей</button></li>
+    </ul>
+
+    <div class="tab-content">
+        <div class="tab-pane fade show active" id="roleTabMain">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    {{ form.code.label(class="form-label") }}
+                    {% if is_edit and role and role.is_system %}
+                        {{ form.code(class="form-control", readonly=true) }}
+                        <div class="form-text">Код системной роли нельзя изменить.</div>
+                    {% else %}
+                        {{ form.code(class="form-control" + (" is-invalid" if form.code.errors else ""), placeholder="custom_role", readonly=not can_manage) }}
+                    {% endif %}
+                </div>
+                <div class="col-md-8">
+                    {{ form.name.label(class="form-label") }}
+                    {{ form.name(class="form-control", readonly=not can_manage) }}
+                </div>
+                <div class="col-12">
+                    {{ form.description.label(class="form-label") }}
+                    {{ form.description(class="form-control", rows=2, readonly=not can_manage) }}
+                </div>
+                {% if role %}
+                <div class="col-md-4">
+                    <small class="text-muted">Сотрудников с ролью</small>
+                    <div class="fw-semibold">{{ role.user_roles|selectattr('deleted_at', 'none')|list|length }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="roleTabModules">
+            <p class="text-muted small">Стандартные действия — по колонкам. Специальные права (мессенджер, поиск, одобрение заявок и т.д.) — в колонке «Дополнительно».</p>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Модуль</th>
+                            {% for action, label in module_actions.items() %}
+                            <th class="text-center small">{{ label }}</th>
+                            {% endfor %}
+                            <th class="text-center small" style="min-width:180px">Дополнительно</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in permission_rows %}
+                        <tr>
+                            <td class="fw-semibold">{{ row.module.name }}</td>
+                            {% for action in module_actions %}
+                            {% set perm = row.standard.get(action) %}
+                            <td class="text-center">
+                                {% if perm %}
+                                <input type="checkbox" class="form-check-input m-0" name="permission_ids" value="{{ perm.id }}"
+                                       {% if perm.id|string in selected_permission_ids %}checked{% endif %}
+                                       {% if not can_manage %}disabled{% endif %}
+                                       title="{{ perm.name }}">
+                                {% else %}<span class="text-muted">—</span>{% endif %}
+                            </td>
+                            {% endfor %}
+                            <td class="text-start small">
+                                {% if row.extra %}
+                                    {% for action, perm in row.extra %}
+                                    <div class="form-check mb-1">
+                                        <input class="form-check-input" type="checkbox" name="permission_ids" value="{{ perm.id }}"
+                                               id="perm_extra_{{ perm.id }}"
+                                               {% if perm.id|string in selected_permission_ids %}checked{% endif %}
+                                               {% if not can_manage %}disabled{% endif %}>
+                                        <label class="form-check-label" for="perm_extra_{{ perm.id }}">{{ perm.name }}</label>
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="roleTabFields">
+            <p class="text-muted small">Если правила не заданы — при наличии права «Редактирование» доступны все поля раздела. Пользовательские поля из конструктора включены в список.</p>
+            <div class="mb-3">
+                <label class="form-label">Модуль</label>
+                <select class="form-select form-select-sm" id="fieldModuleSelect" style="max-width:280px">
+                    {% for mod in modules if mod.code in module_fields %}
+                    <option value="{{ mod.code }}">{{ mod.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% for mod_code, fields in module_fields.items() %}
+            <div class="field-module-panel {% if not loop.first %}d-none{% endif %}" data-module="{{ mod_code }}">
+                <table class="table table-sm table-bordered align-middle">
+                    <thead class="table-light">
+                        <tr><th>Поле</th><th style="width:220px">Уровень доступа</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for field_name, field_label in fields.items() %}
+                        {% set level = field_rules_map.get(mod_code, {}).get(field_name, 0) %}
+                        <tr>
+                            <td>{{ field_label }} <code class="small text-muted">{{ field_name }}</code></td>
+                            <td>
+                                <select class="form-select form-select-sm" name="field_level_{{ mod_code }}_{{ field_name }}"
+                                        {% if not can_manage %}disabled{% endif %}>
+                                    {% for lvl, lbl in field_access_labels.items() %}
+                                    <option value="{{ lvl }}" {% if level == lvl %}selected{% endif %}>{{ lbl }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if can_manage %}
+    <div class="modal-form-footer mt-3 pt-3 border-top">
+        <button type="submit" class="btn btn-primary" id="roleSaveBtn">
+            <i class="bi bi-check-lg"></i> Сохранить
+        </button>
+    </div>
+    {% endif %}
+</form>

@@ -1,0 +1,185 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+{% from "macros/badges.html" import project_status_badge %}
+{% from "macros/files.html" import file_gallery %}
+
+{% block title %}{{ project.code }} — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header(project.code ~ " — " ~ project.name, "Карточка проекта", "folder2-open") %}
+<a href="{{ url_for('projects.edit', project_id=project.id) }}" class="btn btn-primary">
+    <i class="bi bi-pencil-square"></i> Редактировать
+</a>
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-xl-8">
+        <div class="card mb-4">
+            <div class="card-header"><i class="bi bi-card-text"></i>Детали проекта</div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <small class="text-muted">Статус</small>
+                        <div>{{ project_status_badge(project.status) }}</div>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted">Готовность</small>
+                        <div class="d-flex align-items-center gap-2 mt-1">
+                            <div class="progress flex-grow-1" style="height: 10px;">
+                                <div class="progress-bar bg-primary" style="width: {{ project.progress_percent }}%"></div>
+                            </div>
+                            <span class="fw-medium">{{ project.progress_percent }}%</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted">Ответственный</small>
+                        <div class="fw-medium">{{ project.responsible.full_name if project.responsible else "—" }}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <small class="text-muted">Дата начала</small>
+                        <div>{{ project.start_date.strftime('%d.%m.%Y') if project.start_date else "—" }}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <small class="text-muted">Дата окончания</small>
+                        <div>{{ project.end_date.strftime('%d.%m.%Y') if project.end_date else "—" }}</div>
+                    </div>
+                    <div class="col-12">
+                        <small class="text-muted">Исполнители</small>
+                        <div class="mt-1">
+                            {% if project.executors %}
+                                {% for executor in project.executors %}
+                                    <span class="badge badge-status badge-neutral me-1 mb-1">{{ executor.full_name }}</span>
+                                {% endfor %}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <small class="text-muted">Описание</small>
+                        <div class="mt-1">{{ project.description or "—" }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header"><i class="bi bi-file-earmark-text"></i>Документы</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('projects.add_document', project_id=project.id) }}" enctype="multipart/form-data" class="mb-3">
+                    {{ document_form.hidden_tag() }}
+                    <div class="row g-2">
+                        <div class="col-md-6">{{ document_form.title(class="form-control", placeholder="Название документа") }}</div>
+                        <div class="col-md-3">{{ document_form.document_type(class="form-select") }}</div>
+                        <div class="col-md-3">{{ document_form.document_number(class="form-control", placeholder="Номер") }}</div>
+                        <div class="col-md-3">{{ document_form.document_date(class="form-control", type="date") }}</div>
+                        <div class="col-md-9">
+                            {{ document_form.files(class="form-control form-control-sm", multiple=true) }}
+                            <div class="form-text">Несколько файлов сразу (до {{ max_upload_mb }} МБ суммарно).</div>
+                        </div>
+                        <div class="col-md-12">{{ document_form.description(class="form-control", rows=2, placeholder="Описание") }}</div>
+                        <div class="col-md-12">{{ document_form.submit(class="btn btn-primary btn-sm") }}</div>
+                    </div>
+                </form>
+                <div class="small">
+                    {% for doc in project.documents if doc.deleted_at is none %}
+                    <div class="border rounded-2 p-3 mb-2">
+                        <div class="fw-medium">{{ doc.title }}</div>
+                        <div class="text-muted">
+                            {{ doc.document_type }}
+                            {% if doc.document_number %} · № {{ doc.document_number }}{% endif %}
+                            {% if doc.document_date %} · {{ doc.document_date.strftime('%d.%m.%Y') }}{% endif %}
+                        </div>
+                        {% if doc.description %}
+                        <div class="mt-1">{{ doc.description }}</div>
+                        {% endif %}
+                        {% if doc.file_name and doc.storage_key %}
+                        <div class="mt-2 d-flex flex-wrap gap-2">
+                            <a class="btn btn-sm btn-outline-primary"
+                               href="{{ url_for('projects.download_document', project_id=project.id, document_id=doc.id) }}">
+                                Скачать
+                            </a>
+                            {% if doc.mime_type and (doc.mime_type.startswith('image/') or doc.mime_type == 'application/pdf') %}
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#filePreviewModal"
+                                    data-preview-url="{{ url_for('projects.download_document', project_id=project.id, document_id=doc.id, inline=1) }}"
+                                    data-preview-name="{{ doc.file_name }}"
+                                    data-preview-type="{{ 'image' if doc.mime_type.startswith('image/') else 'pdf' }}">
+                                Просмотр
+                            </button>
+                            {% endif %}
+                        </div>
+                        {% elif doc.file_name %}
+                        <span class="badge badge-status badge-neutral mt-2">{{ doc.file_name }}</span>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div class="text-muted">Документы не добавлены.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header"><i class="bi bi-chat-left-text"></i>Комментарии</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('projects.add_comment', project_id=project.id) }}" class="mb-3">
+                    {{ comment_form.hidden_tag() }}
+                    <div class="mb-2">{{ comment_form.body(class="form-control", rows=3, placeholder="Введите комментарий...") }}</div>
+                    {{ comment_form.submit(class="btn btn-primary btn-sm") }}
+                </form>
+                {% for item in comments %}
+                    <div class="border rounded-3 p-3 mb-2">
+                        <div class="d-flex justify-content-between">
+                            <strong>{{ item.author.full_name if item.author else "Пользователь" }}</strong>
+                            <small class="text-muted">{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</small>
+                        </div>
+                        <div class="mt-2">{{ item.body }}</div>
+                    </div>
+                {% else %}
+                    <div class="text-muted">Комментариев пока нет.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4">
+        <div class="card mb-4">
+            <div class="card-header"><i class="bi bi-paperclip"></i>Файлы</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('projects.add_attachment', project_id=project.id) }}" enctype="multipart/form-data" class="mb-3">
+                    {{ attachment_form.hidden_tag() }}
+                    <div class="mb-2">
+                        {{ attachment_form.files(class="form-control form-control-sm", multiple=true) }}
+                        <div class="form-text">Несколько файлов сразу (до {{ max_upload_mb }} МБ суммарно).</div>
+                    </div>
+                    {{ attachment_form.submit(class="btn btn-outline-primary btn-sm w-100") }}
+                </form>
+                {{ file_gallery(file_items) }}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><i class="bi bi-clock-history"></i>История изменений</div>
+            <div class="card-body">
+                <div class="small">
+                    {% for h in project.history %}
+                        <div class="border-start border-2 ps-3 mb-3">
+                            <div class="fw-medium">{{ h.comment or h.action }}</div>
+                            <div class="text-muted">{{ h.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                            {% if h.changed_by_user %}
+                            <div class="text-muted">Автор: {{ h.changed_by_user.full_name }}</div>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <div class="text-muted">История пока пуста.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,92 @@
+{% from "macros/forms.html" import form_errors_alert %}
+<form method="POST" action="{{ form_action }}" class="opora-modal-form">
+    {{ form.hidden_tag() }}
+    {{ form_errors_alert(form) }}
+
+    <ul class="nav nav-tabs opora-card-tabs mb-3" role="tablist">
+        <li class="nav-item"><button class="nav-link active" type="button" data-bs-toggle="tab" data-bs-target="#roleTabMain">Основное</button></li>
+        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="tab" data-bs-target="#roleTabPerms">Разрешения</button></li>
+        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="tab" data-bs-target="#roleTabFields">Поля</button></li>
+    </ul>
+
+    <div class="tab-content">
+        <div class="tab-pane fade show active" id="roleTabMain">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    {{ form.code.label(class="form-label") }}
+                    {% if is_edit and role and role.is_system %}
+                        {{ form.code(class="form-control", readonly=true) }}
+                        <div class="form-text">Код системной роли нельзя изменить.</div>
+                    {% else %}
+                        {{ form.code(class="form-control" + (" is-invalid" if form.code.errors else ""), placeholder="custom_role") }}
+                        {% for e in form.code.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+                    {% endif %}
+                </div>
+                <div class="col-md-8">
+                    {{ form.name.label(class="form-label") }}
+                    {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else "")) }}
+                    {% for e in form.name.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+                </div>
+                <div class="col-12">
+                    {{ form.description.label(class="form-label") }}
+                    {{ form.description(class="form-control", rows=2) }}
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="roleTabPerms">
+            <p class="text-muted small">Отметьте действия, доступные этой роли в каждом разделе системы.</p>
+            <div class="row g-3">
+                {% for module, perms in permissions_by_module.items() %}
+                <div class="col-md-6">
+                    <div class="border rounded-3 p-3 h-100">
+                        <div class="fw-semibold mb-2">{{ module_labels.get(module, module) }}</div>
+                        {% for perm in perms %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="permission_ids" value="{{ perm.id }}" id="perm_{{ perm.id }}"
+                                   {% if perm.id|string in selected_permission_ids %}checked{% endif %}>
+                            <label class="form-check-label" for="perm_{{ perm.id }}">{{ perm.name }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="roleTabFields">
+            <p class="text-muted small">Настройте доступ к отдельным полям. Если ничего не отмечено — при наличии права «Редактирование» доступны все поля раздела.</p>
+            {% for module, fields in module_fields.items() %}
+            <div class="mb-3">
+                <div class="fw-semibold mb-2">{{ module_labels.get(module, module) }}</div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered align-middle mb-0">
+                        <thead class="table-light">
+                            <tr><th>Поле</th><th class="text-center" style="width:100px">Просмотр</th><th class="text-center" style="width:120px">Редактирование</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for field_name, field_label in fields.items() %}
+                            {% set fr = field_rules_map.get(module, {}).get(field_name, {'view': false, 'edit': false}) %}
+                            <tr>
+                                <td>{{ field_label }} <code class="small text-muted">{{ field_name }}</code></td>
+                                <td class="text-center">
+                                    <input type="checkbox" name="field_view_{{ module }}_{{ field_name }}" {% if fr.view %}checked{% endif %}>
+                                </td>
+                                <td class="text-center">
+                                    <input type="checkbox" name="field_edit_{{ module }}_{{ field_name }}" {% if fr.edit %}checked{% endif %}>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="modal-form-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+        {{ form.submit(class="btn btn-primary") }}
+    </div>
+</form>

@@ -1,0 +1,136 @@
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar__header">
+        <a href="{{ url_for('main.index') }}" class="logo logo--sidebar">
+            {% include "components/logo.html" %}
+        </a>
+        <button class="sidebar__close d-lg-none" id="sidebarClose" aria-label="Закрыть меню">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+
+    <nav class="sidebar__nav">
+        <div class="sidebar__section">
+            <span class="sidebar__label">Основное</span>
+            <a href="{{ url_for('main.index') }}"
+               class="sidebar__link {% if request.endpoint == 'main.index' %}active{% endif %}">
+                <i class="bi bi-grid-1x2"></i>
+                <span>Панель управления</span>
+            </a>
+        </div>
+
+        <div class="sidebar__section">
+            <span class="sidebar__label">Модули</span>
+            {% if current_user.has_permission('requests.view') %}
+            <a href="{{ url_for('requests.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('requests.') %}active{% endif %}">
+                <i class="bi bi-clipboard-check"></i>
+                <span>Заявки</span>
+            </a>
+            {% endif %}
+            {% if current_user.has_permission('projects.view') %}
+            <a href="{{ url_for('projects.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('projects.') %}active{% endif %}">
+                <i class="bi bi-folder2-open"></i>
+                <span>Проекты</span>
+            </a>
+            {% endif %}
+            {% if current_user.has_permission('contracts.view') %}
+            <a href="{{ url_for('contracts.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('contracts.') %}active{% endif %}">
+                <i class="bi bi-file-earmark-text"></i>
+                <span>Контракты</span>
+            </a>
+            {% endif %}
+            {% if current_user.has_permission('reports.view') %}
+            <a href="{{ url_for('reports.requests') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('reports.') %}active{% endif %}">
+                <i class="bi bi-bar-chart"></i>
+                <span>Отчёты</span>
+            </a>
+            {% endif %}
+            {% if current_user.has_permission('messenger.use') %}
+            <a href="{{ url_for('messenger.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('messenger.') %}active{% endif %}">
+                <i class="bi bi-chat-dots"></i>
+                <span>Мессенджер</span>
+                <span class="sidebar__badge sidebar__badge--accent d-none" id="messengerUnreadBadge">0</span>
+            </a>
+            {% endif %}
+            {% if current_user.has_permission('users.view') %}
+            <a href="{{ url_for('employees.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('employees.') %}active{% endif %}">
+                <i class="bi bi-people"></i>
+                <span>Сотрудники</span>
+            </a>
+            {% else %}
+            <a href="#" class="sidebar__link sidebar__link--disabled">
+                <i class="bi bi-people"></i>
+                <span>Сотрудники</span>
+                <span class="sidebar__badge">Скоро</span>
+            </a>
+            {% endif %}
+        </div>
+
+        <div class="sidebar__section">
+            <span class="sidebar__label">Администрирование</span>
+            {% if current_user.has_permission('roles.view') %}
+            <a href="{{ url_for('roles.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('roles.') %}active{% endif %}">
+                <i class="bi bi-shield-lock"></i>
+                <span>Роли</span>
+            </a>
+            {% endif %}
+            {% if current_user.has_permission('roles.manage') %}
+            <a href="{{ url_for('field_builder.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('field_builder.') %}active{% endif %}">
+                <i class="bi bi-ui-radios"></i>
+                <span>Конструктор полей</span>
+            </a>
+            <a href="{{ url_for('positions.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('positions.') %}active{% endif %}">
+                <i class="bi bi-briefcase"></i>
+                <span>Должности</span>
+            </a>
+            {% endif %}
+        </div>
+
+        <div class="sidebar__section">
+            <span class="sidebar__label">Система</span>
+            <a href="{{ url_for('main.about') }}"
+               class="sidebar__link {% if request.endpoint == 'main.about' %}active{% endif %}">
+                <i class="bi bi-info-circle"></i>
+                <span>О системе</span>
+            </a>
+            {% if current_user.has_permission('audit.view') %}
+            <a href="{{ url_for('audit.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('audit.') %}active{% endif %}">
+                <i class="bi bi-journal-text"></i>
+                <span>Журнал действий</span>
+            </a>
+            {% endif %}
+            {% if current_user.has_permission('auth.login_logs.view') %}
+            <a href="{{ url_for('auth.login_logs') }}"
+               class="sidebar__link {% if request.endpoint == 'auth.login_logs' %}active{% endif %}">
+                <i class="bi bi-shield-check"></i>
+                <span>Журнал входов</span>
+            </a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <div class="sidebar__footer">
+        <div class="sidebar__user">
+            <div class="sidebar__user-avatar">
+                {{ current_user.full_name[0] | upper }}
+            </div>
+            <div class="sidebar__user-info">
+                <span class="sidebar__user-name">{{ current_user.full_name }}</span>
+                <span class="sidebar__user-role">
+                    {{ current_user.position_title or (current_user.role_names[0] if current_user.role_names else 'Пользователь') }}
+                </span>
+            </div>
+        </div>
+    </div>
+</aside>
+
+<div class="sidebar-overlay d-lg-none" id="sidebarOverlay"></div>

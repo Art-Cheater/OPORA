@@ -1,0 +1,33 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}{% if mode == 'create' %}Новый сотрудник{% else %}Редактирование{% endif %} — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% if mode == 'create' %}
+{% call page_header("Новый сотрудник", "Создание учётной записи", "person-plus") %}{% endcall %}
+{% else %}
+{% call page_header("Редактирование сотрудника", employee.full_name, "pencil-square") %}{% endcall %}
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<form method="POST" class="card">
+    <div class="card-body">
+        {{ form.hidden_tag() }}
+        <div class="row g-3">
+            <div class="col-md-6">{{ form.full_name.label(class="form-label") }}{{ form.full_name(class="form-control") }}</div>
+            <div class="col-md-6">{{ form.email.label(class="form-label") }}{{ form.email(class="form-control") }}</div>
+            <div class="col-md-6">{{ form.phone.label(class="form-label") }}{{ form.phone(class="form-control") }}</div>
+            <div class="col-md-6">{{ form.position.label(class="form-label") }}{{ form.position(class="form-control") }}</div>
+            <div class="col-md-6">{{ form.department.label(class="form-label") }}{{ form.department(class="form-control") }}</div>
+            <div class="col-md-6">{{ form.role_ids.label(class="form-label") }}{{ form.role_ids(class="form-select", multiple=true, size=4) }}</div>
+            <div class="col-md-12">{{ form.password.label(class="form-label") }}{{ form.password(class="form-control") }}</div>
+        </div>
+    </div>
+    <div class="card-footer bg-white d-flex gap-2">
+        {{ form.submit(class="btn btn-primary") }}
+        <a href="{{ url_for('employees.index') }}" class="btn btn-outline-primary">Отмена</a>
+    </div>
+</form>
+{% endblock %}

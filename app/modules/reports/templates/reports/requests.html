@@ -1,0 +1,193 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}Отчёты по заявкам — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Отчёты по заявкам", "Сводка за выбранный период", "bar-chart") %}
+{% if can_export %}
+<a href="{{ url_for('reports.requests_export', **request.args) }}" class="btn btn-outline-primary">
+    <i class="bi bi-download"></i> Экспорт CSV
+</a>
+{% endif %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-calendar3"></i>Период</div>
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('reports.requests') }}" class="row g-3 align-items-end" id="reportsPeriodForm">
+            <div class="col-md-3">
+                <label class="form-label">{{ form.period.label.text }}</label>
+                {{ form.period(class="form-select", id="reportPeriod") }}
+            </div>
+            <div class="col-md-3 report-custom-dates">
+                <label class="form-label">{{ form.date_from.label.text }}</label>
+                {{ form.date_from(class="form-control", type="date") }}
+            </div>
+            <div class="col-md-3 report-custom-dates">
+                <label class="form-label">{{ form.date_to.label.text }}</label>
+                {{ form.date_to(class="form-control", type="date") }}
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-arrow-repeat"></i> Показать
+                </button>
+            </div>
+        </form>
+        <div class="form-text mt-2">{{ report.period.label }}</div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="text-muted small">Создано</div>
+                <div class="display-6 fw-semibold">{{ report.created_count }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 border-success">
+            <div class="card-body">
+                <div class="text-muted small">Выполнено за период</div>
+                <div class="display-6 fw-semibold text-success">{{ report.completed_count }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 border-warning">
+            <div class="card-body">
+                <div class="text-muted small">Осталось из созданных</div>
+                <div class="display-6 fw-semibold text-warning">{{ report.remaining_from_period }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="text-muted small">Всего открытых сейчас</div>
+                <div class="display-6 fw-semibold">{{ report.open_total }}</div>
+                <div class="text-muted small mt-1">Отменено за период: {{ report.cancelled_count }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="text-muted small">Среднее время до выполнения</div>
+                <div class="fs-3 fw-semibold">
+                    {% if report.avg_hours_to_complete is not none %}
+                        {{ report.avg_hours_to_complete }} ч
+                    {% else %}
+                        —
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="text-muted small">Медиана времени до выполнения</div>
+                <div class="fs-3 fw-semibold">
+                    {% if report.median_hours_to_complete is not none %}
+                        {{ report.median_hours_to_complete }} ч
+                    {% else %}
+                        —
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header"><i class="bi bi-pie-chart"></i>Созданные за период — по статусу</div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Статус</th>
+                                <th class="text-end">Количество</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in report.by_status %}
+                            <tr>
+                                <td>
+                                    <span class="badge" style="background: {{ item.color or '#6C757D' }}; color: #fff;">
+                                        {{ item.name }}
+                                    </span>
+                                </td>
+                                <td class="text-end fw-medium">{{ item.count }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="2" class="text-muted text-center py-4">За выбранный период заявок не создано.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header"><i class="bi bi-people"></i>Нагрузка мастеров</div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Мастер</th>
+                                <th class="text-end">Выполнено</th>
+                                <th class="text-end">Открыто</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in report.by_master %}
+                            <tr>
+                                <td>{{ item.full_name }}</td>
+                                <td class="text-end fw-medium">{{ item.completed }}</td>
+                                <td class="text-end">{{ item.assigned_open }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="3" class="text-muted text-center py-4">Нет данных по мастерам за период.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const period = document.getElementById("reportPeriod");
+  const customBlocks = document.querySelectorAll(".report-custom-dates");
+  function sync() {
+    const show = period && period.value === "custom";
+    customBlocks.forEach((el) => {
+      el.classList.toggle("d-none", !show);
+    });
+  }
+  period?.addEventListener("change", sync);
+  sync();
+})();
+</script>
+{% endblock %}

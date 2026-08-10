@@ -1,0 +1,91 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Мессенджер — {{ app_name }}{% endblock %}
+
+{% block body_class %}messenger-body{% endblock %}
+
+{% block extra_css %}
+<link href="{{ url_for('static', filename='css/messenger.css') }}" rel="stylesheet">
+{% endblock %}
+
+{% block body %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<div class="tg-app" id="messengerApp"
+     data-current-user-id="{{ current_user.id }}"
+     data-current-user-name="{{ current_user.full_name }}"
+     data-poll-interval="{{ messenger_poll_interval_ms }}"
+     data-unread-interval="{{ messenger_unread_interval_ms }}">
+    <aside class="tg-sidebar">
+        <header class="tg-sidebar__header">
+            <a href="{{ url_for('main.index') }}" class="tg-sidebar__back" title="В систему">
+                <i class="bi bi-arrow-left"></i>
+            </a>
+            <div class="tg-sidebar__profile">
+                <div class="tg-avatar">{{ current_user.full_name[0] | upper }}</div>
+                <div>
+                    <div class="tg-sidebar__name">{{ current_user.full_name }}</div>
+                    <div class="tg-sidebar__status">Мессенджер Опора</div>
+                </div>
+            </div>
+        </header>
+
+        <div class="tg-search-wrap">
+            <i class="bi bi-search"></i>
+            <input type="search" id="globalSearch" class="tg-search" placeholder="Поиск сообщений и людей…" autocomplete="off">
+        </div>
+
+        <div class="tg-tabs">
+            <button type="button" class="tg-tab active" data-tab="chats">Чаты</button>
+            <button type="button" class="tg-tab" data-tab="users">Контакты</button>
+        </div>
+
+        <div class="tg-panel" id="chatsPanel">
+            <div class="tg-list" id="conversationList"></div>
+        </div>
+        <div class="tg-panel d-none" id="usersPanel">
+            <div class="tg-list" id="userList"></div>
+        </div>
+        <div class="tg-panel d-none" id="searchPanel">
+            <div class="tg-search-results" id="searchResults"></div>
+        </div>
+    </aside>
+
+    <main class="tg-main">
+        <div class="tg-empty" id="emptyState">
+            <div class="tg-empty__icon"><i class="bi bi-chat-dots"></i></div>
+            <h2>Корпоративный мессенджер</h2>
+            <p>Выберите чат или начните переписку с коллегой</p>
+        </div>
+
+        <div class="tg-chat d-none" id="chatView">
+            <header class="tg-chat__header">
+                <button type="button" class="tg-chat__back d-lg-none" id="chatBackBtn">
+                    <i class="bi bi-arrow-left"></i>
+                </button>
+                <div class="tg-avatar tg-avatar--sm" id="chatPeerAvatar">?</div>
+                <div class="tg-chat__peer">
+                    <div class="tg-chat__peer-name" id="chatPeerName">—</div>
+                    <div class="tg-chat__peer-status" id="chatPeerStatus">офлайн</div>
+                </div>
+            </header>
+
+            <div class="tg-messages" id="messagesContainer"></div>
+
+            <footer class="tg-composer">
+                <label class="tg-composer__attach" title="Прикрепить файл">
+                    <i class="bi bi-paperclip"></i>
+                    <input type="file" id="fileInput" class="d-none" multiple>
+                </label>
+                <textarea id="messageInput" class="tg-composer__input" rows="1" placeholder="Написать сообщение…"></textarea>
+                <button type="button" class="tg-composer__send" id="sendBtn" title="Отправить">
+                    <i class="bi bi-send-fill"></i>
+                </button>
+            </footer>
+        </div>
+    </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/messenger.js') }}"></script>
+{% endblock %}

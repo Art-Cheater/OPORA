@@ -1,0 +1,73 @@
+{% from "macros/badges.html" import project_status_badge %}
+{% from "macros/crud.html" import table_actions %}
+<div class="table-card">
+    <table class="table table-opora">
+        <thead>
+            <tr>
+                <th>Код</th>
+                <th>Название</th>
+                <th>Статус</th>
+                <th>Готовность</th>
+                <th>Ответственный</th>
+                <th>Исполнители</th>
+                <th>Даты</th>
+                <th>Обновлено</th>
+                <th class="text-end">Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for project in projects_pagination.items %}
+            <tr data-opora-id="{{ project.id }}">
+                <td class="fw-semibold">{{ project.code }}</td>
+                <td>
+                    <div class="fw-medium">{{ project.name }}</div>
+                    {% if project.description %}
+                    <div class="small text-muted text-truncate" style="max-width: 280px">{{ project.description }}</div>
+                    {% endif %}
+                </td>
+                <td>{{ project_status_badge(project.status) }}</td>
+                <td>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="progress flex-grow-1" style="height: 8px; min-width: 80px;">
+                            <div class="progress-bar bg-primary" style="width: {{ project.progress_percent }}%"></div>
+                        </div>
+                        <span class="small text-muted">{{ project.progress_percent }}%</span>
+                    </div>
+                </td>
+                <td>{{ project.responsible.full_name if project.responsible else '—' }}</td>
+                <td>
+                    {% if project.executors %}
+                        {% for executor in project.executors[:2] %}
+                            <span class="badge badge-status badge-neutral">{{ executor.full_name }}</span>
+                        {% endfor %}
+                        {% if project.executors|length > 2 %}
+                            <span class="small text-muted">+{{ project.executors|length - 2 }}</span>
+                        {% endif %}
+                    {% else %}—{% endif %}
+                </td>
+                <td class="text-muted small">
+                    {% if project.start_date %}{{ project.start_date.strftime('%d.%m.%Y') }}{% else %}—{% endif %}
+                    —
+                    {% if project.end_date %}{{ project.end_date.strftime('%d.%m.%Y') }}{% else %}—{% endif %}
+                </td>
+                <td class="text-muted">{{ project.updated_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                <td class="text-end">
+                    {{ table_actions(
+                        view_url=url_for('projects.detail', project_id=project.id),
+                        edit_url=url_for('projects.edit', project_id=project.id),
+                        entity_id=project.id,
+                        can_edit=current_user.has_permission('projects.edit'),
+                        can_delete=current_user.has_permission('projects.delete')
+                    ) }}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="9" class="table-empty">
+                    <i class="bi bi-inbox"></i> Проекты не найдены
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

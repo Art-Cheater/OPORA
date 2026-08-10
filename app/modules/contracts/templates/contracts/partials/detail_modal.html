@@ -1,0 +1,90 @@
+{% from "macros/badges.html" import contract_status_badge, contract_type_badge %}
+{% from "macros/custom_fields.html" import custom_fields_detail with context %}
+<span class="d-none" data-opora-card-title>{{ contract.number }} — {{ contract.title }}</span>
+<span class="d-none" data-opora-card-badge>{{ contract_status_badge(contract.status) }}</span>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Тип</div>
+                    <div>{{ contract_type_badge(contract.contract_type) }}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Статус</div>
+                    <div>{{ contract_status_badge(contract.status) }}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Дата</div>
+                    <div>{{ contract.contract_date.strftime('%d.%m.%Y') if contract.contract_date else "—" }}</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Ответственный</div>
+                    <div>{{ contract.responsible.full_name if contract.responsible else "—" }}</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Номер</div>
+                    <div>{{ contract.number }}</div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Описание</div>
+                    <div>{{ contract.description or "—" }}</div>
+                </div>
+            </div>
+            {{ custom_fields_detail(custom_field_details) }}
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <ul class="nav nav-tabs opora-card-tabs mb-3" role="tablist">
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#ctrTabComments" type="button">Комментарии</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#ctrTabDocs" type="button">Документы</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#ctrTabHistory" type="button">История</button></li>
+        </ul>
+        <div class="tab-content">
+            <div class="tab-pane fade show active" id="ctrTabComments">
+                {% for item in comments %}
+                <div class="border rounded-3 p-3 mb-2">
+                    <div class="d-flex justify-content-between">
+                        <strong>{{ item.author.full_name if item.author else "Пользователь" }}</strong>
+                        <small class="text-muted">{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</small>
+                    </div>
+                    <div class="mt-2">{{ item.body }}</div>
+                </div>
+                {% else %}
+                <div class="text-muted small">Комментариев пока нет.</div>
+                {% endfor %}
+            </div>
+            <div class="tab-pane fade" id="ctrTabDocs">
+                {% for doc in contract.documents %}
+                <div class="border rounded-2 p-2 mb-2">
+                    <div class="fw-medium">{{ doc.title }}</div>
+                    <div class="text-muted small">{{ doc.document_date.strftime('%d.%m.%Y') if doc.document_date else '' }}</div>
+                </div>
+                {% else %}
+                <div class="text-muted small">Документы не добавлены.</div>
+                {% endfor %}
+            </div>
+            <div class="tab-pane fade" id="ctrTabHistory">
+                {% for h in contract.history %}
+                <div class="border-start border-2 ps-3 mb-3">
+                    <div class="fw-medium small">{{ h.comment or h.action }}</div>
+                    <div class="text-muted small">{{ h.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                </div>
+                {% else %}
+                <div class="text-muted small">История пока пуста.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,139 @@
+{% extends "layouts/app.html" %}
+{% from "macros/badges.html" import status_badge %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}Главная — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Панель управления", "Добро пожаловать, " ~ user.full_name, "grid-1x2") %}{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="row g-4 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <a href="{{ url_for('requests.index') }}" class="dashboard-card">
+            <div class="card card-stat h-100">
+                <div class="card-stat__icon card-stat__icon--orange">
+                    <i class="bi bi-clipboard-check"></i>
+                </div>
+                <div class="card-stat__title">Заявки</div>
+                <div class="card-stat__desc">Управление заявками</div>
+                {{ status_badge('in_progress', 'В работе') }}
+            </div>
+        </a>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <a href="{{ url_for('projects.index') }}" class="dashboard-card">
+            <div class="card card-stat h-100">
+                <div class="card-stat__icon card-stat__icon--green">
+                    <i class="bi bi-folder2-open"></i>
+                </div>
+                <div class="card-stat__title">Проекты</div>
+                <div class="card-stat__desc">Текущие проекты</div>
+                {{ status_badge('done', 'Готово') }}
+            </div>
+        </a>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <a href="{{ url_for('contracts.index') }}" class="dashboard-card">
+            <div class="card card-stat h-100">
+                <div class="card-stat__icon card-stat__icon--yellow">
+                    <i class="bi bi-file-earmark-text"></i>
+                </div>
+                <div class="card-stat__title">Договоры</div>
+                <div class="card-stat__desc">Документооборот</div>
+                {{ status_badge('not_ready', 'Не готово') }}
+            </div>
+        </a>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        {% if current_user.has_permission('users.view') %}
+        <a href="{{ url_for('employees.index') }}" class="dashboard-card">
+            <div class="card card-stat h-100">
+                <div class="card-stat__icon card-stat__icon--orange">
+                    <i class="bi bi-people"></i>
+                </div>
+                <div class="card-stat__title">Сотрудники</div>
+                <div class="card-stat__desc">Управление персоналом</div>
+                {{ status_badge('done', 'Активен') }}
+            </div>
+        </a>
+        {% else %}
+        <div class="dashboard-card dashboard-card--disabled">
+            <div class="card card-stat h-100">
+                <div class="card-stat__icon card-stat__icon--orange">
+                    <i class="bi bi-people"></i>
+                </div>
+                <div class="card-stat__title">Сотрудники</div>
+                <div class="card-stat__desc">Управление персоналом</div>
+                <span class="badge badge-neutral">Скоро</span>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-activity"></i> Разделы системы</span>
+    </div>
+    <div class="table-card border-0 shadow-none">
+        <table class="table table-opora">
+            <thead>
+                <tr>
+                    <th>Модуль</th>
+                    <th>Описание</th>
+                    <th>Статус</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="dashboard-row" data-href="{{ url_for('requests.index') }}">
+                    <td><i class="bi bi-clipboard-check text-primary me-2"></i>Заявки</td>
+                    <td class="text-muted">Создание и обработка заявок</td>
+                    <td>{{ status_badge('in_progress') }}</td>
+                    <td class="text-end"><i class="bi bi-chevron-right text-muted"></i></td>
+                </tr>
+                <tr class="dashboard-row" data-href="{{ url_for('projects.index') }}">
+                    <td><i class="bi bi-folder2-open text-primary me-2"></i>Проекты</td>
+                    <td class="text-muted">Управление проектами</td>
+                    <td>{{ status_badge('in_progress') }}</td>
+                    <td class="text-end"><i class="bi bi-chevron-right text-muted"></i></td>
+                </tr>
+                <tr class="dashboard-row" data-href="{{ url_for('contracts.index') }}">
+                    <td><i class="bi bi-file-earmark-text text-primary me-2"></i>Договоры</td>
+                    <td class="text-muted">Реестр договоров</td>
+                    <td>{{ status_badge('in_progress') }}</td>
+                    <td class="text-end"><i class="bi bi-chevron-right text-muted"></i></td>
+                </tr>
+                {% if current_user.has_permission('users.view') %}
+                <tr class="dashboard-row" data-href="{{ url_for('employees.index') }}">
+                    <td><i class="bi bi-people text-primary me-2"></i>Сотрудники</td>
+                    <td class="text-muted">Управление персоналом</td>
+                    <td>{{ status_badge('done') }}</td>
+                    <td class="text-end"><i class="bi bi-chevron-right text-muted"></i></td>
+                </tr>
+                {% endif %}
+                {% if current_user.has_permission('audit.view') %}
+                <tr class="dashboard-row" data-href="{{ url_for('audit.index') }}">
+                    <td><i class="bi bi-journal-text text-primary me-2"></i>Журнал действий</td>
+                    <td class="text-muted">Аудит системы</td>
+                    <td>{{ status_badge('done') }}</td>
+                    <td class="text-end"><i class="bi bi-chevron-right text-muted"></i></td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+document.querySelectorAll(".dashboard-row[data-href]").forEach((row) => {
+  row.style.cursor = "pointer";
+  row.addEventListener("click", () => { window.location.href = row.dataset.href; });
+});
+</script>
+{% endblock %}

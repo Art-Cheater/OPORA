@@ -1,0 +1,19 @@
+{% extends "layouts/base.html" %}
+
+{% block body_class %}auth-body{% endblock %}
+
+{% block body %}
+<div class="auth-shell">
+    <div class="auth-shell__brand">
+        <a href="{{ url_for('auth.login') }}" class="logo logo--light">
+            {% include "components/logo.html" %}
+        </a>
+        <p class="auth-shell__tagline">Корпоративная информационная система<br>муниципального предприятия</p>
+    </div>
+
+    <div class="auth-shell__form">
+        {% include "components/flash_messages.html" %}
+        {% block auth_content %}{% endblock %}
+    </div>
+</div>
+{% endblock %}

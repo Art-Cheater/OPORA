@@ -1,0 +1,40 @@
+"""Реестр модулей — централизованная регистрация Blueprint."""
+
+from flask import Flask
+
+from app.modules.auth import auth_bp
+from app.modules.contracts import contracts_bp
+from app.modules.employees import employees_bp
+from app.modules.field_builder import field_builder_bp
+from app.modules.main import main_bp
+from app.modules.positions import positions_bp
+from app.modules.roles import roles_bp
+from app.modules.messenger import messenger_bp
+from app.modules.projects import projects_bp
+from app.modules.requests import requests_bp
+from app.modules.reports import reports_bp
+from app.modules.search import search_bp
+from app.modules.audit import audit_bp
+
+# Список всех модулей системы.
+ALL_BLUEPRINTS = [
+    main_bp,
+    auth_bp,
+    requests_bp,
+    projects_bp,
+    contracts_bp,
+    employees_bp,
+    positions_bp,
+    roles_bp,
+    field_builder_bp,
+    messenger_bp,
+    search_bp,
+    audit_bp,
+    reports_bp,
+]
+
+
+def register_blueprints(app: Flask) -> None:
+    """Регистрирует все Blueprint-модули в приложении."""
+    for blueprint in ALL_BLUEPRINTS:
+        app.register_blueprint(blueprint)

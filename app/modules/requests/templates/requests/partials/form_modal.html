@@ -1,0 +1,23 @@
+{% from "macros/forms.html" import modal_field, form_errors_alert with context %}
+{% from "macros/custom_fields.html" import custom_fields_form, custom_fields_detail with context %}
+<form method="POST" action="{{ form_action }}" class="opora-modal-form">
+    {{ form.hidden_tag() }}
+    {{ form_errors_alert(form) }}
+    <div class="row g-3">
+        {{ modal_field(form.number, col=3, module='requests') }}
+        {{ modal_field(form.title, col=9, module='requests') }}
+        {{ modal_field(form.description, col=12, rows=3, module='requests') }}
+        {{ modal_field(form.address, col=8, placeholder="Город, улица, дом", module='requests') }}
+        {{ modal_field(form.latitude, col=2, module='requests') }}
+        {{ modal_field(form.longitude, col=2, module='requests') }}
+        {{ modal_field(form.phone, col=4, module='requests') }}
+        {{ modal_field(form.applicant_name, col=4, module='requests') }}
+        {{ modal_field(form.priority, col=4, module='requests') }}
+        {{ modal_field(form.executor_id, col=6, module='requests') }}
+        {{ custom_fields_form(custom_fields, custom_field_values, custom_field_module) }}
+    </div>
+    <div class="modal-form-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+        {{ form.submit(class="btn btn-primary") }}
+    </div>
+</form>

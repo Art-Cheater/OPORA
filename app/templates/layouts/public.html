@@ -1,0 +1,23 @@
+{% extends "layouts/base.html" %}
+
+{% block body_class %}public-body{% endblock %}
+
+{% block body %}
+<header class="public-header">
+    <div class="container">
+        <a href="{{ url_for('main.about') }}" class="logo">
+            {% include "components/logo.html" %}
+        </a>
+        <a href="{{ url_for('auth.login') }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-box-arrow-in-right"></i> Войти
+        </a>
+    </div>
+</header>
+
+<main class="public-content">
+    <div class="container py-5">
+        {% include "components/flash_messages.html" %}
+        {% block content %}{% endblock %}
+    </div>
+</main>
+{% endblock %}

@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: opora_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-opora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opora_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-opora}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-opora}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    container_name: opora_web
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-opora}:${POSTGRES_PASSWORD:-opora_secret}@db:5432/${POSTGRES_DB:-opora}
+      DB_HOST: db
+      DB_PORT: 5432
+      FLASK_ENV: ${FLASK_ENV:-development}
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
