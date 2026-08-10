@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Index, Integer, String, text
+from sqlalchemy import ForeignKey, Index, Integer, String, Boolean, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import ActiveRecordMixin, BaseModel
@@ -39,6 +39,7 @@ class FieldDefinition(ActiveRecordMixin, BaseModel):
     code: Mapped[str] = mapped_column(String(100), nullable=False)
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_visible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     system_module: Mapped[SystemModule] = relationship(
         "SystemModule",

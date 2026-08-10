@@ -57,24 +57,38 @@ def _uuid_list(values: list[str]) -> list[uuid.UUID]:
 
 
 def _project_payload_from_form(form: ProjectForm, project=None) -> ProjectPayload:
+    from app.core.builtin_field_service import BuiltinFieldService as BFS
+    from app.models.enums import ProjectStatus
+
     fp = FieldPermissionService.resolve_field
     u, m = current_user, "projects"
+
+    def field(code, submitted, default=None):
+        raw = fp(u, m, code, submitted, project)
+        return BFS.value_or_default(m, code, raw, default=default, entity=project)
+
     executor_ids = _uuid_list(form.executor_ids.data or [])
     if project and not FieldPermissionService.can_edit_field(u, m, "executor_ids"):
         executor_ids = ProjectRepository.get_executor_ids(project)
-    resp_val = fp(u, m, "responsible_id", form.responsible_id.data, project)
+    if not BFS.is_visible(m, "executor_ids"):
+        if project is not None:
+            executor_ids = ProjectRepository.get_executor_ids(project)
+        elif not executor_ids:
+            executor_ids = []
+
+    resp_val = field("responsible_id", form.responsible_id.data, default=None)
     if isinstance(resp_val, uuid.UUID):
         responsible_id = resp_val
     else:
         responsible_id = _uuid_or_none(str(resp_val) if resp_val else "")
     return ProjectPayload(
-        code=fp(u, m, "code", form.code.data, project),
-        name=fp(u, m, "name", form.name.data, project),
-        description=fp(u, m, "description", form.description.data, project),
-        status=fp(u, m, "status", form.status.data, project),
-        progress_percent=fp(u, m, "progress_percent", form.progress_percent.data or 0, project),
-        start_date=fp(u, m, "start_date", form.start_date.data, project),
-        end_date=fp(u, m, "end_date", form.end_date.data, project),
+        code=field("code", form.code.data, default=ProjectRepository.next_code()),
+        name=field("name", form.name.data, default="Без названия"),
+        description=field("description", form.description.data, default=""),
+        status=field("status", form.status.data, default=ProjectStatus.DRAFT.value),
+        progress_percent=field("progress_percent", form.progress_percent.data or 0, default=0),
+        start_date=field("start_date", form.start_date.data, default=None),
+        end_date=field("end_date", form.end_date.data, default=None),
         responsible_id=responsible_id,
         executor_ids=executor_ids,
     )
@@ -88,10 +102,13 @@ def _prepare_filter_form(form: ProjectFilterForm) -> None:
 
 
 def _prepare_project_form(form: ProjectForm) -> None:
+    from app.core.builtin_field_service import BuiltinFieldService
+
     users = ProjectRepository.get_users()
     user_choices = [("", "Не назначен")] + [(str(item.id), item.full_name) for item in users]
     form.responsible_id.choices = user_choices
     form.executor_ids.choices = [(str(item.id), item.full_name) for item in users]
+    BuiltinFieldService.apply_to_form(form, "projects")
 
 
 def _apply_project_create_defaults(form: ProjectForm) -> None:

@@ -14,60 +14,76 @@
 <div class="row g-4">
     <div class="col-lg-7">
         <div class="row g-3">
+            {% if is_builtin_visible('requests', 'status_id') %}
             <div class="col-md-4">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Статус</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('requests', 'status_id', 'Статус') }}</div>
                     <div>{{ request_status_badge(req.status) }}</div>
                 </div>
             </div>
+            {% endif %}
+            {% if is_builtin_visible('requests', 'priority') %}
             <div class="col-md-4">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Приоритет</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('requests', 'priority', 'Приоритет') }}</div>
                     <div class="fw-medium">{{ req.priority }}</div>
                 </div>
             </div>
+            {% endif %}
+            {% if is_builtin_visible('requests', 'applicant_name') %}
             <div class="col-md-4">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Заявитель</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('requests', 'applicant_name', 'Заявитель') }}</div>
                     <div>{{ req.applicant_name }}</div>
                 </div>
             </div>
+            {% endif %}
             <div class="col-md-6">
                 <div class="opora-detail-field">
                     <div class="opora-detail-field__label">Диспетчер</div>
                     <div>{{ dispatcher.full_name if dispatcher else "—" }}</div>
                 </div>
             </div>
+            {% if is_builtin_visible('requests', 'responsible_id') %}
             <div class="col-md-6">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Ответственный мастер</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('requests', 'responsible_id', 'Ответственный мастер') }}</div>
                     <div>{{ req.responsible.full_name if req.responsible else "—" }}</div>
                 </div>
             </div>
+            {% endif %}
+            {% if is_builtin_visible('requests', 'executor_id') %}
             <div class="col-md-6">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Исполнитель</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('requests', 'executor_id', 'Исполнитель') }}</div>
                     <div>{{ req.executor.full_name if req.executor else "—" }}</div>
                 </div>
             </div>
+            {% endif %}
+            {% if is_builtin_visible('requests', 'phone') %}
             <div class="col-md-6">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Телефон</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('requests', 'phone', 'Телефон') }}</div>
                     <div>{{ req.phone or "—" }}</div>
                 </div>
             </div>
+            {% endif %}
+            {% if is_builtin_visible('requests', 'address') %}
             <div class="col-md-6">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Адрес</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('requests', 'address', 'Адрес') }}</div>
                     <div>{{ req.address }}</div>
                 </div>
             </div>
+            {% endif %}
+            {% if is_builtin_visible('requests', 'description') %}
             <div class="col-12">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Описание</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('requests', 'description', 'Описание') }}</div>
                     <div>{{ req.description or "—" }}</div>
                 </div>
             </div>
+            {% endif %}
             {{ custom_fields_detail(custom_field_details) }}
         </div>
     </div>

@@ -46,20 +46,28 @@ def _uuid_or_none(value: str) -> uuid.UUID | None:
 
 
 def _contract_payload_from_form(form: ContractForm, contract=None) -> ContractPayload:
+    from app.core.builtin_field_service import BuiltinFieldService as BFS
+    from app.models.enums import ContractStatus, ContractType
+
     fp = FieldPermissionService.resolve_field
     u, m = current_user, "contracts"
-    resp_val = fp(u, m, "responsible_id", form.responsible_id.data, contract)
+
+    def field(code, submitted, default=None):
+        raw = fp(u, m, code, submitted, contract)
+        return BFS.value_or_default(m, code, raw, default=default, entity=contract)
+
+    resp_val = field("responsible_id", form.responsible_id.data, default=None)
     if isinstance(resp_val, uuid.UUID):
         responsible_id = resp_val
     else:
         responsible_id = _uuid_or_none(str(resp_val) if resp_val else "")
     return ContractPayload(
-        contract_type=fp(u, m, "contract_type", form.contract_type.data, contract),
-        number=fp(u, m, "number", form.number.data, contract),
-        title=fp(u, m, "title", form.title.data, contract),
-        description=fp(u, m, "description", form.description.data, contract),
-        status=fp(u, m, "status", form.status.data, contract),
-        contract_date=fp(u, m, "contract_date", form.contract_date.data, contract),
+        contract_type=field("contract_type", form.contract_type.data, default=ContractType.OTHER.value),
+        number=field("number", form.number.data, default=ContractRepository.next_number()),
+        title=field("title", form.title.data, default="Без названия"),
+        description=field("description", form.description.data, default=""),
+        status=field("status", form.status.data, default=ContractStatus.DRAFT.value),
+        contract_date=field("contract_date", form.contract_date.data, default=None),
         responsible_id=responsible_id,
     )
 
@@ -71,10 +79,13 @@ def _prepare_filter_form(form: ContractFilterForm) -> None:
 
 
 def _prepare_contract_form(form: ContractForm) -> None:
+    from app.core.builtin_field_service import BuiltinFieldService
+
     users = ContractRepository.get_users()
     form.responsible_id.choices = [("", "Не назначен")] + [
         (str(item.id), item.full_name) for item in users
     ]
+    BuiltinFieldService.apply_to_form(form, "contracts")
 
 
 def _apply_contract_create_defaults(form: ContractForm) -> None:

@@ -171,6 +171,12 @@ class PermissionService:
         cls._cached_modules.cache_clear()
         cls.get_module_fields.cache_clear()
         cls.get_module_permissions.cache_clear()
+        try:
+            from app.core.builtin_field_service import BuiltinFieldService
+
+            BuiltinFieldService.clear_cache()
+        except Exception:
+            pass
 
     @staticmethod
     def get_modules() -> list[CachedModule]:

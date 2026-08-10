@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import uuid
 
-from flask import flash, jsonify, redirect, render_template, request, url_for
+from flask import flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
+from app.core.builtin_field_service import BuiltinFieldService
 from app.core.field_catalog import list_field_builder_rows
 from app.core.custom_field_service import CustomFieldService, CustomFieldPayload, OptionPayload
 from app.core.decorators import permission_required
@@ -16,7 +17,7 @@ from app.core.http import ajax_error, ajax_ok, is_ajax
 from app.models.auth.constants import PERM_ROLES_MANAGE
 from app.models.custom_fields.constants import CUSTOM_FIELD_MODULE_LABELS, FIELD_TYPE_LABELS
 from app.modules.field_builder.blueprint import field_builder_bp
-from app.modules.field_builder.forms import CustomFieldForm
+from app.modules.field_builder.forms import BuiltinFieldForm, CustomFieldForm
 
 
 def _parse_options(text: str) -> list[OptionPayload]:
@@ -152,6 +153,66 @@ def delete(field_id: uuid.UUID):
         return ajax_error(str(exc))
 
 
+@field_builder_bp.route("/builtin/<uuid:field_id>/edit", methods=["GET", "POST"])
+@login_required
+@permission_required(PERM_ROLES_MANAGE)
+def edit_builtin(field_id: uuid.UUID):
+    field = BuiltinFieldService.get_by_id(field_id)
+    if field is None:
+        flash("Поле не найдено.", "danger")
+        return redirect(url_for("field_builder.index"))
+
+    module_code = field.system_module.code if field.system_module else "requests"
+    form = BuiltinFieldForm(obj=field)
+    if request.method == "GET":
+        form.code.data = field.code
+        form.is_visible.data = bool(field.is_visible)
+
+    if form.validate_on_submit():
+        try:
+            BuiltinFieldService.update_field(
+                field,
+                name=form.name.data or "",
+                sort_order=form.sort_order.data or 0,
+                is_visible=bool(form.is_visible.data),
+                actor_id=current_user.id,
+            )
+            if is_ajax():
+                return ajax_ok("Встроенное поле обновлено.", id=str(field.id))
+            flash("Встроенное поле обновлено.", "success")
+            return redirect(url_for("field_builder.index", module=module_code))
+        except ValidationError as exc:
+            if is_ajax():
+                return ajax_error(
+                    str(exc),
+                    html=_render_builtin_form(form, url_for("field_builder.edit_builtin", field_id=field.id)),
+                )
+            flash(str(exc), "danger")
+    elif is_ajax() and request.method == "POST":
+        return ajax_error(
+            form_errors_message(form),
+            html=_render_builtin_form(form, url_for("field_builder.edit_builtin", field_id=field.id)),
+        )
+
+    if is_ajax():
+        return _render_builtin_form(form, url_for("field_builder.edit_builtin", field_id=field.id))
+    return redirect(url_for("field_builder.index", module=module_code))
+
+
+@field_builder_bp.route("/builtin/<uuid:field_id>/hide", methods=["POST"])
+@login_required
+@permission_required(PERM_ROLES_MANAGE)
+def hide_builtin(field_id: uuid.UUID):
+    field = BuiltinFieldService.get_by_id(field_id)
+    if field is None:
+        return ajax_error("Поле не найдено.", status=404)
+    try:
+        BuiltinFieldService.hide_field(field, current_user.id)
+        return ajax_ok("Встроенное поле скрыто. Его можно снова включить через «Изменить».")
+    except ValidationError as exc:
+        return ajax_error(str(exc))
+
+
 def _render_form(form, form_action, field=None):
     return render_template(
         "field_builder/partials/form_modal.html",
@@ -160,4 +221,12 @@ def _render_form(form, form_action, field=None):
         field=field,
         is_edit=form.is_edit,
         type_labels=FIELD_TYPE_LABELS,
+    )
+
+
+def _render_builtin_form(form, form_action):
+    return render_template(
+        "field_builder/partials/builtin_form_modal.html",
+        form=form,
+        form_action=form_action,
     )

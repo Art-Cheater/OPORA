@@ -46,10 +46,13 @@ def _prepare_filter_form(form: EmployeeFilterForm) -> None:
 
 
 def _prepare_employee_form(form: EmployeeForm) -> None:
+    from app.core.builtin_field_service import BuiltinFieldService
+
     roles = EmployeeRepository.get_roles()
     form.role_ids.choices = [(str(r.id), r.name) for r in roles]
     positions = EmployeeRepository.get_positions()
     form.position_id.choices = [("", "—")] + [(str(p.id), p.name) for p in positions]
+    BuiltinFieldService.apply_to_form(form, "users")
 
 
 def _apply_employee_create_defaults(form: EmployeeForm) -> None:

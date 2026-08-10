@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.core.builtin_field_service import BuiltinFieldService
 from app.core.custom_field_service import CustomFieldService
 from app.core.permission_service import PermissionService
 from app.models.custom_fields.constants import CUSTOM_FIELD_MODULES
@@ -46,26 +47,30 @@ def catalog_fields_dict() -> dict[str, dict[str, str]]:
 
 
 def list_field_builder_rows(module_code: str) -> list[FieldCatalogRow]:
-    """Строки конструктора полей: встроенные (просмотр) + пользовательские (редактирование)."""
-    builtin = PermissionService.get_module_fields(module_code)
-    custom_by_code = {f.code: f for f in CustomFieldService.list_for_module(module_code, include_hidden=True)}
+    """Строки конструктора: встроенные (редактируемые) + пользовательские."""
+    builtin = BuiltinFieldService.get_settings(module_code)
+    custom_by_code = {
+        f.code: f for f in CustomFieldService.list_for_module(module_code, include_hidden=True)
+    }
 
     rows: list[FieldCatalogRow] = []
-    seen: set[str] = set()
 
-    for code, name in sorted(builtin.items(), key=lambda item: item[1].lower()):
-        if code in custom_by_code:
+    for meta in sorted(builtin.values(), key=lambda item: (item.sort_order, item.name.lower())):
+        if meta.code in custom_by_code:
             continue
         rows.append(
             FieldCatalogRow(
-                code=code,
-                name=name,
+                code=meta.code,
+                name=meta.name,
                 field_type="builtin",
                 source="builtin",
-                is_editable=False,
+                is_required=False,
+                is_visible=meta.is_visible,
+                sort_order=meta.sort_order,
+                field_id=str(meta.id),
+                is_editable=True,
             )
         )
-        seen.add(code)
 
     for field in sorted(custom_by_code.values(), key=lambda f: (f.sort_order, f.name)):
         rows.append(
@@ -82,6 +87,5 @@ def list_field_builder_rows(module_code: str) -> list[FieldCatalogRow]:
                 is_editable=True,
             )
         )
-        seen.add(field.code)
 
     return rows

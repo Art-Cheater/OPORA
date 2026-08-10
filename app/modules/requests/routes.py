@@ -81,8 +81,15 @@ def _resolve_uuid_field(field_name: str, form_value: str, entity=None):
 
 
 def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload:
+    from app.core.builtin_field_service import BuiltinFieldService as BFS
+    from app.models.enums import Priority
+
     fp = FieldPermissionService.resolve_field
     u, m = current_user, "requests"
+
+    def field(code, submitted, default=None):
+        raw = fp(u, m, code, submitted, entity)
+        return BFS.value_or_default(m, code, raw, default=default, entity=entity)
 
     if entity is not None:
         status_id = entity.status_id
@@ -93,15 +100,15 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
         status_id = status.id
 
     return RequestPayload(
-        number=fp(u, m, "number", form.number.data, entity),
-        title=fp(u, m, "title", form.title.data, entity),
-        description=fp(u, m, "description", form.description.data, entity),
-        address=fp(u, m, "address", form.address.data, entity),
-        latitude=fp(u, m, "latitude", form.latitude.data, entity),
-        longitude=fp(u, m, "longitude", form.longitude.data, entity),
-        phone=fp(u, m, "phone", form.phone.data, entity),
-        applicant_name=fp(u, m, "applicant_name", form.applicant_name.data, entity),
-        priority=fp(u, m, "priority", form.priority.data, entity),
+        number=field("number", form.number.data, default=RequestRepository.next_number()),
+        title=field("title", form.title.data, default="Без названия"),
+        description=field("description", form.description.data, default=""),
+        address=field("address", form.address.data, default=""),
+        latitude=field("latitude", form.latitude.data, default=None),
+        longitude=field("longitude", form.longitude.data, default=None),
+        phone=field("phone", form.phone.data, default=None),
+        applicant_name=field("applicant_name", form.applicant_name.data, default=""),
+        priority=field("priority", form.priority.data, default=Priority.MEDIUM.value),
         status_id=status_id,
         responsible_id=entity.responsible_id if entity is not None else None,
         executor_id=_resolve_uuid_field("executor_id", form.executor_id.data or "", entity),
@@ -121,6 +128,8 @@ def _prepare_filter_form(form: RequestFilterForm) -> None:
 
 
 def _prepare_request_form(form: RequestForm) -> None:
+    from app.core.builtin_field_service import BuiltinFieldService
+
     statuses = RequestRepository.get_statuses()
     users = RequestRepository.get_users()
 
@@ -128,6 +137,7 @@ def _prepare_request_form(form: RequestForm) -> None:
     user_choices = [("", "Не назначен")] + [(str(item.id), item.full_name) for item in users]
     form.responsible_id.choices = user_choices
     form.executor_id.choices = user_choices
+    BuiltinFieldService.apply_to_form(form, "requests")
 
 
 def _prepare_assign_master_form(form: AssignMasterForm) -> None:

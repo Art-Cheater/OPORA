@@ -189,18 +189,17 @@ class ReferenceDataService:
             for field_code, field_name, sort_order in field_rows:
                 key = (str(mod.id), field_code)
                 if key in existing_fields:
-                    fd = existing_fields[key]
-                    fd.name = field_name
-                    fd.sort_order = sort_order
-                else:
-                    db.session.add(
-                        FieldDefinition(
-                            module_id=mod.id,
-                            code=field_code,
-                            name=field_name,
-                            sort_order=sort_order,
-                        )
+                    # Не затираем ручные правки (название, порядок, видимость)
+                    continue
+                db.session.add(
+                    FieldDefinition(
+                        module_id=mod.id,
+                        code=field_code,
+                        name=field_name,
+                        sort_order=sort_order,
+                        is_visible=True,
                     )
+                )
         db.session.flush()
 
         existing_positions = {

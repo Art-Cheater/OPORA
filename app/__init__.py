@@ -240,6 +240,8 @@ def _register_context_processors(app: Flask) -> None:
 
     @app.context_processor
     def inject_globals():
+        from app.core.builtin_field_service import BuiltinFieldService
+
         max_upload_mb = int(app.config.get("MAX_CONTENT_LENGTH", 0) / (1024 * 1024)) or 64
         return {
             "app_name": app.config["APP_NAME"],
@@ -248,6 +250,8 @@ def _register_context_processors(app: Flask) -> None:
             "max_upload_files": int(app.config.get("MAX_UPLOAD_FILES", 20)),
             "messenger_poll_interval_ms": int(app.config.get("MESSENGER_POLL_INTERVAL_MS", 8000)),
             "messenger_unread_interval_ms": int(app.config.get("MESSENGER_UNREAD_INTERVAL_MS", 45000)),
+            "is_builtin_visible": BuiltinFieldService.is_visible,
+            "builtin_label": BuiltinFieldService.label,
         }
 
 

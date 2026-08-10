@@ -51,3 +51,13 @@ class CustomFieldForm(FlaskForm):
         self.module_code.choices = [
             (c, CUSTOM_FIELD_MODULE_LABELS.get(c, c)) for c in CUSTOM_FIELD_MODULES
         ]
+
+
+class BuiltinFieldForm(FlaskForm):
+    """Редактирование встроенного поля: название, порядок, видимость."""
+
+    code = StringField("Системный код")
+    name = StringField("Название", validators=[DataRequired(), Length(max=150)])
+    is_visible = BooleanField("Видимость", default=True)
+    sort_order = IntegerField("Порядок", default=0, validators=[Optional()])
+    submit = SubmitField("Сохранить")

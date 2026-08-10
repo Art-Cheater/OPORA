@@ -1,0 +1,34 @@
+{% from "macros/forms.html" import form_errors_alert %}
+<form method="POST" action="{{ form_action }}" class="opora-modal-form" id="builtinFieldForm">
+    {{ form.hidden_tag() }}
+    {{ form_errors_alert(form) }}
+    <div class="alert alert-light border small mb-3">
+        Встроенное поле нельзя удалить из базы. Скрытие убирает его из форм и карточек;
+        скрытое поле становится необязательным.
+    </div>
+    <div class="row g-3">
+        <div class="col-md-6">
+            {{ form.code.label(class="form-label") }}
+            {{ form.code(class="form-control", readonly=true) }}
+            <div class="form-text">Системный код нельзя изменить.</div>
+        </div>
+        <div class="col-md-6">
+            {{ form.name.label(class="form-label") }}
+            {{ form.name(class="form-control") }}
+        </div>
+        <div class="col-md-6">
+            <div class="form-check mt-4">
+                {{ form.is_visible(class="form-check-input") }}
+                {{ form.is_visible.label(class="form-check-label") }}
+            </div>
+        </div>
+        <div class="col-md-6">
+            {{ form.sort_order.label(class="form-label") }}
+            {{ form.sort_order(class="form-control") }}
+        </div>
+    </div>
+    <div class="modal-form-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+        {{ form.submit(class="btn btn-primary") }}
+    </div>
+</form>

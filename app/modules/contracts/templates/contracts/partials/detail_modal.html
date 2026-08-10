@@ -6,42 +6,54 @@
 <div class="row g-4">
     <div class="col-lg-7">
         <div class="row g-3">
+            {% if is_builtin_visible('contracts', 'contract_type') %}
             <div class="col-md-4">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Тип</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('contracts', 'contract_type', 'Тип') }}</div>
                     <div>{{ contract_type_badge(contract.contract_type) }}</div>
                 </div>
             </div>
+            {% endif %}
+            {% if is_builtin_visible('contracts', 'status') %}
             <div class="col-md-4">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Статус</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('contracts', 'status', 'Статус') }}</div>
                     <div>{{ contract_status_badge(contract.status) }}</div>
                 </div>
             </div>
+            {% endif %}
+            {% if is_builtin_visible('contracts', 'contract_date') %}
             <div class="col-md-4">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Дата</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('contracts', 'contract_date', 'Дата') }}</div>
                     <div>{{ contract.contract_date.strftime('%d.%m.%Y') if contract.contract_date else "—" }}</div>
                 </div>
             </div>
+            {% endif %}
+            {% if is_builtin_visible('contracts', 'responsible_id') %}
             <div class="col-md-6">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Ответственный</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('contracts', 'responsible_id', 'Ответственный') }}</div>
                     <div>{{ contract.responsible.full_name if contract.responsible else "—" }}</div>
                 </div>
             </div>
+            {% endif %}
+            {% if is_builtin_visible('contracts', 'number') %}
             <div class="col-md-6">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Номер</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('contracts', 'number', 'Номер') }}</div>
                     <div>{{ contract.number }}</div>
                 </div>
             </div>
+            {% endif %}
+            {% if is_builtin_visible('contracts', 'description') %}
             <div class="col-12">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Описание</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('contracts', 'description', 'Описание') }}</div>
                     <div>{{ contract.description or "—" }}</div>
                 </div>
             </div>
+            {% endif %}
             {{ custom_fields_detail(custom_field_details) }}
         </div>
     </div>

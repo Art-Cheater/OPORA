@@ -6,15 +6,18 @@
 <div class="row g-4">
     <div class="col-lg-7">
         <div class="row g-3">
+            {% if is_builtin_visible('projects', 'status') %}
             <div class="col-md-4">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Статус</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('projects', 'status', 'Статус') }}</div>
                     <div>{{ project_status_badge(project.status) }}</div>
                 </div>
             </div>
+            {% endif %}
+            {% if is_builtin_visible('projects', 'progress_percent') %}
             <div class="col-md-4">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Готовность</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('projects', 'progress_percent', 'Готовность') }}</div>
                     <div class="d-flex align-items-center gap-2">
                         <div class="progress flex-grow-1" style="height: 8px;">
                             <div class="progress-bar bg-primary" style="width: {{ project.progress_percent }}%"></div>
@@ -23,27 +26,35 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
+            {% if is_builtin_visible('projects', 'responsible_id') %}
             <div class="col-md-4">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Ответственный</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('projects', 'responsible_id', 'Ответственный') }}</div>
                     <div>{{ project.responsible.full_name if project.responsible else "—" }}</div>
                 </div>
             </div>
+            {% endif %}
+            {% if is_builtin_visible('projects', 'start_date') %}
             <div class="col-md-6">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Дата начала</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('projects', 'start_date', 'Дата начала') }}</div>
                     <div>{{ project.start_date.strftime('%d.%m.%Y') if project.start_date else "—" }}</div>
                 </div>
             </div>
+            {% endif %}
+            {% if is_builtin_visible('projects', 'end_date') %}
             <div class="col-md-6">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Дата окончания</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('projects', 'end_date', 'Дата окончания') }}</div>
                     <div>{{ project.end_date.strftime('%d.%m.%Y') if project.end_date else "—" }}</div>
                 </div>
             </div>
+            {% endif %}
+            {% if is_builtin_visible('projects', 'executor_ids') %}
             <div class="col-12">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Исполнители</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('projects', 'executor_ids', 'Исполнители') }}</div>
                     <div>
                         {% if project.executors %}
                             {% for executor in project.executors %}
@@ -53,12 +64,15 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
+            {% if is_builtin_visible('projects', 'description') %}
             <div class="col-12">
                 <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">Описание</div>
+                    <div class="opora-detail-field__label">{{ builtin_label('projects', 'description', 'Описание') }}</div>
                     <div>{{ project.description or "—" }}</div>
                 </div>
             </div>
+            {% endif %}
             {{ custom_fields_detail(custom_field_details) }}
         </div>
     </div>

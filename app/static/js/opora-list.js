@@ -8,6 +8,8 @@ window.OporaList = (() => {
   let currentPage = 1;
   let debounceTimer = null;
   let pendingDeleteId = null;
+  let pendingDeleteUrl = null;
+  let pendingDeleteMessage = null;
 
   const formModal = () => document.getElementById("oporaFormModal");
   const formModalBody = () => document.getElementById("oporaFormModalBody");
@@ -110,10 +112,33 @@ window.OporaList = (() => {
         else if (action === "delete") openDeleteConfirm(id);
         return;
       }
+
+      const editUrlBtn = e.target.closest("[data-opora-edit]");
+      if (editUrlBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        openEditUrl(editUrlBtn.getAttribute("data-opora-edit"));
+        return;
+      }
+
+      const deleteUrlBtn = e.target.closest("[data-opora-delete]");
+      if (deleteUrlBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        openDeleteConfirmUrl(
+          deleteUrlBtn.getAttribute("data-opora-delete"),
+          deleteUrlBtn.getAttribute("data-opora-delete-message")
+        );
+        return;
+      }
+
       if (!config.baseUrl) return;
       if (e.target.closest("[data-opora-create]")) {
         e.preventDefault();
-        openCreate();
+        const createBtn = e.target.closest("[data-opora-create]");
+        const createUrl = createBtn?.getAttribute("data-opora-create");
+        if (createUrl) openCreateUrl(createUrl);
+        else openCreate();
       }
     });
 
@@ -149,7 +174,7 @@ window.OporaList = (() => {
         if (data.success) {
           bootstrap.Modal.getInstance(formModal())?.hide();
           showToast(data.message || "Сохранено");
-          await loadTable();
+          await refreshAfterMutation();
         } else {
           if (data.html) {
             formModalBody().innerHTML = data.html;
@@ -165,6 +190,14 @@ window.OporaList = (() => {
         if (submitBtn) submitBtn.disabled = false;
       }
     });
+  }
+
+  async function refreshAfterMutation() {
+    if (config.tableContainerId && document.getElementById(config.tableContainerId)) {
+      await loadTable();
+    } else {
+      window.location.reload();
+    }
   }
 
   async function openCreate() {
@@ -186,6 +219,25 @@ window.OporaList = (() => {
     }
   }
 
+  async function openCreateUrl(url) {
+    const modal = formModal();
+    if (!modal || !url) return;
+    formModalTitle().textContent = config.createTitle || "Создание";
+    formModalBody().innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+    bootstrap.Modal.getOrCreateInstance(modal).show();
+    try {
+      const html = await fetchHtml(url);
+      formModalBody().innerHTML = html;
+      const form = formModalBody().querySelector("form");
+      if (form) {
+        bindFormSubmit(form);
+        enhanceForm(form);
+      }
+    } catch {
+      formModalBody().innerHTML = '<div class="alert alert-danger">Не удалось загрузить форму</div>';
+    }
+  }
+
   async function openEdit(id) {
     const modal = formModal();
     if (!modal) return;
@@ -194,6 +246,25 @@ window.OporaList = (() => {
     bootstrap.Modal.getOrCreateInstance(modal).show();
     try {
       const html = await fetchHtml(`${config.baseUrl}/${id}/edit`);
+      formModalBody().innerHTML = html;
+      const form = formModalBody().querySelector("form");
+      if (form) {
+        bindFormSubmit(form);
+        enhanceForm(form);
+      }
+    } catch {
+      formModalBody().innerHTML = '<div class="alert alert-danger">Не удалось загрузить форму</div>';
+    }
+  }
+
+  async function openEditUrl(url) {
+    const modal = formModal();
+    if (!modal || !url) return;
+    formModalTitle().textContent = config.editTitle || "Редактирование";
+    formModalBody().innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+    bootstrap.Modal.getOrCreateInstance(modal).show();
+    try {
+      const html = await fetchHtml(url);
       formModalBody().innerHTML = html;
       const form = formModalBody().querySelector("form");
       if (form) {
@@ -249,22 +320,38 @@ window.OporaList = (() => {
 
   function openDeleteConfirm(id) {
     pendingDeleteId = id;
+    pendingDeleteUrl = null;
+    pendingDeleteMessage = null;
     confirmModalBody().textContent =
       config.deleteMessage || "Вы уверены, что хотите удалить эту запись? Это действие нельзя отменить.";
     bootstrap.Modal.getOrCreateInstance(confirmModal()).show();
   }
 
-  async function executeDelete() {
-    if (!pendingDeleteId) return;
-    const id = pendingDeleteId;
+  function openDeleteConfirmUrl(url, message) {
     pendingDeleteId = null;
+    pendingDeleteUrl = url;
+    pendingDeleteMessage = message;
+    confirmModalBody().textContent =
+      message ||
+      config.deleteMessage ||
+      "Вы уверены, что хотите удалить эту запись? Это действие нельзя отменить.";
+    bootstrap.Modal.getOrCreateInstance(confirmModal()).show();
+  }
+
+  async function executeDelete() {
+    const id = pendingDeleteId;
+    const url = pendingDeleteUrl;
+    pendingDeleteId = null;
+    pendingDeleteUrl = null;
+    pendingDeleteMessage = null;
+    if (!id && !url) return;
     bootstrap.Modal.getInstance(confirmModal())?.hide();
 
     try {
       const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
       const body = new FormData();
       body.append("csrf_token", csrf);
-      const response = await fetch(`${config.baseUrl}/${id}/delete`, {
+      const response = await fetch(url || `${config.baseUrl}/${id}/delete`, {
         method: "POST",
         headers: AJAX_HEADERS,
         body,
@@ -272,7 +359,7 @@ window.OporaList = (() => {
       const data = await response.json();
       if (data.success) {
         showToast(data.message || "Удалено");
-        await loadTable();
+        await refreshAfterMutation();
       } else {
         showToast(data.message || "Ошибка удаления", "danger");
       }
