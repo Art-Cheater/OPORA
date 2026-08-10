@@ -154,6 +154,7 @@ window.OporaList = (() => {
   function enhanceForm(form) {
     if (!form) return;
     if (window.OporaPhoneMask) OporaPhoneMask.init(form);
+    if (window.OporaRequestsForm) OporaRequestsForm.init(form);
     const firstInvalid = form.querySelector(".is-invalid");
     if (firstInvalid) firstInvalid.focus();
   }
@@ -164,7 +165,7 @@ window.OporaList = (() => {
       const submitBtn = form.querySelector('[type="submit"]');
       if (submitBtn) submitBtn.disabled = true;
 
-      try {
+      const doSubmit = async () => {
         const response = await fetch(form.action, {
           method: form.method || "POST",
           headers: AJAX_HEADERS,
@@ -174,6 +175,10 @@ window.OporaList = (() => {
         if (data.success) {
           bootstrap.Modal.getInstance(formModal())?.hide();
           showToast(data.message || "Сохранено");
+          if (data.redirect_url) {
+            window.location.href = data.redirect_url;
+            return;
+          }
           await refreshAfterMutation();
         } else {
           if (data.html) {
@@ -184,8 +189,16 @@ window.OporaList = (() => {
           }
           showToast(data.message || "Проверьте форму", "danger");
         }
-      } catch {
-        showToast("Ошибка сохранения", "danger");
+      };
+
+      try {
+        if (window.OporaRequestsForm?.handleCreateSubmit) {
+          await OporaRequestsForm.handleCreateSubmit(form, doSubmit);
+        } else {
+          await doSubmit();
+        }
+      } catch (err) {
+        showToast(err?.message || "Ошибка сохранения", "danger");
       } finally {
         if (submitBtn) submitBtn.disabled = false;
       }

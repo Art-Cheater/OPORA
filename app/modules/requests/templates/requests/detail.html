@@ -78,20 +78,38 @@
                         <div>{{ req.dispatcher_name or (dispatcher.full_name if dispatcher else "—") }}</div>
                     </div>
                     <div class="col-md-6">
-                        <small class="text-muted">Районный мастер</small>
-                        <div class="fw-semibold">{{ req.responsible.full_name if req.responsible else "—" }}</div>
-                    </div>
-                    <div class="col-md-6">
-                        <small class="text-muted">Исполнитель</small>
-                        <div>{{ req.executor.full_name if req.executor else "—" }}</div>
-                    </div>
-                    <div class="col-md-6">
                         <small class="text-muted">Телефон</small>
                         <div>{{ req.phone or "—" }}</div>
                     </div>
+                    <div class="col-md-6">
+                        <small class="text-muted">Шлагбаум</small>
+                        <div>
+                            {% if req.has_barrier %}
+                                Да{% if req.barrier_phone %} — {{ req.barrier_phone }}{% endif %}
+                            {% else %}
+                                Нет
+                            {% endif %}
+                        </div>
+                    </div>
                     <div class="col-12">
                         <small class="text-muted">Адрес</small>
-                        <div>{{ req.address }}</div>
+                        <div class="{% if req.repeat_count and req.repeat_count > 0 %}border border-danger rounded px-2 py-1{% endif %}">
+                            {{ req.address }}
+                            {% if req.repeat_count and req.repeat_count > 0 %}
+                            <span class="badge text-bg-danger ms-2">повтор ×{{ req.repeat_count }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <small class="text-muted">Даты обращений</small>
+                        <div class="mt-1">
+                            {% if req.received_at %}
+                            <div>1. {{ req.received_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                            {% endif %}
+                            {% for d in req.repeat_dates or [] %}
+                            <div class="text-danger">{{ loop.index + 1 }}. {{ d.replace('T', ' ')[:16] }}</div>
+                            {% endfor %}
+                        </div>
                     </div>
                     <div class="col-12">
                         <small class="text-muted">Описание</small>

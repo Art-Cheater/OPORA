@@ -66,22 +66,6 @@
                     <div>{{ req.dispatcher_name or (dispatcher.full_name if dispatcher else "—") }}</div>
                 </div>
             </div>
-            {% if is_builtin_visible('requests', 'responsible_id') %}
-            <div class="col-md-6">
-                <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">{{ builtin_label('requests', 'responsible_id', 'Районный мастер') }}</div>
-                    <div>{{ req.responsible.full_name if req.responsible else "—" }}</div>
-                </div>
-            </div>
-            {% endif %}
-            {% if is_builtin_visible('requests', 'executor_id') %}
-            <div class="col-md-6">
-                <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">{{ builtin_label('requests', 'executor_id', 'Исполнитель') }}</div>
-                    <div>{{ req.executor.full_name if req.executor else "—" }}</div>
-                </div>
-            </div>
-            {% endif %}
             {% if is_builtin_visible('requests', 'phone') %}
             <div class="col-md-6">
                 <div class="opora-detail-field">
@@ -90,14 +74,44 @@
                 </div>
             </div>
             {% endif %}
+            <div class="col-md-6">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Шлагбаум</div>
+                    <div>
+                        {% if req.has_barrier %}
+                            Да{% if req.barrier_phone %} — {{ req.barrier_phone }}{% endif %}
+                        {% else %}
+                            Нет
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
             {% if is_builtin_visible('requests', 'address') %}
             <div class="col-md-6">
                 <div class="opora-detail-field">
                     <div class="opora-detail-field__label">{{ builtin_label('requests', 'address', 'Адрес') }}</div>
-                    <div>{{ req.address }}</div>
+                    <div class="{% if req.repeat_count and req.repeat_count > 0 %}border border-danger rounded px-2 py-1{% endif %}">
+                        {{ req.address }}
+                        {% if req.repeat_count and req.repeat_count > 0 %}
+                        <span class="badge text-bg-danger ms-1">повтор ×{{ req.repeat_count }}</span>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
             {% endif %}
+            <div class="col-12">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Даты обращений</div>
+                    <div>
+                        {% if req.received_at %}
+                        <div>1. {{ req.received_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                        {% endif %}
+                        {% for d in req.repeat_dates or [] %}
+                        <div class="text-danger">{{ loop.index + 1 }}. {{ d.replace('T', ' ')[:16] }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
             {% if is_builtin_visible('requests', 'description') %}
             <div class="col-12">
                 <div class="opora-detail-field">

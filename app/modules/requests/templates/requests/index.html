@@ -37,16 +37,8 @@
                 <button type="button" id="requestFilterReset" class="btn btn-outline-primary w-100">Сброс</button>
             </div>
             <div class="col-lg-2">
-                <label class="form-label">{{ filter_form.responsible_id.label.text }}</label>
-                {{ filter_form.responsible_id(class="form-select") }}
-            </div>
-            <div class="col-lg-2">
                 <label class="form-label">{{ filter_form.dispatcher_name.label.text }}</label>
                 {{ filter_form.dispatcher_name(class="form-select") }}
-            </div>
-            <div class="col-lg-2">
-                <label class="form-label">{{ filter_form.executor_id.label.text }}</label>
-                {{ filter_form.executor_id(class="form-select") }}
             </div>
             <div class="col-lg-2">
                 <label class="form-label">{{ filter_form.sort_by.label.text }}</label>
@@ -87,4 +79,9 @@
      data-delete-message="Вы уверены, что хотите удалить эту заявку?"
      data-can-edit="{{ 'true' if current_user.has_permission('requests.edit') else 'false' }}">
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/requests-form.js') }}"></script>
 {% endblock %}

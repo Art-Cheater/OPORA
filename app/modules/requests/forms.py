@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from flask_wtf import FlaskForm
 from wtforms import (
+    BooleanField,
     DateTimeLocalField,
     DecimalField,
     MultipleFileField,
@@ -34,9 +35,7 @@ class RequestFilterForm(FlaskForm):
         ],
         validators=[Optional()],
     )
-    responsible_id = SelectField("Районный мастер", choices=[], validators=[Optional()])
     dispatcher_name = SelectField("Диспетчер", choices=[], validators=[Optional()])
-    executor_id = SelectField("Исполнитель", choices=[], validators=[Optional()])
     preset = SelectField(
         "Быстрый фильтр",
         choices=[
@@ -94,7 +93,9 @@ class RequestForm(FlaskForm):
     latitude = DecimalField("Широта", validators=[Optional()], places=7)
     longitude = DecimalField("Долгота", validators=[Optional()], places=7)
     phone = TelField("Телефон", validators=[Optional(), Length(max=30)])
-    applicant_name = StringField("ФИО заявителя", validators=[Optional(), Length(max=255)])
+    applicant_name = StringField("Заявитель", validators=[Optional(), Length(max=255)])
+    has_barrier = BooleanField("Шлагбаум", default=False)
+    barrier_phone = TelField("Телефон шлагбаума", validators=[Optional(), Length(max=30)])
     priority = SelectField(
         "Приоритет",
         choices=[

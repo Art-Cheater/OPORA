@@ -9,7 +9,6 @@
                 <th>ПП (пункт питания)</th>
                 <th>Статус</th>
                 <th>Диспетчер</th>
-                <th>Районный мастер</th>
                 <th>Получена</th>
                 <th class="text-end">Действия</th>
             </tr>
@@ -24,22 +23,34 @@
                 {% elif req.status.code == 'new' %}table-row-new
                 {% elif req.status.code == 'cancelled' %}table-row-cancelled
                 {% endif %}">
-                <td class="fw-semibold">{{ req.number }}</td>
+                <td class="fw-semibold">
+                    {{ req.number }}
+                    {% if req.repeat_count and req.repeat_count > 0 %}
+                    <span class="badge text-bg-danger ms-1" title="Повторные обращения">повтор ×{{ req.repeat_count }}</span>
+                    {% endif %}
+                </td>
                 <td>
-                    <div class="fw-medium">{{ req.address }}</div>
+                    <div class="fw-medium {% if req.repeat_count and req.repeat_count > 0 %}text-danger{% endif %}">{{ req.address }}</div>
                     {% if req.applicant_name and req.applicant_name != '—' %}
                     <div class="small text-muted">{{ req.applicant_name }}</div>
+                    {% endif %}
+                    {% if req.has_barrier %}
+                    <div class="small text-muted"><i class="bi bi-p-square"></i> Шлагбаум{% if req.barrier_phone %}: {{ req.barrier_phone }}{% endif %}</div>
                     {% endif %}
                 </td>
                 <td>{{ req.pp or '—' }}</td>
                 <td>{{ request_status_badge(req.status) }}</td>
                 <td>{{ req.dispatcher_name or '—' }}</td>
-                <td>{{ req.responsible.full_name if req.responsible else '—' }}</td>
                 <td class="text-muted">
                     {% if req.received_at %}
-                        {{ req.received_at.strftime('%d.%m.%Y %H:%M') }}
+                        <div>{{ req.received_at.strftime('%d.%m.%Y %H:%M') }}</div>
                     {% else %}
-                        {{ req.created_at.strftime('%d.%m.%Y %H:%M') }}
+                        <div>{{ req.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                    {% endif %}
+                    {% if req.repeat_dates %}
+                        {% for d in req.repeat_dates %}
+                        <div class="small text-danger">повтор: {{ d.replace('T', ' ')[:16] }}</div>
+                        {% endfor %}
                     {% endif %}
                 </td>
                 <td class="text-end">
@@ -54,7 +65,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="8" class="table-empty">
+                <td colspan="7" class="table-empty">
                     <i class="bi bi-inbox"></i> Заявки не найдены
                 </td>
             </tr>

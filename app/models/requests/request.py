@@ -7,8 +7,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, Numeric, String, Text
-from app.models.types import GUID, SearchVectorType
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text
+from app.models.types import GUID, JSONType, SearchVectorType
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
@@ -50,6 +50,10 @@ class Request(BaseModel):
     longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     applicant_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    has_barrier: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    barrier_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    repeat_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    repeat_dates: Mapped[list | None] = mapped_column(JSONType, nullable=True)
     priority: Mapped[str] = mapped_column(
         String(20),
         default=Priority.MEDIUM.value,

@@ -12,7 +12,8 @@
 {% endblock %}
 
 {% block content %}
-<form method="POST" class="card">
+<form method="POST" class="card" data-requests-form="1"
+      {% if mode == 'edit' and req %}data-request-id="{{ req.id }}"{% endif %}>
     <div class="card-body">
         {{ form.hidden_tag() }}
         <div class="row g-3">
@@ -23,6 +24,7 @@
             <div class="col-md-8">
                 {{ form.address.label(class="form-label") }}
                 {{ form.address(class="form-control", placeholder="Город, улица, дом") }}
+                <div class="alert alert-warning py-2 mt-2 mb-0 small d-none" data-address-hint></div>
             </div>
             <div class="col-md-6">
                 {{ form.pp.label(class="form-label") }}
@@ -35,10 +37,6 @@
             <div class="col-md-6">
                 {{ form.dispatcher_name.label(class="form-label") }}
                 {{ form.dispatcher_name(class="form-select") }}
-            </div>
-            <div class="col-md-6">
-                {{ form.responsible_id.label(class="form-label") }}
-                {{ form.responsible_id(class="form-select") }}
             </div>
             <div class="col-md-12">
                 {{ form.description.label(class="form-label") }}
@@ -56,17 +54,15 @@
                 {{ form.priority.label(class="form-label") }}
                 {{ form.priority(class="form-select") }}
             </div>
-            <div class="col-md-3">
-                {{ form.latitude.label(class="form-label") }}
-                {{ form.latitude(class="form-control") }}
+            <div class="col-md-4">
+                <div class="form-check mt-4 pt-2">
+                    {{ form.has_barrier(class="form-check-input", **{'data-barrier-toggle': '1'}) }}
+                    <label class="form-check-label" for="{{ form.has_barrier.id }}">{{ form.has_barrier.label.text }}</label>
+                </div>
             </div>
-            <div class="col-md-3">
-                {{ form.longitude.label(class="form-label") }}
-                {{ form.longitude(class="form-control") }}
-            </div>
-            <div class="col-md-6">
-                {{ form.executor_id.label(class="form-label") }}
-                {{ form.executor_id(class="form-select") }}
+            <div class="col-md-8 {% if not form.has_barrier.data %}d-none{% endif %}" data-barrier-phone-wrap>
+                {{ form.barrier_phone.label(class="form-label") }}
+                {{ form.barrier_phone(class="form-control opora-phone-mask", placeholder="+7 (___) ___-__-__") }}
             </div>
             {% if mode == 'edit' and req %}
             <div class="col-md-6">
@@ -81,4 +77,9 @@
         {{ form.submit(class="btn btn-primary") }}
     </div>
 </form>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/requests-form.js') }}"></script>
 {% endblock %}

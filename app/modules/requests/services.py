@@ -57,6 +57,8 @@ class RequestPayload:
     status_id: uuid.UUID
     responsible_id: uuid.UUID | None
     executor_id: uuid.UUID | None
+    has_barrier: bool = False
+    barrier_phone: str | None = None
 
 
 class RequestService:
@@ -78,6 +80,9 @@ class RequestService:
         "status_id",
         "responsible_id",
         "executor_id",
+        "has_barrier",
+        "barrier_phone",
+        "repeat_count",
     ]
 
     @staticmethod
@@ -97,6 +102,12 @@ class RequestService:
             return None
         stripped = value.strip()
         return stripped if stripped else None
+
+    @staticmethod
+    def normalize_address(address: str | None) -> str:
+        from app.modules.requests.repositories import normalize_address as _norm
+
+        return _norm(address)
 
     @classmethod
     def get_status_by_code(cls, code: str) -> RequestStatus:
@@ -122,6 +133,11 @@ class RequestService:
             payload.title = payload.address.strip()[:500]
         if not (payload.applicant_name or "").strip():
             payload.applicant_name = "—"
+        if payload.has_barrier:
+            if not cls._normalize_text(payload.barrier_phone):
+                raise ValidationError("Укажите телефон для шлагбаума.")
+        else:
+            payload.barrier_phone = None
 
         status = db.session.get(RequestStatus, payload.status_id)
         if status is None or status.deleted_at is not None:
@@ -308,6 +324,10 @@ class RequestService:
             longitude=payload.longitude,
             phone=cls._normalize_text(payload.phone),
             applicant_name=(payload.applicant_name or "—").strip(),
+            has_barrier=bool(payload.has_barrier),
+            barrier_phone=cls._normalize_text(payload.barrier_phone),
+            repeat_count=0,
+            repeat_dates=[],
             priority=payload.priority,
             status_id=new_status.id,
             responsible_id=payload.responsible_id,
@@ -361,6 +381,8 @@ class RequestService:
         req.longitude = payload.longitude
         req.phone = cls._normalize_text(payload.phone)
         req.applicant_name = (payload.applicant_name or "—").strip()
+        req.has_barrier = bool(payload.has_barrier)
+        req.barrier_phone = cls._normalize_text(payload.barrier_phone)
         req.priority = payload.priority
         req.executor_id = payload.executor_id
         req.responsible_id = payload.responsible_id
@@ -397,6 +419,77 @@ class RequestService:
             history_comment,
             history_details,
             previous_status_id=previous_status_id,
+        )
+        db.session.commit()
+        return req
+
+    @classmethod
+    def mark_repeat_call(
+        cls,
+        req: Request,
+        user_id: uuid.UUID,
+        *,
+        call_at: Any = None,
+        phone: str | None = None,
+        applicant_name: str | None = None,
+        description: str | None = None,
+        has_barrier: bool | None = None,
+        barrier_phone: str | None = None,
+    ) -> Request:
+        """Зафиксировать повторное обращение на существующей открытой заявке."""
+        from datetime import datetime, timezone
+
+        if req.status is None or req.status.is_final:
+            raise ValidationError("Повтор можно отметить только для открытой заявки.")
+
+        when = call_at or datetime.now(timezone.utc)
+        if isinstance(when, datetime) and when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+
+        old_snapshot = cls._snapshot(req)
+        dates = list(req.repeat_dates or [])
+        dates.append(when.isoformat())
+        req.repeat_dates = dates
+        req.repeat_count = int(req.repeat_count or 0) + 1
+
+        if cls._normalize_text(phone):
+            req.phone = cls._normalize_text(phone)
+        if cls._normalize_text(applicant_name):
+            req.applicant_name = applicant_name.strip()
+        if cls._normalize_text(description):
+            # Дописываем к описанию, не затираем
+            note = description.strip()
+            if req.description:
+                req.description = f"{req.description}\n\n[Повтор {when.strftime('%d.%m.%Y %H:%M')}]\n{note}"
+            else:
+                req.description = f"[Повтор {when.strftime('%d.%m.%Y %H:%M')}]\n{note}"
+        if has_barrier is not None:
+            req.has_barrier = bool(has_barrier)
+            if req.has_barrier:
+                if cls._normalize_text(barrier_phone):
+                    req.barrier_phone = cls._normalize_text(barrier_phone)
+            else:
+                req.barrier_phone = None
+
+        req.updated_by = user_id
+        new_snapshot = cls._snapshot(req)
+        cls._log_audit(
+            user_id,
+            AuditAction.UPDATE.value,
+            req.id,
+            f"Повторное обращение по заявке {req.number} (×{req.repeat_count})",
+            old_snapshot,
+            new_snapshot,
+        )
+        cls._log_history(
+            req,
+            user_id,
+            "repeat_call",
+            f"Повторное обращение зафиксировано ({when.strftime('%d.%m.%Y %H:%M')})",
+            {
+                "repeat_count": req.repeat_count,
+                "call_at": when.isoformat(),
+            },
         )
         db.session.commit()
         return req

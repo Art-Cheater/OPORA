@@ -110,12 +110,33 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
     if isinstance(received_at, datetime) and received_at.tzinfo is None:
         received_at = received_at.replace(tzinfo=timezone.utc)
 
-    responsible_raw = field(
+    def preserved(code, submitted, attr, default=None):
+        """Скрытые builtin-поля не затираем при сохранении."""
+        if entity is not None and not BFS.is_visible(m, code):
+            return getattr(entity, attr, default)
+        return field(code, submitted, default=default)
+
+    responsible_raw = preserved(
         "responsible_id",
         form.responsible_id.data or "",
+        "responsible_id",
         default=str(entity.responsible_id) if entity and entity.responsible_id else "",
     )
-    responsible_id = _uuid_or_none(str(responsible_raw) if responsible_raw else "")
+    if isinstance(responsible_raw, uuid.UUID):
+        responsible_id = responsible_raw
+    else:
+        responsible_id = _uuid_or_none(str(responsible_raw) if responsible_raw else "")
+
+    executor_raw = preserved(
+        "executor_id",
+        form.executor_id.data or "",
+        "executor_id",
+        default=str(entity.executor_id) if entity and entity.executor_id else "",
+    )
+    if isinstance(executor_raw, uuid.UUID):
+        executor_id = executor_raw
+    else:
+        executor_id = _uuid_or_none(str(executor_raw) if executor_raw else "")
 
     return RequestPayload(
         number=field("number", form.number.data, default=RequestRepository.next_number()),
@@ -125,31 +146,37 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
         pp=field("pp", form.pp.data, default=None),
         received_at=received_at,
         dispatcher_name=field("dispatcher_name", form.dispatcher_name.data, default=None),
-        latitude=field("latitude", form.latitude.data, default=None),
-        longitude=field("longitude", form.longitude.data, default=None),
+        latitude=preserved(
+            "latitude",
+            form.latitude.data,
+            "latitude",
+            default=entity.latitude if entity else None,
+        ),
+        longitude=preserved(
+            "longitude",
+            form.longitude.data,
+            "longitude",
+            default=entity.longitude if entity else None,
+        ),
         phone=field("phone", form.phone.data, default=None),
         applicant_name=field("applicant_name", form.applicant_name.data, default="—"),
         priority=field("priority", form.priority.data, default=Priority.MEDIUM.value),
         status_id=status_id,
         responsible_id=responsible_id,
-        executor_id=_resolve_uuid_field("executor_id", form.executor_id.data or "", entity),
+        executor_id=executor_id,
+        has_barrier=bool(field("has_barrier", form.has_barrier.data, default=False)),
+        barrier_phone=field("barrier_phone", form.barrier_phone.data, default=None),
     )
 
 
 def _prepare_filter_form(form: RequestFilterForm) -> None:
     statuses = RequestRepository.get_statuses()
-    masters = RequestRepository.get_masters()
     dispatchers = RequestRepository.get_dispatchers()
-    users = RequestRepository.get_users()
 
     form.status_id.choices = [("", "Все статусы")] + [
         (str(item.id), item.name) for item in statuses
     ]
-    form.responsible_id.choices = [("", "Любой")] + [
-        (str(item.id), item.full_name) for item in masters
-    ]
     form.dispatcher_name.choices = [("", "Любой")] + [(d.name, d.name) for d in dispatchers]
-    form.executor_id.choices = [("", "Любой")] + [(str(item.id), item.full_name) for item in users]
 
 
 def _prepare_request_form(form: RequestForm) -> None:
@@ -197,6 +224,8 @@ def _apply_request_create_defaults(form: RequestForm) -> None:
         form.status_id.data = str(status.id)
     form.responsible_id.data = ""
     form.dispatcher_name.data = ""
+    form.has_barrier.data = False
+    form.barrier_phone.data = ""
 
 
 def _build_filters() -> RequestFilter:
@@ -267,6 +296,98 @@ def table():
     return jsonify({"table_html": html, "pagination_html": pager})
 
 
+@requests_bp.route("/api/open-by-address")
+@login_required
+@any_permission_required(PERM_REQUESTS_CREATE, PERM_REQUESTS_EDIT, PERM_REQUESTS_VIEW)
+def open_by_address():
+    address = (request.args.get("address") or "").strip()
+    exclude_raw = request.args.get("exclude_id") or ""
+    exclude_id = _uuid_or_none(exclude_raw)
+    if len(address) < 3:
+        return jsonify({"found": False})
+
+    existing = RequestRepository.find_open_by_address(address, exclude_id=exclude_id)
+    if existing is None:
+        return jsonify({"found": False})
+
+    received = None
+    if existing.received_at:
+        received = existing.received_at.strftime("%d.%m.%Y %H:%M")
+    return jsonify(
+        {
+            "found": True,
+            "id": str(existing.id),
+            "number": existing.number,
+            "address": existing.address,
+            "status": existing.status.name if existing.status else None,
+            "received_at": received,
+            "repeat_count": int(existing.repeat_count or 0),
+            "url": url_for("requests.detail", request_id=existing.id),
+        }
+    )
+
+
+@requests_bp.route("/<uuid:request_id>/mark-repeat", methods=["POST"])
+@login_required
+@permission_required(PERM_REQUESTS_EDIT)
+def mark_repeat(request_id: uuid.UUID):
+    from datetime import datetime, timezone
+
+    req = RequestRepository.get_by_id(request_id)
+    if req is None:
+        if is_ajax():
+            return ajax_error("Заявка не найдена.", status=404)
+        flash("Заявка не найдена.", "danger")
+        return redirect(url_for("requests.index"))
+
+    payload = request.json if request.is_json else request.form
+    call_raw = payload.get("received_at") if payload else None
+    call_at = None
+    if call_raw:
+        try:
+            call_at = datetime.fromisoformat(str(call_raw).replace("Z", "+00:00"))
+        except ValueError:
+            try:
+                call_at = datetime.strptime(str(call_raw), "%Y-%m-%dT%H:%M").replace(
+                    tzinfo=timezone.utc
+                )
+            except ValueError:
+                call_at = None
+
+    has_barrier_raw = payload.get("has_barrier") if payload else None
+    has_barrier = None
+    if has_barrier_raw is not None:
+        has_barrier = str(has_barrier_raw).lower() in ("1", "true", "on", "yes")
+
+    try:
+        updated = RequestService.mark_repeat_call(
+            req,
+            current_user.id,
+            call_at=call_at,
+            phone=payload.get("phone") if payload else None,
+            applicant_name=payload.get("applicant_name") if payload else None,
+            description=payload.get("description") if payload else None,
+            has_barrier=has_barrier,
+            barrier_phone=payload.get("barrier_phone") if payload else None,
+        )
+    except ValidationError as exc:
+        if is_ajax():
+            return ajax_error(str(exc))
+        flash(str(exc), "danger")
+        return redirect(url_for("requests.detail", request_id=req.id))
+
+    detail_url = url_for("requests.detail", request_id=updated.id)
+    if is_ajax():
+        return ajax_ok(
+            "Повторное обращение зафиксировано.",
+            id=str(updated.id),
+            redirect_url=detail_url,
+            repeat_count=updated.repeat_count,
+        )
+    flash("Повторное обращение зафиксировано.", "success")
+    return redirect(detail_url)
+
+
 _CF = "requests"
 
 
@@ -297,6 +418,7 @@ def create():
                     "requests/partials/form_modal.html",
                     form=form,
                     form_action=url_for("requests.create"),
+                    mode="create",
                     **_cf_form(),
                 )
                 return ajax_error(str(exc), html=html)
@@ -306,6 +428,7 @@ def create():
             "requests/partials/form_modal.html",
             form=form,
             form_action=url_for("requests.create"),
+            mode="create",
             **_cf_form(),
         )
         return ajax_error(form_errors_message(form), html=html)
@@ -315,6 +438,7 @@ def create():
             "requests/partials/form_modal.html",
             form=form,
             form_action=url_for("requests.create"),
+            mode="create",
             **_cf_form(),
         )
     return render_template("requests/form.html", form=form, mode="create")
@@ -435,6 +559,8 @@ def edit(request_id: uuid.UUID):
         form.executor_id.data = str(req.executor_id) if req.executor_id else ""
         form.dispatcher_name.data = req.dispatcher_name or ""
         form.pp.data = req.pp or ""
+        form.has_barrier.data = bool(req.has_barrier)
+        form.barrier_phone.data = req.barrier_phone or ""
         if req.received_at is not None:
             form.received_at.data = req.received_at
 
@@ -453,6 +579,8 @@ def edit(request_id: uuid.UUID):
                     "requests/partials/form_modal.html",
                     form=form,
                     form_action=url_for("requests.edit", request_id=req.id),
+                    mode="edit",
+                    req=req,
                     **_cf_form(req.id),
                 )
                 return ajax_error(str(exc), html=html)
@@ -462,6 +590,8 @@ def edit(request_id: uuid.UUID):
             "requests/partials/form_modal.html",
             form=form,
             form_action=url_for("requests.edit", request_id=req.id),
+            mode="edit",
+            req=req,
             **_cf_form(req.id),
         )
         return ajax_error(form_errors_message(form), html=html)
@@ -471,6 +601,8 @@ def edit(request_id: uuid.UUID):
             "requests/partials/form_modal.html",
             form=form,
             form_action=url_for("requests.edit", request_id=req.id),
+            mode="edit",
+            req=req,
             **_cf_form(req.id),
         )
     return render_template("requests/form.html", form=form, mode="edit", req=req)

@@ -430,3 +430,11 @@ a { text-decoration: none; }
 .roles-admin__item { border-radius: var(--opora-radius-sm); margin-bottom: 0.25rem; border: 1px solid transparent; }
 .roles-admin__item.active { border-color: var(--opora-primary); background: rgba(245, 124, 0, 0.08); }
 .roles-admin__editor-card .card-body { max-height: calc(100vh - 220px); overflow-y: auto; }
+
+/* Заявки: повторный адрес */
+.request-address--repeat,
+input.request-address--repeat,
+.form-control.request-address--repeat {
+  border-color: #dc3545 !important;
+  box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.15);
+}

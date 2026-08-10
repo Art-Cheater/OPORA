@@ -194,13 +194,19 @@ class ReferenceDataService:
                 if key in existing_fields:
                     # Не затираем ручные правки (название, порядок, видимость)
                     continue
+                hidden_defaults = {
+                    "responsible_id",
+                    "executor_id",
+                    "latitude",
+                    "longitude",
+                }
                 db.session.add(
                     FieldDefinition(
                         module_id=mod.id,
                         code=field_code,
                         name=field_name,
                         sort_order=sort_order,
-                        is_visible=True,
+                        is_visible=field_code not in hidden_defaults,
                     )
                 )
         db.session.flush()

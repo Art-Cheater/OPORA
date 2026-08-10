@@ -43,6 +43,13 @@ class RequestFilter:
     sort_dir: str = "desc"
 
 
+def normalize_address(address: str | None) -> str:
+    import re
+
+    text = (address or "").strip().lower()
+    return re.sub(r"\s+", " ", text)
+
+
 class RequestRepository:
     """Чтение и запись заявок."""
 
@@ -66,6 +73,37 @@ class RequestRepository:
         return db.session.scalar(
             db.select(Request).where(Request.id == request_id, Request.active_filter())
         )
+
+    @classmethod
+    def find_open_by_address(
+        cls,
+        address: str,
+        *,
+        exclude_id: uuid.UUID | None = None,
+    ) -> Request | None:
+        """Открытая (не финальная) заявка с тем же нормализованным адресом."""
+        target = normalize_address(address)
+        if not target:
+            return None
+
+        stmt = (
+            db.select(Request)
+            .join(RequestStatus, Request.status_id == RequestStatus.id)
+            .options(joinedload(Request.status))
+            .where(
+                Request.active_filter(),
+                RequestStatus.active_filter(),
+                RequestStatus.is_final.is_(False),
+            )
+            .order_by(Request.received_at.desc().nullslast(), Request.created_at.desc())
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(Request.id != exclude_id)
+
+        for req in db.session.scalars(stmt).unique():
+            if normalize_address(req.address) == target:
+                return req
+        return None
 
     @staticmethod
     def get_statuses() -> list[RequestStatus]:
