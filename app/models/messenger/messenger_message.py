@@ -44,6 +44,11 @@ class MessengerMessage(BaseModel):
     storage_key: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    reply_to_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(),
+        ForeignKey("messenger_messages.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     conversation: Mapped[MessengerConversation] = relationship(
         "MessengerConversation",
@@ -51,10 +56,19 @@ class MessengerMessage(BaseModel):
         foreign_keys=[conversation_id],
     )
     sender: Mapped[User] = relationship("User", foreign_keys=[sender_id])
+    reply_to: Mapped[MessengerMessage | None] = relationship(
+        "MessengerMessage",
+        remote_side="MessengerMessage.id",
+        foreign_keys=[reply_to_id],
+    )
 
     @property
     def has_attachment(self) -> bool:
         return bool(self.storage_key)
+
+    @property
+    def is_image(self) -> bool:
+        return bool(self.mime_type and self.mime_type.startswith("image/"))
 
     def __repr__(self) -> str:
         return f"<MessengerMessage {self.id} conv={self.conversation_id}>"

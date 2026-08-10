@@ -3,7 +3,7 @@
   if (!app) return;
 
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
-  const currentUserId = app.dataset.currentUserId;
+  const currentUserName = app.dataset.currentUserName || "Вы";
 
   const conversationList = document.getElementById("conversationList");
   const userList = document.getElementById("userList");
@@ -22,6 +22,14 @@
   const chatPeerStatus = document.getElementById("chatPeerStatus");
   const chatPeerAvatar = document.getElementById("chatPeerAvatar");
   const chatBackBtn = document.getElementById("chatBackBtn");
+  const replyBar = document.getElementById("replyBar");
+  const replyBarLabel = document.getElementById("replyBarLabel");
+  const replyBarText = document.getElementById("replyBarText");
+  const replyBarClose = document.getElementById("replyBarClose");
+  const attachPreview = document.getElementById("attachPreview");
+  const imageLightbox = document.getElementById("imageLightbox");
+  const lightboxImage = document.getElementById("lightboxImage");
+  const lightboxClose = document.getElementById("lightboxClose");
 
   let activeConversationId = null;
   let activePeer = null;
@@ -31,6 +39,9 @@
   let searchTimer = null;
   let unreadEtag = null;
   let eventSource = null;
+  let replyTarget = null;
+  let pendingFiles = [];
+  const drafts = new Map();
   const pollIntervalMs = Number(app.dataset.pollInterval || 8000);
   const unreadIntervalMs = Number(app.dataset.unreadInterval || 45000);
 
@@ -54,15 +65,47 @@
     return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
   }
 
+  function formatPresence(user) {
+    if (!user) return "офлайн";
+    if (user.is_online) return "в сети";
+    if (!user.last_seen_at) return "офлайн";
+    const d = new Date(user.last_seen_at);
+    if (Number.isNaN(d.getTime())) return "офлайн";
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const time = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    if (sameDay) return `был(а) в ${time}`;
+    if (d.toDateString() === yesterday.toDateString()) return `был(а) вчера в ${time}`;
+    const date = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+    return `был(а) ${date} в ${time}`;
+  }
+
   function escapeHtml(text) {
     const div = document.createElement("div");
     div.textContent = text || "";
     return div.innerHTML;
   }
 
+  function isNearBottom(el, threshold = 80) {
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
+  }
+
+  function scrollMessagesToBottom() {
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+
   function renderAvatar(el, user, online = false) {
     el.textContent = user.initial || "?";
     el.classList.toggle("tg-avatar--online", online);
+  }
+
+  function updatePeerStatus(peer) {
+    if (!peer) return;
+    chatPeerStatus.textContent = formatPresence(peer);
+    chatPeerStatus.classList.toggle("online", !!peer.is_online);
+    renderAvatar(chatPeerAvatar, peer, !!peer.is_online);
   }
 
   function showPanel(name) {
@@ -72,6 +115,129 @@
     document.querySelectorAll(".tg-tab").forEach((tab) => {
       tab.classList.toggle("active", tab.dataset.tab === name);
     });
+  }
+
+  function saveDraft() {
+    if (!activeConversationId) return;
+    drafts.set(activeConversationId, {
+      text: messageInput.value,
+      reply: replyTarget,
+    });
+  }
+
+  function restoreDraft(conversationId) {
+    const draft = drafts.get(conversationId);
+    messageInput.value = draft?.text || "";
+    messageInput.style.height = "auto";
+    if (messageInput.value) {
+      messageInput.style.height = `${Math.min(messageInput.scrollHeight, 120)}px`;
+    }
+    if (draft?.reply) {
+      setReplyTarget(draft.reply);
+    } else {
+      clearReplyTarget();
+    }
+  }
+
+  function clearComposerState() {
+    messageInput.value = "";
+    messageInput.style.height = "auto";
+    clearReplyTarget();
+    clearPendingFiles();
+  }
+
+  function setReplyTarget(msg) {
+    replyTarget = {
+      id: msg.id,
+      body: msg.body || msg.file?.name || msg.replyPreview || "",
+      is_mine: !!msg.is_mine,
+      sender_name: msg.is_mine
+        ? currentUserName
+        : msg.sender_name || activePeer?.full_name || "Собеседник",
+    };
+    replyBar.classList.remove("d-none");
+    replyBarLabel.textContent = replyTarget.is_mine ? "Ответ себе" : `Ответ ${replyTarget.sender_name}`;
+    replyBarText.textContent = replyTarget.body || "Вложение";
+    messageInput.focus();
+  }
+
+  function clearReplyTarget() {
+    replyTarget = null;
+    replyBar.classList.add("d-none");
+    replyBarText.textContent = "";
+  }
+
+  function messagePreviewText(msg) {
+    if (msg.body && msg.body.trim()) return msg.body.trim();
+    if (msg.file?.name) return msg.file.name;
+    if (msg.has_attachment) return "Вложение";
+    return "Сообщение";
+  }
+
+  function clearPendingFiles() {
+    pendingFiles.forEach((item) => {
+      if (item.url) URL.revokeObjectURL(item.url);
+    });
+    pendingFiles = [];
+    renderAttachPreview();
+  }
+
+  function renderAttachPreview() {
+    attachPreview.innerHTML = "";
+    if (!pendingFiles.length) {
+      attachPreview.classList.add("d-none");
+      return;
+    }
+    attachPreview.classList.remove("d-none");
+    pendingFiles.forEach((item, index) => {
+      const wrap = document.createElement("div");
+      wrap.className = "tg-attach-preview__item";
+      if (item.url) {
+        const img = document.createElement("img");
+        img.src = item.url;
+        img.alt = item.file.name;
+        wrap.appendChild(img);
+      } else {
+        const icon = document.createElement("div");
+        icon.className = "tg-attach-preview__file";
+        icon.innerHTML = '<i class="bi bi-file-earmark"></i>';
+        wrap.appendChild(icon);
+      }
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "tg-attach-preview__remove";
+      remove.title = "Убрать";
+      remove.innerHTML = '<i class="bi bi-x"></i>';
+      remove.addEventListener("click", () => {
+        const removed = pendingFiles.splice(index, 1)[0];
+        if (removed?.url) URL.revokeObjectURL(removed.url);
+        renderAttachPreview();
+      });
+      wrap.appendChild(remove);
+      attachPreview.appendChild(wrap);
+    });
+  }
+
+  function queueFiles(fileList) {
+    Array.from(fileList || []).forEach((file) => {
+      const isImage = file.type.startsWith("image/");
+      pendingFiles.push({
+        file,
+        url: isImage ? URL.createObjectURL(file) : null,
+      });
+    });
+    renderAttachPreview();
+  }
+
+  function openLightbox(url, alt = "") {
+    lightboxImage.src = url;
+    lightboxImage.alt = alt;
+    imageLightbox.classList.remove("d-none");
+  }
+
+  function closeLightbox() {
+    imageLightbox.classList.add("d-none");
+    lightboxImage.src = "";
   }
 
   function renderConversationItem(conv) {
@@ -87,13 +253,16 @@
 
     const body = document.createElement("div");
     body.className = "tg-list-item__body";
+    const statusHint = conv.peer.is_online ? "в сети" : formatPresence(conv.peer);
     body.innerHTML = `
       <div class="tg-list-item__top">
         <span class="tg-list-item__name">${escapeHtml(conv.peer.full_name)}</span>
         <span class="tg-list-item__time">${formatTime(conv.last_message_at)}</span>
       </div>
       <div class="tg-list-item__top">
-        <span class="tg-list-item__preview">${escapeHtml(conv.last_message_preview || "Нет сообщений")}</span>
+        <span class="tg-list-item__preview ${conv.peer.is_online ? "is-online" : ""}">${escapeHtml(
+          conv.last_message_preview || statusHint
+        )}</span>
         ${conv.unread_count ? `<span class="tg-badge">${conv.unread_count}</span>` : ""}
       </div>
     `;
@@ -114,13 +283,14 @@
 
     const body = document.createElement("div");
     body.className = "tg-list-item__body";
+    const meta = [user.position, user.department].filter(Boolean).join(" · ") || user.email;
     body.innerHTML = `
       <div class="tg-list-item__name">${escapeHtml(user.full_name)}</div>
-      <div class="tg-list-item__preview">${escapeHtml(
-        [user.position, user.department].filter(Boolean).join(" · ") || user.email
-      )}${user.is_blocked ? ' <span class="text-danger">(заблокирован)</span>' : ""}${
-        !user.is_active ? ' <span class="text-muted">(неактивен)</span>' : ""
-      }</div>
+      <div class="tg-list-item__preview ${user.is_online ? "is-online" : ""}">${escapeHtml(
+        formatPresence(user)
+      )} · ${escapeHtml(meta)}${
+        user.is_blocked ? ' <span class="text-danger">(заблокирован)</span>' : ""
+      }${!user.is_active ? ' <span class="text-muted">(неактивен)</span>' : ""}</div>
     `;
 
     item.appendChild(avatar);
@@ -135,7 +305,8 @@
     const data = await res.json();
     conversationList.innerHTML = "";
     if (!data.conversations.length) {
-      conversationList.innerHTML = '<div class="tg-list-empty">Нет диалогов. Начните переписку во вкладке «Контакты».</div>';
+      conversationList.innerHTML =
+        '<div class="tg-list-empty">Нет диалогов. Начните переписку во вкладке «Контакты».</div>';
       return;
     }
     data.conversations.forEach((conv) => {
@@ -166,6 +337,10 @@
   }
 
   async function openConversation(conversationId, peer) {
+    if (activeConversationId && activeConversationId !== conversationId) {
+      saveDraft();
+    }
+
     activeConversationId = conversationId;
     activePeer = peer;
     lastMessageId = null;
@@ -175,13 +350,15 @@
     app.classList.add("chat-open");
 
     chatPeerName.textContent = peer.full_name;
-    chatPeerStatus.textContent = peer.is_online ? "в сети" : "был(а) недавно";
-    chatPeerStatus.classList.toggle("online", peer.is_online);
-    renderAvatar(chatPeerAvatar, peer, peer.is_online);
+    updatePeerStatus(peer);
 
     document.querySelectorAll(".tg-list-item").forEach((el) => {
       el.classList.toggle("active", el.dataset.conversationId === conversationId);
     });
+
+    messagesContainer.innerHTML = "";
+    clearPendingFiles();
+    restoreDraft(conversationId);
 
     await loadMessages(true);
     startPolling();
@@ -192,16 +369,69 @@
     wrap.className = `tg-msg ${msg.is_mine ? "tg-msg--out" : "tg-msg--in"}`;
     wrap.dataset.messageId = msg.id;
 
+    const actions = document.createElement("div");
+    actions.className = "tg-msg__actions";
+    const replyBtn = document.createElement("button");
+    replyBtn.type = "button";
+    replyBtn.className = "tg-msg__reply-btn";
+    replyBtn.title = "Ответить";
+    replyBtn.innerHTML = '<i class="bi bi-reply"></i>';
+    replyBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setReplyTarget({
+        id: msg.id,
+        body: messagePreviewText(msg),
+        is_mine: msg.is_mine,
+        sender_name: msg.is_mine ? currentUserName : activePeer?.full_name,
+      });
+    });
+    actions.appendChild(replyBtn);
+    wrap.appendChild(actions);
+
     const bubble = document.createElement("div");
     bubble.className = "tg-bubble";
 
+    if (msg.reply_to) {
+      const replyBlock = document.createElement("div");
+      replyBlock.className = "tg-bubble__reply";
+      const author = msg.reply_to.is_mine
+        ? currentUserName
+        : msg.reply_to.sender_name || activePeer?.full_name || "Собеседник";
+      replyBlock.innerHTML = `
+        <div>
+          <div class="tg-bubble__reply-author">${escapeHtml(author)}</div>
+          <div class="tg-bubble__reply-text">${escapeHtml(msg.reply_to.body || "Вложение")}</div>
+        </div>
+      `;
+      replyBlock.addEventListener("click", () => {
+        const target = messagesContainer.querySelector(
+          `.tg-msg[data-message-id="${msg.reply_to.id}"]`
+        );
+        if (!target) return;
+        target.classList.add("tg-msg--highlight");
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        setTimeout(() => target.classList.remove("tg-msg--highlight"), 1200);
+      });
+      bubble.appendChild(replyBlock);
+    }
+
     if (msg.has_attachment && msg.file) {
-      const link = document.createElement("a");
-      link.className = "tg-file-link";
-      link.href = msg.file.url;
-      link.target = "_blank";
-      link.innerHTML = `<i class="bi bi-paperclip"></i> ${escapeHtml(msg.file.name)}`;
-      bubble.appendChild(link);
+      if (msg.file.is_image) {
+        const img = document.createElement("img");
+        img.className = "tg-image-preview";
+        img.src = msg.file.url;
+        img.alt = msg.file.name || "Фото";
+        img.loading = "lazy";
+        img.addEventListener("click", () => openLightbox(msg.file.url, msg.file.name || "Фото"));
+        bubble.appendChild(img);
+      } else {
+        const link = document.createElement("a");
+        link.className = "tg-file-link";
+        link.href = `${msg.file.url}?download=1`;
+        link.target = "_blank";
+        link.innerHTML = `<i class="bi bi-paperclip"></i> ${escapeHtml(msg.file.name)}`;
+        bubble.appendChild(link);
+      }
       if (msg.body) {
         const text = document.createElement("div");
         text.className = "mt-2";
@@ -209,7 +439,9 @@
         bubble.appendChild(text);
       }
     } else {
-      bubble.textContent = msg.body || "";
+      const text = document.createElement("div");
+      text.textContent = msg.body || "";
+      bubble.appendChild(text);
     }
 
     const meta = document.createElement("div");
@@ -225,31 +457,40 @@
 
   async function loadMessages(scrollBottom = false) {
     if (!activeConversationId) return;
-    const res = await api(`/messenger/api/conversations/${activeConversationId}/messages`);
+    const conversationId = activeConversationId;
+    const res = await api(`/messenger/api/conversations/${conversationId}/messages`);
     if (!res.ok) return;
     const data = await res.json();
+    if (conversationId !== activeConversationId) return;
 
     if (data.conversation?.peer) {
       activePeer = data.conversation.peer;
-      chatPeerStatus.textContent = activePeer.is_online ? "в сети" : "был(а) недавно";
-      chatPeerStatus.classList.toggle("online", activePeer.is_online);
-      renderAvatar(chatPeerAvatar, activePeer, activePeer.is_online);
+      updatePeerStatus(activePeer);
     }
 
+    const stickToBottom = scrollBottom || isNearBottom(messagesContainer);
     const existingIds = new Set(
       [...messagesContainer.querySelectorAll(".tg-msg")].map((el) => el.dataset.messageId)
     );
     const isInitial = existingIds.size === 0;
+    let appended = 0;
 
     data.messages.forEach((msg) => {
       if (!existingIds.has(msg.id)) {
         messagesContainer.appendChild(renderMessage(msg));
         lastMessageId = msg.id;
+        appended += 1;
+      } else {
+        const el = messagesContainer.querySelector(`.tg-msg[data-message-id="${msg.id}"]`);
+        if (el && msg.is_mine) {
+          const readEl = el.querySelector(".tg-bubble__read");
+          if (readEl) readEl.textContent = msg.is_read ? "✓✓" : "✓";
+        }
       }
     });
 
-    if (scrollBottom || isInitial) {
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    if (scrollBottom || isInitial || (appended && stickToBottom)) {
+      scrollMessagesToBottom();
     }
 
     await loadConversations();
@@ -258,42 +499,73 @@
 
   async function sendMessage() {
     const body = messageInput.value.trim();
-    if (!body || !activeConversationId) return;
+    const hasFiles = pendingFiles.length > 0;
+    if ((!body && !hasFiles) || !activeConversationId) return;
+
     sendBtn.disabled = true;
+    const conversationId = activeConversationId;
+    const replyId = replyTarget?.id || null;
+
+    try {
+      if (hasFiles) {
+        const files = pendingFiles.slice();
+        clearPendingFiles();
+        let replyUsed = false;
+        for (const item of files) {
+          await sendFile(item.file, replyUsed ? null : replyId);
+          replyUsed = true;
+        }
+        if (body) {
+          await postTextMessage(body, replyUsed ? null : replyId);
+        }
+      } else {
+        await postTextMessage(body, replyId);
+      }
+
+      if (conversationId === activeConversationId) {
+        messageInput.value = "";
+        messageInput.style.height = "auto";
+        clearReplyTarget();
+        drafts.delete(conversationId);
+        scrollMessagesToBottom();
+      }
+    } finally {
+      sendBtn.disabled = false;
+    }
+  }
+
+  async function postTextMessage(body, replyId) {
+    const payload = { body };
+    if (replyId) payload.reply_to_id = replyId;
     const res = await api(`/messenger/api/conversations/${activeConversationId}/messages`, {
       method: "POST",
-      body: JSON.stringify({ body }),
+      body: JSON.stringify(payload),
     });
-    sendBtn.disabled = false;
     if (!res.ok) return;
-    messageInput.value = "";
-    messageInput.style.height = "auto";
     const data = await res.json();
-    messagesContainer.appendChild(renderMessage(data.message));
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    if (!messagesContainer.querySelector(`.tg-msg[data-message-id="${data.message.id}"]`)) {
+      messagesContainer.appendChild(renderMessage(data.message));
+    }
+    lastMessageId = data.message.id;
     await loadConversations();
   }
 
-  async function sendFile(file) {
+  async function sendFile(file, replyId = null) {
     if (!file || !activeConversationId) return;
     const form = new FormData();
     form.append("file", file);
+    if (replyId) form.append("reply_to_id", replyId);
     const res = await api(`/messenger/api/conversations/${activeConversationId}/attachments`, {
       method: "POST",
       body: form,
     });
     if (!res.ok) return;
     const data = await res.json();
-    messagesContainer.appendChild(renderMessage(data.message));
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    await loadConversations();
-  }
-
-  async function sendFiles(fileList) {
-    const files = Array.from(fileList || []).filter(Boolean);
-    for (const file of files) {
-      await sendFile(file);
+    if (!messagesContainer.querySelector(`.tg-msg[data-message-id="${data.message.id}"]`)) {
+      messagesContainer.appendChild(renderMessage(data.message));
     }
+    lastMessageId = data.message.id;
+    await loadConversations();
   }
 
   async function searchMessages(query) {
@@ -315,7 +587,9 @@
       row.className = "tg-search-result";
       row.innerHTML = `
         <div class="tg-search-result__peer">${escapeHtml(item.peer.full_name)}</div>
-        <div class="tg-search-result__text">${escapeHtml(item.message.body || item.message.file?.name || "")}</div>
+        <div class="tg-search-result__text">${escapeHtml(
+          item.message.body || item.message.file?.name || ""
+        )}</div>
       `;
       row.addEventListener("click", () => openConversation(item.conversation_id, item.peer));
       searchResults.appendChild(row);
@@ -418,24 +692,48 @@
       e.preventDefault();
       sendMessage();
     }
+    if (e.key === "Escape") {
+      clearReplyTarget();
+    }
   });
   messageInput.addEventListener("input", () => {
     messageInput.style.height = "auto";
     messageInput.style.height = `${Math.min(messageInput.scrollHeight, 120)}px`;
+    if (activeConversationId) {
+      drafts.set(activeConversationId, {
+        text: messageInput.value,
+        reply: replyTarget,
+      });
+    }
   });
 
   fileInput.addEventListener("change", () => {
     if (fileInput.files?.length) {
-      sendFiles(fileInput.files);
+      queueFiles(fileInput.files);
       fileInput.value = "";
     }
   });
 
+  replyBarClose?.addEventListener("click", clearReplyTarget);
+  lightboxClose?.addEventListener("click", closeLightbox);
+  imageLightbox?.addEventListener("click", (e) => {
+    if (e.target === imageLightbox) closeLightbox();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !imageLightbox.classList.contains("d-none")) {
+      closeLightbox();
+    }
+  });
+
   chatBackBtn?.addEventListener("click", () => {
+    saveDraft();
     app.classList.remove("chat-open");
     chatView.classList.add("d-none");
     emptyState.classList.remove("d-none");
     activeConversationId = null;
+    activePeer = null;
+    messagesContainer.innerHTML = "";
+    clearComposerState();
     stopPolling();
   });
 

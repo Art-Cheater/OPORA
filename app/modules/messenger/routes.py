@@ -105,11 +105,15 @@ def users():
     query = request.args.get("q", "")
     users_list = MessengerRepository.list_users(current_user.id, query)
     user_ids = [user.id for user in users_list]
-    online_map = MessengerRepository.online_status_map(user_ids, _online_timeout())
+    presence_map = MessengerRepository.presence_map(user_ids, _online_timeout())
     return jsonify(
         {
             "users": [
-                serialize_user(user, online=online_map.get(str(user.id), False))
+                serialize_user(
+                    user,
+                    online=presence_map.get(str(user.id), {}).get("is_online", False),
+                    last_seen_at=presence_map.get(str(user.id), {}).get("last_seen_at"),
+                )
                 for user in users_list
             ]
         }
@@ -122,11 +126,13 @@ def users():
 def conversations():
     items = MessengerRepository.list_conversations(current_user.id)
     peer_ids = [conv.other_user_id(current_user.id) for conv in items]
-    online_map = MessengerRepository.online_status_map(peer_ids, _online_timeout())
+    presence_map = MessengerRepository.presence_map(peer_ids, _online_timeout())
     return jsonify(
         {
             "conversations": [
-                serialize_conversation(conv, current_user.id, online_map=online_map)
+                serialize_conversation(
+                    conv, current_user.id, presence_map=presence_map
+                )
                 for conv in items
             ],
             "total_unread": MessengerRepository.total_unread_count(current_user.id),
@@ -155,9 +161,10 @@ def open_conversation(peer_id: uuid.UUID):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    peer_ids = [peer_id]
-    online_map = MessengerRepository.online_status_map(peer_ids, _online_timeout())
-    return jsonify(serialize_conversation(conversation, current_user.id, online_map=online_map))
+    presence_map = MessengerRepository.presence_map([peer_id], _online_timeout())
+    return jsonify(
+        serialize_conversation(conversation, current_user.id, presence_map=presence_map)
+    )
 
 
 @messenger_bp.route("/api/conversations/<uuid:conversation_id>/messages")
@@ -175,12 +182,12 @@ def messages(conversation_id: uuid.UUID):
     MessengerService.mark_read(conversation, current_user.id)
 
     peer_id = conversation.other_user_id(current_user.id)
-    online_map = MessengerRepository.online_status_map([peer_id], _online_timeout())
+    presence_map = MessengerRepository.presence_map([peer_id], _online_timeout())
 
     return jsonify(
         {
             "conversation": serialize_conversation(
-                conversation, current_user.id, online_map=online_map
+                conversation, current_user.id, presence_map=presence_map
             ),
             "messages": [serialize_message(msg, current_user.id) for msg in items],
         }
@@ -193,12 +200,18 @@ def messages(conversation_id: uuid.UUID):
 def send_message(conversation_id: uuid.UUID):
     try:
         conversation = MessengerService.ensure_access(conversation_id, current_user.id)
-        body = request.json.get("body") if request.is_json else request.form.get("body")
+        payload = request.json if request.is_json else request.form
+        body = payload.get("body") if payload else None
+        reply_raw = payload.get("reply_to_id") if payload else None
+        reply_to_id = uuid.UUID(str(reply_raw)) if reply_raw else None
         message = MessengerService.send_message(
             conversation,
             sender_id=current_user.id,
             body=body,
+            reply_to_id=reply_to_id,
         )
+    except (ValueError, TypeError):
+        return jsonify({"error": "Некорректный идентификатор ответа."}), 400
     except NotFoundError as exc:
         return jsonify({"error": exc.message}), 404
     except ValidationError as exc:
@@ -214,11 +227,16 @@ def send_attachment(conversation_id: uuid.UUID):
     try:
         conversation = MessengerService.ensure_access(conversation_id, current_user.id)
         file = request.files.get("file")
+        reply_raw = request.form.get("reply_to_id")
+        reply_to_id = uuid.UUID(str(reply_raw)) if reply_raw else None
         message = MessengerService.send_file(
             conversation,
             sender_id=current_user.id,
             file_storage=file,
+            reply_to_id=reply_to_id,
         )
+    except (ValueError, TypeError):
+        return jsonify({"error": "Некорректный идентификатор ответа."}), 400
     except NotFoundError as exc:
         return jsonify({"error": exc.message}), 404
     except ValidationError as exc:
@@ -289,9 +307,12 @@ def download_file(message_id: uuid.UUID):
         mime_type=msg.mime_type,
     )
 
+    force_download = request.args.get("download") == "1"
+    as_attachment = force_download or not msg.is_image
+
     return send_file(
         path,
-        as_attachment=True,
+        as_attachment=as_attachment,
         download_name=download_name,
         mimetype=msg.mime_type or "application/octet-stream",
     )

@@ -71,10 +71,22 @@
 
             <div class="tg-messages" id="messagesContainer"></div>
 
+            <div class="tg-reply-bar d-none" id="replyBar">
+                <div class="tg-reply-bar__body">
+                    <div class="tg-reply-bar__label" id="replyBarLabel">Ответ</div>
+                    <div class="tg-reply-bar__text" id="replyBarText"></div>
+                </div>
+                <button type="button" class="tg-reply-bar__close" id="replyBarClose" title="Отменить ответ">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+
+            <div class="tg-attach-preview d-none" id="attachPreview"></div>
+
             <footer class="tg-composer">
                 <label class="tg-composer__attach" title="Прикрепить файл">
                     <i class="bi bi-paperclip"></i>
-                    <input type="file" id="fileInput" class="d-none" multiple>
+                    <input type="file" id="fileInput" class="d-none" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar">
                 </label>
                 <textarea id="messageInput" class="tg-composer__input" rows="1" placeholder="Написать сообщение…"></textarea>
                 <button type="button" class="tg-composer__send" id="sendBtn" title="Отправить">
@@ -83,6 +95,13 @@
             </footer>
         </div>
     </main>
+</div>
+
+<div class="tg-lightbox d-none" id="imageLightbox" role="dialog" aria-modal="true">
+    <button type="button" class="tg-lightbox__close" id="lightboxClose" title="Закрыть">
+        <i class="bi bi-x-lg"></i>
+    </button>
+    <img src="" alt="" id="lightboxImage">
 </div>
 {% endblock %}
 

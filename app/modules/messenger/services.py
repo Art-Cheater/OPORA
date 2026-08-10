@@ -41,15 +41,26 @@ class MessengerService:
         *,
         sender_id: uuid.UUID,
         body: str | None,
+        reply_to_id: uuid.UUID | None = None,
     ) -> MessengerMessage:
         body = (body or "").strip()
         if not body:
             raise ValidationError("Текст сообщения не может быть пустым.")
 
+        reply_to = None
+        if reply_to_id is not None:
+            reply_to = MessengerRepository.get_message(reply_to_id)
+            if (
+                reply_to is None
+                or reply_to.conversation_id != conversation.id
+            ):
+                raise ValidationError("Сообщение для ответа не найдено.")
+
         message = MessengerMessage(
             conversation_id=conversation.id,
             sender_id=sender_id,
             body=body,
+            reply_to_id=reply_to.id if reply_to else None,
             created_by=sender_id,
             updated_by=sender_id,
         )
@@ -58,7 +69,7 @@ class MessengerService:
         conversation.last_message_preview = cls._preview(body, None)
         conversation.updated_by = sender_id
         db.session.commit()
-        return message
+        return MessengerRepository.get_message(message.id) or message
 
     @classmethod
     def send_file(
@@ -67,6 +78,7 @@ class MessengerService:
         *,
         sender_id: uuid.UUID,
         file_storage,
+        reply_to_id: uuid.UUID | None = None,
     ) -> MessengerMessage:
         from app.core.upload_utils import UploadValidationError, save_upload
 
@@ -77,6 +89,15 @@ class MessengerService:
         except UploadValidationError as exc:
             raise ValidationError(str(exc)) from exc
 
+        reply_to = None
+        if reply_to_id is not None:
+            reply_to = MessengerRepository.get_message(reply_to_id)
+            if (
+                reply_to is None
+                or reply_to.conversation_id != conversation.id
+            ):
+                raise ValidationError("Сообщение для ответа не найдено.")
+
         message = MessengerMessage(
             conversation_id=conversation.id,
             sender_id=sender_id,
@@ -85,6 +106,7 @@ class MessengerService:
             storage_key=saved.storage_key,
             mime_type=saved.mime_type,
             file_size=saved.file_size,
+            reply_to_id=reply_to.id if reply_to else None,
             created_by=sender_id,
             updated_by=sender_id,
         )
@@ -93,7 +115,7 @@ class MessengerService:
         conversation.last_message_preview = cls._preview(None, saved.file_name)
         conversation.updated_by = sender_id
         db.session.commit()
-        return message
+        return MessengerRepository.get_message(message.id) or message
 
     @classmethod
     def mark_read(cls, conversation: MessengerConversation, user_id: uuid.UUID) -> int:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.orm import selectinload
 
 from app.extensions import db
 from app.models.auth.user import User
@@ -115,6 +116,20 @@ class MessengerRepository:
         ) or 0
 
     @staticmethod
+    def get_message(message_id: uuid.UUID) -> MessengerMessage | None:
+        return db.session.scalar(
+            select(MessengerMessage)
+            .options(
+                selectinload(MessengerMessage.reply_to).selectinload(MessengerMessage.sender),
+                selectinload(MessengerMessage.sender),
+            )
+            .where(
+                MessengerMessage.id == message_id,
+                MessengerMessage.active_filter(),
+            )
+        )
+
+    @staticmethod
     def list_messages(
         conversation_id: uuid.UUID,
         *,
@@ -123,6 +138,10 @@ class MessengerRepository:
     ) -> list[MessengerMessage]:
         stmt = (
             select(MessengerMessage)
+            .options(
+                selectinload(MessengerMessage.reply_to).selectinload(MessengerMessage.sender),
+                selectinload(MessengerMessage.sender),
+            )
             .where(
                 MessengerMessage.conversation_id == conversation_id,
                 MessengerMessage.active_filter(),
@@ -222,6 +241,15 @@ class MessengerRepository:
 
     @staticmethod
     def online_status_map(user_ids: list[uuid.UUID], timeout_seconds: int) -> dict[str, bool]:
+        presence = MessengerRepository.presence_map(user_ids, timeout_seconds)
+        return {uid: info["is_online"] for uid, info in presence.items()}
+
+    @staticmethod
+    def presence_map(
+        user_ids: list[uuid.UUID],
+        timeout_seconds: int,
+    ) -> dict[str, dict]:
+        """Статус присутствия: is_online + last_seen_at (ISO)."""
         if not user_ids:
             return {}
         presences = db.session.scalars(
@@ -231,11 +259,16 @@ class MessengerRepository:
             )
         )
         now = utcnow()
-        result: dict[str, bool] = {str(uid): False for uid in user_ids}
+        result: dict[str, dict] = {
+            str(uid): {"is_online": False, "last_seen_at": None} for uid in user_ids
+        }
         for presence in presences:
             last_seen = as_utc_aware(presence.last_seen_at)
             if last_seen is None:
                 continue
             delta = now - last_seen
-            result[str(presence.user_id)] = delta.total_seconds() <= timeout_seconds
+            result[str(presence.user_id)] = {
+                "is_online": delta.total_seconds() <= timeout_seconds,
+                "last_seen_at": last_seen.isoformat(),
+            }
         return result
