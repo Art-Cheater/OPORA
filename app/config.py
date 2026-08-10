@@ -33,8 +33,8 @@ def _build_postgres_url() -> str | None:
     password = os.getenv("POSTGRES_PASSWORD")
     if not user or password is None:
         return None
-    host = os.getenv("POSTGRES_HOST", "localhost")
-    port = os.getenv("POSTGRES_PORT", "5432")
+    host = os.getenv("DB_HOST") or os.getenv("POSTGRES_HOST", "localhost")
+    port = os.getenv("DB_PORT") or os.getenv("POSTGRES_PORT", "5432")
     db_name = os.getenv("POSTGRES_DB", "opora")
     return (
         f"postgresql://{quote_plus(user)}:{quote_plus(password)}"
@@ -46,6 +46,12 @@ def _default_database_url() -> str:
     """DATABASE_URL / USE_SQLITE / POSTGRES_*."""
     if _use_sqlite():
         return _sqlite_url()
+
+    # Docker Compose задаёт DB_HOST=db — URL из POSTGRES_* (пароль с спецсимволами кодируется).
+    if os.getenv("DB_HOST", "").strip():
+        built = _build_postgres_url()
+        if built:
+            return built
 
     raw = os.getenv("DATABASE_URL", "").strip()
     if raw:

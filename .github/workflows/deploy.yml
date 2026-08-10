@@ -1,0 +1,23 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Deploy OPORA
+        shell: pwsh
+        env:
+          # При необходимости задайте repository variable OPORA_ROOT
+          OPORA_ROOT: ${{ vars.OPORA_ROOT }}
+        run: |
+          $root = $env:OPORA_ROOT
+          if ([string]::IsNullOrWhiteSpace($root)) { $root = "C:\OPORA" }
+          $script = Join-Path $root "scripts\deploy.ps1"
+          if (-not (Test-Path $script)) {
+            throw "Не найден $script. Клонируйте репозиторий в $root (см. docs/SERVER_SETUP.md)."
+          }
+          & $script

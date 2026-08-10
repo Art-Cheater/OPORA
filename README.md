@@ -47,20 +47,31 @@ app/modules/<module_name>/
 
 ## Быстрый старт
 
+### Windows-сервер (сайт + БД + автодеплой)
+
+Пошаговая установка на отдельный ПК, self-hosted runner и ежедневный бэкап БД:  
+**[docs/SERVER_SETUP.md](docs/SERVER_SETUP.md)**
+
 ### Docker (рекомендуется)
 
 ```bash
 # Клонировать и перейти в директорию проекта
-cd sait
+cd OPORA
 
 # Скопировать конфигурацию
 cp .env.example .env
+# В .env: POSTGRES_HOST=db, DATABASE_URL=...@db:5432/...
 
-# Запустить
-docker compose up --build
+# Production (сервер)
+docker compose up --build -d
+
+# Локальная разработка с hot-reload
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
 Приложение доступно по адресу: http://localhost:5000
+
+> Данные PostgreSQL хранятся в томе `postgres_data`. Не используйте `docker compose down -v`.
 
 ### Локальная разработка (PostgreSQL)
 
@@ -120,8 +131,9 @@ python -m flask init-db              # Сиды после db upgrade
 |-----------|----------|-------------|
 | `SECRET_KEY` | Секретный ключ Flask | — |
 | `DATABASE_URL` | URL PostgreSQL | — |
+| `POSTGRES_HOST` | Хост БД (`db` в Docker, `localhost` без Docker) | db |
 | `POSTGRES_SCHEMA` | Схема PostgreSQL (по умолчанию `opora`) | opora |
-| `FLASK_ENV` | Окружение (development/production) | development |
+| `FLASK_ENV` | Окружение (development/production) | production |
 | `ADMIN_EMAIL` | Email администратора | admin@opora.ru |
 | `ADMIN_PASSWORD` | Пароль администратора | admin123 |
 

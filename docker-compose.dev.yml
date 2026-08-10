@@ -1,0 +1,10 @@
+# Локальная разработка (с bind-mount исходников).
+# Запуск: docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+services:
+  web:
+    environment:
+      FLASK_ENV: development
+      FLASK_DEBUG: "1"
+    volumes:
+      - .:/app
+      - uploads_data:/app/instance/uploads
