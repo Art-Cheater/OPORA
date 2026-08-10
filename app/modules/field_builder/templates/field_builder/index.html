@@ -5,14 +5,15 @@
 
 {% block page_header %}
 {% call page_header("Администрирование", "Конструктор полей", "ui-radios") %}
-<a href="{{ url_for('field_builder.create', module=module_code) }}"
-   class="btn btn-primary opora-create-btn" data-opora-create="{{ url_for('field_builder.create', module=module_code) }}">
+<button type="button" class="btn btn-primary"
+        data-opora-create="{{ url_for('field_builder.create', module=module_code) }}">
     <i class="bi bi-plus-lg"></i> Создать поле
-</a>
+</button>
 {% endcall %}
 {% endblock %}
 
 {% block content %}
+<div id="oporaFieldBuilderPage">
 <div class="card mb-3">
     <div class="card-body py-2">
         <form method="GET" class="row g-2 align-items-end">
@@ -29,14 +30,14 @@
 </div>
 
 <div class="alert alert-light border small mb-3">
-    Встроенные поля можно переименовать, изменить порядок и скрыть.
-    Скрытие убирает поле из форм и карточек (колонка в базе сохраняется).
-    Пользовательские поля создаются отдельно.
+    Встроенные поля: кнопка <strong>Изменить</strong> (название, порядок, видимость) или <strong>Скрыть</strong>.
+    Колонка «Видим.» только показывает статус — она не нажимается.
+    Пользовательские поля: изменить / удалить справа в строке.
 </div>
 
 <div class="card">
     <div class="table-card">
-        <table class="table table-opora">
+        <table class="table table-opora align-middle">
             <thead>
                 <tr>
                     <th>Источник</th>
@@ -51,7 +52,7 @@
             </thead>
             <tbody>
                 {% for f in fields %}
-                <tr class="{% if f.source == 'builtin' %}table-light{% endif %}{% if not f.is_visible %} opacity-50{% endif %}">
+                <tr class="{% if f.source == 'builtin' %}table-light{% endif %}{% if not f.is_visible %} opacity-75{% endif %}">
                     <td>
                         {% if f.source == 'builtin' %}
                         <span class="badge text-bg-secondary">Встроенное</span>
@@ -69,36 +70,41 @@
                     </td>
                     <td>
                         {% if f.is_visible %}
-                        <i class="bi bi-eye text-success"></i>
+                        <span class="text-success small" title="Поле видно в формах"><i class="bi bi-eye"></i> да</span>
                         {% else %}
-                        <i class="bi bi-eye-slash text-muted"></i>
+                        <span class="text-muted small" title="Поле скрыто"><i class="bi bi-eye-slash"></i> нет</span>
                         {% endif %}
                     </td>
                     <td>{{ f.sort_order }}</td>
                     <td class="text-end">
                         {% if f.is_editable and f.field_id %}
-                        <div class="table-actions">
+                        <div class="d-inline-flex flex-wrap gap-1 justify-content-end">
                             {% if f.source == 'builtin' %}
-                            <button type="button" class="table-actions__btn opora-edit-btn"
-                                    data-opora-edit="{{ url_for('field_builder.edit_builtin', field_id=f.field_id) }}" title="Изменить">
-                                <i class="bi bi-pencil"></i>
+                            <button type="button" class="btn btn-sm btn-outline-primary"
+                                    data-opora-edit="{{ url_for('field_builder.edit_builtin', field_id=f.field_id) }}">
+                                <i class="bi bi-pencil"></i> Изменить
                             </button>
                             {% if f.is_visible %}
-                            <button type="button" class="table-actions__btn table-actions__btn--danger opora-delete-btn"
+                            <button type="button" class="btn btn-sm btn-outline-warning"
                                     data-opora-delete="{{ url_for('field_builder.hide_builtin', field_id=f.field_id) }}"
-                                    data-opora-delete-message="Скрыть встроенное поле «{{ f.name }}»? Оно пропадёт из форм и карточек."
-                                    title="Скрыть">
-                                <i class="bi bi-eye-slash"></i>
+                                    data-opora-delete-message="Скрыть встроенное поле «{{ f.name }}»? Оно пропадёт из форм и карточек.">
+                                <i class="bi bi-eye-slash"></i> Скрыть
+                            </button>
+                            {% else %}
+                            <button type="button" class="btn btn-sm btn-outline-success"
+                                    data-opora-edit="{{ url_for('field_builder.edit_builtin', field_id=f.field_id) }}">
+                                <i class="bi bi-eye"></i> Показать
                             </button>
                             {% endif %}
                             {% else %}
-                            <button type="button" class="table-actions__btn opora-edit-btn"
-                                    data-opora-edit="{{ url_for('field_builder.edit', field_id=f.field_id) }}" title="Изменить">
-                                <i class="bi bi-pencil"></i>
+                            <button type="button" class="btn btn-sm btn-outline-primary"
+                                    data-opora-edit="{{ url_for('field_builder.edit', field_id=f.field_id) }}">
+                                <i class="bi bi-pencil"></i> Изменить
                             </button>
-                            <button type="button" class="table-actions__btn table-actions__btn--danger opora-delete-btn"
-                                    data-opora-delete="{{ url_for('field_builder.delete', field_id=f.field_id) }}" title="Удалить">
-                                <i class="bi bi-trash"></i>
+                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                    data-opora-delete="{{ url_for('field_builder.delete', field_id=f.field_id) }}"
+                                    data-opora-delete-message="Удалить пользовательское поле «{{ f.name }}»?">
+                                <i class="bi bi-trash"></i> Удалить
                             </button>
                             {% endif %}
                         </div>
@@ -114,12 +120,10 @@
         </table>
     </div>
 </div>
-
-<div id="oporaListConfig" class="d-none"
-     data-base-url="/field-builder"
-     data-create-title="Новое поле"
-     data-edit-title="Редактирование поля"
-     data-delete-message="Удалить это поле? Все сохранённые значения будут скрыты."
-     data-can-edit="true">
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/field-builder.js') }}"></script>
 {% endblock %}

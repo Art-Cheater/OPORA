@@ -6,6 +6,9 @@
         <div class="col-md-6">
             {{ form.module_code.label(class="form-label") }}
             {{ form.module_code(class="form-select", disabled=is_edit) }}
+            {% if is_edit %}
+            <input type="hidden" name="module_code" value="{{ form.module_code.data }}">
+            {% endif %}
         </div>
         <div class="col-md-6">
             {{ form.code.label(class="form-label") }}

@@ -108,6 +108,8 @@ def create():
 def edit(field_id: uuid.UUID):
     field = CustomFieldService.get_by_id(field_id)
     if field is None:
+        if is_ajax():
+            return ajax_error("Поле не найдено.", status=404)
         flash("Поле не найдено.", "danger")
         return redirect(url_for("field_builder.index"))
 
@@ -116,6 +118,10 @@ def edit(field_id: uuid.UUID):
     if request.method == "GET":
         form.module_code.data = field.system_module.code
         form.options_text.data = _options_to_text(field)
+    elif request.method == "POST":
+        # disabled <select> не отправляется — восстанавливаем модуль до validate
+        if not (form.module_code.data or "").strip():
+            form.module_code.data = field.system_module.code
 
     if form.validate_on_submit():
         try:
@@ -159,6 +165,8 @@ def delete(field_id: uuid.UUID):
 def edit_builtin(field_id: uuid.UUID):
     field = BuiltinFieldService.get_by_id(field_id)
     if field is None:
+        if is_ajax():
+            return ajax_error("Поле не найдено.", status=404)
         flash("Поле не найдено.", "danger")
         return redirect(url_for("field_builder.index"))
 
