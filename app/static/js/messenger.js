@@ -41,9 +41,11 @@
   let eventSource = null;
   let replyTarget = null;
   let pendingFiles = [];
+  let knownUnreadTotal = null;
   const drafts = new Map();
   const pollIntervalMs = Number(app.dataset.pollInterval || 8000);
   const unreadIntervalMs = Number(app.dataset.unreadInterval || 45000);
+  const notify = window.OporaMessengerNotify;
 
   function api(url, options = {}) {
     const headers = { ...(options.headers || {}) };
@@ -219,14 +221,96 @@
   }
 
   function queueFiles(fileList) {
-    Array.from(fileList || []).forEach((file) => {
-      const isImage = file.type.startsWith("image/");
+    Array.from(fileList || []).forEach((file, index) => {
+      let ready = file;
+      if (file.type.startsWith("image/") && (!file.name || file.name === "image.png")) {
+        const ext = (file.type.split("/")[1] || "png").replace("jpeg", "jpg");
+        ready = new File([file], `screenshot-${Date.now()}-${index}.${ext}`, {
+          type: file.type,
+          lastModified: file.lastModified || Date.now(),
+        });
+      }
+      const isImage = ready.type.startsWith("image/");
       pendingFiles.push({
-        file,
-        url: isImage ? URL.createObjectURL(file) : null,
+        file: ready,
+        url: isImage ? URL.createObjectURL(ready) : null,
       });
     });
     renderAttachPreview();
+  }
+
+  function handlePaste(e) {
+    if (!activeConversationId) return;
+    const clipboard = e.clipboardData;
+    if (!clipboard) return;
+
+    const files = [];
+    if (clipboard.files?.length) {
+      Array.from(clipboard.files).forEach((f) => files.push(f));
+    } else if (clipboard.items?.length) {
+      Array.from(clipboard.items).forEach((item) => {
+        if (item.kind === "file") {
+          const file = item.getAsFile();
+          if (file) files.push(file);
+        }
+      });
+    }
+
+    if (!files.length) return;
+    e.preventDefault();
+    queueFiles(files);
+    messageInput.focus();
+  }
+
+  function closeChat() {
+    if (!activeConversationId && chatView.classList.contains("d-none")) return;
+    saveDraft();
+    app.classList.remove("chat-open");
+    chatView.classList.add("d-none");
+    emptyState.classList.remove("d-none");
+    activeConversationId = null;
+    activePeer = null;
+    messagesContainer.innerHTML = "";
+    clearComposerState();
+    stopPolling();
+    document.querySelectorAll(".tg-list-item.active").forEach((el) => {
+      el.classList.remove("active");
+    });
+  }
+
+  function handleEscape() {
+    if (!imageLightbox.classList.contains("d-none")) {
+      closeLightbox();
+      return;
+    }
+    if (replyTarget) {
+      clearReplyTarget();
+      return;
+    }
+    if (pendingFiles.length) {
+      clearPendingFiles();
+      return;
+    }
+    if (activeConversationId) {
+      closeChat();
+    }
+  }
+
+  function notifyIncomingMessage(msg, conversationId) {
+    if (!notify || !msg || msg.is_mine) return;
+    const viewingThis =
+      !document.hidden &&
+      activeConversationId &&
+      String(activeConversationId) === String(conversationId);
+    notify.notifyNewMessage({
+      title: activePeer?.full_name || "Новое сообщение",
+      body: messagePreviewText(msg),
+      url: "/messenger/",
+      messageId: msg.id,
+      conversationId,
+      skipSound: viewingThis,
+      skipBrowser: viewingThis,
+    });
   }
 
   function openLightbox(url, alt = "") {
@@ -480,6 +564,9 @@
         messagesContainer.appendChild(renderMessage(msg));
         lastMessageId = msg.id;
         appended += 1;
+        if (!isInitial) {
+          notifyIncomingMessage(msg, conversationId);
+        }
       } else {
         const el = messagesContainer.querySelector(`.tg-msg[data-message-id="${msg.id}"]`);
         if (el && msg.is_mine) {
@@ -600,7 +687,7 @@
     await api("/messenger/api/heartbeat", { method: "POST" });
   }
 
-  async function updateGlobalUnread(count) {
+  async function updateGlobalUnread(count, preview = null) {
     let total = count;
     if (total === undefined) {
       const headers = {};
@@ -612,6 +699,18 @@
         const data = await res.json();
         total = data.total;
       }
+    }
+    if (typeof total === "number") {
+      if (
+        knownUnreadTotal !== null &&
+        total > knownUnreadTotal &&
+        notify
+      ) {
+        notify.onUnreadIncrease(total, preview, {
+          activeConversationId,
+        });
+      }
+      knownUnreadTotal = total;
     }
     const badge = document.getElementById("messengerUnreadBadge");
     if (!badge) return;
@@ -626,7 +725,6 @@
   function startPolling() {
     clearInterval(pollTimer);
     const tick = () => {
-      if (document.hidden) return;
       loadMessages(false);
     };
     pollTimer = setInterval(tick, pollIntervalMs);
@@ -644,7 +742,9 @@
       eventSource.addEventListener("unread", (ev) => {
         try {
           const data = JSON.parse(ev.data || "{}");
-          if (typeof data.total === "number") updateGlobalUnread(data.total);
+          if (typeof data.total === "number") {
+            updateGlobalUnread(data.total, data.preview || null);
+          }
         } catch {
           /* ignore */
         }
@@ -692,9 +792,11 @@
       e.preventDefault();
       sendMessage();
     }
-    if (e.key === "Escape") {
-      clearReplyTarget();
-    }
+  });
+  messageInput.addEventListener("paste", handlePaste);
+  app.addEventListener("paste", (e) => {
+    if (e.target === messageInput) return;
+    handlePaste(e);
   });
   messageInput.addEventListener("input", () => {
     messageInput.style.height = "auto";
@@ -714,28 +816,41 @@
     }
   });
 
+  // Drag & drop файлов в окно чата
+  ["dragenter", "dragover"].forEach((evtName) => {
+    chatView.addEventListener(evtName, (e) => {
+      if (!activeConversationId) return;
+      e.preventDefault();
+      e.stopPropagation();
+    });
+  });
+  chatView.addEventListener("drop", (e) => {
+    if (!activeConversationId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer?.files?.length) {
+      queueFiles(e.dataTransfer.files);
+    }
+  });
+
   replyBarClose?.addEventListener("click", clearReplyTarget);
   lightboxClose?.addEventListener("click", closeLightbox);
   imageLightbox?.addEventListener("click", (e) => {
     if (e.target === imageLightbox) closeLightbox();
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !imageLightbox.classList.contains("d-none")) {
-      closeLightbox();
+    if (e.key === "Escape") {
+      handleEscape();
     }
   });
 
-  chatBackBtn?.addEventListener("click", () => {
-    saveDraft();
-    app.classList.remove("chat-open");
-    chatView.classList.add("d-none");
-    emptyState.classList.remove("d-none");
-    activeConversationId = null;
-    activePeer = null;
-    messagesContainer.innerHTML = "";
-    clearComposerState();
-    stopPolling();
-  });
+  chatBackBtn?.addEventListener("click", closeChat);
+
+  document.addEventListener(
+    "click",
+    () => notify?.requestPermission(),
+    { once: true }
+  );
 
   heartbeat();
   heartbeatTimer = setInterval(heartbeat, 30000);

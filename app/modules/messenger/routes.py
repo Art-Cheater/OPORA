@@ -80,8 +80,12 @@ def events_stream():
         for _ in range(max(1, int(1800 / interval))):
             total = MessengerRepository.total_unread_count(user_id)
             if total != last:
-                payload = json.dumps({"total": total})
-                yield f"event: unread\ndata: {payload}\n\n"
+                payload = {"total": total}
+                if last is not None and total > (last or 0):
+                    preview = MessengerRepository.latest_unread_preview(user_id)
+                    if preview:
+                        payload["preview"] = preview
+                yield f"event: unread\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
                 last = total
             else:
                 yield ": keepalive\n\n"

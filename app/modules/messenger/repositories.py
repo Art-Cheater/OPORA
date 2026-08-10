@@ -116,6 +116,55 @@ class MessengerRepository:
         ) or 0
 
     @staticmethod
+    def latest_unread_preview(user_id: uuid.UUID) -> dict | None:
+        """Краткое превью последнего непрочитанного входящего сообщения."""
+        stmt = (
+            select(MessengerMessage)
+            .options(
+                selectinload(MessengerMessage.conversation).selectinload(
+                    MessengerConversation.participant_a
+                ),
+                selectinload(MessengerMessage.conversation).selectinload(
+                    MessengerConversation.participant_b
+                ),
+            )
+            .join(
+                MessengerConversation,
+                MessengerMessage.conversation_id == MessengerConversation.id,
+            )
+            .where(
+                MessengerMessage.sender_id != user_id,
+                MessengerMessage.is_read.is_(False),
+                MessengerMessage.active_filter(),
+                MessengerConversation.active_filter(),
+                or_(
+                    MessengerConversation.participant_a_id == user_id,
+                    MessengerConversation.participant_b_id == user_id,
+                ),
+            )
+            .order_by(MessengerMessage.created_at.desc())
+            .limit(1)
+        )
+        message = db.session.scalar(stmt)
+        if message is None:
+            return None
+        conversation = message.conversation
+        peer = conversation.other_user(user_id)
+        body = (message.body or "").strip()
+        if not body and message.file_name:
+            body = f"📎 {message.file_name}"
+        if not body:
+            body = "Новое сообщение"
+        if len(body) > 140:
+            body = body[:140] + "…"
+        return {
+            "conversation_id": str(conversation.id),
+            "message_id": str(message.id),
+            "peer_name": peer.full_name if peer else "Собеседник",
+            "body": body,
+        }
+
+    @staticmethod
     def get_message(message_id: uuid.UUID) -> MessengerMessage | None:
         return db.session.scalar(
             select(MessengerMessage)

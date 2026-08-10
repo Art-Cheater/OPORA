@@ -9,6 +9,121 @@ document.addEventListener("DOMContentLoaded", () => {
     initMessengerUnreadBadge();
 });
 
+window.OporaMessengerNotify = (() => {
+    let audioCtx = null;
+    let lastNotifiedMessageId = null;
+    let permissionAsked = false;
+
+    function ensureAudio() {
+        if (audioCtx) return audioCtx;
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return null;
+        audioCtx = new Ctx();
+        return audioCtx;
+    }
+
+    function playSound() {
+        try {
+            const ctx = ensureAudio();
+            if (!ctx) return;
+            if (ctx.state === "suspended") ctx.resume();
+            const now = ctx.currentTime;
+            [
+                { freq: 880, start: 0, dur: 0.12 },
+                { freq: 1175, start: 0.1, dur: 0.16 },
+            ].forEach(({ freq, start, dur }) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = "sine";
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.0001, now + start);
+                gain.gain.exponentialRampToValueAtTime(0.07, now + start + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + start);
+                osc.stop(now + start + dur + 0.02);
+            });
+        } catch {
+            /* ignore */
+        }
+    }
+
+    function requestPermission() {
+        if (!("Notification" in window)) return;
+        if (Notification.permission !== "default" || permissionAsked) return;
+        permissionAsked = true;
+        Notification.requestPermission().catch(() => {});
+    }
+
+    function showBrowserNotification({ title, body, url, tag }) {
+        if (!("Notification" in window)) return;
+        if (Notification.permission !== "granted") return;
+        try {
+            const n = new Notification(title || "Новое сообщение", {
+                body: body || "",
+                tag: tag || "opora-messenger",
+                renotify: true,
+                silent: true,
+            });
+            n.onclick = () => {
+                window.focus();
+                if (url) window.location.href = url;
+                n.close();
+            };
+            setTimeout(() => n.close(), 8000);
+        } catch {
+            /* ignore */
+        }
+    }
+
+    /**
+     * Звук + браузерное уведомление о входящем сообщении.
+     * skipUiNoise — если пользователь уже смотрит этот чат во вкладке.
+     */
+    function notifyNewMessage({ title, body, url, messageId, conversationId, skipSound, skipBrowser }) {
+        if (messageId && messageId === lastNotifiedMessageId) return;
+        if (messageId) lastNotifiedMessageId = messageId;
+
+        if (!skipSound) playSound();
+        if (!skipBrowser) {
+            showBrowserNotification({
+                title: title || "Новое сообщение",
+                body: body || "",
+                url: url || "/messenger/",
+                tag: conversationId ? `msg-${conversationId}` : "opora-messenger",
+            });
+        }
+    }
+
+    function onUnreadIncrease(total, preview, options = {}) {
+        if (!preview && total <= 0) return;
+        const activeId = options.activeConversationId || null;
+        const viewingChat =
+            !document.hidden &&
+            preview?.conversation_id &&
+            activeId &&
+            String(activeId) === String(preview.conversation_id);
+
+        notifyNewMessage({
+            title: preview?.peer_name || "Мессенджер",
+            body: preview?.body || `Непрочитанных: ${total}`,
+            url: "/messenger/",
+            messageId: preview?.message_id || null,
+            conversationId: preview?.conversation_id || null,
+            skipSound: viewingChat,
+            skipBrowser: viewingChat,
+        });
+    }
+
+    return {
+        playSound,
+        requestPermission,
+        notifyNewMessage,
+        onUnreadIncrease,
+    };
+})();
+
 function initFlashMessages() {
     document.querySelectorAll(".alert:not(.alert-danger)").forEach((alert) => {
         setTimeout(() => {
@@ -61,12 +176,38 @@ function initMessengerUnreadBadge() {
     if (!badge && !dot) return;
 
     let etag = null;
+    let lastTotal = null;
+    let eventSource = null;
     const intervalMs = Number(
         document.body?.dataset?.messengerUnreadInterval || 45000
     );
+    const onMessengerPage = Boolean(document.getElementById("messengerApp"));
+
+    function applyTotal(total, preview) {
+        if (badge) {
+            if (total > 0) {
+                badge.textContent = total > 99 ? "99+" : String(total);
+                badge.classList.remove("d-none");
+            } else {
+                badge.classList.add("d-none");
+            }
+        }
+        if (dot) {
+            dot.classList.toggle("d-none", total === 0);
+        }
+
+        if (
+            !onMessengerPage &&
+            lastTotal !== null &&
+            total > lastTotal &&
+            window.OporaMessengerNotify
+        ) {
+            window.OporaMessengerNotify.onUnreadIncrease(total, preview || null);
+        }
+        lastTotal = total;
+    }
 
     async function refresh() {
-        if (document.hidden) return;
         try {
             const headers = {};
             if (etag) headers["If-None-Match"] = etag;
@@ -75,23 +216,42 @@ function initMessengerUnreadBadge() {
             if (!res.ok) return;
             etag = res.headers.get("ETag") || etag;
             const data = await res.json();
-            const total = data.total || 0;
-            if (badge) {
-                if (total > 0) {
-                    badge.textContent = total > 99 ? "99+" : String(total);
-                    badge.classList.remove("d-none");
-                } else {
-                    badge.classList.add("d-none");
-                }
-            }
-            if (dot) {
-                dot.classList.toggle("d-none", total === 0);
-            }
+            applyTotal(data.total || 0, null);
         } catch {
             /* ignore */
         }
     }
 
+    function startUnreadStream() {
+        if (onMessengerPage || eventSource || typeof EventSource === "undefined") return;
+        try {
+            eventSource = new EventSource("/messenger/api/events");
+            eventSource.addEventListener("unread", (ev) => {
+                try {
+                    const data = JSON.parse(ev.data || "{}");
+                    if (typeof data.total === "number") {
+                        applyTotal(data.total, data.preview || null);
+                    }
+                } catch {
+                    /* ignore */
+                }
+            });
+            eventSource.onerror = () => {
+                eventSource?.close();
+                eventSource = null;
+            };
+        } catch {
+            eventSource = null;
+        }
+    }
+
+    document.addEventListener(
+        "click",
+        () => window.OporaMessengerNotify?.requestPermission(),
+        { once: true }
+    );
+
     refresh();
     setInterval(refresh, intervalMs);
+    startUnreadStream();
 }

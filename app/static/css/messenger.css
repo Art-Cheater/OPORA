@@ -326,6 +326,18 @@
   font-size: 20px;
   color: var(--tg-accent);
   padding: 4px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.tg-chat__back:hover {
+  background: var(--tg-hover);
 }
 
 .tg-chat__peer-name {
