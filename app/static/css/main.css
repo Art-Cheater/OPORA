@@ -34,7 +34,7 @@
     --bs-link-color: #F57C00;
     --bs-link-hover-color: #E65100;
     --bs-border-radius: 12px;
-    --bs-body-font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --bs-body-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     --bs-body-bg: #F8F9FA;
 }
 

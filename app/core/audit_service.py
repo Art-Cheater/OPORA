@@ -84,13 +84,28 @@ HTTP_ENDPOINT_META: dict[str, tuple[str, str, str]] = {
 SKIP_AUTO_AUDIT_ENDPOINTS = frozenset(
     {
         "static",
+        "main.health",
         "messenger.heartbeat",
         "messenger.unread_count",
+        "messenger.events_stream",
         "search.api",
         "audit.table",
         "requests.table",
+        "requests.index",
         "projects.table",
+        "projects.index",
         "contracts.table",
+        "contracts.index",
+        "tenders.table",
+        "tenders.index",
+        "objects.table",
+        "objects.index",
+        "employees.table",
+        "employees.index",
+        "roles.table",
+        "roles.index",
+        "reports.index",
+        "audit.index",
     }
 )
 

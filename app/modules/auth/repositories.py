@@ -2,7 +2,11 @@
 
 import uuid
 
+from sqlalchemy.orm import joinedload, selectinload
+
 from app.extensions import db
+from app.models.auth.associations import RolePermission, UserRole
+from app.models.auth.role import Role
 from app.models.auth.user import User
 
 
@@ -16,8 +20,17 @@ class UserRepository:
                 user_id = uuid.UUID(user_id)
             except ValueError:
                 return None
+        # Eager RBAC: иначе sidebar делает десятки SELECT на каждое has_permission
         return db.session.scalar(
-            db.select(User).where(User.id == user_id, User.active_filter())
+            db.select(User)
+            .options(
+                selectinload(User.user_roles)
+                .joinedload(UserRole.role)
+                .selectinload(Role.role_permissions)
+                .joinedload(RolePermission.permission),
+                joinedload(User.position_ref),
+            )
+            .where(User.id == user_id, User.active_filter())
         )
 
     @staticmethod

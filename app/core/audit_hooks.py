@@ -25,7 +25,14 @@ def register_audit_hooks(app: Flask) -> None:
             return response
 
         if request.method == "GET":
-            if request.endpoint.endswith(".table") or ".api" in (request.endpoint or ""):
+            endpoint = request.endpoint or ""
+            # Не пишем аудит на каждый клик по спискам/API — это тормозит навигацию
+            if (
+                endpoint.endswith(".table")
+                or endpoint.endswith(".index")
+                or ".api" in endpoint
+                or endpoint.endswith("_count")
+            ):
                 return response
 
         try:

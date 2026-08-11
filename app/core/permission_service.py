@@ -63,9 +63,16 @@ class PermissionService:
     """Централизованная проверка прав модулей и полей."""
 
     @staticmethod
-    def has_permission(user: User, permission_code: str) -> bool:
+    def permission_codes(user: User) -> frozenset[str]:
+        """Кэш кодов прав на экземпляр пользователя (один раз за запрос)."""
+        cached = getattr(user, "_permission_codes_cache", None)
+        if cached is not None:
+            return cached
         if user.is_admin:
-            return True
+            codes: frozenset[str] = frozenset({"*"})
+            setattr(user, "_permission_codes_cache", codes)
+            return codes
+        collected: set[str] = set()
         for user_role in user.user_roles:
             if user_role.deleted_at is not None or user_role.role is None:
                 continue
@@ -76,9 +83,17 @@ class PermissionService:
                 if role_perm.deleted_at is not None or role_perm.permission is None:
                     continue
                 perm = role_perm.permission
-                if perm.deleted_at is None and perm.is_active and perm.code == permission_code:
-                    return True
-        return False
+                if perm.deleted_at is None and perm.is_active and perm.code:
+                    collected.add(perm.code)
+        codes = frozenset(collected)
+        setattr(user, "_permission_codes_cache", codes)
+        return codes
+
+    @staticmethod
+    def has_permission(user: User, permission_code: str) -> bool:
+        if user.is_admin:
+            return True
+        return permission_code in PermissionService.permission_codes(user)
 
     @staticmethod
     def has_module_action(user: User, module_code: str, action: str) -> bool:
