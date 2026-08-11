@@ -16,6 +16,12 @@ def index():
     )
 
 
+@main_bp.route("/health")
+def health():
+    """Лёгкая проверка живости (без логина и тяжёлых запросов)."""
+    return {"status": "ok"}, 200
+
+
 @main_bp.route("/about")
 def about():
     """Информация о системе."""

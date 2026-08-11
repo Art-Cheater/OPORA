@@ -21,12 +21,17 @@ done
 echo "PostgreSQL доступен."
 
 echo "Миграции..."
-flask db upgrade
+if ! flask db upgrade; then
+    echo "ERROR: flask db upgrade failed"
+    flask db current || true
+    flask db heads || true
+    exit 1
+fi
 flask db current || true
 
 echo "Справочники..."
-flask seed-reference-data
-flask seed-admin
+flask seed-reference-data || echo "WARN: seed-reference-data failed (продолжаем)"
+flask seed-admin || echo "WARN: seed-admin failed (продолжаем)"
 
 echo "Запуск: $*"
 exec "$@"
