@@ -54,7 +54,12 @@ def unread_count():
     from flask import make_response
 
     total = MessengerRepository.total_unread_count(current_user.id)
-    response = make_response(jsonify({"total": total}))
+    payload = {"total": total}
+    if total > 0:
+        preview = MessengerRepository.latest_unread_preview(current_user.id)
+        if preview:
+            payload["preview"] = preview
+    response = make_response(jsonify(payload))
     response.set_etag(f"unread-{current_user.id}-{total}", weak=True)
     response.headers["Cache-Control"] = "private, no-cache"
     return response.make_conditional(request)
@@ -64,42 +69,17 @@ def unread_count():
 @login_required
 @permission_required(PERM_MESSENGER_USE)
 def events_stream():
-    """Лёгкий SSE: периодически отдаёт unread без тяжёлого polling с клиента."""
-    import json
-    import time
+    """SSE отключён: держит воркеры gunicorn и вешает сайт.
 
-    from flask import Response, current_app, stream_with_context
-
-    user_id = current_user.id
-    interval = max(5, int(current_app.config.get("MESSENGER_POLL_INTERVAL_MS", 8000) / 1000))
-
-    @stream_with_context
-    def generate():
-        last = None
-        # ~30 минут максимум на соединение
-        for _ in range(max(1, int(1800 / interval))):
-            total = MessengerRepository.total_unread_count(user_id)
-            if total != last:
-                payload = {"total": total}
-                if last is not None and total > (last or 0):
-                    preview = MessengerRepository.latest_unread_preview(user_id)
-                    if preview:
-                        payload["preview"] = preview
-                yield f"event: unread\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
-                last = total
-            else:
-                yield ": keepalive\n\n"
-            time.sleep(interval)
-
-    return Response(
-        generate(),
-        mimetype="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
-        },
-    )
+    Клиенты используют короткий poll `/api/unread-count`.
+    """
+    return jsonify(
+        {
+            "ok": False,
+            "disabled": True,
+            "message": "SSE отключён. Используйте /messenger/api/unread-count.",
+        }
+    ), 410
 
 
 @messenger_bp.route("/api/users")

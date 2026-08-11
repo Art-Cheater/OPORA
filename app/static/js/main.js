@@ -177,9 +177,8 @@ function initMessengerUnreadBadge() {
 
     let etag = null;
     let lastTotal = null;
-    let eventSource = null;
     const intervalMs = Number(
-        document.body?.dataset?.messengerUnreadInterval || 45000
+        document.body?.dataset?.messengerUnreadInterval || 15000
     );
     const onMessengerPage = Boolean(document.getElementById("messengerApp"));
 
@@ -216,32 +215,9 @@ function initMessengerUnreadBadge() {
             if (!res.ok) return;
             etag = res.headers.get("ETag") || etag;
             const data = await res.json();
-            applyTotal(data.total || 0, null);
+            applyTotal(data.total || 0, data.preview || null);
         } catch {
             /* ignore */
-        }
-    }
-
-    function startUnreadStream() {
-        if (onMessengerPage || eventSource || typeof EventSource === "undefined") return;
-        try {
-            eventSource = new EventSource("/messenger/api/events");
-            eventSource.addEventListener("unread", (ev) => {
-                try {
-                    const data = JSON.parse(ev.data || "{}");
-                    if (typeof data.total === "number") {
-                        applyTotal(data.total, data.preview || null);
-                    }
-                } catch {
-                    /* ignore */
-                }
-            });
-            eventSource.onerror = () => {
-                eventSource?.close();
-                eventSource = null;
-            };
-        } catch {
-            eventSource = null;
         }
     }
 
@@ -251,7 +227,10 @@ function initMessengerUnreadBadge() {
         { once: true }
     );
 
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) refresh();
+    });
+
     refresh();
     setInterval(refresh, intervalMs);
-    startUnreadStream();
 }

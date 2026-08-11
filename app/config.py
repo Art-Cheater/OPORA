@@ -125,7 +125,8 @@ class Config:
     MAX_UPLOAD_FILE_MB = int(os.getenv("MAX_UPLOAD_FILE_MB", "32"))
     MESSENGER_ONLINE_TIMEOUT = int(os.getenv("MESSENGER_ONLINE_TIMEOUT", "120"))
     MESSENGER_POLL_INTERVAL_MS = int(os.getenv("MESSENGER_POLL_INTERVAL_MS", "8000"))
-    MESSENGER_UNREAD_INTERVAL_MS = int(os.getenv("MESSENGER_UNREAD_INTERVAL_MS", "45000"))
+    # Короткий poll вместо SSE: не держит воркеры gunicorn
+    MESSENGER_UNREAD_INTERVAL_MS = int(os.getenv("MESSENGER_UNREAD_INTERVAL_MS", "15000"))
 
 
 class DevelopmentConfig(Config):

@@ -38,13 +38,13 @@
   let heartbeatTimer = null;
   let searchTimer = null;
   let unreadEtag = null;
-  let eventSource = null;
   let replyTarget = null;
   let pendingFiles = [];
   let knownUnreadTotal = null;
+  let unreadPollTimer = null;
   const drafts = new Map();
   const pollIntervalMs = Number(app.dataset.pollInterval || 8000);
-  const unreadIntervalMs = Number(app.dataset.unreadInterval || 45000);
+  const unreadIntervalMs = Number(app.dataset.unreadInterval || 15000);
   const notify = window.OporaMessengerNotify;
 
   function api(url, options = {}) {
@@ -689,6 +689,7 @@
 
   async function updateGlobalUnread(count, preview = null) {
     let total = count;
+    let previewData = preview;
     if (total === undefined) {
       const headers = {};
       if (unreadEtag) headers["If-None-Match"] = unreadEtag;
@@ -698,6 +699,7 @@
         unreadEtag = res.headers.get("ETag") || unreadEtag;
         const data = await res.json();
         total = data.total;
+        previewData = data.preview || null;
       }
     }
     if (typeof total === "number") {
@@ -706,7 +708,7 @@
         total > knownUnreadTotal &&
         notify
       ) {
-        notify.onUnreadIncrease(total, preview, {
+        notify.onUnreadIncrease(total, previewData, {
           activeConversationId,
         });
       }
@@ -735,27 +737,13 @@
     pollTimer = null;
   }
 
-  function startUnreadStream() {
-    if (eventSource || typeof EventSource === "undefined") return;
-    try {
-      eventSource = new EventSource("/messenger/api/events");
-      eventSource.addEventListener("unread", (ev) => {
-        try {
-          const data = JSON.parse(ev.data || "{}");
-          if (typeof data.total === "number") {
-            updateGlobalUnread(data.total, data.preview || null);
-          }
-        } catch {
-          /* ignore */
-        }
-      });
-      eventSource.onerror = () => {
-        eventSource?.close();
-        eventSource = null;
-      };
-    } catch {
-      eventSource = null;
-    }
+  function startUnreadPolling() {
+    clearInterval(unreadPollTimer);
+    const tick = () => {
+      if (document.hidden) return;
+      updateGlobalUnread();
+    };
+    unreadPollTimer = setInterval(tick, unreadIntervalMs);
   }
 
   document.addEventListener("visibilitychange", () => {
@@ -857,11 +845,11 @@
   loadConversations();
   loadUsers();
   updateGlobalUnread();
-  startUnreadStream();
+  startUnreadPolling();
 
   window.addEventListener("beforeunload", () => {
     clearInterval(pollTimer);
     clearInterval(heartbeatTimer);
-    eventSource?.close();
+    clearInterval(unreadPollTimer);
   });
 })();

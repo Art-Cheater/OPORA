@@ -20,8 +20,13 @@ done
 
 echo "PostgreSQL доступен."
 
+echo "Миграции..."
 flask db upgrade
+flask db current || true
+
+echo "Справочники..."
 flask seed-reference-data
 flask seed-admin
 
+echo "Запуск: $*"
 exec "$@"
