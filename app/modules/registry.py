@@ -7,6 +7,7 @@ from app.modules.contracts import contracts_bp
 from app.modules.employees import employees_bp
 from app.modules.field_builder import field_builder_bp
 from app.modules.main import main_bp
+from app.modules.objects import objects_bp
 from app.modules.positions import positions_bp
 from app.modules.roles import roles_bp
 from app.modules.messenger import messenger_bp
@@ -14,6 +15,7 @@ from app.modules.projects import projects_bp
 from app.modules.requests import requests_bp
 from app.modules.reports import reports_bp
 from app.modules.search import search_bp
+from app.modules.tenders import tenders_bp
 from app.modules.audit import audit_bp
 
 # Список всех модулей системы.
@@ -21,7 +23,9 @@ ALL_BLUEPRINTS = [
     main_bp,
     auth_bp,
     requests_bp,
+    objects_bp,
     projects_bp,
+    tenders_bp,
     contracts_bp,
     employees_bp,
     positions_bp,

@@ -15,7 +15,9 @@ def test_admin_pages(admin_client):
     for path in (
         "/",
         "/requests/",
+        "/objects/",
         "/projects/",
+        "/tenders/",
         "/contracts/",
         "/reports/requests",
         "/audit/",

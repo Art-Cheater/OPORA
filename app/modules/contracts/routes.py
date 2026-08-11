@@ -69,6 +69,8 @@ def _contract_payload_from_form(form: ContractForm, contract=None) -> ContractPa
         status=field("status", form.status.data, default=ContractStatus.DRAFT.value),
         contract_date=field("contract_date", form.contract_date.data, default=None),
         responsible_id=responsible_id,
+        contractor_name=getattr(form, "contractor_name", None).data if hasattr(form, "contractor_name") else "",
+        amount=getattr(form, "amount", None).data if hasattr(form, "amount") else 0,
     )
 
 
@@ -164,6 +166,87 @@ _CF = "contracts"
 
 def _cf_form(entity_id=None):
     return custom_field_form_context(_CF, entity_id)
+
+
+@contracts_bp.route("/from-tender/<uuid:tender_id>", methods=["GET", "POST"])
+@login_required
+@permission_required(PERM_CONTRACTS_CREATE)
+def create_from_tender(tender_id: uuid.UUID):
+    from app.modules.tenders.repositories import TenderRepository
+
+    tender = TenderRepository.get_by_id(tender_id)
+    if tender is None:
+        flash("Заявка на торги не найдена.", "danger")
+        return redirect(url_for("tenders.index"))
+
+    form = ContractForm()
+    _prepare_contract_form(form)
+    if request.method == "GET":
+        form.number.data = ContractRepository.next_number()
+        form.title.data = f"Контракт по {tender.number}"
+        form.contract_type.data = ContractType.WORK.value
+        form.status.data = ContractStatus.DRAFT.value
+        form.responsible_id.data = str(current_user.id)
+
+    if form.validate_on_submit():
+        try:
+            payload = _contract_payload_from_form(form)
+            contract = ContractService.create_from_tender(tender, payload, current_user.id)
+            flash("Контракт создан из заявки на торги.", "success")
+            return redirect(url_for("contracts.detail", contract_id=contract.id))
+        except ValidationError as exc:
+            flash(str(exc), "danger")
+    return render_template(
+        "contracts/form.html",
+        form=form,
+        mode="create",
+        tender=tender,
+    )
+
+
+@contracts_bp.route("/<uuid:contract_id>/workflow/<action>", methods=["POST"])
+@login_required
+@permission_required(PERM_CONTRACTS_EDIT)
+def workflow(contract_id: uuid.UUID, action: str):
+    from app.modules.contracts.forms import ContractWorkflowForm
+
+    contract = ContractRepository.get_by_id(contract_id)
+    if contract is None:
+        flash("Контракт не найден.", "danger")
+        return redirect(url_for("contracts.index"))
+
+    form = ContractWorkflowForm()
+    action_map = {
+        "activate": ContractStatus.ACTIVE.value,
+        "submit_work_docs": ContractStatus.WORK_DOCS_PENDING.value,
+        "approve_work_docs": ContractStatus.IN_PROGRESS.value,
+        "submit_ks2": ContractStatus.KS2_PENDING.value,
+        "accept_ks2": ContractStatus.COMPLETED.value,
+        "reject_ks2": ContractStatus.REJECTED.value,
+        "resubmit_ks2": ContractStatus.KS2_PENDING.value,
+        "terminate": ContractStatus.TERMINATED.value,
+    }
+    new_status = action_map.get(action)
+    if new_status is None:
+        flash("Неизвестное действие.", "danger")
+        return redirect(url_for("contracts.detail", contract_id=contract.id))
+
+    if not form.validate_on_submit():
+        flash("Не удалось выполнить действие.", "danger")
+        return redirect(url_for("contracts.detail", contract_id=contract.id))
+
+    try:
+        ContractService.transition(
+            contract,
+            new_status,
+            current_user.id,
+            comment=form.comment.data,
+            require_rejection_memo=(action == "reject_ks2"),
+        )
+        flash("Статус контракта обновлён.", "success")
+    except ValidationError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("contracts.detail", contract_id=contract.id))
 
 
 @contracts_bp.route("/new", methods=["GET", "POST"])
@@ -386,6 +469,7 @@ def add_document(contract_id: uuid.UUID):
                     ContractService.add_document(
                         contract,
                         title=form.title.data or saved.file_name,
+                        document_type=form.document_type.data,
                         document_number=form.document_number.data,
                         document_date=form.document_date.data,
                         description=form.description.data,
@@ -399,6 +483,7 @@ def add_document(contract_id: uuid.UUID):
                 ContractService.add_document(
                     contract,
                     title=form.title.data,
+                    document_type=form.document_type.data,
                     document_number=form.document_number.data,
                     document_date=form.document_date.data,
                     description=form.description.data,

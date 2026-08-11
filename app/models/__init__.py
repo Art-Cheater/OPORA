@@ -20,6 +20,7 @@ from app.models.communication.notification import Notification
 from app.models.contracts.contract import Contract
 from app.models.contracts.contract_document import ContractDocument
 from app.models.contracts.contract_history import ContractHistory
+from app.models.contracts.contract_object import ContractObject
 from app.models.files.attachment import Attachment
 from app.models.projects.project import Project
 from app.models.projects.project_document import ProjectDocument
@@ -33,6 +34,10 @@ from app.models.requests.request_dispatcher import RequestDispatcher
 from app.models.requests.request_history import RequestHistory
 from app.models.requests.request_material import RequestMaterial
 from app.models.requests.request_status import RequestStatus
+from app.models.tenders.tender_application import TenderApplication
+from app.models.tenders.tender_document import TenderDocument
+from app.models.tenders.tender_project import TenderProject
+from app.models.work_objects.work_object import WorkObject
 
 __all__ = [
     "BaseModel",
@@ -53,13 +58,18 @@ __all__ = [
     "RequestStatus",
     "RequestHistory",
     "RequestMaterial",
+    "WorkObject",
     "Project",
     "ProjectMember",
     "ProjectDocument",
     "ProjectHistory",
+    "TenderApplication",
+    "TenderDocument",
+    "TenderProject",
     "Contract",
     "ContractDocument",
     "ContractHistory",
+    "ContractObject",
     "Message",
     "MessengerConversation",
     "MessengerMessage",

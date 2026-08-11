@@ -1,0 +1,56 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+{% from "macros/crud.html" import create_button %}
+
+{% block title %}Объекты — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Объекты", "Адресные лоты работ", "geo-alt") %}
+{% if current_user.has_permission('objects.create') %}
+{{ create_button("Создать", "plus-lg") }}
+{% endif %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4 list-filters">
+    <div class="card-header"><i class="bi bi-search"></i>Поиск и фильтры</div>
+    <div class="card-body">
+        <form id="objectFilterForm" class="row g-3">
+            <div class="col-lg-4">
+                <label class="form-label">{{ filter_form.q.label.text }}</label>
+                {{ filter_form.q(class="form-control", placeholder="Наименование, адрес...") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.status.label.text }}</label>
+                {{ filter_form.status(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.plan_year.label.text }}</label>
+                {{ filter_form.plan_year(class="form-control", placeholder="2025") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.sort_by.label.text }}</label>
+                {{ filter_form.sort_by(class="form-select") }}
+            </div>
+            <div class="col-lg-2 d-flex align-items-end">
+                <button type="button" id="objectFilterReset" class="btn btn-outline-primary w-100">Сброс</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="objectsTableContainer">
+    {% include "objects/partials/table.html" %}
+</div>
+
+<div id="oporaListConfig" class="d-none"
+     data-base-url="/objects"
+     data-filter-form-id="objectFilterForm"
+     data-table-container-id="objectsTableContainer"
+     data-reset-btn-id="objectFilterReset"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/list-filters.js') }}"></script>
+{% endblock %}

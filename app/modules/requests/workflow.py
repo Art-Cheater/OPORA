@@ -49,7 +49,10 @@ LIFECYCLE_STEPS = (
 
 # Допустимые переходы
 ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
-    STATUS_NEW: frozenset({STATUS_EMERGENCY_DISPATCHED, STATUS_CANCELLED}),
+    # С «Новая» можно сразу передать мастеру, минуя бригаду
+    STATUS_NEW: frozenset(
+        {STATUS_EMERGENCY_DISPATCHED, STATUS_ACCEPTED_BY_MASTER, STATUS_CANCELLED}
+    ),
     STATUS_EMERGENCY_DISPATCHED: frozenset({STATUS_ACCEPTED_BY_MASTER, STATUS_CANCELLED}),
     # Мастер сразу отмечает «Выполнено»; «В работе» — опционально
     STATUS_ACCEPTED_BY_MASTER: frozenset(
@@ -159,7 +162,15 @@ def available_actions(req: Request, user: User) -> list[WorkflowAction]:
                     confirm="Подтвердить выезд аварийной бригады?",
                 )
             )
-        if has_dispatch:
+            actions.append(
+                WorkflowAction(
+                    code="assign_master",
+                    label="Передать мастеру",
+                    endpoint="requests.assign_master",
+                    style="primary",
+                    needs_master=True,
+                )
+            )
             actions.append(
                 WorkflowAction(
                     code="cancel",

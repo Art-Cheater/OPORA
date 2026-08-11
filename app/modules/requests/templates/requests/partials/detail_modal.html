@@ -1,6 +1,11 @@
 {% from "macros/badges.html" import request_status_badge %}
 {% from "macros/custom_fields.html" import custom_fields_detail with context %}
-<span class="d-none" data-opora-card-title>{{ req.number }} — {{ req.address }}</span>
+<span class="d-none" data-opora-card-title>
+    <span class="request-number {% if req.repeat_count and req.repeat_count > 0 %}request-number--repeat{% endif %}">
+        {{ req.number }}{% if req.repeat_count and req.repeat_count > 0 %} ×{{ req.repeat_count }}{% endif %}
+    </span>
+    — {{ req.address }}
+</span>
 <span class="d-none" data-opora-card-badge>{{ request_status_badge(req.status) }}</span>
 <a class="d-none" data-opora-page-url="{{ url_for('requests.detail', request_id=req.id, full=1) }}"></a>
 

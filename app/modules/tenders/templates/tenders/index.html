@@ -1,0 +1,45 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+{% from "macros/crud.html" import create_button %}
+
+{% block title %}Заявки на торги — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Заявки на торги", "Пакеты проектов для закупок", "hammer") %}
+{% if current_user.has_permission('tenders.create') %}
+{{ create_button("Создать", "plus-lg") }}
+{% endif %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4 list-filters">
+    <div class="card-body">
+        <form id="tenderFilterForm" class="row g-3">
+            <div class="col-lg-4">
+                <label class="form-label">{{ filter_form.q.label.text }}</label>
+                {{ filter_form.q(class="form-control", placeholder="Номер, название...") }}
+            </div>
+            <div class="col-lg-3">
+                <label class="form-label">{{ filter_form.status.label.text }}</label>
+                {{ filter_form.status(class="form-select") }}
+            </div>
+            <div class="col-lg-2 d-flex align-items-end">
+                <button type="button" id="tenderFilterReset" class="btn btn-outline-primary w-100">Сброс</button>
+            </div>
+        </form>
+    </div>
+</div>
+<div id="tendersTableContainer">
+    {% include "tenders/partials/table.html" %}
+</div>
+<div id="oporaListConfig" class="d-none"
+     data-base-url="/tenders"
+     data-filter-form-id="tenderFilterForm"
+     data-table-container-id="tendersTableContainer"
+     data-reset-btn-id="tenderFilterReset"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/list-filters.js') }}"></script>
+{% endblock %}

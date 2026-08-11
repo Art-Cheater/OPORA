@@ -21,16 +21,16 @@ from app.models.enums import ProjectDocumentType, ProjectStatus
 PROJECT_STATUS_CHOICES = [
     (ProjectStatus.DRAFT.value, "Черновик"),
     (ProjectStatus.ACTIVE.value, "В работе"),
-    (ProjectStatus.ON_HOLD.value, "Приостановлен"),
+    (ProjectStatus.IN_TENDER.value, "На торгах"),
+    (ProjectStatus.IN_CONTRACT.value, "В контракте"),
     (ProjectStatus.COMPLETED.value, "Завершён"),
-    (ProjectStatus.ARCHIVED.value, "Архив"),
+    (ProjectStatus.CANCELLED.value, "Отменён"),
 ]
 
 DOCUMENT_TYPE_CHOICES = [
-    (ProjectDocumentType.CONTRACT.value, "Договор"),
-    (ProjectDocumentType.ACT.value, "Акт"),
-    (ProjectDocumentType.ORDER.value, "Приказ"),
-    (ProjectDocumentType.PLAN.value, "План"),
+    (ProjectDocumentType.TECH_SPEC.value, "Техническое задание"),
+    (ProjectDocumentType.OBJECT_DESCRIPTION.value, "Описание объекта"),
+    (ProjectDocumentType.ESTIMATE.value, "Смета"),
     (ProjectDocumentType.OTHER.value, "Прочее"),
 ]
 
@@ -70,6 +70,12 @@ class ProjectFilterForm(FlaskForm):
 class ProjectForm(FlaskForm):
     code = StringField("Код", validators=[DataRequired(), Length(max=50)])
     name = StringField("Название", validators=[DataRequired(), Length(max=500)])
+    object_id = SelectField(
+        "Объект",
+        choices=[],
+        validators=[DataRequired(message="Выберите объект")],
+        validate_choice=False,
+    )
     description = TextAreaField("Описание", validators=[Optional(), Length(max=10000)])
     status = SelectField("Статус", choices=PROJECT_STATUS_CHOICES, validators=[DataRequired()])
     progress_percent = IntegerField(

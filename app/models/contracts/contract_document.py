@@ -11,6 +11,7 @@ from app.models.types import GUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
+from app.models.enums import ContractDocumentType
 
 if TYPE_CHECKING:
     from app.models.contracts.contract import Contract
@@ -22,6 +23,7 @@ class ContractDocument(BaseModel):
     __tablename__ = "contract_documents"
     __table_args__ = (
         Index("ix_contract_documents_contract_id", "contract_id"),
+        Index("ix_contract_documents_document_type", "document_type"),
     )
 
     contract_id: Mapped[uuid.UUID] = mapped_column(
@@ -30,6 +32,11 @@ class ContractDocument(BaseModel):
         nullable=False,
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
+    document_type: Mapped[str] = mapped_column(
+        String(30),
+        default=ContractDocumentType.OTHER.value,
+        nullable=False,
+    )
     document_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     document_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -7,6 +7,11 @@
 
 {% block page_header %}
 {% call page_header(project.code ~ " — " ~ project.name, "Карточка проекта", "folder2-open") %}
+{% if current_user.has_permission('tenders.create') and project.status in ['draft', 'active', 'cancelled'] %}
+<a href="{{ url_for('tenders.create', project_id=project.id) }}" class="btn btn-outline-primary">
+    <i class="bi bi-hammer"></i> В заявку на торги
+</a>
+{% endif %}
 <a href="{{ url_for('projects.edit', project_id=project.id) }}" class="btn btn-primary">
     <i class="bi bi-pencil-square"></i> Редактировать
 </a>
@@ -20,6 +25,14 @@
             <div class="card-header"><i class="bi bi-card-text"></i>Детали проекта</div>
             <div class="card-body">
                 <div class="row g-3">
+                    {% if project.work_object %}
+                    <div class="col-md-12">
+                        <small class="text-muted">Объект</small>
+                        <div>
+                            <a href="{{ url_for('objects.detail', object_id=project.work_object.id) }}">{{ project.work_object.name }}</a>
+                        </div>
+                    </div>
+                    {% endif %}
                     <div class="col-md-4">
                         <small class="text-muted">Статус</small>
                         <div>{{ project_status_badge(project.status) }}</div>

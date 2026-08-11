@@ -81,6 +81,11 @@ def _project_payload_from_form(form: ProjectForm, project=None) -> ProjectPayloa
         responsible_id = resp_val
     else:
         responsible_id = _uuid_or_none(str(resp_val) if resp_val else "")
+    object_val = field("object_id", form.object_id.data, default=None)
+    if isinstance(object_val, uuid.UUID):
+        object_id = object_val
+    else:
+        object_id = _uuid_or_none(str(object_val) if object_val else "")
     return ProjectPayload(
         code=field("code", form.code.data, default=ProjectRepository.next_code()),
         name=field("name", form.name.data, default="Без названия"),
@@ -91,6 +96,7 @@ def _project_payload_from_form(form: ProjectForm, project=None) -> ProjectPayloa
         end_date=field("end_date", form.end_date.data, default=None),
         responsible_id=responsible_id,
         executor_ids=executor_ids,
+        object_id=object_id,
     )
 
 
@@ -101,13 +107,20 @@ def _prepare_filter_form(form: ProjectFilterForm) -> None:
     form.executor_id.choices = user_choices
 
 
-def _prepare_project_form(form: ProjectForm) -> None:
+def _prepare_project_form(form: ProjectForm, project=None) -> None:
     from app.core.builtin_field_service import BuiltinFieldService
+    from app.modules.objects.repositories import ObjectRepository
 
     users = ProjectRepository.get_users()
     user_choices = [("", "Не назначен")] + [(str(item.id), item.full_name) for item in users]
     form.responsible_id.choices = user_choices
     form.executor_ids.choices = [(str(item.id), item.full_name) for item in users]
+    current_object_id = project.object_id if project else None
+    objects = ObjectRepository.list_free_or_current(current_object_id)
+    form.object_id.choices = [("", "Выберите объект")] + [
+        (str(obj.id), obj.name + (f" — {obj.address}" if obj.address else ""))
+        for obj in objects
+    ]
     BuiltinFieldService.apply_to_form(form, "projects")
 
 
@@ -124,6 +137,9 @@ def _apply_project_create_defaults(form: ProjectForm) -> None:
     form.start_date.data = date.today()
     form.end_date.data = date.today() + timedelta(days=90)
     form.responsible_id.data = str(current_user.id)
+    object_id = request.args.get("object_id", "")
+    if object_id:
+        form.object_id.data = object_id
 
 
 @projects_bp.route("/")
@@ -319,9 +335,10 @@ def edit(project_id: uuid.UUID):
         return redirect(url_for("projects.index"))
 
     form = ProjectForm(obj=project)
-    _prepare_project_form(form)
+    _prepare_project_form(form, project)
     if request.method == "GET":
         form.responsible_id.data = str(project.manager_id) if project.manager_id else ""
+        form.object_id.data = str(project.object_id) if project.object_id else ""
         form.executor_ids.data = [str(item) for item in ProjectRepository.get_executor_ids(project)]
 
     if form.validate_on_submit():

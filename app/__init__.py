@@ -93,9 +93,13 @@ def _init_extensions(app: Flask) -> None:
         RoleFieldPermission,
         RolePermission,
         SystemModule,
+        TenderApplication,
+        TenderDocument,
+        TenderProject,
         User,
         UserPresence,
         UserRole,
+        WorkObject,
     )
 
     @login_manager.user_loader

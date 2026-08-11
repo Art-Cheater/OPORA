@@ -296,6 +296,17 @@ def table():
     return jsonify({"table_html": html, "pagination_html": pager})
 
 
+@requests_bp.route("/api/format-address")
+@login_required
+@any_permission_required(PERM_REQUESTS_CREATE, PERM_REQUESTS_EDIT, PERM_REQUESTS_VIEW)
+def format_address_api():
+    from app.modules.requests.address_format import format_address
+
+    raw = request.args.get("address") or ""
+    formatted = format_address(raw)
+    return jsonify({"address": formatted, "raw": raw})
+
+
 @requests_bp.route("/api/open-by-address")
 @login_required
 @any_permission_required(PERM_REQUESTS_CREATE, PERM_REQUESTS_EDIT, PERM_REQUESTS_VIEW)

@@ -18,11 +18,14 @@ if TYPE_CHECKING:
     from app.models.auth.user import User
     from app.models.contracts.contract_document import ContractDocument
     from app.models.contracts.contract_history import ContractHistory
+    from app.models.contracts.contract_object import ContractObject
     from app.models.projects.project import Project
+    from app.models.tenders.tender_application import TenderApplication
+    from app.models.work_objects.work_object import WorkObject
 
 
 class Contract(BaseModel):
-    """Контракт / договор."""
+    """Контракт / договор (может включать несколько объектов)."""
 
     __tablename__ = "contracts"
     __table_args__ = (
@@ -34,6 +37,7 @@ class Contract(BaseModel):
             sqlite_where=text("deleted_at IS NULL"),
         ),
         Index("ix_contracts_project_id", "project_id"),
+        Index("ix_contracts_tender_application_id", "tender_application_id"),
         Index("ix_contracts_status", "status"),
         Index("ix_contracts_contract_type", "contract_type"),
         Index("ix_contracts_responsible_id", "responsible_id"),
@@ -72,6 +76,11 @@ class Contract(BaseModel):
         ForeignKey("projects.id", ondelete="SET NULL"),
         nullable=True,
     )
+    tender_application_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(),
+        ForeignKey("tender_applications.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     responsible: Mapped[User | None] = relationship(
         "User",
@@ -81,6 +90,18 @@ class Contract(BaseModel):
         "Project",
         back_populates="contracts",
         foreign_keys=[project_id],
+    )
+    tender_application: Mapped[TenderApplication | None] = relationship(
+        "TenderApplication",
+        back_populates="contracts",
+        foreign_keys=[tender_application_id],
+    )
+    object_links: Mapped[list[ContractObject]] = relationship(
+        "ContractObject",
+        back_populates="contract",
+        foreign_keys="ContractObject.contract_id",
+        lazy="selectin",
+        cascade="all, delete-orphan",
     )
     history: Mapped[list[ContractHistory]] = relationship(
         "ContractHistory",
@@ -96,6 +117,10 @@ class Contract(BaseModel):
         lazy="selectin",
         order_by="ContractDocument.created_at.desc()",
     )
+
+    @property
+    def work_objects(self) -> list[WorkObject]:
+        return [link.work_object for link in self.object_links if link.work_object is not None]
 
     def __repr__(self) -> str:
         return f"<Contract {self.number}>"

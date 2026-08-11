@@ -20,10 +20,11 @@ if TYPE_CHECKING:
     from app.models.projects.project_member import ProjectMember
     from app.models.requests.request import Request
     from app.models.contracts.contract import Contract
+    from app.models.work_objects.work_object import WorkObject
 
 
 class Project(ActiveRecordMixin, BaseModel):
-    """Проект муниципального предприятия."""
+    """Проект муниципального предприятия (1:1 с адресным объектом)."""
 
     __tablename__ = "projects"
     __table_args__ = (
@@ -36,6 +37,7 @@ class Project(ActiveRecordMixin, BaseModel):
         ),
         Index("ix_projects_status", "status"),
         Index("ix_projects_manager_id", "manager_id"),
+        Index("ix_projects_object_id", "object_id"),
         Index("ix_projects_start_date", "start_date"),
     )
 
@@ -52,12 +54,22 @@ class Project(ActiveRecordMixin, BaseModel):
     progress_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     search_vector: Mapped[str | None] = mapped_column(SearchVectorType, nullable=True)
 
+    object_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(),
+        ForeignKey("work_objects.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     manager_id: Mapped[uuid.UUID | None] = mapped_column(
         GUID(),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
 
+    work_object: Mapped[WorkObject | None] = relationship(
+        "WorkObject",
+        back_populates="projects",
+        foreign_keys=[object_id],
+    )
     manager: Mapped[User | None] = relationship(
         "User",
         foreign_keys=[manager_id],
@@ -70,12 +82,12 @@ class Project(ActiveRecordMixin, BaseModel):
     requests: Mapped[list[Request]] = relationship(
         "Request",
         back_populates="project",
-        lazy="selectin",
+        lazy="select",
     )
     contracts: Mapped[list[Contract]] = relationship(
         "Contract",
         back_populates="project",
-        lazy="selectin",
+        lazy="select",
     )
     history: Mapped[list[ProjectHistory]] = relationship(
         "ProjectHistory",

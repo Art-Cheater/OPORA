@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
-from flask_wtf import FlaskForm
-from wtforms import DateField, MultipleFileField, SelectField, StringField, SubmitField, TextAreaField
-from wtforms.validators import DataRequired, Length, Optional
+from decimal import Decimal
 
-from app.models.enums import ContractStatus, ContractType
+from flask_wtf import FlaskForm
+from wtforms import (
+    DateField,
+    DecimalField,
+    MultipleFileField,
+    SelectField,
+    StringField,
+    SubmitField,
+    TextAreaField,
+)
+from wtforms.validators import DataRequired, Length, NumberRange, Optional
+
+from app.models.enums import ContractDocumentType, ContractStatus, ContractType
 
 
 CONTRACT_TYPE_CHOICES = [
@@ -20,8 +30,23 @@ CONTRACT_TYPE_CHOICES = [
 CONTRACT_STATUS_CHOICES = [
     (ContractStatus.DRAFT.value, "Черновик"),
     (ContractStatus.ACTIVE.value, "Действует"),
-    (ContractStatus.COMPLETED.value, "Завершён"),
-    (ContractStatus.TERMINATED.value, "Расторгнут"),
+    (ContractStatus.WORK_DOCS_PENDING.value, "Согласование рабочей документации"),
+    (ContractStatus.IN_PROGRESS.value, "Выполнение работ"),
+    (ContractStatus.KS2_PENDING.value, "Приёмка КС-2"),
+    (ContractStatus.REJECTED.value, "Отклонено"),
+    (ContractStatus.COMPLETED.value, "Закрыт (принято)"),
+    (ContractStatus.TERMINATED.value, "Закрыт (с отклонением / расторгнут)"),
+]
+
+CONTRACT_STATUS_LABELS = dict(CONTRACT_STATUS_CHOICES)
+
+CONTRACT_DOC_TYPE_CHOICES = [
+    (ContractDocumentType.CONTRACT.value, "Контракт"),
+    (ContractDocumentType.LOCAL_ESTIMATE.value, "Локальный сметный расчет"),
+    (ContractDocumentType.WORK_DOCS.value, "Рабочая документация"),
+    (ContractDocumentType.KS2.value, "Акт выполненных работ (КС-2)"),
+    (ContractDocumentType.REJECTION_MEMO.value, "Служебная записка (замечания)"),
+    (ContractDocumentType.OTHER.value, "Прочее"),
 ]
 
 
@@ -65,6 +90,13 @@ class ContractForm(FlaskForm):
     number = StringField("Номер", validators=[DataRequired(), Length(max=100)])
     title = StringField("Название", validators=[DataRequired(), Length(max=500)])
     description = TextAreaField("Описание", validators=[Optional(), Length(max=10000)])
+    contractor_name = StringField("Подрядчик", validators=[Optional(), Length(max=500)])
+    amount = DecimalField(
+        "Сумма",
+        validators=[Optional(), NumberRange(min=Decimal("0"))],
+        places=2,
+        default=0,
+    )
     status = SelectField("Статус", choices=CONTRACT_STATUS_CHOICES, validators=[DataRequired()])
     contract_date = DateField("Дата", validators=[Optional()], format="%Y-%m-%d")
     responsible_id = SelectField("Ответственный", choices=[], validators=[Optional()])
@@ -78,8 +110,18 @@ class ContractCommentForm(FlaskForm):
 
 class ContractDocumentForm(FlaskForm):
     title = StringField("Название", validators=[DataRequired(), Length(max=500)])
+    document_type = SelectField(
+        "Тип документа",
+        choices=CONTRACT_DOC_TYPE_CHOICES,
+        validators=[DataRequired()],
+    )
     document_number = StringField("Номер документа", validators=[Optional(), Length(max=100)])
     document_date = DateField("Дата документа", validators=[Optional()], format="%Y-%m-%d")
     description = TextAreaField("Описание", validators=[Optional(), Length(max=5000)])
     files = MultipleFileField("Файлы", validators=[Optional()])
     submit = SubmitField("Добавить документ")
+
+
+class ContractWorkflowForm(FlaskForm):
+    comment = TextAreaField("Комментарий", validators=[Optional(), Length(max=5000)])
+    submit = SubmitField("Выполнить")

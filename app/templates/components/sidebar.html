@@ -27,11 +27,25 @@
                 <span>Заявки</span>
             </a>
             {% endif %}
+            {% if current_user.has_permission('objects.view') %}
+            <a href="{{ url_for('objects.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('objects.') %}active{% endif %}">
+                <i class="bi bi-geo-alt"></i>
+                <span>Объекты</span>
+            </a>
+            {% endif %}
             {% if current_user.has_permission('projects.view') %}
             <a href="{{ url_for('projects.index') }}"
                class="sidebar__link {% if request.endpoint and request.endpoint.startswith('projects.') %}active{% endif %}">
                 <i class="bi bi-folder2-open"></i>
                 <span>Проекты</span>
+            </a>
+            {% endif %}
+            {% if current_user.has_permission('tenders.view') %}
+            <a href="{{ url_for('tenders.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('tenders.') %}active{% endif %}">
+                <i class="bi bi-hammer"></i>
+                <span>Заявки на торги</span>
             </a>
             {% endif %}
             {% if current_user.has_permission('contracts.view') %}

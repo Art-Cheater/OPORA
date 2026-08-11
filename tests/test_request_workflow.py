@@ -29,7 +29,7 @@ def test_cancel_allowed_from_active_statuses():
 
 
 def test_forbidden_transitions():
-    assert not can_transition(STATUS_NEW, STATUS_ACCEPTED_BY_MASTER)
+    assert can_transition(STATUS_NEW, STATUS_ACCEPTED_BY_MASTER)
     assert not can_transition(STATUS_NEW, STATUS_COMPLETED)
     assert not can_transition(STATUS_COMPLETED, STATUS_IN_PROGRESS)
     assert not can_transition(STATUS_CANCELLED, STATUS_NEW)

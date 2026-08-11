@@ -14,6 +14,41 @@
 {% endblock %}
 
 {% block content %}
+{% if current_user.has_permission('contracts.edit') %}
+<div class="card mb-4">
+    <div class="card-header">Действия по статусу</div>
+    <div class="card-body d-flex flex-wrap gap-2">
+        {% set wf %}
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="comment" value="">
+        {% endset %}
+        {% if contract.status == 'draft' %}
+        <form method="POST" action="{{ url_for('contracts.workflow', contract_id=contract.id, action='activate') }}">{{ wf }}<button class="btn btn-sm btn-primary">Перевести в «Действует»</button></form>
+        {% endif %}
+        {% if contract.status == 'active' %}
+        <form method="POST" action="{{ url_for('contracts.workflow', contract_id=contract.id, action='submit_work_docs') }}">{{ wf }}<button class="btn btn-sm btn-primary">На согласование РД</button></form>
+        {% endif %}
+        {% if contract.status == 'work_docs_pending' %}
+        <form method="POST" action="{{ url_for('contracts.workflow', contract_id=contract.id, action='approve_work_docs') }}">{{ wf }}<button class="btn btn-sm btn-primary">Согласовать РД</button></form>
+        {% endif %}
+        {% if contract.status == 'in_progress' %}
+        <form method="POST" action="{{ url_for('contracts.workflow', contract_id=contract.id, action='submit_ks2') }}">{{ wf }}<button class="btn btn-sm btn-primary">Сдан КС-2</button></form>
+        {% endif %}
+        {% if contract.status == 'ks2_pending' %}
+        <form method="POST" action="{{ url_for('contracts.workflow', contract_id=contract.id, action='accept_ks2') }}">{{ wf }}<button class="btn btn-sm btn-success">Принять КС-2</button></form>
+        <form method="POST" action="{{ url_for('contracts.workflow', contract_id=contract.id, action='reject_ks2') }}">{{ wf }}<button class="btn btn-sm btn-danger">Отклонить КС-2</button></form>
+        {% endif %}
+        {% if contract.status == 'rejected' %}
+        <form method="POST" action="{{ url_for('contracts.workflow', contract_id=contract.id, action='resubmit_ks2') }}">{{ wf }}<button class="btn btn-sm btn-primary">Новый пакет КС-2</button></form>
+        <form method="POST" action="{{ url_for('contracts.workflow', contract_id=contract.id, action='terminate') }}">{{ wf }}<button class="btn btn-sm btn-outline-danger">Закрыть с отклонением</button></form>
+        {% endif %}
+        {% if contract.status not in ['completed', 'terminated'] %}
+        <form method="POST" action="{{ url_for('contracts.workflow', contract_id=contract.id, action='terminate') }}">{{ wf }}<button class="btn btn-sm btn-outline-secondary">Расторгнуть</button></form>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 <div class="row g-4">
     <div class="col-xl-8">
         <div class="card mb-4">
@@ -33,6 +68,24 @@
                         <div class="fw-medium">
                             {{ contract.contract_date.strftime('%d.%m.%Y') if contract.contract_date else "—" }}
                         </div>
+                    </div>
+                    <div class="col-md-6">
+                        <small class="text-muted">Подрядчик</small>
+                        <div class="fw-medium">{{ contract.contractor_name or "—" }}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <small class="text-muted">Сумма</small>
+                        <div class="fw-medium">{{ contract.amount }} {{ contract.currency }}</div>
+                    </div>
+                    <div class="col-md-12">
+                        <small class="text-muted">Объекты</small>
+                        <ul class="mb-0">
+                            {% for obj in contract.work_objects %}
+                            <li><a href="{{ url_for('objects.detail', object_id=obj.id) }}">{{ obj.name }}</a></li>
+                            {% else %}
+                            <li class="text-muted">—</li>
+                            {% endfor %}
+                        </ul>
                     </div>
                     <div class="col-md-6">
                         <small class="text-muted">Ответственный</small>
@@ -56,9 +109,10 @@
                 <form method="POST" action="{{ url_for('contracts.add_document', contract_id=contract.id) }}" enctype="multipart/form-data" class="mb-3">
                     {{ document_form.hidden_tag() }}
                     <div class="row g-2">
-                        <div class="col-md-6">{{ document_form.title(class="form-control", placeholder="Название документа") }}</div>
-                        <div class="col-md-3">{{ document_form.document_number(class="form-control", placeholder="Номер") }}</div>
-                        <div class="col-md-3">{{ document_form.document_date(class="form-control", type="date") }}</div>
+                        <div class="col-md-4">{{ document_form.title(class="form-control", placeholder="Название документа") }}</div>
+                        <div class="col-md-4">{{ document_form.document_type(class="form-select") }}</div>
+                        <div class="col-md-2">{{ document_form.document_number(class="form-control", placeholder="Номер") }}</div>
+                        <div class="col-md-2">{{ document_form.document_date(class="form-control", type="date") }}</div>
                         <div class="col-md-9">
                             {{ document_form.files(class="form-control form-control-sm", multiple=true) }}
                             <div class="form-text">Несколько файлов сразу (до {{ max_upload_mb }} МБ суммарно).</div>

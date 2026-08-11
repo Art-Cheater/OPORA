@@ -14,10 +14,10 @@
 {% endmacro %}
 
 {% macro request_status_badge(status) %}
-    {# Цвет из справочника request_statuses.color #}
+    {# Цвет из справочника request_statuses.color — более контрастный #}
     {% if status %}
     <span class="badge badge-status request-status-badge"
-          style="background-color: color-mix(in srgb, {{ status.color }} 16%, white); color: {{ status.color }}; border: 1px solid color-mix(in srgb, {{ status.color }} 35%, white);">
+          style="background-color: color-mix(in srgb, {{ status.color }} 28%, white); color: {{ status.color }}; border: 2px solid color-mix(in srgb, {{ status.color }} 55%, white);">
         {{ status.name }}
     </span>
     {% else %}
@@ -39,10 +39,16 @@
         <span class="badge badge-status badge-neutral">Черновик</span>
     {% elif s == 'active' %}
         <span class="badge badge-status badge-in-progress">В работе</span>
+    {% elif s == 'in_tender' %}
+        <span class="badge badge-status badge-in-progress">На торгах</span>
+    {% elif s == 'in_contract' %}
+        <span class="badge badge-status badge-in-progress">В контракте</span>
     {% elif s == 'on_hold' %}
         <span class="badge badge-status badge-not-ready">Приостановлен</span>
     {% elif s == 'completed' %}
         <span class="badge badge-status badge-done">Завершён</span>
+    {% elif s == 'cancelled' %}
+        <span class="badge badge-status badge-not-ready">Отменён</span>
     {% elif s == 'archived' %}
         <span class="badge badge-status badge-neutral">Архив</span>
     {% else %}
@@ -56,10 +62,18 @@
         <span class="badge badge-status badge-neutral">Черновик</span>
     {% elif s == 'active' %}
         <span class="badge badge-status badge-in-progress">Действует</span>
+    {% elif s == 'work_docs_pending' %}
+        <span class="badge badge-status badge-in-progress">Согласование РД</span>
+    {% elif s == 'in_progress' %}
+        <span class="badge badge-status badge-in-progress">Выполнение работ</span>
+    {% elif s == 'ks2_pending' %}
+        <span class="badge badge-status badge-in-progress">Приёмка КС-2</span>
+    {% elif s == 'rejected' %}
+        <span class="badge badge-status badge-not-ready">Отклонено</span>
     {% elif s == 'completed' %}
-        <span class="badge badge-status badge-done">Завершён</span>
+        <span class="badge badge-status badge-done">Закрыт (принято)</span>
     {% elif s == 'terminated' %}
-        <span class="badge badge-status badge-not-ready">Расторгнут</span>
+        <span class="badge badge-status badge-not-ready">Закрыт / расторгнут</span>
     {% else %}
         <span class="badge badge-status badge-neutral">{{ status }}</span>
     {% endif %}

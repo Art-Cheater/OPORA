@@ -98,6 +98,26 @@
     }
   }
 
+  async function formatAddressField(form) {
+    const input = addressInput(form);
+    if (!input) return;
+    const raw = (input.value || "").trim();
+    if (raw.length < 2) return;
+    try {
+      const res = await fetch(
+        `/requests/api/format-address?address=${encodeURIComponent(raw)}`,
+        { headers: { "X-Requested-With": "XMLHttpRequest" } }
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.address && data.address !== raw) {
+        input.value = data.address;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   function bindAddressCheck(form) {
     const input = addressInput(form);
     if (!input || input.dataset.repeatBound) return;
@@ -107,7 +127,10 @@
       checkTimer = setTimeout(() => checkAddress(form), 350);
     };
     input.addEventListener("input", schedule);
-    input.addEventListener("blur", () => checkAddress(form));
+    input.addEventListener("blur", async () => {
+      await formatAddressField(form);
+      await checkAddress(form);
+    });
   }
 
   async function markRepeat(form, match) {

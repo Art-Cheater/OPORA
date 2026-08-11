@@ -16,6 +16,7 @@ from app.models.auth.user import User
 from app.models.requests.request import Request
 from app.models.requests.request_dispatcher import RequestDispatcher
 from app.models.requests.request_status import RequestStatus
+from app.modules.requests.address_format import normalize_address
 from app.modules.requests.workflow import (
     PRESET_AWAITING_MASTER,
     PRESET_COMPLETED,
@@ -41,13 +42,6 @@ class RequestFilter:
     preset: str = ""
     sort_by: str = "received_at"
     sort_dir: str = "desc"
-
-
-def normalize_address(address: str | None) -> str:
-    import re
-
-    text = (address or "").strip().lower()
-    return re.sub(r"\s+", " ", text)
 
 
 class RequestRepository:

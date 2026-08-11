@@ -105,9 +105,15 @@ class RequestService:
 
     @staticmethod
     def normalize_address(address: str | None) -> str:
-        from app.modules.requests.repositories import normalize_address as _norm
+        from app.modules.requests.address_format import normalize_address as _norm
 
         return _norm(address)
+
+    @staticmethod
+    def format_address(address: str | None) -> str:
+        from app.modules.requests.address_format import format_address as _fmt
+
+        return _fmt(address)
 
     @classmethod
     def get_status_by_code(cls, code: str) -> RequestStatus:
@@ -126,11 +132,14 @@ class RequestService:
     def validate_payload(cls, payload: RequestPayload) -> None:
         if not payload.number.strip():
             raise ValidationError("Номер заявки обязателен.")
-        if not payload.address.strip():
+        if not (payload.address or "").strip():
+            raise ValidationError("Адрес обязателен.")
+        payload.address = cls.format_address(payload.address)
+        if not payload.address:
             raise ValidationError("Адрес обязателен.")
         # title заполняется из адреса автоматически
         if not (payload.title or "").strip():
-            payload.title = payload.address.strip()[:500]
+            payload.title = payload.address[:500]
         if not (payload.applicant_name or "").strip():
             payload.applicant_name = "—"
         if payload.has_barrier:
@@ -314,9 +323,9 @@ class RequestService:
 
         req = Request(
             number=payload.number.strip(),
-            title=payload.title.strip() or payload.address.strip()[:500],
+            title=payload.title.strip() or payload.address[:500],
             description=cls._normalize_text(payload.description),
-            address=payload.address.strip(),
+            address=payload.address,
             pp=cls._normalize_text(payload.pp),
             received_at=payload.received_at,
             dispatcher_name=cls._normalize_text(payload.dispatcher_name),
@@ -371,9 +380,9 @@ class RequestService:
 
         # Статус меняется только через workflow-методы
         req.number = payload.number.strip()
-        req.title = (payload.title.strip() or payload.address.strip())[:500]
+        req.title = (payload.title.strip() or payload.address)[:500]
         req.description = cls._normalize_text(payload.description)
-        req.address = payload.address.strip()
+        req.address = payload.address
         req.pp = cls._normalize_text(payload.pp)
         req.received_at = payload.received_at
         req.dispatcher_name = cls._normalize_text(payload.dispatcher_name)
@@ -523,9 +532,9 @@ class RequestService:
         user_id: uuid.UUID,
     ) -> Request:
         req = cls._lock_request(request_id)
-        if req.status.code != STATUS_EMERGENCY_DISPATCHED:
+        if req.status.code not in (STATUS_EMERGENCY_DISPATCHED, STATUS_NEW):
             raise ValidationError(
-                "Назначить мастера можно после статуса «Выехала аварийная бригада»."
+                "Назначить мастера можно из статуса «Новая» или «Выехала аварийная бригада»."
             )
 
         master = cls._ensure_master_user(master_id)

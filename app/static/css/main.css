@@ -1,5 +1,5 @@
 /* ============================================================
-   Опора — Design System
+   ????? ? Design System
    ============================================================ */
 
 :root {
@@ -227,20 +227,59 @@ a { text-decoration: none; }
 .badge-done { background: var(--status-done-bg); color: var(--status-done); }
 .badge-neutral { background: #F1F3F5; color: #6C757D; }
 .badge-role { background: rgba(245,124,0,0.1); color: var(--opora-primary); font-size: 0.75rem; padding: 0.3em 0.65em; border-radius: 6px; }
-.request-status-badge { max-width: 100%; white-space: normal; text-align: left; line-height: 1.25; }
 
-/* Время жизни заявки — цвет всей строки */
-.table-row-new { background: rgba(108, 117, 125, 0.06) !important; box-shadow: inset 4px 0 0 #6C757D; }
-.table-row-brigade { background: rgba(255, 193, 7, 0.18) !important; box-shadow: inset 4px 0 0 #FFC107; }
-.table-row-master { background: rgba(245, 124, 0, 0.14) !important; box-shadow: inset 4px 0 0 #F57C00; }
-.table-row-done { background: rgba(46, 125, 50, 0.12) !important; box-shadow: inset 4px 0 0 #2E7D32; }
-.table-row-cancelled { background: rgba(173, 181, 189, 0.12) !important; box-shadow: inset 4px 0 0 #ADB5BD; opacity: 0.85; }
-.table-row-brigade:hover,
-.table-row-master:hover,
-.table-row-done:hover,
-.table-row-new:hover { filter: brightness(0.98); }
+/* ????? ????? ?????? ? ???? ???? ?????? */
+.table-row-new { background: rgba(21, 101, 192, 0.14) !important; box-shadow: inset 5px 0 0 #1565C0; }
+.table-row-brigade { background: rgba(249, 168, 37, 0.28) !important; box-shadow: inset 5px 0 0 #F9A825; }
+.table-row-master { background: rgba(239, 108, 0, 0.20) !important; box-shadow: inset 5px 0 0 #EF6C00; }
+.table-row-done { background: rgba(46, 125, 50, 0.18) !important; box-shadow: inset 5px 0 0 #2E7D32; }
+.table-row-cancelled { background: rgba(120, 144, 156, 0.16) !important; box-shadow: inset 5px 0 0 #78909C; opacity: 0.9; }
 
-/* Галерея файлов / предпросмотр */
+.table-opora tbody tr.table-row-lifecycle[data-opora-id] {
+    cursor: pointer;
+    transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+    position: relative;
+    z-index: 0;
+}
+.table-opora tbody tr.table-row-lifecycle[data-opora-id]:hover {
+    transform: translateY(-3px) scale(1.008);
+    box-shadow: inset 5px 0 0 currentColor, 0 8px 18px rgba(0, 0, 0, 0.12);
+    filter: saturate(1.08) brightness(1.02);
+    z-index: 1;
+}
+.table-row-new:hover { box-shadow: inset 5px 0 0 #1565C0, 0 8px 18px rgba(21, 101, 192, 0.22) !important; }
+.table-row-brigade:hover { box-shadow: inset 5px 0 0 #F9A825, 0 8px 18px rgba(249, 168, 37, 0.28) !important; }
+.table-row-master:hover { box-shadow: inset 5px 0 0 #EF6C00, 0 8px 18px rgba(239, 108, 0, 0.25) !important; }
+.table-row-done:hover { box-shadow: inset 5px 0 0 #2E7D32, 0 8px 18px rgba(46, 125, 50, 0.22) !important; }
+.table-row-cancelled:hover { box-shadow: inset 5px 0 0 #78909C, 0 8px 18px rgba(120, 144, 156, 0.2) !important; }
+
+.request-number {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    line-height: 1.2;
+}
+.request-number--repeat {
+    border-color: #dc3545;
+    background: rgba(220, 53, 69, 0.08);
+    box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.12);
+}
+
+.request-status-badge {
+    max-width: 100%;
+    white-space: normal;
+    text-align: left;
+    line-height: 1.25;
+    font-weight: 700;
+    font-size: 0.8rem;
+    padding: 0.4em 0.8em;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* ??????? ?????? / ???????????? */
 .file-gallery {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -294,7 +333,7 @@ a { text-decoration: none; }
 .file-card__date { font-size: 0.72rem; color: #6C757D; margin-bottom: 0.45rem; }
 .file-card__actions { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 
-/* Полоска этапов в карточке */
+/* ??????? ?????? ? ???????? */
 .request-lifecycle { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .request-lifecycle__step {
     flex: 1 1 120px;
@@ -308,10 +347,10 @@ a { text-decoration: none; }
     text-align: center;
 }
 .request-lifecycle__step.is-done { background: rgba(46, 125, 50, 0.12); color: #2E7D32; }
-.request-lifecycle__step.is-current-new { background: rgba(108, 117, 125, 0.15); color: #495057; }
-.request-lifecycle__step.is-current-brigade { background: rgba(255, 193, 7, 0.28); color: #9A7000; }
-.request-lifecycle__step.is-current-master { background: rgba(245, 124, 0, 0.2); color: #E65100; }
-.request-lifecycle__step.is-current-done { background: rgba(46, 125, 50, 0.2); color: #1B5E20; }
+.request-lifecycle__step.is-current-new { background: rgba(21, 101, 192, 0.2); color: #0D47A1; }
+.request-lifecycle__step.is-current-brigade { background: rgba(249, 168, 37, 0.32); color: #F57F17; }
+.request-lifecycle__step.is-current-master { background: rgba(239, 108, 0, 0.24); color: #E65100; }
+.request-lifecycle__step.is-current-done { background: rgba(46, 125, 50, 0.22); color: #1B5E20; }
 
 /* Buttons */
 .btn { border-radius: var(--opora-radius-sm); font-weight: 500; font-size: 0.875rem; }
@@ -398,8 +437,8 @@ a { text-decoration: none; }
 }
 .opora-modal__title-wrap { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
 .opora-modal__body { padding: 1.25rem; }
-.table-opora tbody tr[data-opora-id] { cursor: pointer; transition: background 0.15s; }
-.table-opora tbody tr[data-opora-id]:hover { background: rgba(245, 124, 0, 0.06); }
+.table-opora tbody tr[data-opora-id] { cursor: pointer; }
+.table-opora tbody tr[data-opora-id]:not(.table-row-lifecycle):hover { background: rgba(245, 124, 0, 0.06); }
 .table-actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.25rem; }
 .table-actions__btn {
     display: inline-flex; align-items: center; justify-content: center;
@@ -431,7 +470,7 @@ a { text-decoration: none; }
 .roles-admin__item.active { border-color: var(--opora-primary); background: rgba(245, 124, 0, 0.08); }
 .roles-admin__editor-card .card-body { max-height: calc(100vh - 220px); overflow-y: auto; }
 
-/* ������: ��������� ����� */
+/* ??????: ????????? ????? */
 .request-address--repeat,
 input.request-address--repeat,
 .form-control.request-address--repeat {

@@ -13,12 +13,13 @@ from app.core.audit_service import AuditService
 from app.core.exceptions import NotFoundError, ValidationError
 from app.extensions import db
 from app.models.communication.comment import Comment
-from app.models.enums import AuditAction, EntityType, ProjectMemberRole
+from app.models.enums import AuditAction, EntityType, ProjectMemberRole, WorkObjectStatus
 from app.models.files.attachment import Attachment
 from app.models.projects.project import Project
 from app.models.projects.project_document import ProjectDocument
 from app.models.projects.project_history import ProjectHistory
 from app.models.projects.project_member import ProjectMember
+from app.models.work_objects.work_object import WorkObject
 
 
 @dataclass
@@ -32,6 +33,7 @@ class ProjectPayload:
     end_date: date | None
     responsible_id: uuid.UUID | None
     executor_ids: list[uuid.UUID]
+    object_id: uuid.UUID | None
 
 
 class ProjectService:
@@ -46,6 +48,7 @@ class ProjectService:
         "start_date",
         "end_date",
         "manager_id",
+        "object_id",
     ]
 
     @staticmethod
@@ -67,15 +70,45 @@ class ProjectService:
         return stripped if stripped else None
 
     @classmethod
-    def validate_payload(cls, payload: ProjectPayload) -> None:
+    def validate_payload(cls, payload: ProjectPayload, *, project: Project | None = None) -> None:
         if not payload.code.strip():
             raise ValidationError("Код проекта обязателен.")
         if not payload.name.strip():
             raise ValidationError("Название проекта обязательно.")
+        if payload.object_id is None:
+            raise ValidationError("Объект обязателен.")
         if payload.progress_percent < 0 or payload.progress_percent > 100:
             raise ValidationError("Процент готовности должен быть от 0 до 100.")
         if payload.start_date and payload.end_date and payload.start_date > payload.end_date:
             raise ValidationError("Дата начала не может быть позже даты окончания.")
+
+        work_object = db.session.scalar(
+            db.select(WorkObject).where(
+                WorkObject.id == payload.object_id,
+                WorkObject.active_filter(),
+            )
+        )
+        if work_object is None:
+            raise ValidationError("Объект не найден.")
+
+        other = db.session.scalar(
+            db.select(Project).where(
+                Project.object_id == payload.object_id,
+                Project.active_filter(),
+                Project.status.notin_(
+                    ["completed", "cancelled", "archived"]
+                ),
+            )
+        )
+        if other is not None and (project is None or other.id != project.id):
+            raise ValidationError("У этого объекта уже есть активный проект.")
+
+        if project is None or project.object_id != payload.object_id:
+            if work_object.status not in (
+                WorkObjectStatus.FREE.value,
+                WorkObjectStatus.IN_PROJECT.value,
+            ):
+                raise ValidationError("Объект занят (на торгах, в контракте или завершён).")
 
     @staticmethod
     def _snapshot(project: Project) -> dict[str, Any]:
@@ -200,11 +233,16 @@ class ProjectService:
             start_date=payload.start_date,
             end_date=payload.end_date,
             manager_id=payload.responsible_id,
+            object_id=payload.object_id,
             created_by=user_id,
             updated_by=user_id,
         )
         db.session.add(project)
         db.session.flush()
+        work_object = db.session.get(WorkObject, payload.object_id)
+        if work_object is not None:
+            work_object.status = WorkObjectStatus.IN_PROJECT.value
+            work_object.updated_by = user_id
         cls._sync_executors(project, payload.executor_ids, user_id)
         db.session.flush()
 
@@ -221,9 +259,10 @@ class ProjectService:
         payload: ProjectPayload,
         user_id: uuid.UUID,
     ) -> Project:
-        cls.validate_payload(payload)
+        cls.validate_payload(payload, project=project)
         old_snapshot = cls._snapshot(project)
         previous_status = project.status
+        previous_object_id = project.object_id
 
         project.code = payload.code.strip()
         project.name = payload.name.strip()
@@ -233,7 +272,18 @@ class ProjectService:
         project.start_date = payload.start_date
         project.end_date = payload.end_date
         project.manager_id = payload.responsible_id
+        project.object_id = payload.object_id
         project.updated_by = user_id
+
+        if previous_object_id and previous_object_id != payload.object_id:
+            old_obj = db.session.get(WorkObject, previous_object_id)
+            if old_obj is not None and old_obj.status == WorkObjectStatus.IN_PROJECT.value:
+                old_obj.status = WorkObjectStatus.FREE.value
+                old_obj.updated_by = user_id
+        work_object = db.session.get(WorkObject, payload.object_id)
+        if work_object is not None and work_object.status == WorkObjectStatus.FREE.value:
+            work_object.status = WorkObjectStatus.IN_PROJECT.value
+            work_object.updated_by = user_id
 
         cls._sync_executors(project, payload.executor_ids, user_id)
         db.session.flush()

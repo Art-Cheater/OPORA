@@ -24,10 +24,12 @@
                 {% elif req.status.code == 'cancelled' %}table-row-cancelled
                 {% endif %}">
                 <td class="fw-semibold">
-                    {{ req.number }}
-                    {% if req.repeat_count and req.repeat_count > 0 %}
-                    <span class="badge text-bg-danger ms-1" title="Повторные обращения">повтор ×{{ req.repeat_count }}</span>
-                    {% endif %}
+                    <span class="request-number {% if req.repeat_count and req.repeat_count > 0 %}request-number--repeat{% endif %}">
+                        {{ req.number }}
+                        {% if req.repeat_count and req.repeat_count > 0 %}
+                        <span class="badge text-bg-danger" title="Повторные обращения">×{{ req.repeat_count }}</span>
+                        {% endif %}
+                    </span>
                 </td>
                 <td>
                     <div class="fw-medium {% if req.repeat_count and req.repeat_count > 0 %}text-danger{% endif %}">{{ req.address }}</div>

@@ -5,7 +5,9 @@ from __future__ import annotations
 # (code, name, icon, sort_order, description)
 SYSTEM_MODULES = [
     ("requests", "Заявки", "clipboard-check", 10, "Управление заявками"),
+    ("objects", "Объекты", "geo-alt", 15, "Адресные объекты работ"),
     ("projects", "Проекты", "folder2-open", 20, "Управление проектами"),
+    ("tenders", "Заявки на торги", "hammer", 25, "Заявки на торги / закупки"),
     ("contracts", "Договоры", "file-earmark-text", 30, "Управление договорами"),
     ("users", "Сотрудники", "people", 40, "Управление сотрудниками"),
     ("materials", "Материалы", "box-seam", 50, "Склад и материалы"),
@@ -40,9 +42,17 @@ MODULE_FIELDS: dict[str, list[tuple[str, str, int]]] = {
         ("latitude", "Широта", 920),
         ("longitude", "Долгота", 930),
     ],
+    "objects": [
+        ("name", "Наименование", 10),
+        ("address", "Адрес", 20),
+        ("plan_year", "Год плана", 30),
+        ("status", "Статус", 40),
+        ("notes", "Примечание", 50),
+    ],
     "projects": [
         ("code", "Код", 10),
         ("name", "Название", 20),
+        ("object_id", "Объект", 25),
         ("description", "Описание", 30),
         ("status", "Статус", 40),
         ("progress_percent", "Готовность", 50),
@@ -50,6 +60,14 @@ MODULE_FIELDS: dict[str, list[tuple[str, str, int]]] = {
         ("end_date", "Дата окончания", 70),
         ("responsible_id", "Ответственный", 80),
         ("executor_ids", "Исполнители", 90),
+    ],
+    "tenders": [
+        ("number", "Номер", 10),
+        ("title", "Название", 20),
+        ("project_ids", "Проекты", 30),
+        ("status", "Статус", 40),
+        ("responsible_id", "Ответственный", 50),
+        ("description", "Описание", 60),
     ],
     "contracts": [
         ("contract_type", "Тип", 10),
@@ -59,6 +77,9 @@ MODULE_FIELDS: dict[str, list[tuple[str, str, int]]] = {
         ("status", "Статус", 50),
         ("contract_date", "Дата", 60),
         ("responsible_id", "Ответственный", 70),
+        ("tender_application_id", "Заявка на торги", 80),
+        ("contractor_name", "Подрядчик", 90),
+        ("amount", "Сумма", 100),
     ],
     "users": [
         ("full_name", "ФИО", 10),
@@ -96,7 +117,9 @@ REQUEST_DISPATCHERS: list[tuple[str, int]] = [
 # Модули с полным набором действий
 FULL_ACTION_MODULES = (
     "requests",
+    "objects",
     "projects",
+    "tenders",
     "contracts",
     "users",
     "materials",

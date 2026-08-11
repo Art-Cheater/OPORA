@@ -1,0 +1,38 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}{{ obj.name }} — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header(obj.name, status_labels.get(obj.status, obj.status), "geo-alt") %}
+{% if current_user.has_permission('objects.edit') %}
+<a href="{{ url_for('objects.edit', object_id=obj.id) }}" class="btn btn-outline-primary btn-sm">Редактировать</a>
+{% endif %}
+{% if current_user.has_permission('projects.create') %}
+<a href="{{ url_for('projects.create', object_id=obj.id) }}" class="btn btn-primary btn-sm">Создать проект</a>
+{% endif %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body row g-3">
+        <div class="col-md-8">
+            <small class="text-muted">Адрес</small>
+            <div class="fw-medium">{{ obj.address or "—" }}</div>
+        </div>
+        <div class="col-md-2">
+            <small class="text-muted">Год плана</small>
+            <div>{{ obj.plan_year or "—" }}</div>
+        </div>
+        <div class="col-md-2">
+            <small class="text-muted">Статус</small>
+            <div>{{ status_labels.get(obj.status, obj.status) }}</div>
+        </div>
+        <div class="col-12">
+            <small class="text-muted">Примечание</small>
+            <div>{{ obj.notes or "—" }}</div>
+        </div>
+    </div>
+</div>
+{% endblock %}

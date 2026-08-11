@@ -10,11 +10,24 @@ class Priority(str, Enum):
   CRITICAL = "critical"
 
 
+class WorkObjectStatus(str, Enum):
+  FREE = "free"
+  IN_PROJECT = "in_project"
+  IN_TENDER = "in_tender"
+  IN_CONTRACT = "in_contract"
+  COMPLETED = "completed"
+  ARCHIVED = "archived"
+
+
 class ProjectStatus(str, Enum):
   DRAFT = "draft"
   ACTIVE = "active"
-  ON_HOLD = "on_hold"
+  IN_TENDER = "in_tender"
+  IN_CONTRACT = "in_contract"
   COMPLETED = "completed"
+  CANCELLED = "cancelled"
+  # legacy
+  ON_HOLD = "on_hold"
   ARCHIVED = "archived"
 
 
@@ -26,18 +39,49 @@ class ProjectMemberRole(str, Enum):
 
 
 class ProjectDocumentType(str, Enum):
+  TECH_SPEC = "tech_spec"
+  OBJECT_DESCRIPTION = "object_description"
+  ESTIMATE = "estimate"
+  OTHER = "other"
+  # legacy
   CONTRACT = "contract"
   ACT = "act"
   ORDER = "order"
   PLAN = "plan"
+
+
+class TenderApplicationStatus(str, Enum):
+  DRAFT = "draft"
+  SUBMITTED = "submitted"
+  WON = "won"
+  LOST = "lost"
+  CANCELLED = "cancelled"
+
+
+class TenderDocumentType(str, Enum):
+  TENDER_APPLICATION = "tender_application"
+  PRICE_REQUEST = "price_request"
   OTHER = "other"
 
 
 class ContractStatus(str, Enum):
   DRAFT = "draft"
   ACTIVE = "active"
+  WORK_DOCS_PENDING = "work_docs_pending"
+  IN_PROGRESS = "in_progress"
+  KS2_PENDING = "ks2_pending"
+  REJECTED = "rejected"
   COMPLETED = "completed"
   TERMINATED = "terminated"
+
+
+class ContractDocumentType(str, Enum):
+  CONTRACT = "contract"
+  LOCAL_ESTIMATE = "local_estimate"
+  WORK_DOCS = "work_docs"
+  KS2 = "ks2"
+  REJECTION_MEMO = "rejection_memo"
+  OTHER = "other"
 
 
 class ContractType(str, Enum):
@@ -73,7 +117,9 @@ class EntityType(str, Enum):
   ROLE = "role"
   PERMISSION = "permission"
   REQUEST = "request"
+  WORK_OBJECT = "work_object"
   PROJECT = "project"
+  TENDER_APPLICATION = "tender_application"
   CONTRACT = "contract"
   MESSAGE = "message"
   NOTIFICATION = "notification"
