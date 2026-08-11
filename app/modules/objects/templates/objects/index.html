@@ -40,18 +40,40 @@
     </div>
 </div>
 
+{% if current_user.has_permission('objects.create') %}
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-file-earmark-excel"></i>Импорт из плана освещения</div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('objects.import_plan') }}" enctype="multipart/form-data" class="row g-3 align-items-end">
+            {{ import_form.hidden_tag() }}
+            <div class="col-lg-8">
+                <label class="form-label">{{ import_form.file.label.text }}</label>
+                {{ import_form.file(class="form-control") }}
+                <div class="form-text">Excel «План работ освещение …» — вытаскиваются наименования со всех листов.</div>
+            </div>
+            <div class="col-lg-4">
+                {{ import_form.submit(class="btn btn-outline-primary w-100") }}
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
 <div id="objectsTableContainer">
     {% include "objects/partials/table.html" %}
+</div>
+<div id="objectsPaginationContainer" class="mt-3">
+    {% include "objects/partials/pagination.html" %}
 </div>
 
 <div id="oporaListConfig" class="d-none"
      data-base-url="/objects"
      data-filter-form-id="objectFilterForm"
      data-table-container-id="objectsTableContainer"
-     data-reset-btn-id="objectFilterReset"></div>
-{% endblock %}
-
-{% block extra_js %}
-{{ super() }}
-<script src="{{ url_for('static', filename='js/list-filters.js') }}"></script>
+     data-pagination-container-id="objectsPaginationContainer"
+     data-reset-btn-id="objectFilterReset"
+     data-page-link-class="object-page-link"
+     data-view-mode="page"
+     data-create-title="Новый объект"
+     data-edit-title="Редактирование объекта"></div>
 {% endblock %}

@@ -33,14 +33,18 @@
 <div id="tendersTableContainer">
     {% include "tenders/partials/table.html" %}
 </div>
+<div id="tendersPaginationContainer" class="mt-3">
+    {% include "tenders/partials/pagination.html" %}
+</div>
 <div id="oporaListConfig" class="d-none"
      data-base-url="/tenders"
      data-filter-form-id="tenderFilterForm"
      data-table-container-id="tendersTableContainer"
-     data-reset-btn-id="tenderFilterReset"></div>
-{% endblock %}
-
-{% block extra_js %}
-{{ super() }}
-<script src="{{ url_for('static', filename='js/list-filters.js') }}"></script>
+     data-pagination-container-id="tendersPaginationContainer"
+     data-reset-btn-id="tenderFilterReset"
+     data-page-link-class="tender-page-link"
+     data-view-mode="page"
+     data-create-title="Новая заявка на торги"
+     data-edit-title="Редактирование заявки на торги"
+     data-can-edit="{{ 'true' if current_user.has_permission('tenders.edit') else 'false' }}"></div>
 {% endblock %}

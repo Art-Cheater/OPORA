@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from flask_wtf import FlaskForm
+from flask_wtf.file import FileAllowed, FileField, FileRequired
 from wtforms import IntegerField, SelectField, StringField, SubmitField, TextAreaField
 from wtforms.validators import DataRequired, Length, NumberRange, Optional
 
@@ -53,3 +54,14 @@ class ObjectForm(FlaskForm):
     notes = TextAreaField("Примечание", validators=[Optional(), Length(max=10000)])
     status = SelectField("Статус", choices=OBJECT_STATUS_CHOICES, validators=[DataRequired()])
     submit = SubmitField("Сохранить")
+
+
+class ObjectImportForm(FlaskForm):
+    file = FileField(
+        "Файл плана (.xlsx)",
+        validators=[
+            FileRequired(message="Выберите файл Excel"),
+            FileAllowed(["xlsx"], message="Только .xlsx"),
+        ],
+    )
+    submit = SubmitField("Импортировать объекты")

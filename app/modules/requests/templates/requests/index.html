@@ -6,6 +6,11 @@
 
 {% block page_header %}
 {% call page_header("Заявки", "Диспетчеризация: АБ → мастер → исполнение", "clipboard-check") %}
+{% if current_user.has_permission('requests.dispatch') or current_user.has_permission('requests.edit') %}
+<a href="{{ url_for('requests.dispatchers') }}" class="btn btn-outline-secondary">
+    <i class="bi bi-people"></i> Диспетчеры
+</a>
+{% endif %}
 {% if current_user.has_permission('requests.create') %}
 {{ create_button("Создать", "plus-lg") }}
 {% endif %}
@@ -77,6 +82,7 @@
      data-create-title="Новая заявка"
      data-edit-title="Редактирование заявки"
      data-delete-message="Вы уверены, что хотите удалить эту заявку?"
+     data-view-mode="page"
      data-can-edit="{{ 'true' if current_user.has_permission('requests.edit') else 'false' }}">
 </div>
 {% endblock %}

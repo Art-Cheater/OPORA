@@ -1,0 +1,36 @@
+{% from "macros/forms.html" import form_errors_alert %}
+<form method="POST" action="{{ form_action }}" class="opora-modal-form">
+    {{ form.hidden_tag() }}
+    {{ form_errors_alert(form) }}
+    <div class="row g-3">
+        <div class="col-md-4">
+            {{ form.number.label(class="form-label") }}
+            {{ form.number(class="form-control") }}
+        </div>
+        <div class="col-md-8">
+            {{ form.title.label(class="form-label") }}
+            {{ form.title(class="form-control") }}
+        </div>
+        <div class="col-md-6">
+            {{ form.status.label(class="form-label") }}
+            {{ form.status(class="form-select") }}
+        </div>
+        <div class="col-md-6">
+            {{ form.responsible_id.label(class="form-label") }}
+            {{ form.responsible_id(class="form-select") }}
+        </div>
+        <div class="col-12">
+            {{ form.project_ids.label(class="form-label") }}
+            {{ form.project_ids(class="form-select", size=8) }}
+            <div class="form-text">Можно выбрать несколько проектов (Ctrl/Shift).</div>
+        </div>
+        <div class="col-12">
+            {{ form.description.label(class="form-label") }}
+            {{ form.description(class="form-control", rows=3) }}
+        </div>
+    </div>
+    <div class="modal-form-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+        {{ form.submit(class="btn btn-primary") }}
+    </div>
+</form>

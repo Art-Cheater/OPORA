@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from flask import current_app, flash, redirect, render_template, request, send_file, url_for
+from flask import current_app, flash, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
 from app.core.decorators import permission_required
@@ -75,6 +75,15 @@ def _payload(form: TenderForm) -> TenderPayload:
     )
 
 
+def _render_form_modal(form: TenderForm, form_action: str, modal_title: str):
+    return render_template(
+        "tenders/partials/form_modal.html",
+        form=form,
+        form_action=form_action,
+        modal_title=modal_title,
+    )
+
+
 @tenders_bp.route("/")
 @login_required
 @permission_required(PERM_TENDERS_VIEW)
@@ -111,14 +120,20 @@ def table():
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 20, type=int)
     pagination = TenderRepository.paginated_list(filters, page=page, per_page=per_page)
-    return render_template(
+    html = render_template(
         "tenders/partials/table.html",
         pagination=pagination,
         items=pagination.items,
         status_labels=TENDER_STATUS_LABELS,
     )
+    pager = render_template(
+        "tenders/partials/pagination.html",
+        pagination=pagination,
+    )
+    return jsonify({"table_html": html, "pagination_html": pager})
 
 
+@tenders_bp.route("/new", methods=["GET", "POST"])
 @tenders_bp.route("/create", methods=["GET", "POST"])
 @login_required
 @permission_required(PERM_TENDERS_CREATE)
@@ -138,14 +153,25 @@ def create():
             tender = TenderService.create(_payload(form), current_user.id)
             flash("Заявка на торги создана.", "success")
             if is_ajax():
-                return ajax_ok(redirect=url_for("tenders.detail", tender_id=tender.id))
+                return ajax_ok(
+                    "Заявка на торги создана.",
+                    redirect_url=url_for("tenders.detail", tender_id=tender.id),
+                )
             return redirect(url_for("tenders.detail", tender_id=tender.id))
         except ValidationError as exc:
             if is_ajax():
-                return ajax_error(str(exc))
+                return ajax_error(
+                    str(exc),
+                    html=_render_form_modal(form, url_for("tenders.create"), "Новая заявка на торги"),
+                )
             flash(str(exc), "danger")
     elif request.method == "POST" and is_ajax():
-        return ajax_error(form_errors_message(form))
+        return ajax_error(
+            form_errors_message(form),
+            html=_render_form_modal(form, url_for("tenders.create"), "Новая заявка на торги"),
+        )
+    if is_ajax() and request.method == "GET":
+        return _render_form_modal(form, url_for("tenders.create"), "Новая заявка на торги")
     return render_template("tenders/form.html", form=form, mode="create")
 
 
@@ -194,9 +220,38 @@ def edit(tender_id: uuid.UUID):
         try:
             TenderService.update(tender, _payload(form), current_user.id)
             flash("Заявка на торги сохранена.", "success")
+            if is_ajax():
+                return ajax_ok(
+                    "Заявка на торги сохранена.",
+                    redirect_url=url_for("tenders.detail", tender_id=tender.id),
+                )
             return redirect(url_for("tenders.detail", tender_id=tender.id))
         except ValidationError as exc:
+            if is_ajax():
+                return ajax_error(
+                    str(exc),
+                    html=_render_form_modal(
+                        form,
+                        url_for("tenders.edit", tender_id=tender.id),
+                        "Редактирование заявки на торги",
+                    ),
+                )
             flash(str(exc), "danger")
+    elif request.method == "POST" and is_ajax():
+        return ajax_error(
+            form_errors_message(form),
+            html=_render_form_modal(
+                form,
+                url_for("tenders.edit", tender_id=tender.id),
+                "Редактирование заявки на торги",
+            ),
+        )
+    if is_ajax() and request.method == "GET":
+        return _render_form_modal(
+            form,
+            url_for("tenders.edit", tender_id=tender.id),
+            "Редактирование заявки на торги",
+        )
     return render_template("tenders/form.html", form=form, mode="edit", tender=tender)
 
 

@@ -9,6 +9,7 @@ from wtforms import (
     BooleanField,
     DateTimeLocalField,
     DecimalField,
+    IntegerField,
     MultipleFileField,
     SelectField,
     StringField,
@@ -151,3 +152,14 @@ class RequestMaterialForm(FlaskForm):
 class RequestAttachmentForm(FlaskForm):
     files = MultipleFileField("Файлы", validators=[DataRequired(message="Выберите хотя бы один файл")])
     submit = SubmitField("Загрузить")
+
+
+class DispatcherForm(FlaskForm):
+    name = StringField("ФИО диспетчера", validators=[DataRequired(), Length(max=255)])
+    sort_order = IntegerField(
+        "Порядок",
+        validators=[Optional(), NumberRange(min=0, max=9999)],
+        default=0,
+    )
+    is_active = BooleanField("Активен", default=True)
+    submit = SubmitField("Сохранить")

@@ -22,6 +22,7 @@ gunicorn==23.0.0
 
 # Development
 python-dateutil==2.9.0.post0
+openpyxl==3.1.5
 
 # Testing / load
 pytest==8.3.5

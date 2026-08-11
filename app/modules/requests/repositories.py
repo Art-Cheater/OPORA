@@ -198,6 +198,59 @@ class RequestRepository:
         )
 
     @staticmethod
+    def list_dispatchers_all() -> list[RequestDispatcher]:
+        return list(
+            db.session.scalars(
+                db.select(RequestDispatcher)
+                .where(RequestDispatcher.active_filter())
+                .order_by(RequestDispatcher.sort_order.asc(), RequestDispatcher.name.asc())
+            )
+        )
+
+    @staticmethod
+    def get_dispatcher(dispatcher_id: uuid.UUID) -> RequestDispatcher | None:
+        return db.session.scalar(
+            db.select(RequestDispatcher).where(
+                RequestDispatcher.id == dispatcher_id,
+                RequestDispatcher.active_filter(),
+            )
+        )
+
+    @staticmethod
+    def create_dispatcher(*, name: str, sort_order: int, is_active: bool, user_id: uuid.UUID) -> RequestDispatcher:
+        item = RequestDispatcher(
+            name=name.strip(),
+            sort_order=sort_order or 0,
+            is_active=bool(is_active),
+            created_by=user_id,
+            updated_by=user_id,
+        )
+        db.session.add(item)
+        db.session.commit()
+        return item
+
+    @staticmethod
+    def update_dispatcher(
+        item: RequestDispatcher,
+        *,
+        name: str,
+        sort_order: int,
+        is_active: bool,
+        user_id: uuid.UUID,
+    ) -> RequestDispatcher:
+        item.name = name.strip()
+        item.sort_order = sort_order or 0
+        item.is_active = bool(is_active)
+        item.updated_by = user_id
+        db.session.commit()
+        return item
+
+    @staticmethod
+    def delete_dispatcher(item: RequestDispatcher, user_id: uuid.UUID) -> None:
+        item.soft_delete(user_id)
+        db.session.commit()
+
+    @staticmethod
     def next_number() -> str:
         from datetime import datetime
 

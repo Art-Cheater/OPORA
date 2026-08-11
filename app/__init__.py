@@ -263,6 +263,7 @@ def _register_context_processors(app: Flask) -> None:
 
 def _register_cli_commands(app: Flask) -> None:
     """Регистрация CLI-команд."""
+    import click
 
     @app.cli.command("seed-admin")
     def seed_admin():
@@ -295,6 +296,40 @@ def _register_cli_commands(app: Flask) -> None:
 
         ReferenceDataService.sync_security_roles()
         print("Роли и разрешения синхронизированы.")
+
+    @app.cli.command("import-lighting-plan")
+    @click.option(
+        "--path",
+        "file_path",
+        required=True,
+        help="Путь к Excel «План работ освещение …»",
+    )
+    @click.option("--user-email", default=None, help="Email пользователя для аудита (по умолчанию admin)")
+    def import_lighting_plan(file_path: str, user_email: str | None):
+        """Импорт объектов из Excel-плана освещения."""
+        from pathlib import Path
+
+        from app.models.auth.user import User
+        from app.modules.objects.services import ObjectService
+
+        path = Path(file_path)
+        user = None
+        if user_email:
+            user = db.session.scalar(
+                db.select(User).where(User.email == user_email.lower().strip(), User.active_filter())
+            )
+        if user is None:
+            user = db.session.scalar(
+                db.select(User).where(User.active_filter()).order_by(User.created_at.asc()).limit(1)
+            )
+        if user is None:
+            click.echo("Нет пользователей в БД — сначала seed-admin.")
+            return
+        result = ObjectService.import_from_lighting_plan(path, user.id)
+        click.echo(
+            f"Готово: создано {result.created}, обновлено {result.updated}, "
+            f"пропущено {result.skipped}, строк в файле {result.total}."
+        )
 
     @app.cli.command("init-db")
     def init_db():

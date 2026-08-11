@@ -45,6 +45,7 @@ from app.models.files.attachment import Attachment
 from app.modules.requests.blueprint import requests_bp
 from app.modules.requests.forms import (
     AssignMasterForm,
+    DispatcherForm,
     RequestAttachmentForm,
     RequestCommentForm,
     RequestFilterForm,
@@ -294,6 +295,75 @@ def table():
         requests_pagination=pagination,
     )
     return jsonify({"table_html": html, "pagination_html": pager})
+
+
+@requests_bp.route("/dispatchers", methods=["GET", "POST"])
+@login_required
+@any_permission_required(PERM_REQUESTS_DISPATCH, PERM_REQUESTS_EDIT)
+def dispatchers():
+    form = DispatcherForm()
+    if form.validate_on_submit():
+        try:
+            RequestRepository.create_dispatcher(
+                name=form.name.data or "",
+                sort_order=int(form.sort_order.data or 0),
+                is_active=bool(form.is_active.data),
+                user_id=current_user.id,
+            )
+            flash("Диспетчер добавлен.", "success")
+            return redirect(url_for("requests.dispatchers"))
+        except Exception as exc:  # noqa: BLE001
+            db.session.rollback()
+            flash(f"Не удалось добавить: {exc}", "danger")
+    items = RequestRepository.list_dispatchers_all()
+    return render_template(
+        "requests/dispatchers.html",
+        form=form,
+        items=items,
+    )
+
+
+@requests_bp.route("/dispatchers/<uuid:dispatcher_id>/edit", methods=["GET", "POST"])
+@login_required
+@any_permission_required(PERM_REQUESTS_DISPATCH, PERM_REQUESTS_EDIT)
+def edit_dispatcher(dispatcher_id: uuid.UUID):
+    item = RequestRepository.get_dispatcher(dispatcher_id)
+    if item is None:
+        flash("Диспетчер не найден.", "danger")
+        return redirect(url_for("requests.dispatchers"))
+    form = DispatcherForm()
+    if request.method == "GET":
+        form.name.data = item.name
+        form.sort_order.data = item.sort_order
+        form.is_active.data = item.is_active
+    if form.validate_on_submit():
+        RequestRepository.update_dispatcher(
+            item,
+            name=form.name.data or "",
+            sort_order=int(form.sort_order.data or 0),
+            is_active=bool(form.is_active.data),
+            user_id=current_user.id,
+        )
+        flash("Диспетчер сохранён.", "success")
+        return redirect(url_for("requests.dispatchers"))
+    return render_template(
+        "requests/dispatcher_form.html",
+        form=form,
+        item=item,
+    )
+
+
+@requests_bp.route("/dispatchers/<uuid:dispatcher_id>/delete", methods=["POST"])
+@login_required
+@any_permission_required(PERM_REQUESTS_DISPATCH, PERM_REQUESTS_EDIT)
+def delete_dispatcher(dispatcher_id: uuid.UUID):
+    item = RequestRepository.get_dispatcher(dispatcher_id)
+    if item is None:
+        flash("Диспетчер не найден.", "danger")
+        return redirect(url_for("requests.dispatchers"))
+    RequestRepository.delete_dispatcher(item, current_user.id)
+    flash("Диспетчер удалён.", "success")
+    return redirect(url_for("requests.dispatchers"))
 
 
 @requests_bp.route("/api/format-address")

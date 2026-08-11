@@ -96,6 +96,57 @@ window.OporaList = (() => {
     });
   }
 
+  function openView(id) {
+    if (!id) return;
+    if (config.viewMode === "page") {
+      window.location.href = `${config.baseUrl}/${id}`;
+      return;
+    }
+    return openViewModal(id);
+  }
+
+  async function openViewModal(id) {
+    const modal = detailModal();
+    if (!modal) return;
+    detailModalBody().innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+    detailModalTitle().textContent = "Загрузка...";
+    detailModalBadge().innerHTML = "";
+    detailEditBtn()?.classList.add("d-none");
+    const openBtn = detailOpenPageBtn();
+    if (openBtn) {
+      openBtn.classList.add("d-none");
+      openBtn.removeAttribute("href");
+    }
+    bootstrap.Modal.getOrCreateInstance(modal).show();
+
+    try {
+      const html = await fetchHtml(`${config.baseUrl}/${id}`);
+      detailModalBody().innerHTML = html;
+
+      const card = detailModalBody().querySelector("[data-opora-card-title]");
+      const badge = detailModalBody().querySelector("[data-opora-card-badge]");
+      if (card) detailModalTitle().textContent = card.textContent.trim();
+      if (badge) detailModalBadge().innerHTML = badge.innerHTML;
+
+      const pageLink = detailModalBody().querySelector("[data-opora-page-url]");
+      const pageUrl = pageLink?.getAttribute("data-opora-page-url") || `${config.baseUrl}/${id}?full=1`;
+      if (openBtn) {
+        openBtn.href = pageUrl;
+        openBtn.classList.remove("d-none");
+      }
+
+      if (config.canEdit) {
+        detailEditBtn()?.classList.remove("d-none");
+        detailEditBtn().onclick = () => {
+          bootstrap.Modal.getInstance(detailModal())?.hide();
+          openEdit(id);
+        };
+      }
+    } catch {
+      detailModalBody().innerHTML = '<div class="alert alert-danger">Не удалось загрузить карточку</div>';
+    }
+  }
+
   function bindGlobalActions() {
     if (document.body.dataset.oporaGlobalBound === "1") return;
     document.body.dataset.oporaGlobalBound = "1";
@@ -289,48 +340,6 @@ window.OporaList = (() => {
     }
   }
 
-  async function openView(id) {
-    const modal = detailModal();
-    if (!modal) return;
-    detailModalBody().innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
-    detailModalTitle().textContent = "Загрузка...";
-    detailModalBadge().innerHTML = "";
-    detailEditBtn()?.classList.add("d-none");
-    const openBtn = detailOpenPageBtn();
-    if (openBtn) {
-      openBtn.classList.add("d-none");
-      openBtn.removeAttribute("href");
-    }
-    bootstrap.Modal.getOrCreateInstance(modal).show();
-
-    try {
-      const html = await fetchHtml(`${config.baseUrl}/${id}`);
-      detailModalBody().innerHTML = html;
-
-      const card = detailModalBody().querySelector("[data-opora-card-title]");
-      const badge = detailModalBody().querySelector("[data-opora-card-badge]");
-      if (card) detailModalTitle().textContent = card.textContent.trim();
-      if (badge) detailModalBadge().innerHTML = badge.innerHTML;
-
-      const pageLink = detailModalBody().querySelector("[data-opora-page-url]");
-      const pageUrl = pageLink?.getAttribute("data-opora-page-url") || `${config.baseUrl}/${id}?full=1`;
-      if (openBtn) {
-        openBtn.href = pageUrl;
-        openBtn.classList.remove("d-none");
-      }
-
-      if (config.canEdit) {
-        detailEditBtn()?.classList.remove("d-none");
-        detailEditBtn().onclick = () => {
-          bootstrap.Modal.getInstance(detailModal())?.hide();
-          openEdit(id);
-        };
-      }
-    } catch {
-      detailModalBody().innerHTML = '<div class="alert alert-danger">Не удалось загрузить карточку</div>';
-    }
-  }
-
   function openDeleteConfirm(id) {
     pendingDeleteId = id;
     pendingDeleteUrl = null;
@@ -428,6 +437,7 @@ window.OporaList = (() => {
       editTitle: cfg.dataset.editTitle,
       deleteMessage: cfg.dataset.deleteMessage,
       canEdit: cfg.dataset.canEdit === "true",
+      viewMode: cfg.dataset.viewMode || "modal",
     });
   }
 
