@@ -1,11 +1,14 @@
 """Добавляем is_active и TSVECTOR для объектов и заявок на торги.
 
-Revision ID: 019_fix_objects_tenders_is_active
+Revision ID: 019_fix_objects_active
 Revises: 018_procurement_chain
 Create Date: 2026-08-11
 
 Миграция 018 создала work_objects / tender_applications без is_active,
 хотя модели наследуют ActiveRecordMixin — из-за этого списки давали 500.
+
+Важно: id ревизии короткий (≤32), иначе падает UPDATE alembic_version
+(колонка version_num varchar(32) по умолчанию).
 """
 
 from __future__ import annotations
@@ -13,7 +16,7 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "019_fix_objects_tenders_is_active"
+revision = "019_fix_objects_active"
 down_revision = "018_procurement_chain"
 branch_labels = None
 depends_on = None
@@ -40,6 +43,19 @@ def _column_type_name(table: str, column: str) -> str:
     return ""
 
 
+def _widen_alembic_version() -> None:
+    """Расширяем version_num, чтобы длинные revision id не ломали stamp."""
+    bind = op.get_bind()
+    if bind.dialect.name != "postgresql":
+        return
+    op.execute(
+        sa.text(
+            "ALTER TABLE alembic_version "
+            "ALTER COLUMN version_num TYPE varchar(64)"
+        )
+    )
+
+
 def _ensure_tsvector(table: str) -> None:
     """На PostgreSQL: Text → tsvector (данные search_vector ещё не заполнялись)."""
     bind = op.get_bind()
@@ -56,6 +72,8 @@ def _ensure_tsvector(table: str) -> None:
 
 
 def upgrade() -> None:
+    _widen_alembic_version()
+
     if not _has_column("work_objects", "is_active"):
         op.add_column(
             "work_objects",
