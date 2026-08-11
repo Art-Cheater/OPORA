@@ -208,6 +208,7 @@ def _register_error_handlers(app: Flask) -> None:
     def internal_error(error):
         from flask import render_template
 
+        app.logger.exception("Unhandled server error: %s", error)
         db.session.rollback()
         return render_template("errors/500.html"), 500
 

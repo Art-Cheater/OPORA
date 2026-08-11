@@ -33,12 +33,14 @@ def upgrade():
         sa.Column("plan_year", sa.Integer(), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("status", sa.String(length=30), nullable=False, server_default="free"),
-        sa.Column("search_vector", sa.Text(), nullable=True),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
+        sa.Column("search_vector", postgresql.TSVECTOR(), nullable=True),
         sa.ForeignKeyConstraint(["created_by"], ["users.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["updated_by"], ["users.id"], ondelete="SET NULL"),
     )
     op.create_index("ix_work_objects_created_at", "work_objects", ["created_at"])
     op.create_index("ix_work_objects_deleted_at", "work_objects", ["deleted_at"])
+    op.create_index("ix_work_objects_is_active", "work_objects", ["is_active"])
     op.create_index("ix_work_objects_status", "work_objects", ["status"])
     op.create_index("ix_work_objects_plan_year", "work_objects", ["plan_year"])
     op.create_index("ix_work_objects_name", "work_objects", ["name"])
@@ -50,7 +52,8 @@ def upgrade():
         sa.Column("title", sa.String(length=500), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("status", sa.String(length=30), nullable=False, server_default="draft"),
-        sa.Column("search_vector", sa.Text(), nullable=True),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
+        sa.Column("search_vector", postgresql.TSVECTOR(), nullable=True),
         sa.Column("responsible_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.ForeignKeyConstraint(["responsible_id"], ["users.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["created_by"], ["users.id"], ondelete="SET NULL"),
@@ -58,6 +61,7 @@ def upgrade():
     )
     op.create_index("ix_tender_applications_created_at", "tender_applications", ["created_at"])
     op.create_index("ix_tender_applications_deleted_at", "tender_applications", ["deleted_at"])
+    op.create_index("ix_tender_applications_is_active", "tender_applications", ["is_active"])
     op.create_index("ix_tender_applications_status", "tender_applications", ["status"])
     op.create_index("ix_tender_applications_responsible_id", "tender_applications", ["responsible_id"])
     op.create_index(
@@ -187,6 +191,7 @@ def downgrade():
     op.drop_index("ix_tender_applications_number_unique_active", table_name="tender_applications")
     op.drop_index("ix_tender_applications_responsible_id", table_name="tender_applications")
     op.drop_index("ix_tender_applications_status", table_name="tender_applications")
+    op.drop_index("ix_tender_applications_is_active", table_name="tender_applications")
     op.drop_index("ix_tender_applications_deleted_at", table_name="tender_applications")
     op.drop_index("ix_tender_applications_created_at", table_name="tender_applications")
     op.drop_table("tender_applications")
@@ -194,6 +199,7 @@ def downgrade():
     op.drop_index("ix_work_objects_name", table_name="work_objects")
     op.drop_index("ix_work_objects_plan_year", table_name="work_objects")
     op.drop_index("ix_work_objects_status", table_name="work_objects")
+    op.drop_index("ix_work_objects_is_active", table_name="work_objects")
     op.drop_index("ix_work_objects_deleted_at", table_name="work_objects")
     op.drop_index("ix_work_objects_created_at", table_name="work_objects")
     op.drop_table("work_objects")

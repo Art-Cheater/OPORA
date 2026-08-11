@@ -17,11 +17,11 @@
             {% for req in requests_pagination.items %}
             <tr data-opora-id="{{ req.id }}"
                 class="table-row-lifecycle
-                {% if req.status.code == 'emergency_dispatched' %}table-row-brigade
-                {% elif req.status.code in ['accepted_by_master', 'in_progress'] %}table-row-master
-                {% elif req.status.code == 'completed' %}table-row-done
-                {% elif req.status.code == 'new' %}table-row-new
-                {% elif req.status.code == 'cancelled' %}table-row-cancelled
+                {% if req.status and req.status.code == 'emergency_dispatched' %}table-row-brigade
+                {% elif req.status and req.status.code in ['accepted_by_master', 'in_progress'] %}table-row-master
+                {% elif req.status and req.status.code == 'completed' %}table-row-done
+                {% elif req.status and req.status.code == 'new' %}table-row-new
+                {% elif req.status and req.status.code == 'cancelled' %}table-row-cancelled
                 {% endif %}">
                 <td class="fw-semibold">
                     <span class="request-number {% if req.repeat_count and req.repeat_count > 0 %}request-number--repeat{% endif %}">

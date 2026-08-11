@@ -51,6 +51,7 @@
      data-reset-btn-id="objectFilterReset"></div>
 {% endblock %}
 
-{% block scripts %}
+{% block extra_js %}
+{{ super() }}
 <script src="{{ url_for('static', filename='js/list-filters.js') }}"></script>
 {% endblock %}
