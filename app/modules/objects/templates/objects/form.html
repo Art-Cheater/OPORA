@@ -4,7 +4,7 @@
 {% block title %}{% if mode == 'create' %}Новый объект{% else %}Редактирование{% endif %} — {{ app_name }}{% endblock %}
 
 {% block page_header %}
-{% call page_header(modal_title if modal_title is defined else ("Новый объект" if mode == 'create' else "Редактирование объекта"), "", "geo-alt") %}{% endcall %}
+{% call page_header("Новый объект" if mode == 'create' else "Редактирование объекта", "", "geo-alt") %}{% endcall %}
 {% endblock %}
 
 {% block content %}
@@ -13,10 +13,10 @@
         {{ form.hidden_tag() }}
         <div class="row g-3">
             <div class="col-12">
-                {{ form.name.label(class="form-label") }}
-                {{ form.name(class="form-control") }}
+                {{ form.work_type.label(class="form-label") }}
+                {{ form.work_type(class="form-control") }}
             </div>
-            <div class="col-md-8">
+            <div class="col-12">
                 {{ form.address.label(class="form-label") }}
                 {{ form.address(class="form-control") }}
             </div>
@@ -24,9 +24,37 @@
                 {{ form.plan_year.label(class="form-label") }}
                 {{ form.plan_year(class="form-control") }}
             </div>
-            <div class="col-md-6">
+            <div class="col-md-8">
+                {{ form.work_deadline.label(class="form-label") }}
+                {{ form.work_deadline(class="form-control") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.contract_number.label(class="form-label") }}
+                {{ form.contract_number(class="form-control") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.contract_date.label(class="form-label") }}
+                {{ form.contract_date(class="form-control") }}
+            </div>
+            <div class="col-md-4">
                 {{ form.status.label(class="form-label") }}
                 {{ form.status(class="form-select") }}
+            </div>
+            <div class="col-12">
+                {{ form.contractor_name.label(class="form-label") }}
+                {{ form.contractor_name(class="form-control") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.contract_amount.label(class="form-label") }}
+                {{ form.contract_amount(class="form-control") }}
+            </div>
+            <div class="col-md-6">
+                {{ form.budget_amount.label(class="form-label") }}
+                {{ form.budget_amount(class="form-control") }}
+            </div>
+            <div class="col-12">
+                {{ form.result_text.label(class="form-label") }}
+                {{ form.result_text(class="form-control") }}
             </div>
             <div class="col-12">
                 {{ form.notes.label(class="form-label") }}

@@ -39,6 +39,9 @@ class TenderPayload:
     status: str
     responsible_id: uuid.UUID | None
     project_ids: list[uuid.UUID]
+    object_id: uuid.UUID | None = None
+    work_deadline: str | None = None
+    published_at: date | None = None
 
 
 class TenderService:
@@ -52,7 +55,7 @@ class TenderService:
     @classmethod
     def _load_projects(cls, project_ids: list[uuid.UUID]) -> list[Project]:
         if not project_ids:
-            raise ValidationError("Выберите хотя бы один проект.")
+            return []
         projects = list(
             db.session.scalars(
                 db.select(Project).where(Project.id.in_(project_ids), Project.active_filter())
@@ -61,6 +64,25 @@ class TenderService:
         if len(projects) != len(set(project_ids)):
             raise ValidationError("Один или несколько проектов не найдены.")
         return projects
+
+    @classmethod
+    def _validate_tender_links(
+        cls,
+        *,
+        object_id: uuid.UUID | None,
+        projects: list[Project],
+        tender_id: uuid.UUID | None = None,
+    ) -> None:
+        if object_id is None and not projects:
+            raise ValidationError("Укажите объект и/или хотя бы один проект.")
+        if object_id is not None:
+            obj = db.session.scalar(
+                db.select(WorkObject).where(WorkObject.id == object_id, WorkObject.active_filter())
+            )
+            if obj is None:
+                raise ValidationError("Выбранный объект не найден.")
+        if projects:
+            cls._validate_projects_for_tender(projects, tender_id=tender_id)
 
     @classmethod
     def _validate_projects_for_tender(
@@ -173,7 +195,10 @@ class TenderService:
             raise ValidationError("Заявка на торги с таким номером уже есть.")
 
         projects = cls._load_projects(payload.project_ids)
-        cls._validate_projects_for_tender(projects)
+        cls._validate_tender_links(
+            object_id=payload.object_id,
+            projects=projects,
+        )
 
         tender = TenderApplication(
             number=payload.number.strip(),
@@ -181,6 +206,9 @@ class TenderService:
             description=cls._normalize(payload.description),
             status=payload.status or TenderApplicationStatus.DRAFT.value,
             responsible_id=payload.responsible_id,
+            object_id=payload.object_id,
+            work_deadline=cls._normalize(payload.work_deadline),
+            published_at=payload.published_at,
             created_by=user_id,
             updated_by=user_id,
         )
@@ -209,13 +237,20 @@ class TenderService:
             # состав меняем только в черновике/переданной; статус можно обновлять отдельно
             pass
         projects = cls._load_projects(payload.project_ids)
-        cls._validate_projects_for_tender(projects, tender_id=tender.id)
+        cls._validate_tender_links(
+            object_id=payload.object_id,
+            projects=projects,
+            tender_id=tender.id,
+        )
         tender.number = payload.number.strip()
         tender.title = payload.title.strip()
         tender.description = cls._normalize(payload.description)
         previous = tender.status
         tender.status = payload.status
         tender.responsible_id = payload.responsible_id
+        tender.object_id = payload.object_id
+        tender.work_deadline = cls._normalize(payload.work_deadline)
+        tender.published_at = payload.published_at
         tender.updated_by = user_id
         if previous in (
             TenderApplicationStatus.DRAFT.value,

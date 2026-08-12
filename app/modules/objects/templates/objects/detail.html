@@ -1,10 +1,10 @@
 {% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header %}
 
-{% block title %}{{ obj.name }} — {{ app_name }}{% endblock %}
+{% block title %}{{ obj.display_address }} — {{ app_name }}{% endblock %}
 
 {% block page_header %}
-{% call page_header(obj.name, status_labels.get(obj.status, obj.status), "geo-alt") %}
+{% call page_header(obj.display_address, status_labels.get(obj.status, obj.status), "geo-alt") %}
 {% if current_user.has_permission('objects.edit') %}
 <a href="{{ url_for('objects.edit', object_id=obj.id) }}" class="btn btn-outline-primary btn-sm">Редактировать</a>
 {% endif %}
@@ -15,19 +15,58 @@
 {% endblock %}
 
 {% block content %}
-<div class="card">
+<div class="card mb-4">
+    <div class="card-header">Карточка объекта</div>
     <div class="card-body row g-3">
         <div class="col-md-8">
             <small class="text-muted">Адрес</small>
-            <div class="fw-medium">{{ obj.address or "—" }}</div>
+            <div class="fw-medium">{{ obj.display_address }}</div>
         </div>
-        <div class="col-md-2">
+        <div class="col-md-4">
+            <small class="text-muted">Тип работ</small>
+            <div>{{ obj.work_type or "—" }}</div>
+        </div>
+        <div class="col-md-4">
+            <small class="text-muted">Срок выполнения работ</small>
+            <div>{{ obj.work_deadline or "—" }}</div>
+        </div>
+        <div class="col-md-4">
+            <small class="text-muted">Номер контракта</small>
+            <div>{{ obj.contract_number or "—" }}</div>
+        </div>
+        <div class="col-md-4">
+            <small class="text-muted">Дата заключения</small>
+            <div>
+                {% if obj.contract_date %}{{ obj.contract_date.strftime('%d.%m.%Y') }}{% else %}—{% endif %}
+            </div>
+        </div>
+        <div class="col-md-6">
+            <small class="text-muted">Подрядчик</small>
+            <div>{{ obj.contractor_name or "—" }}</div>
+        </div>
+        <div class="col-md-3">
+            <small class="text-muted">Сумма контракта</small>
+            <div>{% if obj.contract_amount is not none %}{{ obj.contract_amount }}{% else %}—{% endif %}</div>
+        </div>
+        <div class="col-md-3">
+            <small class="text-muted">Бюджет / НМЦК</small>
+            <div>{% if obj.budget_amount is not none %}{{ obj.budget_amount }}{% else %}—{% endif %}</div>
+        </div>
+        <div class="col-md-3">
             <small class="text-muted">Год плана</small>
             <div>{{ obj.plan_year or "—" }}</div>
         </div>
-        <div class="col-md-2">
+        <div class="col-md-3">
             <small class="text-muted">Статус</small>
             <div>{{ status_labels.get(obj.status, obj.status) }}</div>
+        </div>
+        <div class="col-md-6">
+            <small class="text-muted">Результат</small>
+            <div>{{ obj.result_text or "—" }}</div>
+        </div>
+        <div class="col-md-6">
+            <small class="text-muted">Лист источника</small>
+            <div>{{ obj.source_sheet or "—" }}</div>
         </div>
         <div class="col-12">
             <small class="text-muted">Примечание</small>

@@ -61,13 +61,16 @@ class TenderFilterForm(FlaskForm):
 class TenderForm(FlaskForm):
     number = StringField("Номер", validators=[DataRequired(), Length(max=50)])
     title = StringField("Название", validators=[DataRequired(), Length(max=500)])
+    object_id = SelectField("Объект", choices=[], validators=[Optional()], validate_choice=False)
+    work_deadline = StringField("Срок выполнения работ", validators=[Optional(), Length(max=500)])
+    published_at = DateField("Дата публикации заявки", validators=[Optional()], format="%Y-%m-%d")
     description = TextAreaField("Описание", validators=[Optional(), Length(max=10000)])
     status = SelectField("Статус", choices=TENDER_STATUS_CHOICES, validators=[DataRequired()])
     responsible_id = SelectField("Ответственный", choices=[], validators=[Optional()])
     project_ids = SelectMultipleField(
         "Проекты",
         choices=[],
-        validators=[DataRequired(message="Выберите хотя бы один проект")],
+        validators=[Optional()],
         validate_choice=False,
     )
     submit = SubmitField("Сохранить")

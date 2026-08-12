@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Index, String, Text, text
-from app.models.types import GUID, SearchVectorType
+from sqlalchemy import Date, ForeignKey, Index, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import ActiveRecordMixin, BaseModel
 from app.models.enums import TenderApplicationStatus
+from app.models.types import GUID, SearchVectorType
 
 if TYPE_CHECKING:
     from app.models.auth.user import User
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
     from app.models.projects.project import Project
     from app.models.tenders.tender_document import TenderDocument
     from app.models.tenders.tender_project import TenderProject
+    from app.models.work_objects.work_object import WorkObject
 
 
 class TenderApplication(ActiveRecordMixin, BaseModel):
@@ -34,6 +36,7 @@ class TenderApplication(ActiveRecordMixin, BaseModel):
         ),
         Index("ix_tender_applications_status", "status"),
         Index("ix_tender_applications_responsible_id", "responsible_id"),
+        Index("ix_tender_applications_object_id", "object_id"),
     )
 
     number: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -46,6 +49,14 @@ class TenderApplication(ActiveRecordMixin, BaseModel):
     )
     search_vector: Mapped[str | None] = mapped_column(SearchVectorType, nullable=True)
 
+    object_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(),
+        ForeignKey("work_objects.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    work_deadline: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    published_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+
     responsible_id: Mapped[uuid.UUID | None] = mapped_column(
         GUID(),
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -53,6 +64,10 @@ class TenderApplication(ActiveRecordMixin, BaseModel):
     )
 
     responsible: Mapped[User | None] = relationship("User", foreign_keys=[responsible_id])
+    work_object: Mapped[WorkObject | None] = relationship(
+        "WorkObject",
+        foreign_keys=[object_id],
+    )
     project_links: Mapped[list[TenderProject]] = relationship(
         "TenderProject",
         back_populates="tender",

@@ -4,8 +4,8 @@
         <thead>
             <tr>
                 <th>Номер</th>
-                <th>Название</th>
-                <th>Проекты</th>
+                <th>Объект</th>
+                <th>Срок выполнения</th>
                 <th>Статус</th>
                 <th class="text-end">Действия</th>
             </tr>
@@ -14,8 +14,14 @@
             {% for t in items %}
             <tr data-opora-id="{{ t.id }}">
                 <td class="fw-medium">{{ t.number }}</td>
-                <td>{{ t.title }}</td>
-                <td>{{ t.project_links|selectattr('deleted_at', 'none')|list|length }}</td>
+                <td>
+                    {% if t.work_object %}
+                        {{ t.work_object.display_address }}
+                    {% else %}
+                        {{ t.title }}
+                    {% endif %}
+                </td>
+                <td>{{ t.work_deadline or "—" }}</td>
                 <td><span class="badge text-bg-secondary">{{ status_labels.get(t.status, t.status) }}</span></td>
                 <td class="text-end">
                     {{ table_actions(

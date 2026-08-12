@@ -18,6 +18,33 @@
 <div class="row g-4">
     <div class="col-lg-7">
         <div class="card mb-4">
+            <div class="card-header">Основное</div>
+            <div class="card-body row g-3">
+                <div class="col-md-8">
+                    <small class="text-muted">Объект</small>
+                    <div class="fw-medium">
+                        {% if tender.work_object %}
+                        <a href="{{ url_for('objects.detail', object_id=tender.work_object.id) }}">{{ tender.work_object.display_address }}</a>
+                        {% else %}—{% endif %}
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <small class="text-muted">Срок выполнения</small>
+                    <div>{{ tender.work_deadline or "—" }}</div>
+                </div>
+                <div class="col-md-4">
+                    <small class="text-muted">Дата публикации заявки</small>
+                    <div>
+                        {% if tender.published_at %}{{ tender.published_at.strftime('%d.%m.%Y') }}{% else %}—{% endif %}
+                    </div>
+                </div>
+                <div class="col-12">
+                    <small class="text-muted">Описание</small>
+                    <div>{{ tender.description or "—" }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="card mb-4">
             <div class="card-header">Состав (проекты / объекты)</div>
             <ul class="list-group list-group-flush">
                 {% for link in tender.project_links if link.deleted_at is none %}
@@ -26,7 +53,7 @@
                         <a href="{{ url_for('projects.detail', project_id=link.project.id) }}">{{ link.project.code }}</a>
                         — {{ link.project.name }}
                         {% if link.project.work_object %}
-                        <div class="small text-muted">Объект: {{ link.project.work_object.name }}</div>
+                        <div class="small text-muted">Объект: {{ link.project.work_object.display_address }}</div>
                         {% endif %}
                     </div>
                 </li>

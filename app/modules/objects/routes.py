@@ -27,9 +27,18 @@ from app.modules.objects.services import ObjectPayload, ObjectService
 
 def _payload(form: ObjectForm) -> ObjectPayload:
     return ObjectPayload(
-        name=form.name.data or "",
+        name=form.address.data or "",
+        work_type=form.work_type.data,
         address=form.address.data,
         plan_year=form.plan_year.data,
+        work_deadline=form.work_deadline.data,
+        contract_number=form.contract_number.data,
+        contract_date=form.contract_date.data,
+        contractor_name=form.contractor_name.data,
+        contract_amount=form.contract_amount.data,
+        budget_amount=form.budget_amount.data,
+        result_text=form.result_text.data,
+        source_sheet=None,
         notes=form.notes.data,
         status=form.status.data or "free",
     )
@@ -105,6 +114,7 @@ def create():
     form = ObjectForm()
     if request.method == "GET":
         form.status.data = "free"
+        form.work_type.data = "Устройство наружного освещения"
     if form.validate_on_submit():
         try:
             obj = ObjectService.create(_payload(form), current_user.id)
@@ -168,6 +178,16 @@ def import_plan():
     return redirect(url_for("objects.index"))
 
 
+@objects_bp.route("/wipe", methods=["POST"])
+@login_required
+@permission_required(PERM_OBJECTS_DELETE)
+def wipe():
+    """Мягко удалить все объекты — перед повторным импортом из Excel."""
+    count = ObjectService.wipe_all(current_user.id)
+    flash(f"Удалено объектов: {count}. Можно заново импортировать файл.", "success")
+    return redirect(url_for("objects.index"))
+
+
 @objects_bp.route("/<uuid:object_id>")
 @login_required
 @permission_required(PERM_OBJECTS_VIEW)
@@ -193,9 +213,16 @@ def edit(object_id: uuid.UUID):
         return redirect(url_for("objects.index"))
     form = ObjectForm(obj=obj)
     if request.method == "GET":
-        form.name.data = obj.name
-        form.address.data = obj.address
+        form.work_type.data = obj.work_type or "Устройство наружного освещения"
+        form.address.data = obj.address or obj.name
         form.plan_year.data = obj.plan_year
+        form.work_deadline.data = obj.work_deadline
+        form.contract_number.data = obj.contract_number
+        form.contract_date.data = obj.contract_date
+        form.contractor_name.data = obj.contractor_name
+        form.contract_amount.data = obj.contract_amount
+        form.budget_amount.data = obj.budget_amount
+        form.result_text.data = obj.result_text
         form.notes.data = obj.notes
         form.status.data = obj.status
     if form.validate_on_submit():

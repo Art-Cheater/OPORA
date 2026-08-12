@@ -49,6 +49,7 @@ class TenderRepository:
                 ),
                 selectinload(TenderApplication.documents),
                 joinedload(TenderApplication.responsible),
+                joinedload(TenderApplication.work_object),
             )
         )
 
@@ -118,6 +119,7 @@ class TenderRepository:
             .options(
                 selectinload(TenderApplication.project_links).joinedload(TenderProject.project),
                 joinedload(TenderApplication.responsible),
+                joinedload(TenderApplication.work_object),
             )
         )
         if filters.q:

@@ -25,8 +25,10 @@ class ObjectRepository:
         "created_at": WorkObject.created_at,
         "updated_at": WorkObject.updated_at,
         "name": WorkObject.name,
+        "address": WorkObject.address,
         "status": WorkObject.status,
         "plan_year": WorkObject.plan_year,
+        "contractor_name": WorkObject.contractor_name,
     }
 
     @staticmethod
@@ -41,6 +43,16 @@ class ObjectRepository:
         )
 
     @staticmethod
+    def list_all() -> list[WorkObject]:
+        return list(
+            db.session.scalars(
+                db.select(WorkObject)
+                .where(WorkObject.active_filter())
+                .order_by(WorkObject.address.asc().nulls_last(), WorkObject.name.asc())
+            )
+        )
+
+    @staticmethod
     def list_free_or_current(current_id: uuid.UUID | None = None) -> list[WorkObject]:
         from app.models.enums import WorkObjectStatus
 
@@ -51,7 +63,11 @@ class ObjectRepository:
             )
         else:
             stmt = stmt.where(WorkObject.status == WorkObjectStatus.FREE.value)
-        return list(db.session.scalars(stmt.order_by(WorkObject.name.asc())))
+        return list(
+            db.session.scalars(
+                stmt.order_by(WorkObject.address.asc().nulls_last(), WorkObject.name.asc())
+            )
+        )
 
     @classmethod
     def paginated_list(cls, filters: ObjectFilter, page: int = 1, per_page: int = 20):
@@ -62,6 +78,8 @@ class ObjectRepository:
                 or_(
                     WorkObject.name.ilike(q),
                     WorkObject.address.ilike(q),
+                    WorkObject.contractor_name.ilike(q),
+                    WorkObject.contract_number.ilike(q),
                     WorkObject.notes.ilike(q),
                 )
             )

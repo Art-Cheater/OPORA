@@ -331,6 +331,21 @@ def _register_cli_commands(app: Flask) -> None:
             f"пропущено {result.skipped}, строк в файле {result.total}."
         )
 
+    @app.cli.command("wipe-work-objects")
+    def wipe_work_objects():
+        """Мягко удалить все объекты (перед повторным импортом)."""
+        from app.models.auth.user import User
+        from app.modules.objects.services import ObjectService
+
+        user = db.session.scalar(
+            db.select(User).where(User.active_filter()).order_by(User.created_at.asc()).limit(1)
+        )
+        if user is None:
+            click.echo("Нет пользователей в БД.")
+            return
+        count = ObjectService.wipe_all(user.id)
+        click.echo(f"Удалено объектов: {count}")
+
     @app.cli.command("init-db")
     def init_db():
         """Создаёт схему (SQLite: create_all) и заполняет справочники + админа."""

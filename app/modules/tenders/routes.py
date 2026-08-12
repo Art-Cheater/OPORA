@@ -54,6 +54,12 @@ def _prepare_form(form: TenderForm, extra_project_ids: list[uuid.UUID] | None = 
     form.responsible_id.choices = [("", "Не назначен")] + [
         (str(u.id), u.full_name) for u in users
     ]
+    from app.modules.objects.repositories import ObjectRepository
+
+    objects = ObjectRepository.list_all()
+    form.object_id.choices = [("", "Не выбран")] + [
+        (str(o.id), o.display_address[:120]) for o in objects
+    ]
     projects = TenderRepository.selectable_projects(extra_project_ids)
     form.project_ids.choices = [
         (
@@ -72,6 +78,9 @@ def _payload(form: TenderForm) -> TenderPayload:
         status=form.status.data or TenderApplicationStatus.DRAFT.value,
         responsible_id=_uuid_or_none(form.responsible_id.data or ""),
         project_ids=_uuid_list(form.project_ids.data or []),
+        object_id=_uuid_or_none(form.object_id.data or ""),
+        work_deadline=form.work_deadline.data,
+        published_at=form.published_at.data,
     )
 
 
@@ -216,6 +225,9 @@ def edit(tender_id: uuid.UUID):
         form.status.data = tender.status
         form.responsible_id.data = str(tender.responsible_id) if tender.responsible_id else ""
         form.project_ids.data = [str(i) for i in current_ids]
+        form.object_id.data = str(tender.object_id) if tender.object_id else ""
+        form.work_deadline.data = tender.work_deadline
+        form.published_at.data = tender.published_at
     if form.validate_on_submit():
         try:
             TenderService.update(tender, _payload(form), current_user.id)

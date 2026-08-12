@@ -11,6 +11,19 @@
             {{ form.title.label(class="form-label") }}
             {{ form.title(class="form-control") }}
         </div>
+        <div class="col-12">
+            {{ form.object_id.label(class="form-label") }}
+            {{ form.object_id(class="form-select") }}
+        </div>
+        <div class="col-md-6">
+            {{ form.work_deadline.label(class="form-label") }}
+            {{ form.work_deadline(class="form-control", placeholder="например 31.12.2026") }}
+        </div>
+        <div class="col-md-6">
+            {{ form.published_at.label(class="form-label") }}
+            {{ form.published_at(class="form-control") }}
+            <div class="form-text">Информационное поле, в таблице не показывается.</div>
+        </div>
         <div class="col-md-6">
             {{ form.status.label(class="form-label") }}
             {{ form.status(class="form-select") }}
@@ -22,7 +35,7 @@
         <div class="col-12">
             {{ form.project_ids.label(class="form-label") }}
             {{ form.project_ids(class="form-select", size=8) }}
-            <div class="form-text">Можно выбрать несколько проектов (Ctrl/Shift).</div>
+            <div class="form-text">Необязательно, если выбран объект. Можно выбрать несколько (Ctrl/Shift).</div>
         </div>
         <div class="col-12">
             {{ form.description.label(class="form-label") }}

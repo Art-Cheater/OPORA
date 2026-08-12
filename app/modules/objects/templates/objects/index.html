@@ -49,12 +49,22 @@
             <div class="col-lg-8">
                 <label class="form-label">{{ import_form.file.label.text }}</label>
                 {{ import_form.file(class="form-control") }}
-                <div class="form-text">Excel «План работ освещение …» — вытаскиваются наименования со всех листов.</div>
+                <div class="form-text">
+                    Из «Наименование объектов» берётся тип («Устройство наружного освещения») и адрес отдельно;
+                    также подтягиваются срок, контракт, подрядчик.
+                </div>
             </div>
             <div class="col-lg-4">
                 {{ import_form.submit(class="btn btn-outline-primary w-100") }}
             </div>
         </form>
+        {% if current_user.has_permission('objects.delete') %}
+        <form method="POST" action="{{ url_for('objects.wipe') }}" class="mt-3"
+              onsubmit="return confirm('Удалить ВСЕ объекты? Это нужно перед повторным импортом.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-danger btn-sm">Очистить все объекты</button>
+        </form>
+        {% endif %}
     </div>
 </div>
 {% endif %}

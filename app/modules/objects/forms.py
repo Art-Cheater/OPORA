@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, FileField, FileRequired
-from wtforms import IntegerField, SelectField, StringField, SubmitField, TextAreaField
+from wtforms import (
+    DateField,
+    DecimalField,
+    IntegerField,
+    SelectField,
+    StringField,
+    SubmitField,
+    TextAreaField,
+)
 from wtforms.validators import DataRequired, Length, NumberRange, Optional
 
 from app.models.enums import WorkObjectStatus
@@ -33,10 +41,10 @@ class ObjectFilterForm(FlaskForm):
         "Сортировка",
         choices=[
             ("created_at", "По дате создания"),
-            ("updated_at", "По дате обновления"),
-            ("name", "По названию"),
-            ("status", "По статусу"),
+            ("address", "По адресу"),
             ("plan_year", "По году"),
+            ("contractor_name", "По подрядчику"),
+            ("status", "По статусу"),
         ],
         default="created_at",
     )
@@ -48,9 +56,20 @@ class ObjectFilterForm(FlaskForm):
 
 
 class ObjectForm(FlaskForm):
-    name = StringField("Наименование", validators=[DataRequired(), Length(max=500)])
-    address = StringField("Адрес", validators=[Optional(), Length(max=500)])
+    work_type = StringField(
+        "Тип работ",
+        validators=[Optional(), Length(max=255)],
+        default="Устройство наружного освещения",
+    )
+    address = StringField("Адрес", validators=[DataRequired(), Length(max=1000)])
     plan_year = IntegerField("Год плана", validators=[Optional(), NumberRange(min=2000, max=2100)])
+    work_deadline = StringField("Срок выполнения работ", validators=[Optional(), Length(max=500)])
+    contract_number = StringField("Номер контракта", validators=[Optional(), Length(max=100)])
+    contract_date = DateField("Дата заключения", validators=[Optional()], format="%Y-%m-%d")
+    contractor_name = StringField("Подрядчик", validators=[Optional(), Length(max=500)])
+    contract_amount = DecimalField("Сумма контракта", places=2, validators=[Optional()])
+    budget_amount = DecimalField("Бюджет / НМЦК", places=2, validators=[Optional()])
+    result_text = StringField("Результат", validators=[Optional(), Length(max=500)])
     notes = TextAreaField("Примечание", validators=[Optional(), Length(max=10000)])
     status = SelectField("Статус", choices=OBJECT_STATUS_CHOICES, validators=[DataRequired()])
     submit = SubmitField("Сохранить")

@@ -3,20 +3,33 @@
     <table class="table table-opora">
         <thead>
             <tr>
-                <th>Наименование</th>
                 <th>Адрес</th>
-                <th>Год</th>
-                <th>Статус</th>
+                <th>Срок выполнения работ</th>
+                <th>Номер контракта</th>
+                <th>Дата заключения</th>
+                <th>Подрядчик</th>
                 <th class="text-end">Действия</th>
             </tr>
         </thead>
         <tbody>
             {% for obj in items %}
             <tr data-opora-id="{{ obj.id }}">
-                <td class="fw-medium">{{ obj.name }}</td>
-                <td>{{ obj.address or "—" }}</td>
-                <td>{{ obj.plan_year or "—" }}</td>
-                <td><span class="badge text-bg-secondary">{{ status_labels.get(obj.status, obj.status) }}</span></td>
+                <td>
+                    <div class="fw-medium">{{ obj.display_address }}</div>
+                    {% if obj.plan_year %}
+                    <div class="small text-muted">{{ obj.plan_year }}{% if obj.source_sheet %} · {{ obj.source_sheet }}{% endif %}</div>
+                    {% endif %}
+                </td>
+                <td>{{ obj.work_deadline or "—" }}</td>
+                <td>{{ obj.contract_number or "—" }}</td>
+                <td>
+                    {% if obj.contract_date %}
+                        {{ obj.contract_date.strftime('%d.%m.%Y') }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td>{{ obj.contractor_name or "—" }}</td>
                 <td class="text-end">
                     {{ table_actions(
                         view_url=url_for('objects.detail', object_id=obj.id),
@@ -29,7 +42,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="5" class="table-empty">
+                <td colspan="6" class="table-empty">
                     <i class="bi bi-inbox"></i> Объектов пока нет
                 </td>
             </tr>
