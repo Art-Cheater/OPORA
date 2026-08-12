@@ -21,19 +21,10 @@ def register_audit_hooks(app: Flask) -> None:
             return response
         if request.endpoint is None or request.endpoint in SKIP_AUTO_AUDIT_ENDPOINTS:
             return response
-        if request.method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
+        # GET не пишем: лишний COMMIT на каждый просмотр карточки сильно тормозит навигацию.
+        # Явные действия модулей пишут аудит сами через AuditService.log(...).
+        if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
             return response
-
-        if request.method == "GET":
-            endpoint = request.endpoint or ""
-            # Не пишем аудит на каждый клик по спискам/API — это тормозит навигацию
-            if (
-                endpoint.endswith(".table")
-                or endpoint.endswith(".index")
-                or ".api" in endpoint
-                or endpoint.endswith("_count")
-            ):
-                return response
 
         try:
             AuditService.log_http_action(current_user.id, request.endpoint, request.method)

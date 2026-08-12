@@ -7,6 +7,7 @@ window.OporaList = (() => {
   let config = {};
   let currentPage = 1;
   let debounceTimer = null;
+  let tableAbort = null;
   let pendingDeleteId = null;
   let pendingDeleteUrl = null;
   let pendingDeleteMessage = null;
@@ -57,16 +58,27 @@ window.OporaList = (() => {
     const paginationContainer = document.getElementById(config.paginationContainerId);
     if (!tableContainer) return;
 
+    // Отменяем предыдущий запрос фильтра — иначе при быстром вводе копятся медленные ответы
+    if (tableAbort) tableAbort.abort();
+    tableAbort = new AbortController();
+
     const url = `${config.baseUrl}/table?${queryParams().toString()}`;
-    const response = await fetch(url, { headers: AJAX_HEADERS });
-    if (!response.ok) return;
-    const data = await response.json();
-    tableContainer.innerHTML = data.table_html;
-    if (paginationContainer) {
-      paginationContainer.innerHTML = data.pagination_html;
+    try {
+      const response = await fetch(url, {
+        headers: AJAX_HEADERS,
+        signal: tableAbort.signal,
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      tableContainer.innerHTML = data.table_html;
+      if (paginationContainer) {
+        paginationContainer.innerHTML = data.pagination_html;
+      }
+      bindTableEvents();
+      bindPagination();
+    } catch (err) {
+      if (err?.name === "AbortError") return;
     }
-    bindTableEvents();
-    bindPagination();
   }
 
   function bindPagination() {

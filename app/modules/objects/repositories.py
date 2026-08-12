@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass
 
 from sqlalchemy import or_
+from sqlalchemy.orm import load_only
 
 from app.extensions import db
 from app.models.work_objects.work_object import WorkObject
@@ -53,10 +54,26 @@ class ObjectRepository:
         )
 
     @staticmethod
+    def list_choices() -> list[WorkObject]:
+        """Лёгкий список для select: только id/address/name."""
+        return list(
+            db.session.scalars(
+                db.select(WorkObject)
+                .options(load_only(WorkObject.id, WorkObject.address, WorkObject.name))
+                .where(WorkObject.active_filter())
+                .order_by(WorkObject.address.asc().nulls_last(), WorkObject.name.asc())
+            )
+        )
+
+    @staticmethod
     def list_free_or_current(current_id: uuid.UUID | None = None) -> list[WorkObject]:
         from app.models.enums import WorkObjectStatus
 
-        stmt = db.select(WorkObject).where(WorkObject.active_filter())
+        stmt = (
+            db.select(WorkObject)
+            .options(load_only(WorkObject.id, WorkObject.address, WorkObject.name, WorkObject.status))
+            .where(WorkObject.active_filter())
+        )
         if current_id is not None:
             stmt = stmt.where(
                 (WorkObject.status == WorkObjectStatus.FREE.value) | (WorkObject.id == current_id)

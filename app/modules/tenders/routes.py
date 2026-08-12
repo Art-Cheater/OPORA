@@ -56,7 +56,7 @@ def _prepare_form(form: TenderForm, extra_project_ids: list[uuid.UUID] | None = 
     ]
     from app.modules.objects.repositories import ObjectRepository
 
-    objects = ObjectRepository.list_all()
+    objects = ObjectRepository.list_choices()
     form.object_id.choices = [("", "Не выбран")] + [
         (str(o.id), o.display_address[:120]) for o in objects
     ]

@@ -81,6 +81,8 @@ def _engine_options(database_url: str) -> dict:
     options: dict = {
         "pool_pre_ping": True,
         "pool_recycle": 300,
+        "pool_size": int(os.getenv("DB_POOL_SIZE", "8")),
+        "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "16")),
     }
     if schema and schema != "public":
         # Таблицы создаются в схеме, которой владеет приложение
@@ -126,7 +128,8 @@ class Config:
     MESSENGER_ONLINE_TIMEOUT = int(os.getenv("MESSENGER_ONLINE_TIMEOUT", "120"))
     MESSENGER_POLL_INTERVAL_MS = int(os.getenv("MESSENGER_POLL_INTERVAL_MS", "8000"))
     # Короткий poll вместо SSE: не держит воркеры gunicorn
-    MESSENGER_UNREAD_INTERVAL_MS = int(os.getenv("MESSENGER_UNREAD_INTERVAL_MS", "15000"))
+    # Реже опрос непрочитанных — меньше нагрузка на воркеры при открытых вкладках
+    MESSENGER_UNREAD_INTERVAL_MS = int(os.getenv("MESSENGER_UNREAD_INTERVAL_MS", "45000"))
 
 
 class DevelopmentConfig(Config):
