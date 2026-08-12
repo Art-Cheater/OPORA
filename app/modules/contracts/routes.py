@@ -93,15 +93,35 @@ def _prepare_contract_form(form: ContractForm) -> None:
 def _apply_contract_create_defaults(form: ContractForm) -> None:
     from datetime import date
 
+    from app.modules.objects.repositories import ObjectRepository
+
     if request.method != "GET":
         return
     form.number.data = ContractRepository.next_number()
     form.title.data = "Новый контракт"
     form.description.data = "Описание контракта"
-    form.contract_type.data = ContractType.SUPPLY.value
+    form.contract_type.data = ContractType.WORK.value
     form.status.data = ContractStatus.DRAFT.value
     form.contract_date.data = date.today()
     form.responsible_id.data = str(current_user.id)
+
+    object_id = request.args.get("object_id", "")
+    if not object_id:
+        return
+    obj = ObjectRepository.get_by_id(object_id)
+    if obj is None:
+        return
+    if obj.contract_number:
+        form.number.data = obj.contract_number[:100]
+    form.title.data = f"Контракт — {obj.display_address}"[:500]
+    if obj.contractor_name and hasattr(form, "contractor_name"):
+        form.contractor_name.data = obj.contractor_name
+    if obj.contract_amount is not None and hasattr(form, "amount"):
+        form.amount.data = obj.contract_amount
+    if obj.contract_date:
+        form.contract_date.data = obj.contract_date
+    if obj.result_text:
+        form.description.data = obj.result_text[:5000]
 
 
 @contracts_bp.route("/")
@@ -260,7 +280,10 @@ def create():
     if form.validate_on_submit():
         try:
             payload = _contract_payload_from_form(form)
-            created = ContractService.create_contract(payload, current_user.id)
+            object_id = _uuid_or_none(request.args.get("object_id", "") or request.form.get("object_id", ""))
+            created = ContractService.create_contract(
+                payload, current_user.id, object_id=object_id
+            )
             save_custom_fields(_CF, created.id, request.form, current_user)
             if is_ajax():
                 return ajax_ok("Контракт успешно создан.", id=str(created.id))

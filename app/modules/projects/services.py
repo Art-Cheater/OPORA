@@ -104,11 +104,13 @@ class ProjectService:
             raise ValidationError("У этого объекта уже есть активный проект.")
 
         if project is None or project.object_id != payload.object_id:
-            if work_object.status not in (
-                WorkObjectStatus.FREE.value,
-                WorkObjectStatus.IN_PROJECT.value,
+            # Статус «в контракте» из плана освещения — справочный; блокируем только торги/завершённые
+            if work_object.status in (
+                WorkObjectStatus.IN_TENDER.value,
+                WorkObjectStatus.COMPLETED.value,
+                WorkObjectStatus.ARCHIVED.value,
             ):
-                raise ValidationError("Объект занят (на торгах, в контракте или завершён).")
+                raise ValidationError("Объект занят (на торгах, завершён или в архиве).")
 
     @staticmethod
     def _snapshot(project: Project) -> dict[str, Any]:

@@ -115,17 +115,34 @@ def _prepare_project_form(form: ProjectForm, project=None) -> None:
     user_choices = [("", "Не назначен")] + [(str(item.id), item.full_name) for item in users]
     form.responsible_id.choices = user_choices
     form.executor_ids.choices = [(str(item.id), item.full_name) for item in users]
+
     current_object_id = project.object_id if project else None
-    objects = ObjectRepository.list_free_or_current(current_object_id)
-    form.object_id.choices = [("", "Выберите объект")] + [
-        (str(obj.id), obj.name + (f" — {obj.address}" if obj.address else ""))
-        for obj in objects
-    ]
+    if current_object_id is None:
+        raw = request.args.get("object_id") or (form.object_id.data if form.object_id.data else "")
+        current_object_id = _uuid_or_none(str(raw) if raw else "")
+
+    # С объектом из URL — не грузим весь справочник свободных (быстрее открытие формы)
+    if project is None and current_object_id is not None and request.args.get("object_id"):
+        obj = ObjectRepository.get_by_id(current_object_id)
+        if obj is not None:
+            form.object_id.choices = [
+                (str(obj.id), ObjectRepository.label_for_select(obj)),
+            ]
+        else:
+            form.object_id.choices = [("", "Объект не найден")]
+    else:
+        objects = ObjectRepository.list_free_or_current(current_object_id)
+        form.object_id.choices = [("", "Выберите объект")] + [
+            (str(obj.id), ObjectRepository.label_for_select(obj)) for obj in objects
+        ]
     BuiltinFieldService.apply_to_form(form, "projects")
 
 
 def _apply_project_create_defaults(form: ProjectForm) -> None:
     from datetime import date, timedelta
+
+    from app.modules.objects.repositories import ObjectRepository
+    from app.modules.objects.services import ObjectService
 
     if request.method != "GET":
         return
@@ -137,9 +154,23 @@ def _apply_project_create_defaults(form: ProjectForm) -> None:
     form.start_date.data = date.today()
     form.end_date.data = date.today() + timedelta(days=90)
     form.responsible_id.data = str(current_user.id)
+
     object_id = request.args.get("object_id", "")
     if object_id:
         form.object_id.data = object_id
+        obj = ObjectRepository.get_by_id(object_id)
+        if obj is not None:
+            form.name.data = (obj.display_address or obj.name or "Новый проект")[:500]
+            if obj.result_text:
+                form.description.data = obj.result_text[:5000]
+            suggested = ObjectService.suggested_project_status(obj.result_text)
+            status_arg = request.args.get("status", "")
+            if status_arg in {ProjectStatus.DRAFT.value, ProjectStatus.ACTIVE.value}:
+                form.status.data = status_arg
+            elif suggested:
+                form.status.data = suggested
+            if form.status.data == ProjectStatus.ACTIVE.value:
+                form.progress_percent.data = 10
 
 
 @projects_bp.route("/")

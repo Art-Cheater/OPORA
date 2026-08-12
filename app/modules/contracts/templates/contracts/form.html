@@ -15,6 +15,9 @@
 <form method="POST" class="card">
     <div class="card-body">
         {{ form.hidden_tag() }}
+        {% if request.args.get('object_id') %}
+        <input type="hidden" name="object_id" value="{{ request.args.get('object_id') }}">
+        {% endif %}
         <div class="row g-3">
             <div class="col-md-3">
                 {{ form.contract_type.label(class="form-label") }}

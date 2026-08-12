@@ -17,6 +17,16 @@ from app.models.work_objects.work_object import WorkObject
 
 WORK_TYPE_DEFAULT = "Устройство наружного освещения"
 
+# Результат из плана → предлагаемый статус проекта
+_RESULT_DRAFT_RE = re.compile(
+    r"обследование\s+проведено.*тз\s+подготовлено|локально.?сметн",
+    re.IGNORECASE,
+)
+_RESULT_ACTIVE_RE = re.compile(
+    r"подготовка\s+рабочей\s+документации|ид[её]т\s+подготовка\s+рабочей",
+    re.IGNORECASE,
+)
+
 # Строки-мусор внизу листов Excel (подписи, «План/Остаток» и т.п.)
 _JUNK_NAME_RE = re.compile(
     r"^(план|остаток|куратор|начальник|и\.?\s*о\.?|туров|телефон|\d[\d\-\s]{5,})$",
@@ -51,6 +61,28 @@ class ImportResult:
 
 
 class ObjectService:
+    @staticmethod
+    def suggested_project_status(result_text: str | None) -> str | None:
+        """
+        По колонке «Результат» из плана:
+        - ТЗ/сметный расчёт готов → черновик проекта
+        - идёт подготовка рабочей документации → проект «В работе»
+        """
+        from app.models.enums import ProjectStatus
+
+        text = (result_text or "").strip()
+        if not text:
+            return None
+        if _RESULT_ACTIVE_RE.search(text):
+            return ProjectStatus.ACTIVE.value
+        if _RESULT_DRAFT_RE.search(text):
+            return ProjectStatus.DRAFT.value
+        return None
+
+    @staticmethod
+    def can_create_contract_from_plan(obj: WorkObject) -> bool:
+        return bool((obj.contract_number or "").strip())
+
     @staticmethod
     def _normalize(value: str | None) -> str | None:
         if value is None:
@@ -297,14 +329,13 @@ class ObjectService:
                     notes = cls._as_text(row[cols["notes"]])
 
                 status = WorkObjectStatus.FREE.value
+                # Номер контракта в плане — справочное поле, не блокирует создание проекта в Опоре
                 if result_text and re.search(r"выполнен|принят", result_text, re.IGNORECASE):
                     status = WorkObjectStatus.COMPLETED.value
-                elif contract_number:
-                    status = WorkObjectStatus.IN_CONTRACT.value
 
                 rows.append(
                     {
-                        "name": address[:1000],
+                        "name": name[:1000],
                         "work_type": work_type,
                         "address": address[:1000],
                         "plan_year": plan_year,
@@ -438,12 +469,24 @@ class ObjectService:
         return len(items)
 
     @classmethod
+    def _compose_full_name(cls, work_type: str | None, address: str) -> str:
+        """Собрать полное наименование, если его не задали вручную."""
+        wt = cls._normalize(work_type) or WORK_TYPE_DEFAULT
+        addr = address.strip()
+        if not addr:
+            return wt[:1000]
+        if addr.casefold().startswith(wt.casefold()):
+            return addr[:1000]
+        return f"{wt} {addr}"[:1000]
+
+    @classmethod
     def create(cls, payload: ObjectPayload, user_id: uuid.UUID) -> WorkObject:
-        address = cls._normalize(payload.address) or payload.name.strip()
+        address = cls._normalize(payload.address) or cls._normalize(payload.name) or ""
         if not address:
             raise ValidationError("Адрес объекта обязателен.")
+        full_name = cls._normalize(payload.name) or cls._compose_full_name(payload.work_type, address)
         obj = WorkObject(
-            name=address[:1000],
+            name=full_name[:1000],
             work_type=cls._normalize(payload.work_type) or WORK_TYPE_DEFAULT,
             address=address[:1000],
             plan_year=payload.plan_year,
@@ -475,11 +518,12 @@ class ObjectService:
 
     @classmethod
     def update(cls, obj: WorkObject, payload: ObjectPayload, user_id: uuid.UUID) -> WorkObject:
-        address = cls._normalize(payload.address) or payload.name.strip()
+        address = cls._normalize(payload.address) or cls._normalize(payload.name) or ""
         if not address:
             raise ValidationError("Адрес объекта обязателен.")
+        full_name = cls._normalize(payload.name) or cls._compose_full_name(payload.work_type, address)
         old = {"address": obj.address, "status": obj.status, "contract_number": obj.contract_number}
-        obj.name = address[:1000]
+        obj.name = full_name[:1000]
         obj.work_type = cls._normalize(payload.work_type) or WORK_TYPE_DEFAULT
         obj.address = address[:1000]
         obj.plan_year = payload.plan_year

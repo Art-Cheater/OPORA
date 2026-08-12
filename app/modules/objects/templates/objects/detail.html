@@ -8,8 +8,18 @@
 {% if current_user.has_permission('objects.edit') %}
 <a href="{{ url_for('objects.edit', object_id=obj.id) }}" class="btn btn-outline-primary btn-sm">Редактировать</a>
 {% endif %}
-{% if current_user.has_permission('projects.create') %}
-<a href="{{ url_for('projects.create', object_id=obj.id) }}" class="btn btn-primary btn-sm">Создать проект</a>
+{% if current_user.has_permission('projects.create') and can_create_project %}
+<a href="{{ url_for('projects.create', object_id=obj.id, status=suggested_project_status or 'draft') }}"
+   class="btn btn-primary btn-sm">
+    {% if suggested_project_status == 'active' %}
+    Создать проект (в работе)
+    {% else %}
+    Создать проект{% if suggested_project_status == 'draft' %} (черновик){% endif %}
+    {% endif %}
+</a>
+{% endif %}
+{% if current_user.has_permission('contracts.create') and can_create_contract %}
+<a href="{{ url_for('contracts.create', object_id=obj.id) }}" class="btn btn-outline-secondary btn-sm">Создать контракт</a>
 {% endif %}
 {% endcall %}
 {% endblock %}
@@ -25,6 +35,10 @@
         <div class="col-md-4">
             <small class="text-muted">Тип работ</small>
             <div>{{ obj.work_type or "—" }}</div>
+        </div>
+        <div class="col-12">
+            <small class="text-muted">Полное наименование</small>
+            <div>{{ obj.name or "—" }}</div>
         </div>
         <div class="col-md-4">
             <small class="text-muted">Срок выполнения работ</small>

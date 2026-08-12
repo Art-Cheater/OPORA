@@ -27,7 +27,7 @@ from app.modules.objects.services import ObjectPayload, ObjectService
 
 def _payload(form: ObjectForm) -> ObjectPayload:
     return ObjectPayload(
-        name=form.address.data or "",
+        name=form.full_name.data or "",
         work_type=form.work_type.data,
         address=form.address.data,
         plan_year=form.plan_year.data,
@@ -192,15 +192,48 @@ def wipe():
 @login_required
 @permission_required(PERM_OBJECTS_VIEW)
 def detail(object_id: uuid.UUID):
+    from app.extensions import db
+    from app.models.enums import ProjectStatus
+    from app.models.projects.project import Project
+
     obj = ObjectRepository.get_by_id(object_id)
     if obj is None:
         flash("Объект не найден.", "danger")
         return redirect(url_for("objects.index"))
-    return render_template(
-        "objects/detail.html",
-        obj=obj,
-        status_labels=OBJECT_STATUS_LABELS,
+
+    has_active_project = (
+        db.session.scalar(
+            db.select(Project.id).where(
+                Project.object_id == obj.id,
+                Project.active_filter(),
+                Project.status.notin_(
+                    [
+                        ProjectStatus.COMPLETED.value,
+                        ProjectStatus.CANCELLED.value,
+                        ProjectStatus.ARCHIVED.value,
+                    ]
+                ),
+            ).limit(1)
+        )
+        is not None
     )
+    suggested = ObjectService.suggested_project_status(obj.result_text)
+    can_create_project = (not has_active_project) and obj.status not in (
+        "in_tender",
+        "completed",
+        "archived",
+    )
+    can_create_contract = ObjectService.can_create_contract_from_plan(obj)
+    ctx = {
+        "obj": obj,
+        "status_labels": OBJECT_STATUS_LABELS,
+        "suggested_project_status": suggested,
+        "can_create_project": can_create_project,
+        "can_create_contract": can_create_contract,
+    }
+    if is_ajax() and not request.args.get("full"):
+        return render_template("objects/partials/detail_modal.html", **ctx)
+    return render_template("objects/detail.html", **ctx)
 
 
 @objects_bp.route("/<uuid:object_id>/edit", methods=["GET", "POST"])
@@ -215,6 +248,7 @@ def edit(object_id: uuid.UUID):
     if request.method == "GET":
         form.work_type.data = obj.work_type or "Устройство наружного освещения"
         form.address.data = obj.address or obj.name
+        form.full_name.data = obj.name
         form.plan_year.data = obj.plan_year
         form.work_deadline.data = obj.work_deadline
         form.contract_number.data = obj.contract_number

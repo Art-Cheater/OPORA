@@ -28,7 +28,8 @@ class WorkObject(ActiveRecordMixin, BaseModel):
         Index("ix_work_objects_contract_number", "contract_number"),
     )
 
-    # name — отображаемое (обычно адрес); work_type — «Устройство наружного освещения»
+    # name — полное наименование из плана (тип + адрес);
+    # work_type — «Устройство наружного освещения»; address — только адрес
     name: Mapped[str] = mapped_column(String(1000), nullable=False)
     work_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     address: Mapped[str | None] = mapped_column(String(1000), nullable=True)

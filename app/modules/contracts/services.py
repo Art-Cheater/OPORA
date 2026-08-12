@@ -181,7 +181,13 @@ class ContractService:
         )
 
     @classmethod
-    def create_contract(cls, payload: ContractPayload, user_id: uuid.UUID) -> Contract:
+    def create_contract(
+        cls,
+        payload: ContractPayload,
+        user_id: uuid.UUID,
+        *,
+        object_id: uuid.UUID | None = None,
+    ) -> Contract:
         cls.validate_payload(payload)
         exists = db.session.scalar(
             db.select(Contract).where(
@@ -191,6 +197,14 @@ class ContractService:
         )
         if exists is not None:
             raise ValidationError("Контракт с таким номером уже существует.")
+
+        work_object = None
+        if object_id is not None:
+            work_object = db.session.scalar(
+                db.select(WorkObject).where(WorkObject.id == object_id, WorkObject.active_filter())
+            )
+            if work_object is None:
+                raise ValidationError("Объект не найден.")
 
         contract = Contract(
             contract_type=payload.contract_type,
@@ -208,6 +222,18 @@ class ContractService:
         )
         db.session.add(contract)
         db.session.flush()
+
+        if work_object is not None:
+            db.session.add(
+                ContractObject(
+                    contract_id=contract.id,
+                    object_id=work_object.id,
+                    created_by=user_id,
+                    updated_by=user_id,
+                )
+            )
+            work_object.status = WorkObjectStatus.IN_CONTRACT.value
+            work_object.updated_by = user_id
 
         snapshot = cls._snapshot(contract)
         cls._log_audit(user_id, AuditAction.CREATE.value, contract.id, f"Создан контракт {contract.number}", None, snapshot)

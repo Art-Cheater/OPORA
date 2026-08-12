@@ -1,0 +1,68 @@
+<span class="d-none" data-opora-card-title>{{ obj.display_address }}</span>
+<span class="d-none" data-opora-card-badge>{{ status_labels.get(obj.status, obj.status) }}</span>
+<a class="d-none" data-opora-page-url="{{ url_for('objects.detail', object_id=obj.id, full=1) }}"></a>
+
+<div class="mb-3 d-flex flex-wrap gap-2">
+    <a href="{{ url_for('objects.detail', object_id=obj.id, full=1) }}" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-box-arrow-up-right"></i> Полная страница
+    </a>
+    {% if current_user.has_permission('projects.create') and can_create_project %}
+    <a href="{{ url_for('projects.create', object_id=obj.id, status=suggested_project_status or 'draft') }}"
+       class="btn btn-primary btn-sm">
+        <i class="bi bi-folder-plus"></i>
+        {% if suggested_project_status == 'active' %}
+        Создать проект (в работе)
+        {% else %}
+        Создать проект{% if suggested_project_status == 'draft' %} (черновик){% endif %}
+        {% endif %}
+    </a>
+    {% endif %}
+    {% if current_user.has_permission('contracts.create') and can_create_contract %}
+    <a href="{{ url_for('contracts.create', object_id=obj.id) }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-file-earmark-text"></i> Создать контракт
+    </a>
+    {% endif %}
+</div>
+
+<div class="row g-3">
+    <div class="col-md-8">
+        <small class="text-muted">Адрес</small>
+        <div class="fw-medium">{{ obj.display_address }}</div>
+    </div>
+    <div class="col-md-4">
+        <small class="text-muted">Тип работ</small>
+        <div>{{ obj.work_type or "—" }}</div>
+    </div>
+    <div class="col-12">
+        <small class="text-muted">Полное наименование</small>
+        <div>{{ obj.name or "—" }}</div>
+    </div>
+    <div class="col-md-4">
+        <small class="text-muted">Срок выполнения работ</small>
+        <div>{{ obj.work_deadline or "—" }}</div>
+    </div>
+    <div class="col-md-4">
+        <small class="text-muted">Номер контракта</small>
+        <div>{{ obj.contract_number or "—" }}</div>
+    </div>
+    <div class="col-md-4">
+        <small class="text-muted">Дата заключения</small>
+        <div>{% if obj.contract_date %}{{ obj.contract_date.strftime('%d.%m.%Y') }}{% else %}—{% endif %}</div>
+    </div>
+    <div class="col-md-6">
+        <small class="text-muted">Подрядчик</small>
+        <div>{{ obj.contractor_name or "—" }}</div>
+    </div>
+    <div class="col-md-3">
+        <small class="text-muted">Статус</small>
+        <div>{{ status_labels.get(obj.status, obj.status) }}</div>
+    </div>
+    <div class="col-md-3">
+        <small class="text-muted">Год плана</small>
+        <div>{{ obj.plan_year or "—" }}</div>
+    </div>
+    <div class="col-12">
+        <small class="text-muted">Результат</small>
+        <div>{{ obj.result_text or "—" }}</div>
+    </div>
+</div>

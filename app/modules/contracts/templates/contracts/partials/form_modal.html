@@ -2,6 +2,9 @@
 {% from "macros/custom_fields.html" import custom_fields_form with context %}
 <form method="POST" action="{{ form_action }}" class="opora-modal-form">
     {{ form.hidden_tag() }}
+    {% if request.args.get('object_id') %}
+    <input type="hidden" name="object_id" value="{{ request.args.get('object_id') }}">
+    {% endif %}
     {{ form_errors_alert(form) }}
     <div class="row g-3">
         {{ modal_field(form.contract_type, col=3, module='contracts') }}

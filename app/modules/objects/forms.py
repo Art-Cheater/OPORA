@@ -66,6 +66,11 @@ class ObjectForm(FlaskForm):
         default="Устройство наружного освещения",
     )
     address = StringField("Адрес", validators=[DataRequired(), Length(max=1000)])
+    full_name = StringField(
+        "Полное наименование",
+        validators=[Optional(), Length(max=1000)],
+        description="Как в плане работ; если пусто — соберётся из типа и адреса",
+    )
     plan_year = IntegerField("Год плана", validators=[Optional(), NumberRange(min=2000, max=2100)])
     work_deadline = StringField("Срок выполнения работ", validators=[Optional(), Length(max=500)])
     contract_number = StringField("Номер контракта", validators=[Optional(), Length(max=100)])

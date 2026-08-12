@@ -50,7 +50,8 @@
                 <label class="form-label">{{ import_form.file.label.text }}</label>
                 {{ import_form.file(class="form-control") }}
                 <div class="form-text">
-                    Из «Наименование объектов» берётся тип («Устройство наружного освещения») и адрес отдельно;
+                    Из «Наименование объектов» сохраняется полное название в карточке;
+                    отдельно выделяются тип («Устройство наружного освещения») и адрес;
                     также подтягиваются срок, контракт, подрядчик.
                 </div>
             </div>
@@ -83,7 +84,8 @@
      data-pagination-container-id="objectsPaginationContainer"
      data-reset-btn-id="objectFilterReset"
      data-page-link-class="object-page-link"
-     data-view-mode="page"
+     data-view-mode="modal"
      data-create-title="Новый объект"
-     data-edit-title="Редактирование объекта"></div>
+     data-edit-title="Редактирование объекта"
+     data-can-edit="{{ 'true' if current_user.has_permission('objects.edit') else 'false' }}"></div>
 {% endblock %}

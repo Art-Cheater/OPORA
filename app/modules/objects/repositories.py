@@ -89,6 +89,12 @@ class ObjectRepository:
             )
         )
 
+    @staticmethod
+    def label_for_select(obj: WorkObject) -> str:
+        addr = (obj.address or obj.name or "").strip()
+        return (addr[:120] if addr else str(obj.id))
+
+
     @classmethod
     def paginated_list(cls, filters: ObjectFilter, page: int = 1, per_page: int = 20):
         stmt = db.select(WorkObject).where(WorkObject.active_filter())
