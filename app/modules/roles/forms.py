@@ -13,6 +13,7 @@ class RoleFilterForm(FlaskForm):
         "Сортировка",
         choices=[("name", "По названию"), ("code", "По коду"), ("created_at", "По дате")],
         default="name",
+        validate_choice=False,
     )
     sort_dir = SelectField(
         "Направление",

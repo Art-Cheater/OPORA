@@ -30,6 +30,9 @@ class ObjectRepository:
         "status": WorkObject.status,
         "plan_year": WorkObject.plan_year,
         "contractor_name": WorkObject.contractor_name,
+        "work_deadline": WorkObject.work_deadline,
+        "contract_number": WorkObject.contract_number,
+        "contract_date": WorkObject.contract_date,
     }
 
     @staticmethod

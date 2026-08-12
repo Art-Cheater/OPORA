@@ -46,10 +46,12 @@ class TenderFilterForm(FlaskForm):
             ("created_at", "По дате создания"),
             ("updated_at", "По дате обновления"),
             ("number", "По номеру"),
-            ("title", "По названию"),
+            ("title", "По названию / объекту"),
             ("status", "По статусу"),
+            ("work_deadline", "По сроку"),
         ],
         default="created_at",
+        validate_choice=False,
     )
     sort_dir = SelectField(
         "Направление",

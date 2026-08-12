@@ -1,52 +1,55 @@
-{% from "macros/crud.html" import table_actions %}
-<div class="table-card">
-    <table class="table table-opora">
-        <thead>
-            <tr>
-                <th>Адрес</th>
-                <th>Срок выполнения работ</th>
-                <th>Номер контракта</th>
-                <th>Дата заключения</th>
-                <th>Подрядчик</th>
-                <th class="text-end">Действия</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for obj in items %}
-            <tr data-opora-id="{{ obj.id }}">
-                <td>
-                    <div class="fw-medium">{{ obj.display_address }}</div>
-                    {% if obj.plan_year %}
-                    <div class="small text-muted">{{ obj.plan_year }}{% if obj.source_sheet %} · {{ obj.source_sheet }}{% endif %}</div>
-                    {% endif %}
-                </td>
-                <td>{{ obj.work_deadline or "—" }}</td>
-                <td>{{ obj.contract_number or "—" }}</td>
-                <td>
-                    {% if obj.contract_date %}
-                        {{ obj.contract_date.strftime('%d.%m.%Y') }}
-                    {% else %}
-                        —
-                    {% endif %}
-                </td>
-                <td>{{ obj.contractor_name or "—" }}</td>
-                <td class="text-end">
-                    {{ table_actions(
-                        view_url=url_for('objects.detail', object_id=obj.id),
-                        edit_url=url_for('objects.edit', object_id=obj.id),
-                        entity_id=obj.id,
-                        can_edit=current_user.has_permission('objects.edit'),
-                        can_delete=current_user.has_permission('objects.delete')
-                    ) }}
-                </td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="6" class="table-empty">
-                    <i class="bi bi-inbox"></i> Объектов пока нет
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+{% from "macros/crud.html" import table_actions %}
+{% from "macros/ui.html" import sortable_th %}
+{% set sort_by = sort_by|default(request.args.get('sort_by', 'created_at'), true) %}
+{% set sort_dir = sort_dir|default(request.args.get('sort_dir', 'desc'), true) %}
+<div class="table-card">
+    <table class="table table-opora">
+        <thead>
+            <tr>
+                {{ sortable_th("Адрес", "address", sort_by, sort_dir) }}
+                {{ sortable_th("Срок выполнения работ", "work_deadline", sort_by, sort_dir) }}
+                {{ sortable_th("Номер контракта", "contract_number", sort_by, sort_dir) }}
+                {{ sortable_th("Дата заключения", "contract_date", sort_by, sort_dir) }}
+                {{ sortable_th("Подрядчик", "contractor_name", sort_by, sort_dir) }}
+                <th class="text-end">Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for obj in items %}
+            <tr data-opora-id="{{ obj.id }}">
+                <td>
+                    <div class="fw-medium">{{ obj.display_address }}</div>
+                    {% if obj.plan_year %}
+                    <div class="small text-muted">{{ obj.plan_year }}{% if obj.source_sheet %} · {{ obj.source_sheet }}{% endif %}</div>
+                    {% endif %}
+                </td>
+                <td>{{ obj.work_deadline or "—" }}</td>
+                <td>{{ obj.contract_number or "—" }}</td>
+                <td>
+                    {% if obj.contract_date %}
+                        {{ obj.contract_date.strftime('%d.%m.%Y') }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td>{{ obj.contractor_name or "—" }}</td>
+                <td class="text-end">
+                    {{ table_actions(
+                        view_url=url_for('objects.detail', object_id=obj.id),
+                        edit_url=url_for('objects.edit', object_id=obj.id),
+                        entity_id=obj.id,
+                        can_edit=current_user.has_permission('objects.edit'),
+                        can_delete=current_user.has_permission('objects.delete')
+                    ) }}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6" class="table-empty">
+                    <i class="bi bi-inbox"></i> Объектов пока нет
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

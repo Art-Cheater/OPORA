@@ -214,6 +214,28 @@ a { text-decoration: none; }
     padding: 0.75rem 1.25rem; font-size: 0.75rem; font-weight: 600;
     text-transform: uppercase; letter-spacing: 0.04em; color: #6C757D;
 }
+.th-sort { white-space: nowrap; }
+.th-sort__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-transform: inherit;
+    letter-spacing: inherit;
+    font-weight: inherit;
+    cursor: pointer;
+    user-select: none;
+}
+.th-sort__btn:hover,
+.th-sort__btn.is-active { color: var(--opora-primary); }
+.th-sort__icon { font-size: 0.7rem; line-height: 1; }
+.th-sort__icon.is-muted { opacity: 0.28; }
+.th-sort__btn:hover .th-sort__icon.is-muted { opacity: 0.55; }
 .table-opora tbody td { padding: 0.875rem 1.25rem; border-bottom: 1px solid var(--opora-border-light); vertical-align: middle; }
 .table-opora tbody tr:last-child td { border-bottom: none; }
 .table-opora tbody tr:hover { background: rgba(245,124,0,0.03); }

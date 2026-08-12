@@ -31,6 +31,7 @@ class TenderRepository:
         "number": TenderApplication.number,
         "title": TenderApplication.title,
         "status": TenderApplication.status,
+        "work_deadline": TenderApplication.work_deadline,
     }
 
     @staticmethod

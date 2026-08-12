@@ -59,8 +59,12 @@ class RequestFilterForm(FlaskForm):
             ("number", "По номеру"),
             ("priority", "По приоритету"),
             ("address", "По адресу"),
+            ("pp", "По ПП"),
+            ("dispatcher_name", "По диспетчеру"),
+            ("status_id", "По статусу"),
         ],
         default="received_at",
+        validate_choice=False,
     )
     sort_dir = SelectField(
         "Направление",

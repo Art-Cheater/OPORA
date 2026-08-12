@@ -1,13 +1,16 @@
 {% from "macros/badges.html" import user_status_badge %}
 {% from "macros/crud.html" import table_actions %}
+{% from "macros/ui.html" import sortable_th %}
+{% set sort_by = sort_by|default(request.args.get('sort_by', 'full_name'), true) %}
+{% set sort_dir = sort_dir|default(request.args.get('sort_dir', 'asc'), true) %}
 <div class="table-card">
     <table class="table table-opora">
         <thead>
             <tr>
-                <th>ФИО</th>
-                <th>Email</th>
-                <th>Должность</th>
-                <th>Подразделение</th>
+                {{ sortable_th("ФИО", "full_name", sort_by, sort_dir) }}
+                {{ sortable_th("Email", "email", sort_by, sort_dir) }}
+                {{ sortable_th("Должность", "position", sort_by, sort_dir) }}
+                {{ sortable_th("Подразделение", "department", sort_by, sort_dir) }}
                 <th>Роли</th>
                 <th>Статус</th>
                 <th class="text-end">Действия</th>

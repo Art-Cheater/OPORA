@@ -1,16 +1,19 @@
 {% from "macros/badges.html" import contract_status_badge, contract_type_badge %}
 {% from "macros/crud.html" import table_actions %}
+{% from "macros/ui.html" import sortable_th %}
+{% set sort_by = sort_by|default(request.args.get('sort_by', 'created_at'), true) %}
+{% set sort_dir = sort_dir|default(request.args.get('sort_dir', 'desc'), true) %}
 <div class="table-card">
     <table class="table table-opora">
         <thead>
             <tr>
-                <th>Номер</th>
-                <th>Название</th>
-                <th>Тип</th>
-                <th>Статус</th>
+                {{ sortable_th("Номер", "number", sort_by, sort_dir) }}
+                {{ sortable_th("Название", "title", sort_by, sort_dir) }}
+                {{ sortable_th("Тип", "contract_type", sort_by, sort_dir) }}
+                {{ sortable_th("Статус", "status", sort_by, sort_dir) }}
                 <th>Ответственный</th>
-                <th>Дата</th>
-                <th>Обновлено</th>
+                {{ sortable_th("Дата", "contract_date", sort_by, sort_dir) }}
+                {{ sortable_th("Обновлено", "updated_at", sort_by, sort_dir) }}
                 <th class="text-end">Действия</th>
             </tr>
         </thead>

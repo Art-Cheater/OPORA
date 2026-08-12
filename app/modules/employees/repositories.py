@@ -32,6 +32,7 @@ class EmployeeRepository:
         "created_at": User.created_at,
         "email": User.email,
         "department": User.department,
+        "position": User.position,
     }
 
     @staticmethod

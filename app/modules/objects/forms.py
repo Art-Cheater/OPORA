@@ -42,11 +42,15 @@ class ObjectFilterForm(FlaskForm):
         choices=[
             ("created_at", "По дате создания"),
             ("address", "По адресу"),
+            ("work_deadline", "По сроку"),
+            ("contract_number", "По номеру контракта"),
+            ("contract_date", "По дате заключения"),
             ("plan_year", "По году"),
             ("contractor_name", "По подрядчику"),
             ("status", "По статусу"),
         ],
         default="created_at",
+        validate_choice=False,
     )
     sort_dir = SelectField(
         "Направление",

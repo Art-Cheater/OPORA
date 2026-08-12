@@ -77,6 +77,7 @@ class ContractFilterForm(FlaskForm):
             ("contract_date", "По дате контракта"),
         ],
         default="created_at",
+        validate_choice=False,
     )
     sort_dir = SelectField(
         "Направление",

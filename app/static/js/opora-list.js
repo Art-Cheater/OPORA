@@ -96,12 +96,46 @@ window.OporaList = (() => {
     });
   }
 
+  function ensureSortField(form, name, value) {
+    let el = form.querySelector(`[name="${name}"]`);
+    if (!el) {
+      el = document.createElement("input");
+      el.type = "hidden";
+      el.name = name;
+      form.appendChild(el);
+    }
+    if (el.tagName === "SELECT") {
+      const has = Array.from(el.options).some((o) => o.value === value);
+      if (!has) el.appendChild(new Option(value, value, true, true));
+    }
+    el.value = value;
+  }
+
+  function applySort(field, defaultDir = "asc") {
+    const form = document.getElementById(config.filterFormId);
+    if (!form || !field) return;
+    const currentBy = form.querySelector('[name="sort_by"]')?.value || "";
+    const currentDir = form.querySelector('[name="sort_dir"]')?.value || "desc";
+    const nextDir = currentBy === field ? (currentDir === "asc" ? "desc" : "asc") : defaultDir;
+    ensureSortField(form, "sort_by", field);
+    ensureSortField(form, "sort_dir", nextDir);
+    currentPage = 1;
+    loadTable();
+  }
+
   function bindTableEvents() {
     const tableContainer = document.getElementById(config.tableContainerId);
     if (!tableContainer || tableContainer.dataset.oporaBound === "1") return;
     tableContainer.dataset.oporaBound = "1";
 
     tableContainer.addEventListener("click", (e) => {
+      const sortBtn = e.target.closest("[data-opora-sort]");
+      if (sortBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        applySort(sortBtn.dataset.oporaSort, sortBtn.dataset.oporaSortDefault || "asc");
+        return;
+      }
       if (e.target.closest("[data-opora-action]")) return;
       const row = e.target.closest("tr[data-opora-id]");
       if (row) openView(row.dataset.oporaId);

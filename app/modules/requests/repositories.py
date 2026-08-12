@@ -55,6 +55,9 @@ class RequestRepository:
         "priority": Request.priority,
         "address": Request.address,
         "title": Request.title,
+        "pp": Request.pp,
+        "dispatcher_name": Request.dispatcher_name,
+        "status_id": Request.status_id,
     }
 
     @staticmethod

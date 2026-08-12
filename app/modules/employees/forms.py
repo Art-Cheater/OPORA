@@ -28,8 +28,10 @@ class EmployeeFilterForm(FlaskForm):
             ("created_at", "По дате создания"),
             ("email", "По email"),
             ("department", "По подразделению"),
+            ("position", "По должности"),
         ],
         default="full_name",
+        validate_choice=False,
     )
     sort_dir = SelectField(
         "Направление",

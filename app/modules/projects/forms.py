@@ -59,6 +59,7 @@ class ProjectFilterForm(FlaskForm):
             ("end_date", "По дате окончания"),
         ],
         default="created_at",
+        validate_choice=False,
     )
     sort_dir = SelectField(
         "Направление",

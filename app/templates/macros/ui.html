@@ -21,3 +21,23 @@
     {% endif %}
 </div>
 {% endmacro %}
+
+{# Кликабельный заголовок колонки: сортировка списка #}
+{% macro sortable_th(label, field, sort_by='', sort_dir='desc', th_class='') %}
+{% set is_active = sort_by == field %}
+{% set is_date = field.endswith('_at') or field.endswith('_date') or field in ['received_at', 'plan_year'] %}
+<th class="th-sort {{ th_class }}" scope="col">
+    <button type="button"
+            class="th-sort__btn{% if is_active %} is-active{% endif %}"
+            data-opora-sort="{{ field }}"
+            data-opora-sort-default="{{ 'desc' if is_date else 'asc' }}"
+            title="Сортировать по: {{ label }}">
+        <span>{{ label }}</span>
+        {% if is_active %}
+        <i class="bi bi-caret-{{ 'up' if sort_dir == 'asc' else 'down' }}-fill th-sort__icon" aria-hidden="true"></i>
+        {% else %}
+        <i class="bi bi-caret-down-fill th-sort__icon is-muted" aria-hidden="true"></i>
+        {% endif %}
+    </button>
+</th>
+{% endmacro %}
