@@ -10,7 +10,7 @@ from sqlalchemy import Date, Index, Integer, Numeric, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import ActiveRecordMixin, BaseModel
-from app.models.enums import WorkObjectStatus
+from app.models.enums import WorkObjectKind, WorkObjectStatus
 from app.models.types import SearchVectorType
 
 if TYPE_CHECKING:
@@ -26,12 +26,19 @@ class WorkObject(ActiveRecordMixin, BaseModel):
         Index("ix_work_objects_plan_year", "plan_year"),
         Index("ix_work_objects_name", "name"),
         Index("ix_work_objects_contract_number", "contract_number"),
+        Index("ix_work_objects_object_kind", "object_kind"),
     )
 
     # name — полное наименование из плана (тип + адрес);
     # work_type — «Устройство наружного освещения»; address — только адрес
+    # object_kind — раздел плана: плановый / судебный / тех. присоединение
     name: Mapped[str] = mapped_column(String(1000), nullable=False)
     work_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    object_kind: Mapped[str | None] = mapped_column(
+        String(30),
+        default=WorkObjectKind.PLANNED.value,
+        nullable=True,
+    )
     address: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     plan_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     work_deadline: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -40,6 +47,7 @@ class WorkObject(ActiveRecordMixin, BaseModel):
     contractor_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
     contract_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     budget_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    court_decision_number: Mapped[str | None] = mapped_column(String(255), nullable=True)
     result_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
     source_sheet: Mapped[str | None] = mapped_column(String(100), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -12,7 +12,7 @@ from pathlib import Path
 from app.core.audit_service import AuditService
 from app.core.exceptions import ValidationError
 from app.extensions import db
-from app.models.enums import AuditAction, EntityType, WorkObjectStatus
+from app.models.enums import AuditAction, EntityType, WorkObjectKind, WorkObjectStatus
 from app.models.work_objects.work_object import WorkObject
 
 WORK_TYPE_DEFAULT = "Устройство наружного освещения"
@@ -38,6 +38,7 @@ _JUNK_NAME_RE = re.compile(
 class ObjectPayload:
     name: str
     work_type: str | None
+    object_kind: str | None
     address: str | None
     plan_year: int | None
     work_deadline: str | None
@@ -46,6 +47,7 @@ class ObjectPayload:
     contractor_name: str | None
     contract_amount: Decimal | None
     budget_amount: Decimal | None
+    court_decision_number: str | None
     result_text: str | None
     source_sheet: str | None
     notes: str | None
@@ -82,6 +84,27 @@ class ObjectService:
     @staticmethod
     def can_create_contract_from_plan(obj: WorkObject) -> bool:
         return bool((obj.contract_number or "").strip())
+
+    @staticmethod
+    def suggested_contract_amount(obj: WorkObject) -> Decimal | None:
+        """
+        Для формы контракта: сумма контракта, если есть;
+        иначе НМЦК (бюджет). Это разные поля — при появлении контракта
+        сумма контракта не подменяется на НМЦК.
+        """
+        if obj.contract_amount is not None:
+            return obj.contract_amount
+        return obj.budget_amount
+
+    @staticmethod
+    def detect_object_kind(sheet_name: str | None) -> str:
+        """По названию листа Excel: плановый / судебный / тех. присоединение."""
+        s = (sheet_name or "").casefold().replace("ё", "е").strip()
+        if "судеб" in s:
+            return WorkObjectKind.COURT.value
+        if "тех" in s and ("прис" in s or "присоед" in s):
+            return WorkObjectKind.TECH_CONNECT.value
+        return WorkObjectKind.PLANNED.value
 
     @staticmethod
     def _normalize(value: str | None) -> str | None:
@@ -213,6 +236,8 @@ class ObjectService:
                 mapping["contract_date"] = idx
             elif "сумма" in h and "контракт" in h:
                 mapping["contract_amount"] = idx
+            elif "судебн" in h:
+                mapping["court_decision"] = idx
             elif "расход" in h or "нмцк" in h or "бюджет" in h:
                 mapping["budget"] = idx
             elif "результат" in h:
@@ -265,6 +290,7 @@ class ObjectService:
             ws = wb[sheet_name]
             year_match = re.search(r"(20\d{2})", sheet_name)
             plan_year = int(year_match.group(1)) if year_match else None
+            object_kind = cls.detect_object_kind(sheet_name)
 
             header_row_idx = None
             header_values = None
@@ -314,12 +340,18 @@ class ObjectService:
                 if "contract_date" in cols and cols["contract_date"] < len(row):
                     contract_date = cls._as_date(row[cols["contract_date"]]) or contract_date
 
+                # Сумма контракта и НМЦК — разные поля; не подставляем одно в другое
                 contract_amount = None
                 if "contract_amount" in cols and cols["contract_amount"] < len(row):
                     contract_amount = cls._as_decimal(row[cols["contract_amount"]])
                 budget_amount = None
                 if "budget" in cols and cols["budget"] < len(row):
                     budget_amount = cls._as_decimal(row[cols["budget"]])
+
+                court_decision = None
+                if object_kind == WorkObjectKind.COURT.value:
+                    if "court_decision" in cols and cols["court_decision"] < len(row):
+                        court_decision = cls._as_text(row[cols["court_decision"]])
 
                 result_text = None
                 if "result" in cols and cols["result"] < len(row):
@@ -337,6 +369,7 @@ class ObjectService:
                     {
                         "name": name[:1000],
                         "work_type": work_type,
+                        "object_kind": object_kind,
                         "address": address[:1000],
                         "plan_year": plan_year,
                         "work_deadline": deadline,
@@ -345,6 +378,7 @@ class ObjectService:
                         "contractor_name": contractor,
                         "contract_amount": contract_amount,
                         "budget_amount": budget_amount,
+                        "court_decision_number": (court_decision or "")[:255] or None,
                         "result_text": result_text,
                         "source_sheet": sheet_name.strip()[:100],
                         "notes": notes,
@@ -396,6 +430,7 @@ class ObjectService:
                 obj = WorkObject(
                     name=data["name"],
                     work_type=data["work_type"],
+                    object_kind=data["object_kind"],
                     address=data["address"],
                     plan_year=data["plan_year"],
                     work_deadline=data["work_deadline"],
@@ -404,6 +439,7 @@ class ObjectService:
                     contractor_name=data["contractor_name"],
                     contract_amount=data["contract_amount"],
                     budget_amount=data["budget_amount"],
+                    court_decision_number=data["court_decision_number"],
                     result_text=data["result_text"],
                     source_sheet=data["source_sheet"],
                     notes=data["notes"],
@@ -416,6 +452,7 @@ class ObjectService:
             else:
                 obj.name = data["name"]
                 obj.work_type = data["work_type"]
+                obj.object_kind = data["object_kind"]
                 obj.address = data["address"]
                 obj.plan_year = data["plan_year"]
                 obj.work_deadline = data["work_deadline"]
@@ -424,6 +461,7 @@ class ObjectService:
                 obj.contractor_name = data["contractor_name"]
                 obj.contract_amount = data["contract_amount"]
                 obj.budget_amount = data["budget_amount"]
+                obj.court_decision_number = data["court_decision_number"]
                 obj.result_text = data["result_text"]
                 obj.source_sheet = data["source_sheet"]
                 obj.notes = data["notes"]
@@ -485,9 +523,14 @@ class ObjectService:
         if not address:
             raise ValidationError("Адрес объекта обязателен.")
         full_name = cls._normalize(payload.name) or cls._compose_full_name(payload.work_type, address)
+        court = cls._normalize(payload.court_decision_number)
+        kind = payload.object_kind or WorkObjectKind.PLANNED.value
+        if kind != WorkObjectKind.COURT.value:
+            court = None
         obj = WorkObject(
             name=full_name[:1000],
             work_type=cls._normalize(payload.work_type) or WORK_TYPE_DEFAULT,
+            object_kind=kind,
             address=address[:1000],
             plan_year=payload.plan_year,
             work_deadline=cls._normalize(payload.work_deadline),
@@ -496,6 +539,7 @@ class ObjectService:
             contractor_name=cls._normalize(payload.contractor_name),
             contract_amount=payload.contract_amount,
             budget_amount=payload.budget_amount,
+            court_decision_number=court,
             result_text=cls._normalize(payload.result_text),
             source_sheet=cls._normalize(payload.source_sheet),
             notes=cls._normalize(payload.notes),
@@ -523,8 +567,13 @@ class ObjectService:
             raise ValidationError("Адрес объекта обязателен.")
         full_name = cls._normalize(payload.name) or cls._compose_full_name(payload.work_type, address)
         old = {"address": obj.address, "status": obj.status, "contract_number": obj.contract_number}
+        court = cls._normalize(payload.court_decision_number)
+        kind = payload.object_kind or WorkObjectKind.PLANNED.value
+        if kind != WorkObjectKind.COURT.value:
+            court = None
         obj.name = full_name[:1000]
         obj.work_type = cls._normalize(payload.work_type) or WORK_TYPE_DEFAULT
+        obj.object_kind = kind
         obj.address = address[:1000]
         obj.plan_year = payload.plan_year
         obj.work_deadline = cls._normalize(payload.work_deadline)
@@ -533,6 +582,7 @@ class ObjectService:
         obj.contractor_name = cls._normalize(payload.contractor_name)
         obj.contract_amount = payload.contract_amount
         obj.budget_amount = payload.budget_amount
+        obj.court_decision_number = court
         obj.result_text = cls._normalize(payload.result_text)
         obj.source_sheet = cls._normalize(payload.source_sheet)
         obj.notes = cls._normalize(payload.notes)

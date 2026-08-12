@@ -17,15 +17,19 @@
     <div class="card-header"><i class="bi bi-search"></i>Поиск и фильтры</div>
     <div class="card-body">
         <form id="objectFilterForm" class="row g-3">
-            <div class="col-lg-4">
+            <div class="col-lg-3">
                 <label class="form-label">{{ filter_form.q.label.text }}</label>
                 {{ filter_form.q(class="form-control", placeholder="Наименование, адрес...") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.object_kind.label.text }}</label>
+                {{ filter_form.object_kind(class="form-select") }}
             </div>
             <div class="col-lg-2">
                 <label class="form-label">{{ filter_form.status.label.text }}</label>
                 {{ filter_form.status(class="form-select") }}
             </div>
-            <div class="col-lg-2">
+            <div class="col-lg-1">
                 <label class="form-label">{{ filter_form.plan_year.label.text }}</label>
                 {{ filter_form.plan_year(class="form-control", placeholder="2025") }}
             </div>
@@ -50,9 +54,9 @@
                 <label class="form-label">{{ import_form.file.label.text }}</label>
                 {{ import_form.file(class="form-control") }}
                 <div class="form-text">
-                    Из «Наименование объектов» сохраняется полное название в карточке;
-                    отдельно выделяются тип («Устройство наружного освещения») и адрес;
-                    также подтягиваются срок, контракт, подрядчик.
+                    Разделы плана → тип объекта: «План…» — плановый, «Судебн…» — судебный,
+                    «Тех.прис…» — техническое присоединение. Для судебных подтягивается
+                    «Номер судебного решения». Сумма контракта и расходы по НМЦК хранятся отдельно.
                 </div>
             </div>
             <div class="col-lg-4">

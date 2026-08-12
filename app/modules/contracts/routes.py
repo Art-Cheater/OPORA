@@ -94,6 +94,7 @@ def _apply_contract_create_defaults(form: ContractForm) -> None:
     from datetime import date
 
     from app.modules.objects.repositories import ObjectRepository
+    from app.modules.objects.services import ObjectService
 
     if request.method != "GET":
         return
@@ -116,8 +117,10 @@ def _apply_contract_create_defaults(form: ContractForm) -> None:
     form.title.data = f"Контракт — {obj.display_address}"[:500]
     if obj.contractor_name and hasattr(form, "contractor_name"):
         form.contractor_name.data = obj.contractor_name
-    if obj.contract_amount is not None and hasattr(form, "amount"):
-        form.amount.data = obj.contract_amount
+    # Сумма контракта, иначе НМЦК (не подменяем поля объекта)
+    amount = ObjectService.suggested_contract_amount(obj)
+    if amount is not None and hasattr(form, "amount"):
+        form.amount.data = amount
     if obj.contract_date:
         form.contract_date.data = obj.contract_date
     if obj.result_text:

@@ -16,6 +16,7 @@ from app.models.work_objects.work_object import WorkObject
 class ObjectFilter:
     q: str = ""
     status: str = ""
+    object_kind: str = ""
     plan_year: str = ""
     sort_by: str = "created_at"
     sort_dir: str = "desc"
@@ -33,6 +34,7 @@ class ObjectRepository:
         "work_deadline": WorkObject.work_deadline,
         "contract_number": WorkObject.contract_number,
         "contract_date": WorkObject.contract_date,
+        "object_kind": WorkObject.object_kind,
     }
 
     @staticmethod
@@ -106,11 +108,14 @@ class ObjectRepository:
                     WorkObject.address.ilike(q),
                     WorkObject.contractor_name.ilike(q),
                     WorkObject.contract_number.ilike(q),
+                    WorkObject.court_decision_number.ilike(q),
                     WorkObject.notes.ilike(q),
                 )
             )
         if filters.status:
             stmt = stmt.where(WorkObject.status == filters.status)
+        if filters.object_kind:
+            stmt = stmt.where(WorkObject.object_kind == filters.object_kind)
         if filters.plan_year and filters.plan_year.isdigit():
             stmt = stmt.where(WorkObject.plan_year == int(filters.plan_year))
 

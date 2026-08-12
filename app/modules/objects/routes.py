@@ -20,7 +20,13 @@ from app.models.auth.constants import (
     PERM_OBJECTS_VIEW,
 )
 from app.modules.objects.blueprint import objects_bp
-from app.modules.objects.forms import OBJECT_STATUS_LABELS, ObjectFilterForm, ObjectForm, ObjectImportForm
+from app.modules.objects.forms import (
+    OBJECT_KIND_LABELS,
+    OBJECT_STATUS_LABELS,
+    ObjectFilterForm,
+    ObjectForm,
+    ObjectImportForm,
+)
 from app.modules.objects.repositories import ObjectFilter, ObjectRepository
 from app.modules.objects.services import ObjectPayload, ObjectService
 
@@ -29,6 +35,7 @@ def _payload(form: ObjectForm) -> ObjectPayload:
     return ObjectPayload(
         name=form.full_name.data or "",
         work_type=form.work_type.data,
+        object_kind=form.object_kind.data,
         address=form.address.data,
         plan_year=form.plan_year.data,
         work_deadline=form.work_deadline.data,
@@ -37,6 +44,7 @@ def _payload(form: ObjectForm) -> ObjectPayload:
         contractor_name=form.contractor_name.data,
         contract_amount=form.contract_amount.data,
         budget_amount=form.budget_amount.data,
+        court_decision_number=form.court_decision_number.data,
         result_text=form.result_text.data,
         source_sheet=None,
         notes=form.notes.data,
@@ -62,6 +70,7 @@ def index():
     filters = ObjectFilter(
         q=request.args.get("q", ""),
         status=request.args.get("status", ""),
+        object_kind=request.args.get("object_kind", ""),
         plan_year=request.args.get("plan_year", ""),
         sort_by=request.args.get("sort_by", "created_at"),
         sort_dir=request.args.get("sort_dir", "desc"),
@@ -76,6 +85,7 @@ def index():
         pagination=pagination,
         items=pagination.items,
         status_labels=OBJECT_STATUS_LABELS,
+        kind_labels=OBJECT_KIND_LABELS,
     )
 
 
@@ -86,6 +96,7 @@ def table():
     filters = ObjectFilter(
         q=request.args.get("q", ""),
         status=request.args.get("status", ""),
+        object_kind=request.args.get("object_kind", ""),
         plan_year=request.args.get("plan_year", ""),
         sort_by=request.args.get("sort_by", "created_at"),
         sort_dir=request.args.get("sort_dir", "desc"),
@@ -98,6 +109,7 @@ def table():
         pagination=pagination,
         items=pagination.items,
         status_labels=OBJECT_STATUS_LABELS,
+        kind_labels=OBJECT_KIND_LABELS,
     )
     pager = render_template(
         "objects/partials/pagination.html",
@@ -227,6 +239,7 @@ def detail(object_id: uuid.UUID):
     ctx = {
         "obj": obj,
         "status_labels": OBJECT_STATUS_LABELS,
+        "kind_labels": OBJECT_KIND_LABELS,
         "suggested_project_status": suggested,
         "can_create_project": can_create_project,
         "can_create_contract": can_create_contract,
@@ -247,6 +260,7 @@ def edit(object_id: uuid.UUID):
     form = ObjectForm(obj=obj)
     if request.method == "GET":
         form.work_type.data = obj.work_type or "Устройство наружного освещения"
+        form.object_kind.data = obj.object_kind or "planned"
         form.address.data = obj.address or obj.name
         form.full_name.data = obj.name
         form.plan_year.data = obj.plan_year
@@ -256,6 +270,7 @@ def edit(object_id: uuid.UUID):
         form.contractor_name.data = obj.contractor_name
         form.contract_amount.data = obj.contract_amount
         form.budget_amount.data = obj.budget_amount
+        form.court_decision_number.data = obj.court_decision_number
         form.result_text.data = obj.result_text
         form.notes.data = obj.notes
         form.status.data = obj.status

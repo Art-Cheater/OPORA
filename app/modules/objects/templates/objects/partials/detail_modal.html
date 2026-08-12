@@ -30,8 +30,16 @@
         <div class="fw-medium">{{ obj.display_address }}</div>
     </div>
     <div class="col-md-4">
+        <small class="text-muted">Тип объекта</small>
+        <div>{{ kind_labels.get(obj.object_kind, obj.object_kind) or "—" }}</div>
+    </div>
+    <div class="col-md-6">
         <small class="text-muted">Тип работ</small>
         <div>{{ obj.work_type or "—" }}</div>
+    </div>
+    <div class="col-md-6">
+        <small class="text-muted">Номер судебного решения</small>
+        <div>{{ obj.court_decision_number or "—" }}</div>
     </div>
     <div class="col-12">
         <small class="text-muted">Полное наименование</small>
@@ -52,6 +60,14 @@
     <div class="col-md-6">
         <small class="text-muted">Подрядчик</small>
         <div>{{ obj.contractor_name or "—" }}</div>
+    </div>
+    <div class="col-md-3">
+        <small class="text-muted">Сумма контракта</small>
+        <div>{% if obj.contract_amount is not none %}{{ obj.contract_amount }}{% else %}—{% endif %}</div>
+    </div>
+    <div class="col-md-3">
+        <small class="text-muted">Расходы бюджета по НМЦК</small>
+        <div>{% if obj.budget_amount is not none %}{{ obj.budget_amount }}{% else %}—{% endif %}</div>
     </div>
     <div class="col-md-3">
         <small class="text-muted">Статус</small>

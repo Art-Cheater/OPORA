@@ -19,6 +19,14 @@ class WorkObjectStatus(str, Enum):
   ARCHIVED = "archived"
 
 
+class WorkObjectKind(str, Enum):
+  """Раздел плана освещения (не тип работ)."""
+
+  PLANNED = "planned"
+  COURT = "court"
+  TECH_CONNECT = "tech_connect"
+
+
 class ProjectStatus(str, Enum):
   DRAFT = "draft"
   ACTIVE = "active"

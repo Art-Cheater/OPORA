@@ -3,9 +3,13 @@
     {{ form.hidden_tag() }}
     {{ form_errors_alert(form) }}
     <div class="row g-3">
-        <div class="col-12">
+        <div class="col-md-6">
             {{ form.work_type.label(class="form-label") }}
             {{ form.work_type(class="form-control") }}
+        </div>
+        <div class="col-md-6">
+            {{ form.object_kind.label(class="form-label") }}
+            {{ form.object_kind(class="form-select") }}
         </div>
         <div class="col-12">
             {{ form.address.label(class="form-label") }}
@@ -23,6 +27,11 @@
         <div class="col-md-8">
             {{ form.work_deadline.label(class="form-label") }}
             {{ form.work_deadline(class="form-control") }}
+        </div>
+        <div class="col-12">
+            {{ form.court_decision_number.label(class="form-label") }}
+            {{ form.court_decision_number(class="form-control") }}
+            <div class="form-text">Для типа «Судебный»; для остальных — пусто.</div>
         </div>
         <div class="col-md-4">
             {{ form.contract_number.label(class="form-label") }}
@@ -47,6 +56,7 @@
         <div class="col-md-6">
             {{ form.budget_amount.label(class="form-label") }}
             {{ form.budget_amount(class="form-control") }}
+            <div class="form-text">Не равна сумме контракта при заключённом контракте.</div>
         </div>
         <div class="col-12">
             {{ form.result_text.label(class="form-label") }}

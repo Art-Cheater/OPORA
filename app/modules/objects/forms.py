@@ -15,7 +15,7 @@ from wtforms import (
 )
 from wtforms.validators import DataRequired, Length, NumberRange, Optional
 
-from app.models.enums import WorkObjectStatus
+from app.models.enums import WorkObjectKind, WorkObjectStatus
 
 OBJECT_STATUS_CHOICES = [
     (WorkObjectStatus.FREE.value, "Свободен"),
@@ -28,12 +28,25 @@ OBJECT_STATUS_CHOICES = [
 
 OBJECT_STATUS_LABELS = dict(OBJECT_STATUS_CHOICES)
 
+OBJECT_KIND_CHOICES = [
+    (WorkObjectKind.PLANNED.value, "Плановый"),
+    (WorkObjectKind.COURT.value, "Судебный"),
+    (WorkObjectKind.TECH_CONNECT.value, "Техническое присоединение"),
+]
+
+OBJECT_KIND_LABELS = dict(OBJECT_KIND_CHOICES)
+
 
 class ObjectFilterForm(FlaskForm):
     q = StringField("Поиск", validators=[Optional(), Length(max=255)])
     status = SelectField(
         "Статус",
         choices=[("", "Все статусы")] + OBJECT_STATUS_CHOICES,
+        validators=[Optional()],
+    )
+    object_kind = SelectField(
+        "Тип объекта",
+        choices=[("", "Все типы")] + OBJECT_KIND_CHOICES,
         validators=[Optional()],
     )
     plan_year = StringField("Год плана", validators=[Optional(), Length(max=4)])
@@ -47,6 +60,7 @@ class ObjectFilterForm(FlaskForm):
             ("contract_date", "По дате заключения"),
             ("plan_year", "По году"),
             ("contractor_name", "По подрядчику"),
+            ("object_kind", "По типу объекта"),
             ("status", "По статусу"),
         ],
         default="created_at",
@@ -65,6 +79,12 @@ class ObjectForm(FlaskForm):
         validators=[Optional(), Length(max=255)],
         default="Устройство наружного освещения",
     )
+    object_kind = SelectField(
+        "Тип объекта",
+        choices=OBJECT_KIND_CHOICES,
+        default=WorkObjectKind.PLANNED.value,
+        validators=[DataRequired()],
+    )
     address = StringField("Адрес", validators=[DataRequired(), Length(max=1000)])
     full_name = StringField(
         "Полное наименование",
@@ -77,7 +97,17 @@ class ObjectForm(FlaskForm):
     contract_date = DateField("Дата заключения", validators=[Optional()], format="%Y-%m-%d")
     contractor_name = StringField("Подрядчик", validators=[Optional(), Length(max=500)])
     contract_amount = DecimalField("Сумма контракта", places=2, validators=[Optional()])
-    budget_amount = DecimalField("Бюджет / НМЦК", places=2, validators=[Optional()])
+    budget_amount = DecimalField(
+        "Расходы бюджета по НМЦК",
+        places=2,
+        validators=[Optional()],
+        description="Не равна сумме контракта, когда контракт уже заключён",
+    )
+    court_decision_number = StringField(
+        "Номер судебного решения",
+        validators=[Optional(), Length(max=255)],
+        description="Заполняется для типа «Судебный»",
+    )
     result_text = StringField("Результат", validators=[Optional(), Length(max=500)])
     notes = TextAreaField("Примечание", validators=[Optional(), Length(max=10000)])
     status = SelectField("Статус", choices=OBJECT_STATUS_CHOICES, validators=[DataRequired()])
