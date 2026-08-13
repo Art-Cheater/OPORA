@@ -216,3 +216,18 @@ def test_employee_and_tender_shared_forms_open(admin_client):
     tender_modal = admin_client.get("/tenders/new", headers=ajax)
     assert tender_modal.status_code == 200, tender_modal.get_data(as_text=True)[:2000]
     assert 'name="object_id"' in tender_modal.get_data(as_text=True)
+
+
+def test_list_rows_use_status_tones(admin_client):
+    _create_request(admin_client)
+    requests_page = admin_client.get("/requests/")
+    assert requests_page.status_code == 200
+    assert "table-row-lifecycle" in requests_page.get_data(as_text=True)
+
+    employees_page = admin_client.get("/employees/")
+    assert employees_page.status_code == 200
+    assert "table-row-lifecycle" in employees_page.get_data(as_text=True)
+
+    for path in ("/projects/", "/contracts/", "/objects/", "/tenders/"):
+        response = admin_client.get(path)
+        assert response.status_code == 200, path

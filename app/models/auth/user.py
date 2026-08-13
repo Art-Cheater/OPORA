@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from flask_login import UserMixin
 from sqlalchemy import Boolean, ForeignKey, Index, String, Text, text
 from app.models.types import GUID, SearchVectorType
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from app.core.security import hash_password, verify_password
 from app.models.base import BaseModel, utcnow
@@ -49,7 +49,9 @@ class User(UserMixin, BaseModel):
     )
     department: Mapped[str | None] = mapped_column(String(255), nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    search_vector: Mapped[str | None] = mapped_column(SearchVectorType, nullable=True)
+    search_vector: Mapped[str | None] = deferred(
+        mapped_column(SearchVectorType, nullable=True)
+    )
 
     # Явная колонка: перекрывает property is_active из Flask-Login UserMixin
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)

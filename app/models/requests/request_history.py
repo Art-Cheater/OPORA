@@ -26,6 +26,7 @@ class RequestHistory(BaseModel):
         Index("ix_request_history_request_id", "request_id"),
         Index("ix_request_history_status_id", "status_id"),
         Index("ix_request_history_changed_by", "changed_by"),
+        Index("ix_request_history_status_created", "status_id", "created_at"),
     )
 
     request_id: Mapped[uuid.UUID] = mapped_column(

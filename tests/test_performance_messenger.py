@@ -175,3 +175,17 @@ def test_search_and_employee_roles_are_eager_loaded(app):
 
         users = MessengerRepository.list_users(admin_id, limit=2)
         assert len(users) == 2
+
+
+def test_requests_list_stays_within_query_budget(admin_client, app):
+    from app.modules.requests.repositories import RequestFilter, RequestRepository
+    from app.modules.reports.services import ReportsService, resolve_period
+
+    with app.app_context():
+        with count_queries(db.engine) as counter:
+            RequestRepository.paginated_list(RequestFilter(), page=1, per_page=20)
+        assert counter.count <= 4
+
+        with count_queries(db.engine) as report_counter:
+            ReportsService.requests_report(resolve_period("week"))
+        assert report_counter.count <= 6

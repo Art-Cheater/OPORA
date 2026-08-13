@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text
 from app.models.types import GUID, JSONType, SearchVectorType
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from app.models.base import BaseModel
 from app.models.enums import Priority
@@ -39,6 +39,8 @@ class Request(BaseModel):
         Index("ix_requests_number", "number", unique=True),
         Index("ix_requests_received_at", "received_at"),
         Index("ix_requests_dispatcher_name", "dispatcher_name"),
+        Index("ix_requests_deleted_received", "deleted_at", "received_at"),
+        Index("ix_requests_deleted_status", "deleted_at", "status_id"),
     )
 
     number: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -71,7 +73,9 @@ class Request(BaseModel):
         nullable=False,
     )
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    search_vector: Mapped[str | None] = mapped_column(SearchVectorType, nullable=True)
+    search_vector: Mapped[str | None] = deferred(
+        mapped_column(SearchVectorType, nullable=True)
+    )
 
     status_id: Mapped[uuid.UUID] = mapped_column(
         GUID(),

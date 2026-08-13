@@ -86,8 +86,3 @@
      data-can-edit="{{ 'true' if current_user.has_permission('requests.edit') else 'false' }}">
 </div>
 {% endblock %}
-
-{% block extra_js %}
-{{ super() }}
-<script src="{{ url_for('static', filename='js/requests-form.js') }}"></script>
-{% endblock %}

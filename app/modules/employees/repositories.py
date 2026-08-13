@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass
 
 from sqlalchemy import or_
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import load_only, noload, selectinload
 
 from app.extensions import db
 from app.models.auth.associations import UserRole
@@ -48,7 +48,8 @@ class EmployeeRepository:
             .options(
                 selectinload(User.user_roles)
                 .joinedload(UserRole.role)
-                .lazyload(Role.role_permissions)
+                .lazyload(Role.role_permissions),
+                noload(User.login_logs),
             )
             .where(User.id == user_id, User.active_filter())
         )
@@ -58,6 +59,16 @@ class EmployeeRepository:
         return list(
             db.session.scalars(
                 db.select(Position)
+                .options(
+                    load_only(
+                        Position.id,
+                        Position.code,
+                        Position.name,
+                        Position.sort_order,
+                        Position.is_active,
+                    ),
+                    noload(Position.users),
+                )
                 .where(Position.active_filter(), Position.is_active.is_(True))
                 .order_by(Position.sort_order.asc(), Position.name.asc())
             )
@@ -68,6 +79,12 @@ class EmployeeRepository:
         return list(
             db.session.scalars(
                 db.select(Role)
+                .options(
+                    load_only(Role.id, Role.code, Role.name, Role.is_active),
+                    noload(Role.role_permissions),
+                    noload(Role.user_roles),
+                    noload(Role.field_permissions),
+                )
                 .where(Role.active_filter(), Role.is_active.is_(True))
                 .order_by(Role.name.asc())
             )
@@ -80,7 +97,8 @@ class EmployeeRepository:
             .options(
                 selectinload(User.user_roles)
                 .joinedload(UserRole.role)
-                .lazyload(Role.role_permissions)
+                .lazyload(Role.role_permissions),
+                noload(User.login_logs),
             )
             .where(User.active_filter())
         )

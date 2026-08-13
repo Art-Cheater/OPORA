@@ -102,66 +102,6 @@ def _hours_between(start: datetime | None, end: datetime | None) -> float | None
 class ReportsService:
     @classmethod
     def requests_report(cls, period: PeriodRange) -> RequestsReport:
-        created_count = db.session.scalar(
-            select(func.count())
-            .select_from(Request)
-            .where(
-                Request.active_filter(),
-                Request.created_at >= period.dt_from,
-                Request.created_at <= period.dt_to,
-            )
-        ) or 0
-
-        completed_count = db.session.scalar(
-            select(func.count(func.distinct(RequestHistory.request_id)))
-            .select_from(RequestHistory)
-            .join(RequestStatus, RequestStatus.id == RequestHistory.status_id)
-            .join(Request, Request.id == RequestHistory.request_id)
-            .where(
-                RequestHistory.active_filter(),
-                Request.active_filter(),
-                RequestStatus.code == STATUS_COMPLETED,
-                RequestHistory.created_at >= period.dt_from,
-                RequestHistory.created_at <= period.dt_to,
-            )
-        ) or 0
-
-        cancelled_count = db.session.scalar(
-            select(func.count(func.distinct(RequestHistory.request_id)))
-            .select_from(RequestHistory)
-            .join(RequestStatus, RequestStatus.id == RequestHistory.status_id)
-            .join(Request, Request.id == RequestHistory.request_id)
-            .where(
-                RequestHistory.active_filter(),
-                Request.active_filter(),
-                RequestStatus.code == STATUS_CANCELLED,
-                RequestHistory.created_at >= period.dt_from,
-                RequestHistory.created_at <= period.dt_to,
-            )
-        ) or 0
-
-        remaining_from_period = db.session.scalar(
-            select(func.count())
-            .select_from(Request)
-            .join(RequestStatus, RequestStatus.id == Request.status_id)
-            .where(
-                Request.active_filter(),
-                Request.created_at >= period.dt_from,
-                Request.created_at <= period.dt_to,
-                RequestStatus.code.notin_([STATUS_COMPLETED, STATUS_CANCELLED]),
-            )
-        ) or 0
-
-        open_total = db.session.scalar(
-            select(func.count())
-            .select_from(Request)
-            .join(RequestStatus, RequestStatus.id == Request.status_id)
-            .where(
-                Request.active_filter(),
-                RequestStatus.code.notin_([STATUS_COMPLETED, STATUS_CANCELLED]),
-            )
-        ) or 0
-
         rows = db.session.execute(
             select(
                 RequestStatus.code,
@@ -189,6 +129,42 @@ class ReportsService:
             StatusStat(code=code, name=name, color=color, count=int(count or 0))
             for code, name, color, count in rows
         ]
+        created_count = sum(item.count for item in by_status)
+        remaining_from_period = sum(
+            item.count
+            for item in by_status
+            if item.code not in {STATUS_COMPLETED, STATUS_CANCELLED}
+        )
+
+        history_counts = {
+            code: int(count or 0)
+            for code, count in db.session.execute(
+                select(RequestStatus.code, func.count(func.distinct(RequestHistory.request_id)))
+                .select_from(RequestHistory)
+                .join(RequestStatus, RequestStatus.id == RequestHistory.status_id)
+                .join(Request, Request.id == RequestHistory.request_id)
+                .where(
+                    RequestHistory.active_filter(),
+                    Request.active_filter(),
+                    RequestStatus.code.in_([STATUS_COMPLETED, STATUS_CANCELLED]),
+                    RequestHistory.created_at >= period.dt_from,
+                    RequestHistory.created_at <= period.dt_to,
+                )
+                .group_by(RequestStatus.code)
+            ).all()
+        }
+        completed_count = history_counts.get(STATUS_COMPLETED, 0)
+        cancelled_count = history_counts.get(STATUS_CANCELLED, 0)
+
+        open_total = db.session.scalar(
+            select(func.count())
+            .select_from(Request)
+            .join(RequestStatus, RequestStatus.id == Request.status_id)
+            .where(
+                Request.active_filter(),
+                RequestStatus.code.notin_([STATUS_COMPLETED, STATUS_CANCELLED]),
+            )
+        ) or 0
 
         # SLA: время от создания заявки до первого перехода в completed в периоде
         complete_hist = (

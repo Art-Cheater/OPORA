@@ -7,7 +7,7 @@ from datetime import date
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Date, ForeignKey, Index, String, Text, text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from app.models.base import ActiveRecordMixin, BaseModel
 from app.models.enums import TenderApplicationStatus
@@ -37,6 +37,7 @@ class TenderApplication(ActiveRecordMixin, BaseModel):
         Index("ix_tender_applications_status", "status"),
         Index("ix_tender_applications_responsible_id", "responsible_id"),
         Index("ix_tender_applications_object_id", "object_id"),
+        Index("ix_tender_applications_deleted_created", "deleted_at", "created_at"),
     )
 
     number: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -47,7 +48,9 @@ class TenderApplication(ActiveRecordMixin, BaseModel):
         default=TenderApplicationStatus.DRAFT.value,
         nullable=False,
     )
-    search_vector: Mapped[str | None] = mapped_column(SearchVectorType, nullable=True)
+    search_vector: Mapped[str | None] = deferred(
+        mapped_column(SearchVectorType, nullable=True)
+    )
 
     object_id: Mapped[uuid.UUID | None] = mapped_column(
         GUID(),
@@ -72,14 +75,15 @@ class TenderApplication(ActiveRecordMixin, BaseModel):
         "TenderProject",
         back_populates="tender",
         foreign_keys="TenderProject.tender_id",
-        lazy="selectin",
+        # select, не selectin: список торгов не должен тянуть состав и документы
+        lazy="select",
         cascade="all, delete-orphan",
     )
     documents: Mapped[list[TenderDocument]] = relationship(
         "TenderDocument",
         back_populates="tender",
         foreign_keys="TenderDocument.tender_id",
-        lazy="selectin",
+        lazy="select",
         order_by="TenderDocument.created_at.desc()",
     )
     contracts: Mapped[list[Contract]] = relationship(

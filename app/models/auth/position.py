@@ -37,7 +37,8 @@ class Position(ActiveRecordMixin, BaseModel):
         "User",
         back_populates="position_ref",
         foreign_keys="User.position_id",
-        lazy="selectin",
+        # select: иначе user_loader с joinedload(position_ref) тянет всех коллег
+        lazy="select",
     )
 
     def __repr__(self) -> str:

@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass
 
 from sqlalchemy import or_
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload, load_only, noload, selectinload
 
 from app.extensions import db
 from app.models.auth.user import User
@@ -14,6 +14,7 @@ from app.models.enums import ProjectStatus
 from app.models.projects.project import Project
 from app.models.tenders.tender_application import TenderApplication
 from app.models.tenders.tender_project import TenderProject
+from app.models.work_objects.work_object import WorkObject
 
 
 @dataclass
@@ -22,6 +23,14 @@ class TenderFilter:
     status: str = ""
     sort_by: str = "created_at"
     sort_dir: str = "desc"
+
+
+def _user_name_only():
+    return (
+        load_only(User.id, User.full_name),
+        noload(User.user_roles),
+        noload(User.login_logs),
+    )
 
 
 class TenderRepository:
@@ -45,27 +54,29 @@ class TenderRepository:
             db.select(TenderApplication)
             .where(TenderApplication.id == tender_id, TenderApplication.active_filter())
             .options(
-                selectinload(TenderApplication.project_links).joinedload(TenderProject.project).joinedload(
-                    Project.work_object
+                selectinload(TenderApplication.project_links)
+                .joinedload(TenderProject.project)
+                .options(
+                    joinedload(Project.work_object),
+                    selectinload(Project.documents),
+                    noload(Project.members),
+                    noload(Project.history),
+                    noload(Project.requests),
+                    noload(Project.contracts),
                 ),
                 selectinload(TenderApplication.documents),
-                joinedload(TenderApplication.responsible),
+                joinedload(TenderApplication.responsible).options(*_user_name_only()),
                 joinedload(TenderApplication.work_object),
+                noload(TenderApplication.contracts),
             )
         )
 
     @staticmethod
     def get_users() -> list[User]:
-        from sqlalchemy.orm import load_only, noload
-
         return list(
             db.session.scalars(
                 db.select(User)
-                .options(
-                    load_only(User.id, User.full_name),
-                    noload(User.user_roles),
-                    noload(User.login_logs),
-                )
+                .options(*_user_name_only())
                 .where(User.active_filter(), User.is_active.is_(True), User.is_blocked.is_(False))
                 .order_by(User.full_name.asc())
             )
@@ -101,7 +112,17 @@ class TenderRepository:
         stmt = (
             db.select(Project)
             .where(Project.active_filter(), Project.status.in_(allowed))
-            .options(joinedload(Project.work_object))
+            .options(
+                load_only(Project.id, Project.code, Project.name, Project.status, Project.object_id),
+                joinedload(Project.work_object).load_only(
+                    WorkObject.id, WorkObject.address, WorkObject.name
+                ),
+                noload(Project.members),
+                noload(Project.history),
+                noload(Project.documents),
+                noload(Project.requests),
+                noload(Project.contracts),
+            )
             .order_by(Project.code.asc())
         )
         projects = list(db.session.scalars(stmt).unique())
@@ -113,7 +134,17 @@ class TenderRepository:
                     db.session.scalars(
                         db.select(Project)
                         .where(Project.id.in_(missing), Project.active_filter())
-                        .options(joinedload(Project.work_object))
+                        .options(
+                            load_only(
+                                Project.id, Project.code, Project.name, Project.status, Project.object_id
+                            ),
+                            joinedload(Project.work_object).load_only(
+                                WorkObject.id, WorkObject.address, WorkObject.name
+                            ),
+                            noload(Project.members),
+                            noload(Project.history),
+                            noload(Project.documents),
+                        )
                     ).unique()
                 )
                 projects.extend(more)
@@ -125,9 +156,26 @@ class TenderRepository:
             db.select(TenderApplication)
             .where(TenderApplication.active_filter())
             .options(
-                selectinload(TenderApplication.project_links).joinedload(TenderProject.project),
-                joinedload(TenderApplication.responsible),
-                joinedload(TenderApplication.work_object),
+                load_only(
+                    TenderApplication.id,
+                    TenderApplication.number,
+                    TenderApplication.title,
+                    TenderApplication.status,
+                    TenderApplication.work_deadline,
+                    TenderApplication.object_id,
+                ),
+                joinedload(TenderApplication.work_object).options(
+                    load_only(
+                        WorkObject.id,
+                        WorkObject.address,
+                        WorkObject.name,
+                    ),
+                    noload(WorkObject.projects),
+                ),
+                noload(TenderApplication.project_links),
+                noload(TenderApplication.documents),
+                noload(TenderApplication.responsible),
+                noload(TenderApplication.contracts),
             )
         )
         if filters.q:

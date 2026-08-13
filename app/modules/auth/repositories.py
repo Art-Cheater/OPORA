@@ -2,10 +2,12 @@
 
 import uuid
 
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload, noload, selectinload
 
 from app.extensions import db
 from app.models.auth.associations import RolePermission, UserRole
+from app.models.auth.permission import Permission
+from app.models.auth.position import Position
 from app.models.auth.role import Role
 from app.models.auth.user import User
 
@@ -27,8 +29,13 @@ class UserRepository:
                 selectinload(User.user_roles)
                 .joinedload(UserRole.role)
                 .selectinload(Role.role_permissions)
-                .joinedload(RolePermission.permission),
-                joinedload(User.position_ref),
+                .joinedload(RolePermission.permission)
+                .options(
+                    noload(Permission.role_permissions),
+                    noload(Permission.system_module),
+                ),
+                joinedload(User.position_ref).options(noload(Position.users)),
+                noload(User.login_logs),
             )
             .where(User.id == user_id, User.active_filter())
         )

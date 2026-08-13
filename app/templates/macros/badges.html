@@ -104,3 +104,71 @@
         <span class="badge badge-status badge-neutral">Деактивирован</span>
     {% endif %}
 {% endmacro %}
+
+{# Цветовая полоса строки списка по статусу сущности #}
+{% macro table_row_tone(tone) -%}
+table-row-lifecycle table-row-{{ tone }}
+{%- endmacro %}
+
+{% macro request_row_class(req) -%}
+{%- set code = req.status.code if req.status else '' -%}
+{%- if code == 'new' -%}{{ table_row_tone('new') }}
+{%- elif code == 'emergency_dispatched' -%}{{ table_row_tone('brigade') }}
+{%- elif code in ['accepted_by_master', 'in_progress'] -%}{{ table_row_tone('master') }}
+{%- elif code == 'completed' -%}{{ table_row_tone('done') }}
+{%- elif code == 'cancelled' -%}{{ table_row_tone('cancelled') }}
+{%- else -%}{{ table_row_tone('draft') }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro project_row_class(status) -%}
+{%- set s = (status or '')|lower -%}
+{%- if s == 'draft' -%}{{ table_row_tone('draft') }}
+{%- elif s == 'active' -%}{{ table_row_tone('new') }}
+{%- elif s == 'in_tender' -%}{{ table_row_tone('brigade') }}
+{%- elif s == 'in_contract' -%}{{ table_row_tone('master') }}
+{%- elif s == 'completed' -%}{{ table_row_tone('done') }}
+{%- elif s in ['cancelled', 'on_hold', 'archived'] -%}{{ table_row_tone('cancelled') }}
+{%- else -%}{{ table_row_tone('draft') }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro contract_row_class(status) -%}
+{%- set s = (status or '')|lower -%}
+{%- if s == 'draft' -%}{{ table_row_tone('draft') }}
+{%- elif s == 'active' -%}{{ table_row_tone('new') }}
+{%- elif s in ['work_docs_pending', 'in_progress', 'ks2_pending'] -%}{{ table_row_tone('master') }}
+{%- elif s == 'completed' -%}{{ table_row_tone('done') }}
+{%- elif s in ['rejected', 'terminated'] -%}{{ table_row_tone('cancelled') }}
+{%- else -%}{{ table_row_tone('draft') }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro object_row_class(status) -%}
+{%- set s = (status or '')|lower -%}
+{%- if s == 'free' -%}{{ table_row_tone('new') }}
+{%- elif s == 'in_project' -%}{{ table_row_tone('master') }}
+{%- elif s == 'in_tender' -%}{{ table_row_tone('brigade') }}
+{%- elif s == 'in_contract' -%}{{ table_row_tone('master') }}
+{%- elif s == 'completed' -%}{{ table_row_tone('done') }}
+{%- elif s == 'archived' -%}{{ table_row_tone('cancelled') }}
+{%- else -%}{{ table_row_tone('draft') }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro tender_row_class(status) -%}
+{%- set s = (status or '')|lower -%}
+{%- if s == 'draft' -%}{{ table_row_tone('draft') }}
+{%- elif s == 'submitted' -%}{{ table_row_tone('brigade') }}
+{%- elif s == 'won' -%}{{ table_row_tone('done') }}
+{%- elif s in ['lost', 'cancelled'] -%}{{ table_row_tone('cancelled') }}
+{%- else -%}{{ table_row_tone('draft') }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro employee_row_class(user) -%}
+{%- if user.is_blocked -%}{{ table_row_tone('cancelled') }}
+{%- elif user.is_active -%}{{ table_row_tone('done') }}
+{%- else -%}{{ table_row_tone('draft') }}
+{%- endif -%}
+{%- endmacro %}

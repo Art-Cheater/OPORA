@@ -7,11 +7,12 @@ from dataclasses import dataclass
 from datetime import date
 
 from sqlalchemy import or_
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, load_only, noload, selectinload
 
 from app.extensions import db
 from app.models.auth.user import User
 from app.models.contracts.contract import Contract
+from app.models.contracts.contract_object import ContractObject
 
 
 @dataclass
@@ -52,7 +53,20 @@ class ContractRepository:
             except ValueError:
                 return None
         return db.session.scalar(
-            db.select(Contract).where(Contract.id == contract_id, Contract.active_filter())
+            db.select(Contract)
+            .where(Contract.id == contract_id, Contract.active_filter())
+            .options(
+                selectinload(Contract.object_links).joinedload(ContractObject.work_object),
+                selectinload(Contract.history),
+                selectinload(Contract.documents),
+                joinedload(Contract.responsible).options(
+                    load_only(User.id, User.full_name),
+                    noload(User.user_roles),
+                    noload(User.login_logs),
+                ),
+                joinedload(Contract.project),
+                joinedload(Contract.tender_application),
+            )
         )
 
     @staticmethod
@@ -98,7 +112,33 @@ class ContractRepository:
         stmt = (
             db.select(Contract)
             .where(Contract.active_filter())
-            .options(joinedload(Contract.responsible))
+            .options(
+                load_only(
+                    Contract.id,
+                    Contract.number,
+                    Contract.title,
+                    Contract.description,
+                    Contract.contract_type,
+                    Contract.status,
+                    Contract.contractor_name,
+                    Contract.amount,
+                    Contract.currency,
+                    Contract.contract_date,
+                    Contract.end_date,
+                    Contract.updated_at,
+                    Contract.responsible_id,
+                ),
+                joinedload(Contract.responsible).options(
+                    load_only(User.id, User.full_name),
+                    noload(User.user_roles),
+                    noload(User.login_logs),
+                ),
+                noload(Contract.object_links),
+                noload(Contract.history),
+                noload(Contract.documents),
+                noload(Contract.project),
+                noload(Contract.tender_application),
+            )
         )
         if filters.q:
             q = f"%{filters.q.strip()}%"

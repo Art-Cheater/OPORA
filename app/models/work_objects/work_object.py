@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Date, Index, Integer, Numeric, String, Text, text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from app.models.base import ActiveRecordMixin, BaseModel
 from app.models.enums import WorkObjectKind, WorkObjectStatus
@@ -27,6 +27,7 @@ class WorkObject(ActiveRecordMixin, BaseModel):
         Index("ix_work_objects_name", "name"),
         Index("ix_work_objects_contract_number", "contract_number"),
         Index("ix_work_objects_object_kind", "object_kind"),
+        Index("ix_work_objects_deleted_created", "deleted_at", "created_at"),
     )
 
     # name — полное наименование из плана (тип + адрес);
@@ -56,7 +57,9 @@ class WorkObject(ActiveRecordMixin, BaseModel):
         default=WorkObjectStatus.FREE.value,
         nullable=False,
     )
-    search_vector: Mapped[str | None] = mapped_column(SearchVectorType, nullable=True)
+    search_vector: Mapped[str | None] = deferred(
+        mapped_column(SearchVectorType, nullable=True)
+    )
 
     projects: Mapped[list[Project]] = relationship(
         "Project",

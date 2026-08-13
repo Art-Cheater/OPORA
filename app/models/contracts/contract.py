@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import Date, ForeignKey, Index, Numeric, String, Text, text
 from app.models.types import GUID, SearchVectorType
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from app.models.base import BaseModel
 from app.models.enums import ContractStatus, ContractType
@@ -43,6 +43,7 @@ class Contract(BaseModel):
         Index("ix_contracts_responsible_id", "responsible_id"),
         Index("ix_contracts_contract_date", "contract_date"),
         Index("ix_contracts_start_date", "start_date"),
+        Index("ix_contracts_deleted_created", "deleted_at", "created_at"),
     )
 
     contract_type: Mapped[str] = mapped_column(
@@ -64,7 +65,9 @@ class Contract(BaseModel):
     contract_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    search_vector: Mapped[str | None] = mapped_column(SearchVectorType, nullable=True)
+    search_vector: Mapped[str | None] = deferred(
+        mapped_column(SearchVectorType, nullable=True)
+    )
 
     responsible_id: Mapped[uuid.UUID | None] = mapped_column(
         GUID(),
@@ -100,21 +103,22 @@ class Contract(BaseModel):
         "ContractObject",
         back_populates="contract",
         foreign_keys="ContractObject.contract_id",
-        lazy="selectin",
+        # select: список договоров не должен тянуть объекты, историю и файлы
+        lazy="select",
         cascade="all, delete-orphan",
     )
     history: Mapped[list[ContractHistory]] = relationship(
         "ContractHistory",
         back_populates="contract",
         foreign_keys="ContractHistory.contract_id",
-        lazy="selectin",
+        lazy="select",
         order_by="ContractHistory.created_at.desc()",
     )
     documents: Mapped[list[ContractDocument]] = relationship(
         "ContractDocument",
         back_populates="contract",
         foreign_keys="ContractDocument.contract_id",
-        lazy="selectin",
+        lazy="select",
         order_by="ContractDocument.created_at.desc()",
     )
 

@@ -1,4 +1,4 @@
-{% from "macros/badges.html" import contract_status_badge, contract_type_badge %}
+{% from "macros/badges.html" import contract_status_badge, contract_type_badge, contract_row_class %}
 {% from "macros/crud.html" import table_actions %}
 {% from "macros/ui.html" import sortable_th %}
 {% set sort_by = sort_by|default(request.args.get('sort_by', 'created_at'), true) %}
@@ -22,7 +22,7 @@
         </thead>
         <tbody>
             {% for contract in contracts_pagination.items %}
-            <tr data-opora-id="{{ contract.id }}">
+            <tr data-opora-id="{{ contract.id }}" class="{{ contract_row_class(contract.status) }}">
                 <td class="fw-semibold">{{ contract.number }}</td>
                 <td>
                     <div class="fw-medium">{{ contract.title }}</div>

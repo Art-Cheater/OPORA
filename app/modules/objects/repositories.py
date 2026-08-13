@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass
 
 from sqlalchemy import or_
-from sqlalchemy.orm import load_only
+from sqlalchemy.orm import load_only, noload
 
 from app.extensions import db
 from app.models.work_objects.work_object import WorkObject
@@ -99,7 +99,26 @@ class ObjectRepository:
 
     @classmethod
     def paginated_list(cls, filters: ObjectFilter, page: int = 1, per_page: int = 20):
-        stmt = db.select(WorkObject).where(WorkObject.active_filter())
+        stmt = (
+            db.select(WorkObject)
+            .where(WorkObject.active_filter())
+            .options(
+                load_only(
+                    WorkObject.id,
+                    WorkObject.name,
+                    WorkObject.address,
+                    WorkObject.object_kind,
+                    WorkObject.work_deadline,
+                    WorkObject.contract_number,
+                    WorkObject.contract_date,
+                    WorkObject.contractor_name,
+                    WorkObject.status,
+                    WorkObject.plan_year,
+                    WorkObject.source_sheet,
+                ),
+                noload(WorkObject.projects),
+            )
+        )
         if filters.q:
             q = f"%{filters.q.strip()}%"
             stmt = stmt.where(

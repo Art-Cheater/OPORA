@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import Date, ForeignKey, Index, Integer, String, Text, text
 from app.models.types import GUID, SearchVectorType
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from app.models.base import ActiveRecordMixin, BaseModel
 from app.models.enums import ProjectMemberRole, ProjectStatus
@@ -39,6 +39,7 @@ class Project(ActiveRecordMixin, BaseModel):
         Index("ix_projects_manager_id", "manager_id"),
         Index("ix_projects_object_id", "object_id"),
         Index("ix_projects_start_date", "start_date"),
+        Index("ix_projects_deleted_created", "deleted_at", "created_at"),
     )
 
     code: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -52,7 +53,9 @@ class Project(ActiveRecordMixin, BaseModel):
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     progress_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    search_vector: Mapped[str | None] = mapped_column(SearchVectorType, nullable=True)
+    search_vector: Mapped[str | None] = deferred(
+        mapped_column(SearchVectorType, nullable=True)
+    )
 
     object_id: Mapped[uuid.UUID | None] = mapped_column(
         GUID(),
@@ -77,7 +80,8 @@ class Project(ActiveRecordMixin, BaseModel):
     members: Mapped[list[ProjectMember]] = relationship(
         "ProjectMember",
         back_populates="project",
-        lazy="selectin",
+        # select: иначе любой JOIN проекта (торги, формы) тянет участников
+        lazy="select",
     )
     requests: Mapped[list[Request]] = relationship(
         "Request",
@@ -93,14 +97,14 @@ class Project(ActiveRecordMixin, BaseModel):
         "ProjectHistory",
         back_populates="project",
         foreign_keys="ProjectHistory.project_id",
-        lazy="selectin",
+        lazy="select",
         order_by="ProjectHistory.created_at.desc()",
     )
     documents: Mapped[list[ProjectDocument]] = relationship(
         "ProjectDocument",
         back_populates="project",
         foreign_keys="ProjectDocument.project_id",
-        lazy="selectin",
+        lazy="select",
         order_by="ProjectDocument.created_at.desc()",
     )
 

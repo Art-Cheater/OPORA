@@ -13,7 +13,7 @@
         </thead>
         <tbody>
             {% for entry in audit_pagination.items %}
-            <tr>
+            <tr data-opora-id="{{ entry.id }}" class="table-row-lifecycle table-row-draft">
                 <td class="text-muted text-nowrap">{{ entry.created_at.strftime('%d.%m.%Y %H:%M:%S') }}</td>
                 <td>{{ entry.user.full_name if entry.user else '—' }}</td>
                 <td class="text-muted">{{ entry.ip_address or '—' }}</td>

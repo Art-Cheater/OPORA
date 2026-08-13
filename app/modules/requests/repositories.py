@@ -69,7 +69,9 @@ class RequestRepository:
             except ValueError:
                 return None
         return db.session.scalar(
-            db.select(Request).where(Request.id == request_id, Request.active_filter())
+            db.select(Request)
+            .options(joinedload(Request.status))
+            .where(Request.id == request_id, Request.active_filter())
         )
 
     @staticmethod
@@ -380,19 +382,29 @@ class RequestRepository:
             .where(Request.active_filter())
             .join(Request.status)
             .options(
+                load_only(
+                    Request.id,
+                    Request.number,
+                    Request.address,
+                    Request.pp,
+                    Request.dispatcher_name,
+                    Request.received_at,
+                    Request.created_at,
+                    Request.repeat_count,
+                    Request.repeat_dates,
+                    Request.has_barrier,
+                    Request.barrier_phone,
+                    Request.applicant_name,
+                    Request.status_id,
+                    Request.priority,
+                    Request.title,
+                ),
                 contains_eager(Request.status),
-                joinedload(Request.responsible).options(
-                    load_only(User.id, User.full_name, User.email, User.deleted_at, User.is_active),
-                    noload(User.user_roles),
-                    noload(User.login_logs),
-                ),
-                joinedload(Request.executor).options(
-                    load_only(User.id, User.full_name, User.email, User.deleted_at, User.is_active),
-                    noload(User.user_roles),
-                    noload(User.login_logs),
-                ),
+                noload(Request.responsible),
+                noload(Request.executor),
                 noload(Request.history),
                 noload(Request.materials),
+                noload(Request.project),
             )
         )
 

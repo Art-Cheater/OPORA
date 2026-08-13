@@ -51,7 +51,8 @@ class Permission(ActiveRecordMixin, BaseModel):
     role_permissions: Mapped[list[RolePermission]] = relationship(
         "RolePermission",
         back_populates="permission",
-        lazy="selectin",
+        # select: иначе каждый запрос с permissions тянет все привязки ролей
+        lazy="select",
     )
 
     def __repr__(self) -> str:

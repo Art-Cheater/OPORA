@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from sqlalchemy import or_
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload, load_only, noload, selectinload
 
 from app.extensions import db
 from app.models.auth.user import User
@@ -50,7 +50,25 @@ class ProjectRepository:
             except ValueError:
                 return None
         return db.session.scalar(
-            db.select(Project).where(Project.id == project_id, Project.active_filter())
+            db.select(Project)
+            .where(Project.id == project_id, Project.active_filter())
+            .options(
+                selectinload(Project.members).joinedload(ProjectMember.user).options(
+                    load_only(User.id, User.full_name),
+                    noload(User.user_roles),
+                    noload(User.login_logs),
+                ),
+                selectinload(Project.history),
+                selectinload(Project.documents),
+                joinedload(Project.manager).options(
+                    load_only(User.id, User.full_name),
+                    noload(User.user_roles),
+                    noload(User.login_logs),
+                ),
+                joinedload(Project.work_object),
+                noload(Project.requests),
+                noload(Project.contracts),
+            )
         )
 
     @staticmethod
@@ -96,8 +114,34 @@ class ProjectRepository:
             db.select(Project)
             .where(Project.active_filter())
             .options(
-                joinedload(Project.manager),
-                selectinload(Project.members).joinedload(ProjectMember.user),
+                load_only(
+                    Project.id,
+                    Project.code,
+                    Project.name,
+                    Project.description,
+                    Project.status,
+                    Project.progress_percent,
+                    Project.start_date,
+                    Project.end_date,
+                    Project.updated_at,
+                    Project.manager_id,
+                    Project.object_id,
+                ),
+                joinedload(Project.manager).options(
+                    load_only(User.id, User.full_name),
+                    noload(User.user_roles),
+                    noload(User.login_logs),
+                ),
+                selectinload(Project.members).joinedload(ProjectMember.user).options(
+                    load_only(User.id, User.full_name),
+                    noload(User.user_roles),
+                    noload(User.login_logs),
+                ),
+                noload(Project.history),
+                noload(Project.documents),
+                noload(Project.requests),
+                noload(Project.contracts),
+                noload(Project.work_object),
             )
         )
         if filters.q:

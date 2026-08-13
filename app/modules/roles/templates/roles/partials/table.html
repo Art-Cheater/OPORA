@@ -17,7 +17,7 @@
         </thead>
         <tbody>
             {% for role in roles_pagination.items %}
-            <tr data-opora-id="{{ role.id }}">
+            <tr data-opora-id="{{ role.id }}" class="table-row-lifecycle {% if role.is_system %}table-row-brigade{% else %}table-row-draft{% endif %}">
                 <td class="fw-semibold"><code>{{ role.code }}</code></td>
                 <td>{{ role.name }}</td>
                 <td>
