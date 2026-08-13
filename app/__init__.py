@@ -23,6 +23,7 @@ def create_app(config_name: str | None = None) -> Flask:
 
     _init_extensions(app)
     _register_performance_profiler(app)
+    _configure_static_assets(app)
     register_blueprints(app)
     _register_audit_hooks(app)
     _register_security_hooks(app)
@@ -51,6 +52,30 @@ def _ensure_upload_folder(app: Flask) -> None:
     upload_folder = app.config.get("UPLOAD_FOLDER")
     if upload_folder:
         Path(upload_folder).mkdir(parents=True, exist_ok=True)
+
+
+def _configure_static_assets(app: Flask) -> None:
+    """Кэш статики и cache-bust, чтобы повторная навигация не качала CSS/JS заново."""
+    app.config.setdefault("SEND_FILE_MAX_AGE_DEFAULT", 60 * 60 * 24 * 30)
+
+    @app.url_defaults
+    def _static_cache_bust(endpoint, values):
+        if endpoint != "static" or "filename" not in values or "v" in values:
+            return
+        filename = values["filename"]
+        file_path = Path(app.static_folder or "") / filename
+        try:
+            values["v"] = str(int(file_path.stat().st_mtime))
+        except OSError:
+            values["v"] = str(app.config.get("APP_VERSION", "1"))
+
+    @app.after_request
+    def _cache_static_assets(response):
+        from flask import request
+
+        if request.endpoint == "static" and response.status_code == 200:
+            response.headers["Cache-Control"] = "public, max-age=2592000, immutable"
+        return response
 
 
 def _register_audit_hooks(app: Flask) -> None:
@@ -175,8 +200,12 @@ def _register_security_hooks(app: Flask) -> None:
 
     @app.before_request
     def enforce_user_access():
-        from flask import flash, redirect, url_for
+        from flask import flash, redirect, request, url_for
         from flask_login import current_user, logout_user
+
+        # CSS/JS не должны ходить в БД за current_user — иначе статика встаёт в очередь за HTML.
+        if request.endpoint == "static" or (request.path or "").startswith("/static/"):
+            return
 
         if not current_user.is_authenticated:
             return

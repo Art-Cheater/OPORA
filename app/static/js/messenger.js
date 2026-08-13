@@ -866,8 +866,9 @@
     { once: true }
   );
 
-  heartbeat();
-  heartbeatTimer = setInterval(heartbeat, 30000);
+  heartbeatTimer = setInterval(() => {
+    if (!document.hidden) heartbeat();
+  }, 30000);
   loadConversations();
   startUnreadPolling();
 

@@ -5,4 +5,5 @@ from app import create_app
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # threaded: иначе CSS/JS ждут один медленный HTML (Stalled 20+ с в DevTools).
+    app.run(host="0.0.0.0", port=5000, debug=True, threaded=True)

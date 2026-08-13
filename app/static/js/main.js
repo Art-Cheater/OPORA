@@ -184,6 +184,9 @@ function initMessengerUnreadBadge() {
     // messenger.js owns unread polling on its page; do not start a second loop.
     if (onMessengerPage) return;
 
+    const abort = new AbortController();
+    window.addEventListener("pagehide", () => abort.abort(), { once: true });
+
     function applyTotal(total, preview) {
         if (badge) {
             if (total > 0) {
@@ -209,17 +212,22 @@ function initMessengerUnreadBadge() {
     }
 
     async function refresh() {
+        if (document.hidden) return;
         try {
             const headers = {};
             if (etag) headers["If-None-Match"] = etag;
-            const res = await fetch("/messenger/api/unread-count", { headers });
+            const res = await fetch("/messenger/api/unread-count", {
+                headers,
+                signal: abort.signal,
+                priority: "low",
+            });
             if (res.status === 304) return;
             if (!res.ok) return;
             etag = res.headers.get("ETag") || etag;
             const data = await res.json();
             applyTotal(data.total || 0, data.preview || null);
         } catch {
-            /* ignore */
+            /* ignore abort / network */
         }
     }
 
@@ -233,6 +241,9 @@ function initMessengerUnreadBadge() {
         if (!document.hidden) refresh();
     });
 
-    refresh();
-    setInterval(refresh, intervalMs);
+    // Не конкурировать с CSS/JS на первом кадре страницы.
+    window.setTimeout(refresh, 2500);
+    window.setInterval(() => {
+        if (!document.hidden) refresh();
+    }, intervalMs);
 }

@@ -231,3 +231,26 @@ def test_list_rows_use_status_tones(admin_client):
     for path in ("/projects/", "/contracts/", "/objects/", "/tenders/"):
         response = admin_client.get(path)
         assert response.status_code == 200, path
+
+
+def test_static_assets_are_public_cached_and_not_cdn_fallback(client, admin_client):
+    for path in (
+        "/static/css/main.css",
+        "/static/js/main.js",
+        "/static/vendor/bootstrap.min.css",
+        "/static/vendor/bootstrap.bundle.min.js",
+        "/static/vendor/bootstrap-icons.min.css",
+        "/static/vendor/fonts/bootstrap-icons.woff2",
+    ):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        cache = response.headers.get("Cache-Control", "")
+        assert "max-age" in cache
+        assert "public" in cache
+
+    page = admin_client.get("/requests/")
+    html = page.get_data(as_text=True)
+    assert "cdn.jsdelivr.net" not in html
+    assert "static/css/main.css?v=" in html
+    assert "static/vendor/bootstrap.min.css?v=" in html
+
