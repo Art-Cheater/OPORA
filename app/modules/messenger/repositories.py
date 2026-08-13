@@ -332,7 +332,7 @@ class MessengerRepository:
         return list(db.session.scalars(stmt))
 
     @staticmethod
-    def touch_presence(user_id: uuid.UUID) -> UserPresence:
+    def touch_presence(user_id: uuid.UUID, min_interval_seconds: int = 20) -> UserPresence:
         presence = db.session.scalar(
             select(UserPresence).where(
                 UserPresence.user_id == user_id,
@@ -344,6 +344,9 @@ class MessengerRepository:
             presence = UserPresence(user_id=user_id, last_seen_at=now, created_by=user_id, updated_by=user_id)
             db.session.add(presence)
         else:
+            last_seen = as_utc_aware(presence.last_seen_at)
+            if last_seen is not None and (now - last_seen).total_seconds() < min_interval_seconds:
+                return presence
             presence.last_seen_at = now
             presence.updated_by = user_id
         db.session.flush()

@@ -79,10 +79,15 @@ def _default_database_url() -> str:
     )
 
 
+def _sqlite_connect_args() -> dict:
+    """Потоки Flask + ожидание блокировки вместо мгновенного «database is locked»."""
+    return {"check_same_thread": False, "timeout": 15.0}
+
+
 def _engine_options(database_url: str) -> dict:
     """Параметры движка: SQLite или PostgreSQL (search_path схемы opora)."""
     if database_url.startswith("sqlite"):
-        return {"connect_args": {"check_same_thread": False}}
+        return {"connect_args": _sqlite_connect_args()}
 
     schema = os.getenv("POSTGRES_SCHEMA", "opora").strip() or "public"
     options: dict = {
@@ -211,7 +216,7 @@ class TestingConfig(Config):
         return "sqlite:///:memory:"
 
     SQLALCHEMY_DATABASE_URI = None  # задаётся в get_config
-    SQLALCHEMY_ENGINE_OPTIONS = {"connect_args": {"check_same_thread": False}}
+    SQLALCHEMY_ENGINE_OPTIONS = {"connect_args": _sqlite_connect_args()}
 
 
 config_by_name = {
@@ -232,7 +237,7 @@ def get_config(config_name: str | None = None) -> type[Config]:
         config_cls.SQLALCHEMY_DATABASE_URI = uri
         if uri.startswith("sqlite"):
             config_cls.SQLALCHEMY_ENGINE_OPTIONS = {
-                "connect_args": {"check_same_thread": False}
+                "connect_args": _sqlite_connect_args()
             }
         else:
             config_cls.SQLALCHEMY_ENGINE_OPTIONS = {

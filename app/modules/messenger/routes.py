@@ -35,7 +35,6 @@ def _online_timeout() -> int:
 @login_required
 @permission_required(PERM_MESSENGER_USE)
 def index():
-    MessengerService.heartbeat(current_user.id)
     return render_template("messenger/index.html")
 
 

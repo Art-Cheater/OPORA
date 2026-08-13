@@ -118,7 +118,11 @@ def _prepare_project_form(form: ProjectForm, project=None) -> None:
 
     current_object_id = project.object_id if project else None
     if current_object_id is None:
-        raw = request.args.get("object_id") or (form.object_id.data if form.object_id.data else "")
+        raw = (
+            request.form.get("object_id")
+            or request.args.get("object_id")
+            or (form.object_id.data if form.object_id.data else "")
+        )
         current_object_id = _uuid_or_none(str(raw) if raw else "")
 
     # С объектом из URL — не грузим весь справочник свободных (быстрее открытие формы)
@@ -131,10 +135,18 @@ def _prepare_project_form(form: ProjectForm, project=None) -> None:
         else:
             form.object_id.choices = [("", "Объект не найден")]
     else:
-        objects = ObjectRepository.list_free_or_current(current_object_id)
+        objects = ObjectRepository.list_free_or_current(
+            current_object_id,
+            extra_ids=[current_object_id] if current_object_id else None,
+        )
         form.object_id.choices = [("", "Выберите объект")] + [
             (str(obj.id), ObjectRepository.label_for_select(obj)) for obj in objects
         ]
+    form.object_id.render_kw = {
+        **(form.object_id.render_kw or {}),
+        "data-choice-url": url_for("objects.api_choices", free_only=1),
+        "data-choice-placeholder": "Начните вводить адрес…",
+    }
     BuiltinFieldService.apply_to_form(form, "projects")
 
 

@@ -159,6 +159,12 @@ def _configure_sqlite(app: Flask) -> None:
             return
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        # WAL: читатели не ждут писателей. Без этого threaded Flask + запись
+        # (создание, heartbeat) стопорят соседние запросы на ~5 с (busy timeout).
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=15000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA temp_store=MEMORY")
         cursor.close()
 
     _configure_sqlite._registered = True  # type: ignore[attr-defined]

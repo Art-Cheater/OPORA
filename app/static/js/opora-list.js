@@ -284,8 +284,65 @@ window.OporaList = (() => {
     if (!form) return;
     if (window.OporaPhoneMask) OporaPhoneMask.init(form);
     if (window.OporaRequestsForm) OporaRequestsForm.init(form);
+    initChoiceSearch(form);
     const firstInvalid = form.querySelector(".is-invalid");
     if (firstInvalid) firstInvalid.focus();
+  }
+
+  function initChoiceSearch(root) {
+    if (!root) return;
+    root.querySelectorAll("select[data-choice-url]").forEach((select) => {
+      if (select.dataset.choiceBound === "1") return;
+      select.dataset.choiceBound = "1";
+      const input = document.createElement("input");
+      input.type = "search";
+      input.className = "form-control form-control-sm mb-1";
+      input.placeholder = select.dataset.choicePlaceholder || "Поиск…";
+      input.autocomplete = "off";
+      select.parentNode.insertBefore(input, select);
+      let timer = null;
+      input.addEventListener("input", () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fetchChoices(select, input.value), 250);
+      });
+    });
+  }
+
+  async function fetchChoices(select, query) {
+    const url = new URL(select.dataset.choiceUrl, window.location.origin);
+    url.searchParams.set("q", query || "");
+    [...select.options].forEach((option) => {
+      if (option.selected && option.value) url.searchParams.append("id", option.value);
+    });
+    try {
+      const response = await fetch(url.toString(), {
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      const selected = new Set(
+        [...select.selectedOptions].map((option) => option.value).filter(Boolean)
+      );
+      const empty = select.querySelector('option[value=""]');
+      select.innerHTML = "";
+      if (empty && !select.multiple) {
+        select.appendChild(empty);
+      } else if (!select.multiple) {
+        const blank = document.createElement("option");
+        blank.value = "";
+        blank.textContent = "Не выбран";
+        select.appendChild(blank);
+      }
+      (data.items || []).forEach((item) => {
+        const option = document.createElement("option");
+        option.value = item.id;
+        option.textContent = item.label;
+        if (selected.has(item.id)) option.selected = true;
+        select.appendChild(option);
+      });
+    } catch {
+      /* поиск справочника не должен ломать форму */
+    }
   }
 
   function bindFormSubmit(form) {
@@ -548,9 +605,13 @@ window.OporaList = (() => {
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initFromConfigElement);
+    document.addEventListener("DOMContentLoaded", () => {
+      initFromConfigElement();
+      initChoiceSearch(document);
+    });
   } else {
     initFromConfigElement();
+    initChoiceSearch(document);
   }
 
   return { init, loadTable, showToast, openView, openEdit, openCreate, initFromConfigElement };

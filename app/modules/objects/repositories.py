@@ -11,6 +11,18 @@ from sqlalchemy.orm import load_only, noload
 from app.extensions import db
 from app.models.work_objects.work_object import WorkObject
 
+CHOICE_LIMIT = 40
+
+
+def _unique_uuids(*groups: list[uuid.UUID] | uuid.UUID | None) -> list[uuid.UUID]:
+    result: list[uuid.UUID] = []
+    for group in groups:
+        values = group if isinstance(group, list) else [group]
+        for value in values:
+            if value and value not in result:
+                result.append(value)
+    return result
+
 
 @dataclass
 class ObjectFilter:
@@ -59,36 +71,70 @@ class ObjectRepository:
         )
 
     @staticmethod
-    def list_choices() -> list[WorkObject]:
-        """Лёгкий список для select: только id/address/name."""
-        return list(
-            db.session.scalars(
-                db.select(WorkObject)
-                .options(load_only(WorkObject.id, WorkObject.address, WorkObject.name))
-                .where(WorkObject.active_filter())
-                .order_by(WorkObject.address.asc().nulls_last(), WorkObject.name.asc())
-            )
-        )
-
-    @staticmethod
-    def list_free_or_current(current_id: uuid.UUID | None = None) -> list[WorkObject]:
+    def list_choices(
+        q: str = "",
+        limit: int = CHOICE_LIMIT,
+        extra_ids: list[uuid.UUID] | None = None,
+        *,
+        free_only: bool = False,
+        current_id: uuid.UUID | None = None,
+    ) -> list[WorkObject]:
+        """Короткий список для select: не грузим весь справочник объектов."""
         from app.models.enums import WorkObjectStatus
 
+        extras = _unique_uuids(extra_ids, current_id)
         stmt = (
             db.select(WorkObject)
-            .options(load_only(WorkObject.id, WorkObject.address, WorkObject.name, WorkObject.status))
+            .options(
+                load_only(WorkObject.id, WorkObject.address, WorkObject.name, WorkObject.status),
+                noload(WorkObject.projects),
+            )
             .where(WorkObject.active_filter())
         )
-        if current_id is not None:
-            stmt = stmt.where(
-                (WorkObject.status == WorkObjectStatus.FREE.value) | (WorkObject.id == current_id)
-            )
-        else:
-            stmt = stmt.where(WorkObject.status == WorkObjectStatus.FREE.value)
-        return list(
+        if free_only:
+            if extras:
+                stmt = stmt.where(
+                    (WorkObject.status == WorkObjectStatus.FREE.value) | (WorkObject.id.in_(extras))
+                )
+            else:
+                stmt = stmt.where(WorkObject.status == WorkObjectStatus.FREE.value)
+        if q.strip():
+            like = f"%{q.strip()}%"
+            stmt = stmt.where(or_(WorkObject.address.ilike(like), WorkObject.name.ilike(like)))
+        items = list(
             db.session.scalars(
-                stmt.order_by(WorkObject.address.asc().nulls_last(), WorkObject.name.asc())
+                stmt.order_by(WorkObject.address.asc().nulls_last(), WorkObject.name.asc()).limit(limit)
             )
+        )
+        missing = [item_id for item_id in extras if item_id not in {item.id for item in items}]
+        if missing:
+            items.extend(
+                db.session.scalars(
+                    db.select(WorkObject)
+                    .options(
+                        load_only(
+                            WorkObject.id, WorkObject.address, WorkObject.name, WorkObject.status
+                        ),
+                        noload(WorkObject.projects),
+                    )
+                    .where(WorkObject.id.in_(missing), WorkObject.active_filter())
+                )
+            )
+        return items
+
+    @staticmethod
+    def list_free_or_current(
+        current_id: uuid.UUID | None = None,
+        q: str = "",
+        limit: int = CHOICE_LIMIT,
+        extra_ids: list[uuid.UUID] | None = None,
+    ) -> list[WorkObject]:
+        return ObjectRepository.list_choices(
+            q=q,
+            limit=limit,
+            extra_ids=extra_ids,
+            free_only=True,
+            current_id=current_id,
         )
 
     @staticmethod
@@ -128,7 +174,6 @@ class ObjectRepository:
                     WorkObject.contractor_name.ilike(q),
                     WorkObject.contract_number.ilike(q),
                     WorkObject.court_decision_number.ilike(q),
-                    WorkObject.notes.ilike(q),
                 )
             )
         if filters.status:

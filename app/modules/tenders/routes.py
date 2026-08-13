@@ -49,25 +49,49 @@ def _uuid_list(values: list[str]) -> list[uuid.UUID]:
     return result
 
 
-def _prepare_form(form: TenderForm, extra_project_ids: list[uuid.UUID] | None = None) -> None:
+def _prepare_form(
+    form: TenderForm,
+    extra_project_ids: list[uuid.UUID] | None = None,
+    extra_object_ids: list[uuid.UUID] | None = None,
+) -> None:
     users = TenderRepository.get_users()
     form.responsible_id.choices = [("", "Не назначен")] + [
         (str(u.id), u.full_name) for u in users
     ]
     from app.modules.objects.repositories import ObjectRepository
 
-    objects = ObjectRepository.list_choices()
+    extra_objects: list[uuid.UUID] = list(extra_object_ids or [])
+    for raw in (
+        request.form.get("object_id"),
+        request.args.get("object_id"),
+        form.object_id.data if form.object_id.data else None,
+    ):
+        parsed = _uuid_or_none(str(raw) if raw else "")
+        if parsed and parsed not in extra_objects:
+            extra_objects.append(parsed)
+
+    objects = ObjectRepository.list_choices(extra_ids=extra_objects)
     form.object_id.choices = [("", "Не выбран")] + [
-        (str(o.id), o.display_address[:120]) for o in objects
+        (str(o.id), ObjectRepository.label_for_select(o)) for o in objects
     ]
-    projects = TenderRepository.selectable_projects(extra_project_ids)
+    form.object_id.render_kw = {
+        **(form.object_id.render_kw or {}),
+        "data-choice-url": url_for("objects.api_choices"),
+        "data-choice-placeholder": "Начните вводить адрес…",
+    }
+
+    extra_projects = list(extra_project_ids or [])
+    extra_projects.extend(_uuid_list(request.form.getlist("project_ids")))
+    extra_projects.extend(_uuid_list(request.args.getlist("project_id")))
+    projects = TenderRepository.selectable_projects(extra_projects)
     form.project_ids.choices = [
-        (
-            str(p.id),
-            f"{p.code} — {p.name}" + (f" ({p.work_object.name})" if p.work_object else ""),
-        )
-        for p in projects
+        (str(p.id), TenderRepository.project_choice_label(p)) for p in projects
     ]
+    form.project_ids.render_kw = {
+        **(form.project_ids.render_kw or {}),
+        "data-choice-url": url_for("tenders.api_project_choices"),
+        "data-choice-placeholder": "Начните вводить код или название…",
+    }
 
 
 def _payload(form: TenderForm) -> TenderPayload:
@@ -140,6 +164,25 @@ def table():
         pagination=pagination,
     )
     return jsonify({"table_html": html, "pagination_html": pager})
+
+
+@tenders_bp.route("/api/project-choices")
+@login_required
+@permission_required(PERM_TENDERS_VIEW)
+def api_project_choices():
+    extra_ids = _uuid_list(request.args.getlist("id"))
+    projects = TenderRepository.selectable_projects(
+        extra_ids,
+        q=request.args.get("q", ""),
+    )
+    return jsonify(
+        {
+            "items": [
+                {"id": str(project.id), "label": TenderRepository.project_choice_label(project)}
+                for project in projects
+            ]
+        }
+    )
 
 
 @tenders_bp.route("/new", methods=["GET", "POST"])
@@ -217,7 +260,8 @@ def edit(tender_id: uuid.UUID):
         return redirect(url_for("tenders.index"))
     current_ids = [link.project_id for link in tender.project_links if link.deleted_at is None]
     form = TenderForm()
-    _prepare_form(form, current_ids)
+    extra_objects = [tender.object_id] if tender.object_id else None
+    _prepare_form(form, current_ids, extra_objects)
     if request.method == "GET":
         form.number.data = tender.number
         form.title.data = tender.title

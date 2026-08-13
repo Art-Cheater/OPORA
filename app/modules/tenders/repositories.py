@@ -103,52 +103,59 @@ class TenderRepository:
         return f"{prefix}{seq:03d}"
 
     @staticmethod
-    def selectable_projects(extra_ids: list[uuid.UUID] | None = None) -> list[Project]:
+    def selectable_projects(
+        extra_ids: list[uuid.UUID] | None = None,
+        q: str = "",
+        limit: int = 40,
+    ) -> list[Project]:
         allowed = {
             ProjectStatus.DRAFT.value,
             ProjectStatus.ACTIVE.value,
             ProjectStatus.CANCELLED.value,
         }
+        extras = [item_id for item_id in extra_ids or [] if item_id]
+        options = (
+            load_only(Project.id, Project.code, Project.name, Project.status, Project.object_id),
+            joinedload(Project.work_object).load_only(
+                WorkObject.id, WorkObject.address, WorkObject.name
+            ),
+            noload(Project.members),
+            noload(Project.history),
+            noload(Project.documents),
+            noload(Project.requests),
+            noload(Project.contracts),
+        )
         stmt = (
             db.select(Project)
             .where(Project.active_filter(), Project.status.in_(allowed))
-            .options(
-                load_only(Project.id, Project.code, Project.name, Project.status, Project.object_id),
-                joinedload(Project.work_object).load_only(
-                    WorkObject.id, WorkObject.address, WorkObject.name
-                ),
-                noload(Project.members),
-                noload(Project.history),
-                noload(Project.documents),
-                noload(Project.requests),
-                noload(Project.contracts),
-            )
+            .options(*options)
             .order_by(Project.code.asc())
         )
-        projects = list(db.session.scalars(stmt).unique())
-        if extra_ids:
-            existing_ids = {p.id for p in projects}
-            missing = [i for i in extra_ids if i not in existing_ids]
-            if missing:
-                more = list(
-                    db.session.scalars(
-                        db.select(Project)
-                        .where(Project.id.in_(missing), Project.active_filter())
-                        .options(
-                            load_only(
-                                Project.id, Project.code, Project.name, Project.status, Project.object_id
-                            ),
-                            joinedload(Project.work_object).load_only(
-                                WorkObject.id, WorkObject.address, WorkObject.name
-                            ),
-                            noload(Project.members),
-                            noload(Project.history),
-                            noload(Project.documents),
-                        )
-                    ).unique()
-                )
-                projects.extend(more)
+        if q.strip():
+            like = f"%{q.strip()}%"
+            stmt = stmt.where(or_(Project.code.ilike(like), Project.name.ilike(like)))
+        projects = list(db.session.scalars(stmt.limit(limit)).unique())
+        existing_ids = {p.id for p in projects}
+        missing = [item_id for item_id in extras if item_id not in existing_ids]
+        if missing:
+            more = list(
+                db.session.scalars(
+                    db.select(Project)
+                    .where(Project.id.in_(missing), Project.active_filter())
+                    .options(*options)
+                ).unique()
+            )
+            projects.extend(more)
         return projects
+
+    @staticmethod
+    def project_choice_label(project: Project) -> str:
+        label = f"{project.code} — {project.name}"
+        if project.work_object:
+            extra = (project.work_object.address or project.work_object.name or "").strip()
+            if extra:
+                label = f"{label} ({extra[:80]})"
+        return label
 
     @classmethod
     def paginated_list(cls, filters: TenderFilter, page: int = 1, per_page: int = 20):

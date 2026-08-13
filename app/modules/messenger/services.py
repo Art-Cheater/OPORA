@@ -154,4 +154,5 @@ class MessengerService:
     @staticmethod
     def heartbeat(user_id: uuid.UUID) -> None:
         MessengerRepository.touch_presence(user_id)
-        db.session.commit()
+        if db.session.new or db.session.dirty:
+            db.session.commit()

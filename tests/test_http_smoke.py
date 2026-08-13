@@ -216,6 +216,11 @@ def test_employee_and_tender_shared_forms_open(admin_client):
     tender_modal = admin_client.get("/tenders/new", headers=ajax)
     assert tender_modal.status_code == 200, tender_modal.get_data(as_text=True)[:2000]
     assert 'name="object_id"' in tender_modal.get_data(as_text=True)
+    assert "data-choice-url" in tender_modal.get_data(as_text=True)
+
+    choices = admin_client.get("/objects/api/choices", headers=ajax)
+    assert choices.status_code == 200, choices.get_data(as_text=True)[:1000]
+    assert isinstance(choices.get_json().get("items"), list)
 
 
 def test_list_rows_use_status_tones(admin_client):

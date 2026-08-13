@@ -177,6 +177,20 @@ def test_search_and_employee_roles_are_eager_loaded(app):
         assert len(users) == 2
 
 
+def test_heartbeat_skips_write_when_recently_seen(app):
+    with app.app_context():
+        admin = _user("admin@opora.ru")
+        MessengerService.heartbeat(admin.id)
+        db.session.expunge_all()
+
+        with count_queries(db.engine, capture_statements=True) as counter:
+            MessengerService.heartbeat(admin.id)
+
+        assert not any(item.lstrip().upper().startswith("UPDATE") for item in counter.statements)
+        assert not any(item.lstrip().upper().startswith("INSERT") for item in counter.statements)
+        assert counter.count <= 2
+
+
 def test_requests_list_stays_within_query_budget(admin_client, app):
     from app.modules.requests.repositories import RequestFilter, RequestRepository
     from app.modules.reports.services import ReportsService, resolve_period

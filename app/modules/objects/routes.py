@@ -80,6 +80,40 @@ def _prepare_object_form(form: ObjectForm) -> None:
     form.notes.label.text = "Основание для проведения работ"
 
 
+def _uuid_or_none(value: str) -> uuid.UUID | None:
+    if not value:
+        return None
+    try:
+        return uuid.UUID(value)
+    except ValueError:
+        return None
+
+
+@objects_bp.route("/api/choices")
+@login_required
+@permission_required(PERM_OBJECTS_VIEW)
+def api_choices():
+    extra_ids = []
+    for raw in request.args.getlist("id"):
+        parsed = _uuid_or_none(raw)
+        if parsed is not None:
+            extra_ids.append(parsed)
+    free_only = request.args.get("free_only", "").strip().lower() in {"1", "true", "yes"}
+    items = ObjectRepository.list_choices(
+        q=request.args.get("q", ""),
+        extra_ids=extra_ids,
+        free_only=free_only,
+    )
+    return jsonify(
+        {
+            "items": [
+                {"id": str(item.id), "label": ObjectRepository.label_for_select(item)}
+                for item in items
+            ]
+        }
+    )
+
+
 def _render_form_modal(form: ObjectForm, form_action: str, modal_title: str):
     return render_template(
         "objects/partials/form_modal.html",

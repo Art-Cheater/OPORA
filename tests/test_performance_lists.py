@@ -234,3 +234,77 @@ def test_user_loader_does_not_pull_position_colleagues_or_permission_graph(app):
         with count_queries(db.engine) as counter:
             assert loaded.has_permission("tenders.view")
         assert counter.count == 0
+
+
+def test_sqlite_uses_wal_and_busy_timeout(app):
+    with app.app_context():
+        with db.engine.connect() as conn:
+            journal = conn.exec_driver_sql("PRAGMA journal_mode").scalar()
+            timeout = conn.exec_driver_sql("PRAGMA busy_timeout").scalar()
+        assert str(journal).lower() == "wal"
+        assert int(timeout) >= 15000
+
+
+def test_choice_lists_are_capped_and_keep_extra_ids(app, admin_client):
+    with app.app_context():
+        admin = _admin(app)
+        created = []
+        for index in range(45):
+            created.append(
+                ObjectService.create(
+                    ObjectPayload(
+                        name=f"Объект выбора {index:03d}",
+                        address=f"ул. Выборная, {index:03d}",
+                        plan_year=2026,
+                        notes="основание",
+                        status=WorkObjectStatus.FREE.value,
+                    ),
+                    admin.id,
+                )
+            )
+        last = created[-1]
+        last_id = last.id
+        admin_id = admin.id
+        db.session.expunge_all()
+
+        choices = ObjectRepository.list_choices(limit=40)
+        assert len(choices) <= 40
+        assert last_id not in {item.id for item in choices}
+
+        with_extra = ObjectRepository.list_choices(limit=40, extra_ids=[last_id])
+        assert last_id in {item.id for item in with_extra}
+
+        found = ObjectRepository.list_choices(q="044", limit=40)
+        assert last_id in {item.id for item in found}
+
+    ajax = {"X-Requested-With": "XMLHttpRequest"}
+    listed = admin_client.get("/objects/api/choices")
+    assert listed.status_code == 200, listed.get_data(as_text=True)[:1000]
+    payload = listed.get_json()
+    assert payload and len(payload["items"]) <= 40
+
+    searched = admin_client.get("/objects/api/choices?q=044")
+    assert searched.status_code == 200
+    search_ids = {item["id"] for item in searched.get_json()["items"]}
+    assert str(last_id) in search_ids
+
+    create_form = admin_client.get("/tenders/new", headers=ajax)
+    html = create_form.get_data(as_text=True)
+    assert create_form.status_code == 200
+    assert "data-choice-url" in html
+    assert str(last_id) not in html
+
+    saved = admin_client.post(
+        "/tenders/new",
+        data={
+            "number": f"ТРГ-CHOICE-{uuid.uuid4().hex[:6].upper()}",
+            "title": "Торги с объектом вне первых 40",
+            "status": TenderApplicationStatus.DRAFT.value,
+            "object_id": str(last_id),
+            "responsible_id": str(admin_id),
+        },
+        headers=ajax,
+    )
+    assert saved.status_code == 200, saved.get_data(as_text=True)[:2000]
+    body = saved.get_json()
+    assert body and body.get("success") is True
