@@ -20,3 +20,11 @@ def test_normalize_matches_variants():
     b = normalize_address("ул. Лепсе, д.79")
     c = normalize_address("Киров, улица Лепсе, дом 79")
     assert a == b == c
+
+
+def test_open_by_address_lookup_tokens_are_distinctive():
+    from app.modules.requests.repositories import RequestRepository
+
+    tokens = RequestRepository._address_lookup_tokens("лепсе 79")
+    assert "лепсе" in [item.casefold() for item in tokens]
+    assert any(item.startswith("79") for item in tokens)

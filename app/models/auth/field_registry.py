@@ -21,7 +21,7 @@ _FALLBACK_MODULE_FIELDS: dict[str, dict[str, str]] = {
         "original_address": "Исходный адрес",
         "normalized_address": "Нормализованный адрес",
         "region": "Регион адреса",
-        "district": "Район адреса",
+        "district": "Район",
         "settlement": "Населённый пункт",
         "street": "Улица",
         "house": "Дом",

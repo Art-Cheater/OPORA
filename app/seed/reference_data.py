@@ -233,7 +233,6 @@ class ReferenceDataService:
                     "original_address",
                     "normalized_address",
                     "region",
-                    "district",
                     "settlement",
                     "street",
                     "house",

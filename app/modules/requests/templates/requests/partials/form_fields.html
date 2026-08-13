@@ -72,5 +72,5 @@
         <div class="form-control-plaintext border rounded px-3 py-2 bg-light">{{ req.status.name if req.status else "—" }}</div>
     </div>
     {% endif %}
-    {{ custom_fields_form(custom_fields, custom_field_values, custom_field_module) }}
+    {{ custom_fields_form(custom_fields|default([]), custom_field_values|default({}), custom_field_module|default('requests')) }}
 </div>

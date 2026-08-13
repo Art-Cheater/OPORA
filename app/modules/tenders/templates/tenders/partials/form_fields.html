@@ -1,0 +1,16 @@
+{% from "macros/forms.html" import modal_field, form_errors_alert with context %}
+{{ form_errors_alert(form) }}
+<div class="row g-3">
+    {{ modal_field(form.number, col=4, module='tenders') }}
+    {{ modal_field(form.title, col=8, module='tenders') }}
+    {{ modal_field(form.object_id, col=12, module='tenders') }}
+    {{ modal_field(form.work_deadline, col=6, placeholder="например 31.12.2026", module='tenders') }}
+    {{ modal_field(form.published_at, col=6, module='tenders') }}
+    {{ modal_field(form.status, col=6, module='tenders') }}
+    {{ modal_field(form.responsible_id, col=6, module='tenders') }}
+    {{ modal_field(form.project_ids, col=12, size=8, module='tenders') }}
+    <div class="col-12">
+        <div class="form-text">Необязательно при выбранном объекте. Можно выбрать несколько (Ctrl/Shift).</div>
+    </div>
+    {{ modal_field(form.description, col=12, rows=3, module='tenders') }}
+</div>

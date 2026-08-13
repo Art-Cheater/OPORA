@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import contains_eager, joinedload, load_only, noload
 
 from app.extensions import db
@@ -71,6 +72,34 @@ class RequestRepository:
             db.select(Request).where(Request.id == request_id, Request.active_filter())
         )
 
+    @staticmethod
+    def _address_lookup_tokens(address: str) -> list[str]:
+        """Характерные фрагменты для SQL-фильтра, без полной загрузки открытых заявок."""
+        tokens: list[str] = []
+        formatted = " ".join((address or "").split())
+        if not formatted:
+            return tokens
+        house = None
+        house_match = re.search(
+            r"(?:дом|д\.?)\s*(\d+[а-яёa-z]?(?:\s*/\s*\d+[а-яёa-z]?)?)\s*$",
+            formatted,
+            flags=re.IGNORECASE,
+        )
+        if house_match:
+            house = house_match.group(1).replace(" ", "")
+        elif (digits := re.search(r"(\d+[а-яёa-z]?)$", formatted, flags=re.IGNORECASE)):
+            house = digits.group(1)
+        words = [
+            part
+            for part in re.split(r"[^\wа-яё]+", formatted, flags=re.IGNORECASE)
+            if len(part) >= 4 and part.casefold() not in {"киров", "улица", "город"}
+        ]
+        if words:
+            tokens.append(words[-1][:80])
+        if house:
+            tokens.append(house[:30])
+        return tokens
+
     @classmethod
     def find_open_by_address(
         cls,
@@ -86,14 +115,35 @@ class RequestRepository:
         stmt = (
             db.select(Request)
             .join(RequestStatus, Request.status_id == RequestStatus.id)
-            .options(joinedload(Request.status))
+            .options(
+                load_only(
+                    Request.id,
+                    Request.number,
+                    Request.address,
+                    Request.received_at,
+                    Request.repeat_count,
+                    Request.status_id,
+                ),
+                contains_eager(Request.status),
+            )
             .where(
                 Request.active_filter(),
                 RequestStatus.active_filter(),
                 RequestStatus.is_final.is_(False),
             )
             .order_by(Request.received_at.desc().nullslast(), Request.created_at.desc())
+            .limit(50)
         )
+        tokens = cls._address_lookup_tokens(address)
+        if tokens:
+            stmt = stmt.where(
+                or_(
+                    *[
+                        func.lower(Request.address).like(f"%{token.casefold()}%")
+                        for token in tokens
+                    ]
+                )
+            )
         if exclude_id is not None:
             stmt = stmt.where(Request.id != exclude_id)
 

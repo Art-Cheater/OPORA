@@ -25,6 +25,7 @@ MODULE_FIELDS: dict[str, list[tuple[str, str, int]]] = {
     "requests": [
         ("number", "Номер", 10),
         ("address", "Адрес", 20),
+        ("district", "Район", 22),
         ("pp", "ПП (пункт питания)", 30),
         ("received_at", "Дата и время получения", 40),
         ("dispatcher_name", "Диспетчер", 50),
@@ -44,7 +45,6 @@ MODULE_FIELDS: dict[str, list[tuple[str, str, int]]] = {
         ("original_address", "Исходный адрес", 940),
         ("normalized_address", "Нормализованный адрес", 950),
         ("region", "Регион адреса", 960),
-        ("district", "Район адреса", 970),
         ("settlement", "Населённый пункт", 980),
         ("street", "Улица", 990),
         ("house", "Дом", 1000),
@@ -83,7 +83,10 @@ MODULE_FIELDS: dict[str, list[tuple[str, str, int]]] = {
     "tenders": [
         ("number", "Номер", 10),
         ("title", "Название", 20),
+        ("object_id", "Объект", 25),
         ("project_ids", "Проекты", 30),
+        ("work_deadline", "Срок выполнения работ", 35),
+        ("published_at", "Дата публикации заявки", 38),
         ("status", "Статус", 40),
         ("responsible_id", "Ответственный", 50),
         ("description", "Описание", 60),

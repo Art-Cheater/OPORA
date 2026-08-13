@@ -204,7 +204,13 @@ def create():
                         **_cf_form(),
             is_edit=False,
         )
-    return render_template("employees/form.html", form=form, mode="create")
+    return render_template(
+        "employees/form.html",
+        form=form,
+        mode="create",
+        is_edit=False,
+        **_cf_form(),
+    )
 
 
 @employees_bp.route("/<uuid:employee_id>")
@@ -283,7 +289,14 @@ def edit(employee_id: uuid.UUID):
                         **_cf_form(employee.id),
             is_edit=True,
         )
-    return render_template("employees/form.html", form=form, mode="edit", employee=employee)
+    return render_template(
+        "employees/form.html",
+        form=form,
+        mode="edit",
+        employee=employee,
+        is_edit=True,
+        **_cf_form(employee.id),
+    )
 
 
 @employees_bp.route("/<uuid:employee_id>/delete", methods=["POST"])

@@ -15,15 +15,7 @@
 <form method="POST" class="card">
     <div class="card-body">
         {{ form.hidden_tag() }}
-        <div class="row g-3">
-            <div class="col-md-6">{{ form.full_name.label(class="form-label") }}{{ form.full_name(class="form-control") }}</div>
-            <div class="col-md-6">{{ form.email.label(class="form-label") }}{{ form.email(class="form-control") }}</div>
-            <div class="col-md-6">{{ form.phone.label(class="form-label") }}{{ form.phone(class="form-control") }}</div>
-            <div class="col-md-6">{{ form.position.label(class="form-label") }}{{ form.position(class="form-control") }}</div>
-            <div class="col-md-6">{{ form.department.label(class="form-label") }}{{ form.department(class="form-control") }}</div>
-            <div class="col-md-6">{{ form.role_ids.label(class="form-label") }}{{ form.role_ids(class="form-select", multiple=true, size=4) }}</div>
-            <div class="col-md-12">{{ form.password.label(class="form-label") }}{{ form.password(class="form-control") }}</div>
-        </div>
+        {% include "employees/partials/form_fields.html" %}
     </div>
     <div class="card-footer bg-white d-flex gap-2">
         {{ form.submit(class="btn btn-primary") }}

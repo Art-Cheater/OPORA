@@ -164,7 +164,7 @@
                 {% else %}
                 <div class="text-muted small">Комментариев пока нет.</div>
                 {% endfor %}
-                {% if current_user.has_permission('requests.edit') %}
+                {% if comment_form and current_user.has_permission('requests.edit') %}
                 <form method="POST"
                       action="{{ url_for('requests.add_comment', request_id=req.id) }}"
                       class="mt-3"

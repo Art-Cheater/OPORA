@@ -34,6 +34,8 @@ class Request(BaseModel):
         Index("ix_requests_priority", "priority"),
         Index("ix_requests_due_date", "due_date"),
         Index("ix_requests_address", "address"),
+        Index("ix_requests_district", "district"),
+        Index("ix_requests_settlement", "settlement"),
         Index("ix_requests_number", "number", unique=True),
         Index("ix_requests_received_at", "received_at"),
         Index("ix_requests_dispatcher_name", "dispatcher_name"),

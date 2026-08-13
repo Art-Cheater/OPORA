@@ -258,6 +258,7 @@ def _apply_request_create_defaults(form: RequestForm) -> None:
     form.house.data = ""
     form.address_source.data = ""
     form.address_external_id.data = ""
+    form.address_selection_token.data = ""
     form.latitude.data = None
     form.longitude.data = None
     form.pp.data = ""

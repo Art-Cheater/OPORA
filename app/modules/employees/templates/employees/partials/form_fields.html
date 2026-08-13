@@ -1,0 +1,17 @@
+{% from "macros/forms.html" import modal_field, form_errors_alert with context %}
+{% from "macros/custom_fields.html" import custom_fields_form with context %}
+{% set editing = is_edit if is_edit is defined else mode == 'edit' %}
+{{ form_errors_alert(form) }}
+<div class="row g-3">
+    {{ modal_field(form.full_name, col=6, module='users') }}
+    {{ modal_field(form.email, col=6, placeholder="user@company.ru", module='users') }}
+    {{ modal_field(form.phone, col=6, module='users') }}
+    {{ modal_field(form.position_id, col=6, module='users') }}
+    {{ modal_field(form.department, col=6, module='users') }}
+    {{ modal_field(form.role_ids, col=6, size=4, module='users') }}
+    {{ modal_field(form.password, col=12, placeholder=("Оставьте пустым, чтобы не менять" if editing else "Минимум 6 символов"), module='users') }}
+    {{ custom_fields_form(custom_fields|default([]), custom_field_values|default({}), custom_field_module|default('users')) }}
+</div>
+{% if editing %}
+<div class="form-text">Пароль: оставьте пустым, если менять не нужно.</div>
+{% endif %}
