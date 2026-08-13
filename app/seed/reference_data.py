@@ -230,6 +230,15 @@ class ReferenceDataService:
                     "executor_id",
                     "latitude",
                     "longitude",
+                    "original_address",
+                    "normalized_address",
+                    "region",
+                    "district",
+                    "settlement",
+                    "street",
+                    "house",
+                    "address_source",
+                    "address_external_id",
                 }
                 db.session.add(
                     FieldDefinition(

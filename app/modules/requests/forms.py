@@ -9,6 +9,7 @@ from wtforms import (
     BooleanField,
     DateTimeLocalField,
     DecimalField,
+    HiddenField,
     IntegerField,
     MultipleFileField,
     SelectField,
@@ -76,6 +77,16 @@ class RequestFilterForm(FlaskForm):
 class RequestForm(FlaskForm):
     number = StringField("Номер заявки", validators=[DataRequired(), Length(max=50)])
     address = StringField("Адрес", validators=[DataRequired(), Length(max=500)])
+    address_selection_token = HiddenField(validators=[Optional()])
+    original_address = HiddenField(validators=[Optional(), Length(max=500)])
+    normalized_address = HiddenField(validators=[Optional(), Length(max=1000)])
+    region = HiddenField(validators=[Optional(), Length(max=255)])
+    district = StringField("Район", validators=[Optional(), Length(max=255)])
+    settlement = HiddenField(validators=[Optional(), Length(max=255)])
+    street = HiddenField(validators=[Optional(), Length(max=500)])
+    house = HiddenField(validators=[Optional(), Length(max=100)])
+    address_source = HiddenField(validators=[Optional(), Length(max=50)])
+    address_external_id = HiddenField(validators=[Optional(), Length(max=255)])
     pp = StringField("ПП (пункт питания)", validators=[Optional(), Length(max=255)])
     received_at = DateTimeLocalField(
         "Дата и время получения",

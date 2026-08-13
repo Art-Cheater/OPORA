@@ -12,10 +12,27 @@ from pathlib import Path
 from app.core.audit_service import AuditService
 from app.core.exceptions import ValidationError
 from app.extensions import db
-from app.models.enums import AuditAction, EntityType, WorkObjectKind, WorkObjectStatus
+from app.models.enums import (
+    AuditAction,
+    EntityType,
+    ProjectStatus,
+    WorkObjectKind,
+    WorkObjectStatus,
+)
+from app.models.projects.project import Project
 from app.models.work_objects.work_object import WorkObject
+from app.modules.projects.repositories import ProjectRepository
+from app.modules.projects.services import ProjectPayload, ProjectService
 
 WORK_TYPE_DEFAULT = "Устройство наружного освещения"
+AUTO_PROJECT_RESULT = (
+    "Обследование проведено, ТЗ подготовлено, локально-сметный расчет готов."
+)
+_CLOSED_PROJECT_STATUSES = (
+    ProjectStatus.COMPLETED.value,
+    ProjectStatus.CANCELLED.value,
+    ProjectStatus.ARCHIVED.value,
+)
 
 # Результат из плана → предлагаемый статус проекта
 _RESULT_DRAFT_RE = re.compile(
@@ -37,21 +54,21 @@ _JUNK_NAME_RE = re.compile(
 @dataclass
 class ObjectPayload:
     name: str
-    work_type: str | None
-    object_kind: str | None
-    address: str | None
-    plan_year: int | None
-    work_deadline: str | None
-    contract_number: str | None
-    contract_date: date | None
-    contractor_name: str | None
-    contract_amount: Decimal | None
-    budget_amount: Decimal | None
-    court_decision_number: str | None
-    result_text: str | None
-    source_sheet: str | None
-    notes: str | None
-    status: str
+    work_type: str | None = None
+    object_kind: str | None = None
+    address: str | None = None
+    plan_year: int | None = None
+    work_deadline: str | None = None
+    contract_number: str | None = None
+    contract_date: date | None = None
+    contractor_name: str | None = None
+    contract_amount: Decimal | None = None
+    budget_amount: Decimal | None = None
+    court_decision_number: str | None = None
+    result_text: str | None = None
+    source_sheet: str | None = None
+    notes: str | None = None
+    status: str = WorkObjectStatus.FREE.value
 
 
 @dataclass
@@ -64,14 +81,79 @@ class ImportResult:
 
 class ObjectService:
     @staticmethod
+    def _normalized_result(value: str | None) -> str:
+        """Нормализовать пробелы для точного сопоставления результата."""
+        return re.sub(r"\s+", " ", value or "").strip().casefold()
+
+    @classmethod
+    def should_create_project(cls, result_text: str | None) -> bool:
+        return cls._normalized_result(result_text) == cls._normalized_result(
+            AUTO_PROJECT_RESULT
+        )
+
+    @classmethod
+    def _ensure_project_for_result(
+        cls,
+        obj: WorkObject,
+        user_id: uuid.UUID,
+    ) -> Project | None:
+        """
+        Идемпотентно создать проект для целевого результата.
+
+        Метод не фиксирует транзакцию: объект, проект, аудит и история
+        сохраняются одним commit вызывающей операции.
+        """
+        if not cls.should_create_project(obj.result_text):
+            return None
+
+        db.session.flush()
+        locked_obj = db.session.scalar(
+            db.select(WorkObject)
+            .where(WorkObject.id == obj.id, WorkObject.active_filter())
+            .with_for_update()
+        )
+        if locked_obj is not None:
+            obj = locked_obj
+
+        existing = db.session.scalar(
+            db.select(Project)
+            .where(
+                Project.object_id == obj.id,
+                Project.active_filter(),
+                Project.status.notin_(_CLOSED_PROJECT_STATUSES),
+            )
+            .order_by(Project.created_at.asc())
+            .limit(1)
+        )
+        obj.status = WorkObjectStatus.IN_PROJECT.value
+        obj.updated_by = user_id
+        if existing is not None:
+            return existing
+
+        return ProjectService.create_project(
+            ProjectPayload(
+                code=ProjectRepository.next_code(),
+                name=(obj.display_address or obj.name)[:500],
+                description=obj.result_text,
+                status=ProjectStatus.DRAFT.value,
+                progress_percent=0,
+                start_date=None,
+                end_date=None,
+                responsible_id=user_id,
+                executor_ids=[],
+                object_id=obj.id,
+            ),
+            user_id,
+            commit=False,
+        )
+
+    @staticmethod
     def suggested_project_status(result_text: str | None) -> str | None:
         """
         По колонке «Результат» из плана:
         - ТЗ/сметный расчёт готов → черновик проекта
         - идёт подготовка рабочей документации → проект «В работе»
         """
-        from app.models.enums import ProjectStatus
-
         text = (result_text or "").strip()
         if not text:
             return None
@@ -468,6 +550,7 @@ class ObjectService:
                 obj.status = data["status"]
                 obj.updated_by = user_id
                 result.updated += 1
+            cls._ensure_project_for_result(obj, user_id)
 
         AuditService.log(
             user_id=user_id,
@@ -549,6 +632,7 @@ class ObjectService:
         )
         db.session.add(obj)
         db.session.flush()
+        cls._ensure_project_for_result(obj, user_id)
         AuditService.log(
             user_id=user_id,
             action=AuditAction.CREATE.value,
@@ -588,6 +672,7 @@ class ObjectService:
         obj.notes = cls._normalize(payload.notes)
         obj.status = payload.status
         obj.updated_by = user_id
+        cls._ensure_project_for_result(obj, user_id)
         AuditService.log(
             user_id=user_id,
             action=AuditAction.UPDATE.value,

@@ -1,0 +1,76 @@
+{% from "macros/forms.html" import modal_field, form_errors_alert with context %}
+{% from "macros/custom_fields.html" import custom_fields_form with context %}
+{{ form_errors_alert(form) }}
+<div class="row g-3">
+    {{ modal_field(form.number, col=4, module='requests') }}
+
+    {% if is_builtin_visible('requests', 'address') and current_user.can_view_field('requests', 'address') %}
+    <div class="col-md-8">
+        {{ form.address.label(class="form-label") }}
+        {% if current_user.can_edit_field('requests', 'address') %}
+        <div class="position-relative">
+            {{ form.address(class="form-control" + (" is-invalid" if form.address.errors else ""), placeholder="Начните вводить улицу и дом", autocomplete="off", role="combobox", **{'aria-autocomplete': 'list', 'aria-expanded': 'false', 'data-address-input': '1'}) }}
+            <div class="list-group position-absolute start-0 end-0 shadow d-none"
+                 style="z-index: 1060; max-height: 18rem; overflow-y: auto;"
+                 data-address-suggestions role="listbox"></div>
+        </div>
+        {% for error in form.address.errors %}
+        <div class="invalid-feedback d-block">{{ error }}</div>
+        {% endfor %}
+        <div class="form-text" data-address-status>Выберите подходящий адрес из подсказок или сохраните введённый текст.</div>
+        {{ form.address_selection_token() }}
+        {{ form.original_address() }}
+        {{ form.normalized_address() }}
+        {{ form.region() }}
+        {{ form.settlement() }}
+        {{ form.street() }}
+        {{ form.house() }}
+        {{ form.address_source() }}
+        {{ form.address_external_id() }}
+        {{ form.latitude(type="hidden") }}
+        {{ form.longitude(type="hidden") }}
+        {% else %}
+        <div class="form-control-plaintext border rounded px-3 py-2 bg-light">{{ form.address.data or "—" }}</div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="col-12 d-none" data-address-hint-wrap>
+        <div class="alert alert-warning py-2 mb-0 small" data-address-hint></div>
+    </div>
+    {{ modal_field(form.district, col=6, placeholder="Определяется по выбранному адресу", module='requests') }}
+    {{ modal_field(form.pp, col=6, placeholder="Пункт питания", module='requests') }}
+    {{ modal_field(form.received_at, col=6, module='requests') }}
+    {{ modal_field(form.dispatcher_name, col=6, module='requests') }}
+    {{ modal_field(form.description, col=12, rows=4, module='requests') }}
+    {{ modal_field(form.phone, col=4, module='requests') }}
+    {{ modal_field(form.applicant_name, col=4, module='requests') }}
+    {{ modal_field(form.priority, col=4, module='requests') }}
+
+    {% if is_builtin_visible('requests', 'has_barrier') and current_user.can_view_field('requests', 'has_barrier') %}
+    <div class="col-md-4">
+        {% if current_user.can_edit_field('requests', 'has_barrier') %}
+        <div class="form-check mt-4 pt-2">
+            {{ form.has_barrier(class="form-check-input", **{'data-barrier-toggle': '1'}) }}
+            <label class="form-check-label" for="{{ form.has_barrier.id }}">{{ form.has_barrier.label.text }}</label>
+        </div>
+        {% else %}
+        <label class="form-label">{{ form.has_barrier.label.text }}</label>
+        <div class="form-control-plaintext border rounded px-3 py-2 bg-light">{{ "Да" if form.has_barrier.data else "Нет" }}</div>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% if is_builtin_visible('requests', 'barrier_phone') and current_user.can_view_field('requests', 'barrier_phone') %}
+    <div class="col-md-8 {% if not form.has_barrier.data %}d-none{% endif %}" data-barrier-phone-wrap>
+        {{ modal_field(form.barrier_phone, col=12, module='requests') }}
+    </div>
+    {% endif %}
+
+    {% if mode == 'edit' and req and current_user.can_view_field('requests', 'status_id') %}
+    <div class="col-md-6">
+        <label class="form-label">{{ builtin_label('requests', 'status_id', 'Статус') }}</label>
+        <div class="form-control-plaintext border rounded px-3 py-2 bg-light">{{ req.status.name if req.status else "—" }}</div>
+    </div>
+    {% endif %}
+    {{ custom_fields_form(custom_fields, custom_field_values, custom_field_module) }}
+</div>

@@ -42,6 +42,9 @@
   let pendingFiles = [];
   let knownUnreadTotal = null;
   let unreadPollTimer = null;
+  let conversationsRequest = null;
+  let unreadRequest = null;
+  let messagePollRunning = false;
   const drafts = new Map();
   const pollIntervalMs = Number(app.dataset.pollInterval || 8000);
   const unreadIntervalMs = Number(app.dataset.unreadInterval || 15000);
@@ -384,19 +387,27 @@
   }
 
   async function loadConversations() {
-    const res = await api("/messenger/api/conversations");
-    if (!res.ok) return;
-    const data = await res.json();
-    conversationList.innerHTML = "";
-    if (!data.conversations.length) {
-      conversationList.innerHTML =
-        '<div class="tg-list-empty">Нет диалогов. Начните переписку во вкладке «Контакты».</div>';
-      return;
+    if (conversationsRequest) return conversationsRequest;
+    conversationsRequest = (async () => {
+      const res = await api("/messenger/api/conversations");
+      if (!res.ok) return;
+      const data = await res.json();
+      conversationList.innerHTML = "";
+      updateGlobalUnread(data.total_unread);
+      if (!data.conversations.length) {
+        conversationList.innerHTML =
+          '<div class="tg-list-empty">Нет диалогов. Начните переписку во вкладке «Контакты».</div>';
+        return;
+      }
+      data.conversations.forEach((conv) => {
+        conversationList.appendChild(renderConversationItem(conv));
+      });
+    })();
+    try {
+      return await conversationsRequest;
+    } finally {
+      conversationsRequest = null;
     }
-    data.conversations.forEach((conv) => {
-      conversationList.appendChild(renderConversationItem(conv));
-    });
-    updateGlobalUnread(data.total_unread);
   }
 
   async function loadUsers(query = "") {
@@ -416,7 +427,6 @@
     if (!res.ok) return;
     const conv = await res.json();
     showPanel("chats");
-    await loadConversations();
     await openConversation(conv.id, conv.peer);
   }
 
@@ -556,7 +566,7 @@
     const existingIds = new Set(
       [...messagesContainer.querySelectorAll(".tg-msg")].map((el) => el.dataset.messageId)
     );
-    const isInitial = existingIds.size === 0;
+    const isInitial = scrollBottom;
     let appended = 0;
 
     data.messages.forEach((msg) => {
@@ -580,8 +590,9 @@
       scrollMessagesToBottom();
     }
 
-    await loadConversations();
-    updateGlobalUnread();
+    if (isInitial || appended) {
+      await loadConversations();
+    }
   }
 
   async function sendMessage() {
@@ -608,6 +619,7 @@
       } else {
         await postTextMessage(body, replyId);
       }
+      await loadConversations();
 
       if (conversationId === activeConversationId) {
         messageInput.value = "";
@@ -634,7 +646,6 @@
       messagesContainer.appendChild(renderMessage(data.message));
     }
     lastMessageId = data.message.id;
-    await loadConversations();
   }
 
   async function sendFile(file, replyId = null) {
@@ -652,7 +663,6 @@
       messagesContainer.appendChild(renderMessage(data.message));
     }
     lastMessageId = data.message.id;
-    await loadConversations();
   }
 
   async function searchMessages(query) {
@@ -691,6 +701,8 @@
     let total = count;
     let previewData = preview;
     if (total === undefined) {
+      if (unreadRequest) return unreadRequest;
+      unreadRequest = (async () => {
       const headers = {};
       if (unreadEtag) headers["If-None-Match"] = unreadEtag;
       const res = await api("/messenger/api/unread-count", { headers });
@@ -700,6 +712,12 @@
         const data = await res.json();
         total = data.total;
         previewData = data.preview || null;
+      }
+      })();
+      try {
+        await unreadRequest;
+      } finally {
+        unreadRequest = null;
       }
     }
     if (typeof total === "number") {
@@ -715,19 +733,28 @@
       knownUnreadTotal = total;
     }
     const badge = document.getElementById("messengerUnreadBadge");
-    if (!badge) return;
-    if (total > 0) {
-      badge.textContent = total > 99 ? "99+" : String(total);
-      badge.classList.remove("d-none");
-    } else {
-      badge.classList.add("d-none");
+    const dot = document.getElementById("topbarMessengerDot");
+    if (badge) {
+      if (total > 0) {
+        badge.textContent = total > 99 ? "99+" : String(total);
+        badge.classList.remove("d-none");
+      } else {
+        badge.classList.add("d-none");
+      }
     }
+    dot?.classList.toggle("d-none", !(total > 0));
   }
 
   function startPolling() {
     clearInterval(pollTimer);
-    const tick = () => {
-      loadMessages(false);
+    const tick = async () => {
+      if (messagePollRunning || document.hidden) return;
+      messagePollRunning = true;
+      try {
+        await loadMessages(false);
+      } finally {
+        messagePollRunning = false;
+      }
     };
     pollTimer = setInterval(tick, pollIntervalMs);
   }
@@ -767,7 +794,6 @@
     searchTimer = setTimeout(() => {
       if (q) {
         searchMessages(q);
-        loadUsers(q);
       } else {
         showPanel(document.querySelector(".tg-tab.active")?.dataset.tab || "chats");
       }
@@ -843,8 +869,6 @@
   heartbeat();
   heartbeatTimer = setInterval(heartbeat, 30000);
   loadConversations();
-  loadUsers();
-  updateGlobalUnread();
   startUnreadPolling();
 
   window.addEventListener("beforeunload", () => {

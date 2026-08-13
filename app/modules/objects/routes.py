@@ -11,6 +11,7 @@ from werkzeug.utils import secure_filename
 
 from app.core.decorators import permission_required
 from app.core.exceptions import ValidationError
+from app.core.field_permissions import FieldPermissionService
 from app.core.forms_utils import form_errors_message
 from app.core.http import ajax_error, ajax_ok, is_ajax
 from app.models.auth.constants import (
@@ -31,25 +32,52 @@ from app.modules.objects.repositories import ObjectFilter, ObjectRepository
 from app.modules.objects.services import ObjectPayload, ObjectService
 
 
-def _payload(form: ObjectForm) -> ObjectPayload:
+def _payload(form: ObjectForm, obj=None) -> ObjectPayload:
+    from app.core.builtin_field_service import BuiltinFieldService as BFS
+
+    fp = FieldPermissionService.resolve_field
+    user, module = current_user, "objects"
+
+    def field(code, submitted, default=None, attr=None):
+        raw = fp(user, module, code, submitted, obj)
+        return BFS.value_or_default(
+            module,
+            code,
+            raw,
+            default=default,
+            entity=obj,
+            attr=attr,
+        )
+
     return ObjectPayload(
-        name=form.full_name.data or "",
-        work_type=form.work_type.data,
-        object_kind=form.object_kind.data,
-        address=form.address.data,
-        plan_year=form.plan_year.data,
-        work_deadline=form.work_deadline.data,
-        contract_number=form.contract_number.data,
-        contract_date=form.contract_date.data,
-        contractor_name=form.contractor_name.data,
-        contract_amount=form.contract_amount.data,
-        budget_amount=form.budget_amount.data,
-        court_decision_number=form.court_decision_number.data,
-        result_text=form.result_text.data,
-        source_sheet=None,
-        notes=form.notes.data,
-        status=form.status.data or "free",
+        name=field("name", form.full_name.data or "", default="", attr="name"),
+        work_type=field("work_type", form.work_type.data, default=None),
+        object_kind=field("object_kind", form.object_kind.data, default="planned"),
+        address=field("address", form.address.data, default=""),
+        plan_year=field("plan_year", form.plan_year.data, default=None),
+        work_deadline=field("work_deadline", form.work_deadline.data, default=None),
+        contract_number=field("contract_number", form.contract_number.data, default=None),
+        contract_date=field("contract_date", form.contract_date.data, default=None),
+        contractor_name=field("contractor_name", form.contractor_name.data, default=None),
+        contract_amount=field("contract_amount", form.contract_amount.data, default=None),
+        budget_amount=field("budget_amount", form.budget_amount.data, default=None),
+        court_decision_number=field(
+            "court_decision_number",
+            form.court_decision_number.data,
+            default=None,
+        ),
+        result_text=field("result_text", form.result_text.data, default=None),
+        source_sheet=obj.source_sheet if obj is not None else None,
+        notes=field("notes", form.notes.data, default=None),
+        status=field("status", form.status.data or "free", default="free"),
     )
+
+
+def _prepare_object_form(form: ObjectForm) -> None:
+    from app.core.builtin_field_service import BuiltinFieldService
+
+    BuiltinFieldService.apply_to_form(form, "objects")
+    form.notes.label.text = "Основание для проведения работ"
 
 
 def _render_form_modal(form: ObjectForm, form_action: str, modal_title: str):
@@ -124,6 +152,7 @@ def table():
 @permission_required(PERM_OBJECTS_CREATE)
 def create():
     form = ObjectForm()
+    _prepare_object_form(form)
     if request.method == "GET":
         form.status.data = "free"
         form.work_type.data = "Устройство наружного освещения"
@@ -258,6 +287,7 @@ def edit(object_id: uuid.UUID):
         flash("Объект не найден.", "danger")
         return redirect(url_for("objects.index"))
     form = ObjectForm(obj=obj)
+    _prepare_object_form(form)
     if request.method == "GET":
         form.work_type.data = obj.work_type or "Устройство наружного освещения"
         form.object_kind.data = obj.object_kind or "planned"
@@ -276,7 +306,7 @@ def edit(object_id: uuid.UUID):
         form.status.data = obj.status
     if form.validate_on_submit():
         try:
-            ObjectService.update(obj, _payload(form), current_user.id)
+            ObjectService.update(obj, _payload(form, obj), current_user.id)
             flash("Объект сохранён.", "success")
             if is_ajax():
                 return ajax_ok(

@@ -68,9 +68,10 @@ def _contract_payload_from_form(form: ContractForm, contract=None) -> ContractPa
         description=field("description", form.description.data, default=""),
         status=field("status", form.status.data, default=ContractStatus.DRAFT.value),
         contract_date=field("contract_date", form.contract_date.data, default=None),
+        end_date=field("end_date", form.end_date.data, default=None),
         responsible_id=responsible_id,
-        contractor_name=getattr(form, "contractor_name", None).data if hasattr(form, "contractor_name") else "",
-        amount=getattr(form, "amount", None).data if hasattr(form, "amount") else 0,
+        contractor_name=field("contractor_name", form.contractor_name.data, default=""),
+        amount=field("amount", form.amount.data, default=None),
     )
 
 
@@ -141,6 +142,8 @@ def index():
         responsible_id=request.args.get("responsible_id", ""),
         date_from=request.args.get("date_from", ""),
         date_to=request.args.get("date_to", ""),
+        end_date_from=request.args.get("end_date_from", ""),
+        end_date_to=request.args.get("end_date_to", ""),
         sort_by=request.args.get("sort_by", "created_at"),
         sort_dir=request.args.get("sort_dir", "desc"),
     )
@@ -167,6 +170,8 @@ def table():
         responsible_id=request.args.get("responsible_id", ""),
         date_from=request.args.get("date_from", ""),
         date_to=request.args.get("date_to", ""),
+        end_date_from=request.args.get("end_date_from", ""),
+        end_date_to=request.args.get("end_date_to", ""),
         sort_by=request.args.get("sort_by", "created_at"),
         sort_dir=request.args.get("sort_dir", "desc"),
     )
@@ -215,6 +220,7 @@ def create_from_tender(tender_id: uuid.UUID):
         try:
             payload = _contract_payload_from_form(form)
             contract = ContractService.create_from_tender(tender, payload, current_user.id)
+            save_custom_fields(_CF, contract.id, request.form, current_user)
             flash("Контракт создан из заявки на торги.", "success")
             return redirect(url_for("contracts.detail", contract_id=contract.id))
         except ValidationError as exc:
@@ -224,6 +230,8 @@ def create_from_tender(tender_id: uuid.UUID):
         form=form,
         mode="create",
         tender=tender,
+        form_action=url_for("contracts.create_from_tender", tender_id=tender.id),
+        **_cf_form(),
     )
 
 
@@ -235,6 +243,8 @@ def workflow(contract_id: uuid.UUID, action: str):
 
     contract = ContractRepository.get_by_id(contract_id)
     if contract is None:
+        if is_ajax():
+            return ajax_error("Контракт не найден.", status=404)
         flash("Контракт не найден.", "danger")
         return redirect(url_for("contracts.index"))
 
@@ -322,7 +332,13 @@ def create():
             form_action=url_for("contracts.create"),
                         **_cf_form(),
         )
-    return render_template("contracts/form.html", form=form, mode="create")
+    return render_template(
+        "contracts/form.html",
+        form=form,
+        mode="create",
+        form_action=url_for("contracts.create"),
+        **_cf_form(),
+    )
 
 
 @contracts_bp.route("/<uuid:contract_id>")
@@ -371,6 +387,7 @@ def detail(contract_id: uuid.UUID):
             "contracts/partials/detail_modal.html",
             contract=contract,
             comments=comments,
+            comment_form=comment_form,
             file_items=file_items,
             **custom_field_detail_context(_CF, contract.id, current_user),
         )
@@ -382,6 +399,7 @@ def detail(contract_id: uuid.UUID):
         comment_form=comment_form,
         document_form=document_form,
         file_items=file_items,
+        **custom_field_detail_context(_CF, contract.id, current_user),
     )
 
 
@@ -438,7 +456,14 @@ def edit(contract_id: uuid.UUID):
             form_action=url_for("contracts.edit", contract_id=contract.id),
                         **_cf_form(contract.id),
         )
-    return render_template("contracts/form.html", form=form, mode="edit", contract=contract)
+    return render_template(
+        "contracts/form.html",
+        form=form,
+        mode="edit",
+        contract=contract,
+        form_action=url_for("contracts.edit", contract_id=contract.id),
+        **_cf_form(contract.id),
+    )
 
 
 @contracts_bp.route("/<uuid:contract_id>/delete", methods=["POST"])
@@ -461,6 +486,8 @@ def delete(contract_id: uuid.UUID):
 def add_comment(contract_id: uuid.UUID):
     contract = ContractRepository.get_by_id(contract_id)
     if contract is None:
+        if is_ajax():
+            return ajax_error("Контракт не найден.", status=404)
         flash("Контракт не найден.", "danger")
         return redirect(url_for("contracts.index"))
 
@@ -468,9 +495,15 @@ def add_comment(contract_id: uuid.UUID):
     if form.validate_on_submit():
         try:
             ContractService.add_comment(contract, form.body.data, current_user.id)
+            if is_ajax():
+                return ajax_ok("Комментарий добавлен.")
             flash("Комментарий добавлен.", "success")
         except ValidationError as exc:
+            if is_ajax():
+                return ajax_error(str(exc))
             flash(str(exc), "danger")
+    elif is_ajax():
+        return ajax_error(form_errors_message(form))
     return redirect(url_for("contracts.detail", contract_id=contract.id))
 
 

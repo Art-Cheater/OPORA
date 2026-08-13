@@ -1,0 +1,75 @@
+{% from "macros/badges.html" import contract_status_badge, contract_type_badge %}
+{% from "macros/custom_fields.html" import custom_fields_detail with context %}
+{% if is_builtin_visible('contracts', 'contract_type') and current_user.can_view_field('contracts', 'contract_type') %}
+<div class="col-md-4">
+    <div class="opora-detail-field">
+        <div class="opora-detail-field__label">{{ builtin_label('contracts', 'contract_type', 'Тип') }}</div>
+        <div>{{ contract_type_badge(contract.contract_type) }}</div>
+    </div>
+</div>
+{% endif %}
+{% if is_builtin_visible('contracts', 'status') and current_user.can_view_field('contracts', 'status') %}
+<div class="col-md-4">
+    <div class="opora-detail-field">
+        <div class="opora-detail-field__label">{{ builtin_label('contracts', 'status', 'Статус') }}</div>
+        <div>{{ contract_status_badge(contract.status) }}</div>
+    </div>
+</div>
+{% endif %}
+{% if is_builtin_visible('contracts', 'contract_date') and current_user.can_view_field('contracts', 'contract_date') %}
+<div class="col-md-4">
+    <div class="opora-detail-field">
+        <div class="opora-detail-field__label">{{ builtin_label('contracts', 'contract_date', 'Дата') }}</div>
+        <div>{{ contract.contract_date.strftime('%d.%m.%Y') if contract.contract_date else "—" }}</div>
+    </div>
+</div>
+{% endif %}
+{% if is_builtin_visible('contracts', 'end_date') and current_user.can_view_field('contracts', 'end_date') %}
+<div class="col-md-4">
+    <div class="opora-detail-field">
+        <div class="opora-detail-field__label">{{ builtin_label('contracts', 'end_date', 'Дата окончания') }}</div>
+        <div>{{ contract.end_date.strftime('%d.%m.%Y') if contract.end_date else "—" }}</div>
+    </div>
+</div>
+{% endif %}
+{% if is_builtin_visible('contracts', 'contractor_name') and current_user.can_view_field('contracts', 'contractor_name') %}
+<div class="col-md-4">
+    <div class="opora-detail-field">
+        <div class="opora-detail-field__label">{{ builtin_label('contracts', 'contractor_name', 'Подрядчик') }}</div>
+        <div>{{ contract.contractor_name or "—" }}</div>
+    </div>
+</div>
+{% endif %}
+{% if is_builtin_visible('contracts', 'amount') and current_user.can_view_field('contracts', 'amount') %}
+<div class="col-md-4">
+    <div class="opora-detail-field">
+        <div class="opora-detail-field__label">{{ builtin_label('contracts', 'amount', 'Сумма') }}</div>
+        <div>{{ contract.amount }} {{ contract.currency }}</div>
+    </div>
+</div>
+{% endif %}
+{% if is_builtin_visible('contracts', 'responsible_id') and current_user.can_view_field('contracts', 'responsible_id') %}
+<div class="col-md-6">
+    <div class="opora-detail-field">
+        <div class="opora-detail-field__label">{{ builtin_label('contracts', 'responsible_id', 'Ответственный') }}</div>
+        <div>{{ contract.responsible.full_name if contract.responsible else "—" }}</div>
+    </div>
+</div>
+{% endif %}
+{% if is_builtin_visible('contracts', 'number') and current_user.can_view_field('contracts', 'number') %}
+<div class="col-md-6">
+    <div class="opora-detail-field">
+        <div class="opora-detail-field__label">{{ builtin_label('contracts', 'number', 'Номер') }}</div>
+        <div>{{ contract.number }}</div>
+    </div>
+</div>
+{% endif %}
+{% if is_builtin_visible('contracts', 'description') and current_user.can_view_field('contracts', 'description') %}
+<div class="col-12">
+    <div class="opora-detail-field">
+        <div class="opora-detail-field__label">{{ builtin_label('contracts', 'description', 'Описание') }}</div>
+        <div style="white-space: pre-wrap">{{ contract.description or "—" }}</div>
+    </div>
+</div>
+{% endif %}
+{{ custom_fields_detail(custom_field_details|default([])) }}

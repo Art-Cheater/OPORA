@@ -41,6 +41,27 @@ window.OporaList = (() => {
     el.addEventListener("hidden.bs.toast", () => el.remove());
   }
 
+  async function parseJsonResponse(response, fallbackMessage) {
+    const text = await response.text();
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = null;
+    }
+    if (!data || typeof data !== "object") {
+      const statusMessage =
+        response.status === 400 || response.status === 403
+          ? "Сессия формы устарела. Обновите страницу и повторите действие."
+          : fallbackMessage;
+      throw new Error(statusMessage);
+    }
+    if (!response.ok && data.success !== false) {
+      throw new Error(data.message || fallbackMessage);
+    }
+    return data;
+  }
+
   function queryParams() {
     const form = document.getElementById(config.filterFormId);
     if (!form) return new URLSearchParams();
@@ -68,8 +89,8 @@ window.OporaList = (() => {
         headers: AJAX_HEADERS,
         signal: tableAbort.signal,
       });
-      if (!response.ok) return;
-      const data = await response.json();
+      const data = await parseJsonResponse(response, "Не удалось обновить список");
+      if (!response.ok) throw new Error(data.message || "Не удалось обновить список");
       tableContainer.innerHTML = data.table_html;
       if (paginationContainer) {
         paginationContainer.innerHTML = data.pagination_html;
@@ -78,6 +99,7 @@ window.OporaList = (() => {
       bindPagination();
     } catch (err) {
       if (err?.name === "AbortError") return;
+      showToast(err?.message || "Не удалось обновить список", "danger");
     }
   }
 
@@ -188,6 +210,7 @@ window.OporaList = (() => {
           openEdit(id);
         };
       }
+      bindDetailForms(id);
     } catch {
       detailModalBody().innerHTML = '<div class="alert alert-danger">Не удалось загрузить карточку</div>';
     }
@@ -244,8 +267,17 @@ window.OporaList = (() => {
 
   async function fetchHtml(url) {
     const response = await fetch(url, { headers: AJAX_HEADERS });
-    if (!response.ok) throw new Error("Не удалось загрузить данные");
-    return response.text();
+    const text = await response.text();
+    if (!response.ok) {
+      try {
+        const data = JSON.parse(text);
+        throw new Error(data.message || "Не удалось загрузить данные");
+      } catch (err) {
+        if (err instanceof SyntaxError) throw new Error("Не удалось загрузить данные");
+        throw err;
+      }
+    }
+    return text;
   }
 
   function enhanceForm(form) {
@@ -257,6 +289,7 @@ window.OporaList = (() => {
   }
 
   function bindFormSubmit(form) {
+    if (!form) return;
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const submitBtn = form.querySelector('[type="submit"]');
@@ -268,7 +301,7 @@ window.OporaList = (() => {
           headers: AJAX_HEADERS,
           body: new FormData(form),
         });
-        const data = await response.json();
+        const data = await parseJsonResponse(response, "Ошибка сохранения");
         if (data.success) {
           bootstrap.Modal.getInstance(formModal())?.hide();
           showToast(data.message || "Сохранено");
@@ -299,6 +332,33 @@ window.OporaList = (() => {
       } finally {
         if (submitBtn) submitBtn.disabled = false;
       }
+    });
+  }
+
+  function bindDetailForms(id) {
+    detailModalBody()?.querySelectorAll("form[data-opora-detail-form]").forEach((form) => {
+      if (form.dataset.oporaBound === "1") return;
+      form.dataset.oporaBound = "1";
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const submitBtn = form.querySelector('[type="submit"]');
+        if (submitBtn) submitBtn.disabled = true;
+        try {
+          const response = await fetch(form.action, {
+            method: form.method || "POST",
+            headers: AJAX_HEADERS,
+            body: new FormData(form),
+          });
+          const data = await parseJsonResponse(response, "Не удалось добавить комментарий");
+          if (!data.success) throw new Error(data.message || "Проверьте комментарий");
+          showToast(data.message || "Комментарий добавлен");
+          await openViewModal(id);
+        } catch (err) {
+          showToast(err?.message || "Не удалось добавить комментарий", "danger");
+        } finally {
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      });
     });
   }
 
@@ -424,7 +484,7 @@ window.OporaList = (() => {
         headers: AJAX_HEADERS,
         body,
       });
-      const data = await response.json();
+      const data = await parseJsonResponse(response, "Ошибка удаления");
       if (data.success) {
         showToast(data.message || "Удалено");
         await refreshAfterMutation();

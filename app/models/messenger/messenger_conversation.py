@@ -54,7 +54,9 @@ class MessengerConversation(BaseModel):
         "MessengerMessage",
         back_populates="conversation",
         foreign_keys="MessengerMessage.conversation_id",
-        lazy="selectin",
+        # История загружается только через постраничный запрос репозитория.
+        # Это защищает списки диалогов от случайной загрузки всех сообщений.
+        lazy="raise",
         order_by="MessengerMessage.created_at.asc()",
     )
 

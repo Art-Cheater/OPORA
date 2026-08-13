@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import current_app
+from sqlalchemy import update
 
 from app.core.exceptions import NotFoundError, ValidationError
 from app.extensions import db
@@ -120,20 +121,23 @@ class MessengerService:
     @classmethod
     def mark_read(cls, conversation: MessengerConversation, user_id: uuid.UUID) -> int:
         now = datetime.now(timezone.utc)
-        messages = db.session.scalars(
-            db.select(MessengerMessage).where(
+        result = db.session.execute(
+            update(MessengerMessage)
+            .where(
                 MessengerMessage.conversation_id == conversation.id,
                 MessengerMessage.sender_id != user_id,
                 MessengerMessage.is_read.is_(False),
                 MessengerMessage.active_filter(),
             )
+            .values(
+                is_read=True,
+                read_at=now,
+                updated_at=now,
+                updated_by=user_id,
+            )
+            .execution_options(synchronize_session=False)
         )
-        count = 0
-        for message in messages:
-            message.is_read = True
-            message.read_at = now
-            message.updated_by = user_id
-            count += 1
+        count = int(result.rowcount or 0)
         if count:
             db.session.commit()
         return count

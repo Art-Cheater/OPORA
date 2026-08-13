@@ -1,0 +1,16 @@
+{% from "macros/forms.html" import modal_field, form_errors_alert with context %}
+{% from "macros/custom_fields.html" import custom_fields_form with context %}
+{{ form_errors_alert(form) }}
+<div class="row g-3">
+    {{ modal_field(form.contract_type, col=3, module='contracts') }}
+    {{ modal_field(form.number, col=3, module='contracts') }}
+    {{ modal_field(form.title, col=6, module='contracts') }}
+    {{ modal_field(form.contractor_name, col=6, module='contracts') }}
+    {{ modal_field(form.amount, col=3, module='contracts') }}
+    {{ modal_field(form.end_date, col=3, module='contracts') }}
+    {{ modal_field(form.description, col=12, rows=4, module='contracts') }}
+    {{ modal_field(form.status, col=3, module='contracts') }}
+    {{ modal_field(form.contract_date, col=3, module='contracts') }}
+    {{ modal_field(form.responsible_id, col=6, module='contracts') }}
+    {{ custom_fields_form(custom_fields, custom_field_values, custom_field_module) }}
+</div>

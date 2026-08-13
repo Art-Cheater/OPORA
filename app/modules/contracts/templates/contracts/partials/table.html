@@ -11,8 +11,11 @@
                 {{ sortable_th("Название", "title", sort_by, sort_dir) }}
                 {{ sortable_th("Тип", "contract_type", sort_by, sort_dir) }}
                 {{ sortable_th("Статус", "status", sort_by, sort_dir) }}
+                {{ sortable_th("Подрядчик", "contractor_name", sort_by, sort_dir) }}
+                {{ sortable_th("Сумма", "amount", sort_by, sort_dir) }}
                 <th>Ответственный</th>
                 {{ sortable_th("Дата", "contract_date", sort_by, sort_dir) }}
+                {{ sortable_th("Окончание", "end_date", sort_by, sort_dir) }}
                 {{ sortable_th("Обновлено", "updated_at", sort_by, sort_dir) }}
                 <th class="text-end">Действия</th>
             </tr>
@@ -29,9 +32,14 @@
                 </td>
                 <td>{{ contract_type_badge(contract.contract_type) }}</td>
                 <td>{{ contract_status_badge(contract.status) }}</td>
+                <td>{{ contract.contractor_name or '—' }}</td>
+                <td>{{ contract.amount }} {{ contract.currency }}</td>
                 <td>{{ contract.responsible.full_name if contract.responsible else '—' }}</td>
                 <td class="text-muted">
                     {{ contract.contract_date.strftime('%d.%m.%Y') if contract.contract_date else '—' }}
+                </td>
+                <td class="text-muted">
+                    {{ contract.end_date.strftime('%d.%m.%Y') if contract.end_date else '—' }}
                 </td>
                 <td class="text-muted">{{ contract.updated_at.strftime('%d.%m.%Y %H:%M') }}</td>
                 <td class="text-end">
@@ -46,7 +54,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="8" class="table-empty">
+                <td colspan="11" class="table-empty">
                     <i class="bi bi-inbox"></i> Контракты не найдены
                 </td>
             </tr>

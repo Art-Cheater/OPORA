@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
 from app.extensions import db
 from app.models.enums import (
@@ -92,6 +93,7 @@ def test_procurement_chain_happy_path(app, admin_client):
                 description=None,
                 status=ContractStatus.DRAFT.value,
                 contract_date=None,
+                end_date=date(2026, 12, 31),
                 responsible_id=user_id,
                 contractor_name="ООО Тест",
                 amount=1000,

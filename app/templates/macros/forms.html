@@ -1,9 +1,10 @@
 {# Поля формы в модальных окнах с подсветкой ошибок и правами на поля #}
 
-{% macro modal_field(field, col=6, placeholder='', rows=3, multiple=false, size=none, module=none) %}
-{% if module and not is_builtin_visible(module, field.name) %}
-{% elif module and not current_user.can_view_field(module, field.name) %}
-{% elif module and not current_user.can_edit_field(module, field.name) %}
+{% macro modal_field(field, col=6, placeholder='', rows=3, multiple=false, size=none, module=none, permission_field=none) %}
+{% set field_code = permission_field or field.name %}
+{% if module and not is_builtin_visible(module, field_code) %}
+{% elif module and not current_user.can_view_field(module, field_code) %}
+{% elif module and not current_user.can_edit_field(module, field_code) %}
 <div class="col-md-{{ col }}">
     {{ field.label(class="form-label") }}
     <div class="form-control-plaintext border rounded px-3 py-2 bg-light">

@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass
 from functools import lru_cache
 
-from wtforms.validators import DataRequired, Optional
+from wtforms.validators import DataRequired, InputRequired, Optional
 
 from app.core.exceptions import ValidationError
 from app.core.permission_service import PermissionService
@@ -132,7 +132,9 @@ class BuiltinFieldService:
                 field.label.text = meta.name
             if not meta.is_visible:
                 field.validators = [
-                    v for v in list(field.validators) if not isinstance(v, DataRequired)
+                    v
+                    for v in list(field.validators)
+                    if not isinstance(v, (DataRequired, InputRequired))
                 ]
                 if not any(isinstance(v, Optional) for v in field.validators):
                     field.validators.insert(0, Optional())

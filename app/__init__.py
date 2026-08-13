@@ -22,6 +22,7 @@ def create_app(config_name: str | None = None) -> Flask:
     _configure_email_validator()
 
     _init_extensions(app)
+    _register_performance_profiler(app)
     register_blueprints(app)
     _register_audit_hooks(app)
     _register_security_hooks(app)
@@ -56,6 +57,12 @@ def _register_audit_hooks(app: Flask) -> None:
     from app.core.audit_hooks import register_audit_hooks
 
     register_audit_hooks(app)
+
+
+def _register_performance_profiler(app: Flask) -> None:
+    from app.core.performance import register_performance_profiler
+
+    register_performance_profiler(app)
 
 
 def _init_extensions(app: Flask) -> None:
@@ -186,19 +193,26 @@ def _register_error_handlers(app: Flask) -> None:
     @app.errorhandler(404)
     def not_found(error):
         from flask import render_template
+        from app.core.http import ajax_error, is_ajax
+
+        if is_ajax():
+            return ajax_error("Запрошенные данные не найдены.", status=404)
 
         return render_template("errors/404.html"), 404
 
     @app.errorhandler(413)
     def request_entity_too_large(error):
         from flask import flash, redirect, request, url_for
+        from app.core.http import ajax_error, is_ajax
 
         limit_mb = int(app.config.get("MAX_CONTENT_LENGTH", 0) / (1024 * 1024)) or 64
-        flash(
+        message = (
             f"Файлы слишком большие. Лимит загрузки — {limit_mb} МБ за один запрос "
-            f"(можно несколько файлов, но суммарно не больше лимита).",
-            "danger",
+            "(можно несколько файлов, но суммарно не больше лимита)."
         )
+        if is_ajax():
+            return ajax_error(message, status=413)
+        flash(message, "danger")
         ref = request.referrer
         if ref:
             return redirect(ref)
@@ -207,18 +221,27 @@ def _register_error_handlers(app: Flask) -> None:
     @app.errorhandler(500)
     def internal_error(error):
         from flask import render_template
+        from app.core.http import ajax_error, is_ajax
 
         app.logger.exception("Unhandled server error: %s", error)
         db.session.rollback()
+        if is_ajax():
+            return ajax_error(
+                "Внутренняя ошибка сервера. Повторите попытку позже.",
+                status=500,
+            )
         return render_template("errors/500.html"), 500
 
     @app.errorhandler(400)
     def bad_request(error):
         from flask import render_template
         from flask_wtf.csrf import CSRFError
+        from app.core.http import ajax_error, is_ajax
 
         if isinstance(error, CSRFError):
             return _csrf_response()
+        if is_ajax():
+            return ajax_error("Некорректный запрос.", status=400)
 
         return render_template("errors/404.html"), 400
 
@@ -230,11 +253,15 @@ def _register_error_handlers(app: Flask) -> None:
 
     def _csrf_response():
         from flask import flash, redirect, render_template, request
+        from app.core.http import ajax_error, is_ajax
 
-        flash(
-            "Сессия формы устарела. Обновите страницу и повторите действие — повторный вход не требуется.",
-            "warning",
+        message = (
+            "Сессия формы устарела. Обновите страницу и повторите действие — "
+            "повторный вход не требуется."
         )
+        if is_ajax():
+            return ajax_error(message, status=400)
+        flash(message, "warning")
         ref = request.referrer
         if ref and request.url_root in ref and "/auth/login" not in ref:
             return redirect(ref)

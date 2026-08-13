@@ -215,7 +215,21 @@ class ProjectService:
             )
 
     @classmethod
-    def create_project(cls, payload: ProjectPayload, user_id: uuid.UUID) -> Project:
+    def create_project(
+        cls,
+        payload: ProjectPayload,
+        user_id: uuid.UUID,
+        *,
+        commit: bool = True,
+    ) -> Project:
+        """
+        Создать проект в текущей транзакции.
+
+        ``commit=False`` используется составными операциями, где проект и
+        связанная сущность должны сохраниться атомарно. В этом случае сервис
+        выполняет всю валидацию, аудит и историю, но транзакцией управляет
+        вызывающий сервис.
+        """
         cls.validate_payload(payload)
         exists = db.session.scalar(
             db.select(Project).where(
@@ -251,7 +265,8 @@ class ProjectService:
         snapshot = cls._snapshot(project)
         cls._log_audit(user_id, AuditAction.CREATE.value, project.id, f"Создан проект {project.code}", None, snapshot)
         cls._log_history(project, user_id, "create", "Проект создан", {"created": snapshot})
-        db.session.commit()
+        if commit:
+            db.session.commit()
         return project
 
     @classmethod

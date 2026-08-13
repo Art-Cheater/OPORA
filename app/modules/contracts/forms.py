@@ -14,7 +14,7 @@ from wtforms import (
     SubmitField,
     TextAreaField,
 )
-from wtforms.validators import DataRequired, Length, NumberRange, Optional
+from wtforms.validators import DataRequired, InputRequired, Length, NumberRange, Optional
 
 from app.models.enums import ContractDocumentType, ContractStatus, ContractType
 
@@ -50,6 +50,26 @@ CONTRACT_DOC_TYPE_CHOICES = [
 ]
 
 
+class RussianDecimalField(DecimalField):
+    """DecimalField с понятной ошибкой вместо англоязычного сообщения WTForms."""
+
+    def process_formdata(self, valuelist):
+        try:
+            super().process_formdata(valuelist)
+        except ValueError as exc:
+            raise ValueError("Введите корректную сумму контракта.") from exc
+
+
+class RussianDateField(DateField):
+    """DateField с понятной ошибкой формата даты."""
+
+    def process_formdata(self, valuelist):
+        try:
+            super().process_formdata(valuelist)
+        except ValueError as exc:
+            raise ValueError("Введите корректную дату в формате ГГГГ-ММ-ДД.") from exc
+
+
 class ContractFilterForm(FlaskForm):
     q = StringField("Поиск", validators=[Optional(), Length(max=255)])
     contract_type = SelectField(
@@ -65,6 +85,8 @@ class ContractFilterForm(FlaskForm):
     responsible_id = SelectField("Ответственный", choices=[], validators=[Optional()])
     date_from = DateField("Дата с", validators=[Optional()], format="%Y-%m-%d")
     date_to = DateField("Дата по", validators=[Optional()], format="%Y-%m-%d")
+    end_date_from = DateField("Окончание с", validators=[Optional()], format="%Y-%m-%d")
+    end_date_to = DateField("Окончание по", validators=[Optional()], format="%Y-%m-%d")
     sort_by = SelectField(
         "Сортировка",
         choices=[
@@ -75,6 +97,9 @@ class ContractFilterForm(FlaskForm):
             ("status", "По статусу"),
             ("contract_type", "По типу"),
             ("contract_date", "По дате контракта"),
+            ("end_date", "По дате окончания"),
+            ("contractor_name", "По подрядчику"),
+            ("amount", "По сумме"),
         ],
         default="created_at",
         validate_choice=False,
@@ -91,15 +116,33 @@ class ContractForm(FlaskForm):
     number = StringField("Номер", validators=[DataRequired(), Length(max=100)])
     title = StringField("Название", validators=[DataRequired(), Length(max=500)])
     description = TextAreaField("Описание", validators=[Optional(), Length(max=10000)])
-    contractor_name = StringField("Подрядчик", validators=[Optional(), Length(max=500)])
-    amount = DecimalField(
+    contractor_name = StringField(
+        "Подрядчик",
+        validators=[
+            DataRequired(message="Укажите подрядчика."),
+            Length(max=500, message="Название подрядчика не должно превышать 500 символов."),
+        ],
+    )
+    amount = RussianDecimalField(
         "Сумма",
-        validators=[Optional(), NumberRange(min=Decimal("0"))],
+        validators=[
+            InputRequired(message="Укажите сумму контракта."),
+            NumberRange(
+                min=Decimal("0.01"),
+                message="Сумма контракта должна быть больше нуля.",
+            ),
+        ],
         places=2,
-        default=0,
+        default=None,
+        rounding=None,
     )
     status = SelectField("Статус", choices=CONTRACT_STATUS_CHOICES, validators=[DataRequired()])
     contract_date = DateField("Дата", validators=[Optional()], format="%Y-%m-%d")
+    end_date = RussianDateField(
+        "Дата окончания",
+        validators=[InputRequired(message="Укажите дату окончания контракта.")],
+        format="%Y-%m-%d",
+    )
     responsible_id = SelectField("Ответственный", choices=[], validators=[Optional()])
     submit = SubmitField("Сохранить")
 

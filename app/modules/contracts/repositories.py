@@ -22,6 +22,8 @@ class ContractFilter:
     responsible_id: str = ""
     date_from: str = ""
     date_to: str = ""
+    end_date_from: str = ""
+    end_date_to: str = ""
     sort_by: str = "created_at"
     sort_dir: str = "desc"
 
@@ -37,6 +39,9 @@ class ContractRepository:
         "status": Contract.status,
         "contract_type": Contract.contract_type,
         "contract_date": Contract.contract_date,
+        "end_date": Contract.end_date,
+        "contractor_name": Contract.contractor_name,
+        "amount": Contract.amount,
     }
 
     @staticmethod
@@ -102,6 +107,7 @@ class ContractRepository:
                     Contract.number.ilike(q),
                     Contract.title.ilike(q),
                     Contract.description.ilike(q),
+                    Contract.contractor_name.ilike(q),
                 )
             )
 
@@ -126,6 +132,18 @@ class ContractRepository:
         if filters.date_to:
             try:
                 stmt = stmt.where(Contract.contract_date <= date.fromisoformat(filters.date_to))
+            except ValueError:
+                pass
+
+        if filters.end_date_from:
+            try:
+                stmt = stmt.where(Contract.end_date >= date.fromisoformat(filters.end_date_from))
+            except ValueError:
+                pass
+
+        if filters.end_date_to:
+            try:
+                stmt = stmt.where(Contract.end_date <= date.fromisoformat(filters.end_date_to))
             except ValueError:
                 pass
 

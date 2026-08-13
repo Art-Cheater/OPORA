@@ -87,7 +87,11 @@ def events_stream():
 @permission_required(PERM_MESSENGER_USE)
 def users():
     query = request.args.get("q", "")
-    users_list = MessengerRepository.list_users(current_user.id, query)
+    users_list = MessengerRepository.list_users(
+        current_user.id,
+        query,
+        limit=int(current_app.config.get("MESSENGER_USER_LOOKUP_LIMIT", 50)),
+    )
     user_ids = [user.id for user in users_list]
     presence_map = MessengerRepository.presence_map(user_ids, _online_timeout())
     return jsonify(
@@ -109,17 +113,24 @@ def users():
 @permission_required(PERM_MESSENGER_USE)
 def conversations():
     items = MessengerRepository.list_conversations(current_user.id)
+    unread_counts = MessengerRepository.unread_counts_for_conversations(
+        [conv.id for conv in items],
+        current_user.id,
+    )
     peer_ids = [conv.other_user_id(current_user.id) for conv in items]
     presence_map = MessengerRepository.presence_map(peer_ids, _online_timeout())
     return jsonify(
         {
             "conversations": [
                 serialize_conversation(
-                    conv, current_user.id, presence_map=presence_map
+                    conv,
+                    current_user.id,
+                    presence_map=presence_map,
+                    unread_count=unread_counts.get(conv.id, 0),
                 )
                 for conv in items
             ],
-            "total_unread": MessengerRepository.total_unread_count(current_user.id),
+            "total_unread": sum(unread_counts.values()),
         }
     )
 
@@ -142,6 +153,7 @@ def open_conversation(peer_id: uuid.UUID):
             created_by=current_user.id,
         )
         db.session.commit()
+        conversation = MessengerRepository.get_conversation(conversation.id) or conversation
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
@@ -161,9 +173,12 @@ def messages(conversation_id: uuid.UUID):
         return jsonify({"error": exc.message}), 404
 
     before_id = request.args.get("before_id")
-    before_uuid = uuid.UUID(before_id) if before_id else None
-    items = MessengerRepository.list_messages(conversation.id, before_id=before_uuid)
+    try:
+        before_uuid = uuid.UUID(before_id) if before_id else None
+    except ValueError:
+        return jsonify({"error": "Некорректный идентификатор сообщения."}), 400
     MessengerService.mark_read(conversation, current_user.id)
+    items = MessengerRepository.list_messages(conversation.id, before_id=before_uuid)
 
     peer_id = conversation.other_user_id(current_user.id)
     presence_map = MessengerRepository.presence_map([peer_id], _online_timeout())
@@ -171,7 +186,10 @@ def messages(conversation_id: uuid.UUID):
     return jsonify(
         {
             "conversation": serialize_conversation(
-                conversation, current_user.id, presence_map=presence_map
+                conversation,
+                current_user.id,
+                presence_map=presence_map,
+                unread_count=0,
             ),
             "messages": [serialize_message(msg, current_user.id) for msg in items],
         }
@@ -251,13 +269,7 @@ def search():
         return jsonify({"results": [], "error": "Минимум 2 символа для поиска."})
 
     items = MessengerRepository.search_messages(current_user.id, query)
-    results = []
-    for message in items:
-        conversation = MessengerRepository.get_conversation(message.conversation_id)
-        if conversation is None:
-            continue
-        message.conversation = conversation
-        results.append(serialize_search_result(message, current_user.id))
+    results = [serialize_search_result(message, current_user.id) for message in items]
 
     return jsonify({"results": results, "query": query})
 

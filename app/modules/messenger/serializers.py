@@ -10,7 +10,6 @@ from flask import url_for
 from app.models.auth.user import User
 from app.models.messenger.messenger_conversation import MessengerConversation
 from app.models.messenger.messenger_message import MessengerMessage
-from app.modules.messenger.repositories import MessengerRepository
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -101,6 +100,7 @@ def serialize_conversation(
     *,
     online_map: dict[str, bool] | None = None,
     presence_map: dict[str, dict] | None = None,
+    unread_count: int = 0,
 ) -> dict:
     peer = conversation.other_user(current_user_id)
     peer_id = conversation.other_user_id(current_user_id)
@@ -112,13 +112,12 @@ def serialize_conversation(
         last_seen_at = presence_map[peer_key].get("last_seen_at")
     elif online_map is not None:
         online = online_map.get(peer_key, False)
-    unread = MessengerRepository.unread_count_for_conversation(conversation.id, current_user_id)
     return {
         "id": str(conversation.id),
         "peer": serialize_user(peer, online=online, last_seen_at=last_seen_at),
         "last_message_preview": conversation.last_message_preview,
         "last_message_at": _iso(conversation.last_message_at),
-        "unread_count": unread,
+        "unread_count": unread_count,
     }
 
 

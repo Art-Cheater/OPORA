@@ -83,7 +83,9 @@ def _resolve_uuid_field(field_name: str, form_value: str, entity=None):
 
 def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload:
     from datetime import datetime, timezone
+    from decimal import Decimal, InvalidOperation
 
+    from app.core.address import load_address_selection_token
     from app.core.builtin_field_service import BuiltinFieldService as BFS
     from app.models.enums import Priority
 
@@ -103,6 +105,14 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
         status_id = status.id
 
     address = field("address", form.address.data, default="") or ""
+    signed_address = load_address_selection_token(form.address_selection_token.data)
+    signed_normalized = str(
+        (signed_address or {}).get("normalized_address") or ""
+    ).strip()
+    signed_selection_is_current = bool(signed_normalized) and address.strip() in {
+        signed_normalized,
+        signed_normalized[:500],
+    }
     received_at = field(
         "received_at",
         form.received_at.data,
@@ -116,6 +126,30 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
         if entity is not None and not BFS.is_visible(m, code):
             return getattr(entity, attr, default)
         return field(code, submitted, default=default)
+
+    def machine_field(code, default=None):
+        """Служебные поля берём только из подписанной сервером подсказки."""
+        if entity is not None and not FieldPermissionService.can_edit_field(u, m, "address"):
+            return getattr(entity, code, default)
+        if signed_selection_is_current:
+            return signed_address.get(code, default)
+        if entity is not None and address.strip() == (entity.address or "").strip():
+            return getattr(entity, code, default)
+        return default
+
+    def signed_coordinate(code):
+        value = machine_field(code)
+        if value in (None, ""):
+            return None
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+
+    if FieldPermissionService.can_edit_field(u, m, "district"):
+        district = field("district", form.district.data, default=None)
+    else:
+        district = machine_field("district")
 
     responsible_raw = preserved(
         "responsible_id",
@@ -144,21 +178,20 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
         title=address.strip()[:500] or "Без адреса",
         description=field("description", form.description.data, default=""),
         address=address,
+        original_address=machine_field("original_address", default=address),
+        normalized_address=machine_field("normalized_address"),
+        region=machine_field("region"),
+        district=district,
+        settlement=machine_field("settlement"),
+        street=machine_field("street"),
+        house=machine_field("house"),
+        address_source=machine_field("address_source"),
+        address_external_id=machine_field("address_external_id"),
         pp=field("pp", form.pp.data, default=None),
         received_at=received_at,
         dispatcher_name=field("dispatcher_name", form.dispatcher_name.data, default=None),
-        latitude=preserved(
-            "latitude",
-            form.latitude.data,
-            "latitude",
-            default=entity.latitude if entity else None,
-        ),
-        longitude=preserved(
-            "longitude",
-            form.longitude.data,
-            "longitude",
-            default=entity.longitude if entity else None,
-        ),
+        latitude=signed_coordinate("latitude"),
+        longitude=signed_coordinate("longitude"),
         phone=field("phone", form.phone.data, default=None),
         applicant_name=field("applicant_name", form.applicant_name.data, default="—"),
         priority=field("priority", form.priority.data, default=Priority.MEDIUM.value),
@@ -216,6 +249,17 @@ def _apply_request_create_defaults(form: RequestForm) -> None:
     form.number.data = RequestRepository.next_number()
     form.description.data = ""
     form.address.data = ""
+    form.original_address.data = ""
+    form.normalized_address.data = ""
+    form.region.data = ""
+    form.district.data = ""
+    form.settlement.data = ""
+    form.street.data = ""
+    form.house.data = ""
+    form.address_source.data = ""
+    form.address_external_id.data = ""
+    form.latitude.data = None
+    form.longitude.data = None
     form.pp.data = ""
     form.applicant_name.data = ""
     form.priority.data = Priority.MEDIUM.value
@@ -377,6 +421,28 @@ def format_address_api():
     return jsonify({"address": formatted, "raw": raw})
 
 
+@requests_bp.route("/api/address-suggestions")
+@login_required
+@any_permission_required(PERM_REQUESTS_CREATE, PERM_REQUESTS_EDIT, PERM_REQUESTS_VIEW)
+def address_suggestions():
+    from app.core.address import (
+        get_address_suggestion_service,
+        make_address_selection_token,
+    )
+
+    query = (request.args.get("q") or "").strip()
+    if len(query) < 3:
+        return jsonify({"suggestions": []})
+    limit = int(current_app.config.get("ADDRESS_SUGGESTION_LIMIT", 8))
+    suggestions = get_address_suggestion_service().suggest(query, limit=limit)
+    payload = []
+    for item in suggestions:
+        data = item.as_dict()
+        data["selection_token"] = make_address_selection_token(item)
+        payload.append(data)
+    return jsonify({"suggestions": payload})
+
+
 @requests_bp.route("/api/open-by-address")
 @login_required
 @any_permission_required(PERM_REQUESTS_CREATE, PERM_REQUESTS_EDIT, PERM_REQUESTS_VIEW)
@@ -522,7 +588,12 @@ def create():
             mode="create",
             **_cf_form(),
         )
-    return render_template("requests/form.html", form=form, mode="create")
+    return render_template(
+        "requests/form.html",
+        form=form,
+        mode="create",
+        **_cf_form(),
+    )
 
 
 @requests_bp.route("/<uuid:request_id>")
@@ -602,6 +673,7 @@ def detail(request_id: uuid.UUID):
             actions=actions,
             dispatcher=dispatcher,
             lifecycle=lifecycle,
+            comment_form=comment_form,
             **custom_field_detail_context(_CF, req.id, current_user),
         )
 
@@ -620,6 +692,7 @@ def detail(request_id: uuid.UUID):
         actions=actions,
         dispatcher=dispatcher,
         lifecycle=lifecycle,
+        **custom_field_detail_context(_CF, req.id, current_user),
     )
 
 
@@ -686,7 +759,13 @@ def edit(request_id: uuid.UUID):
             req=req,
             **_cf_form(req.id),
         )
-    return render_template("requests/form.html", form=form, mode="edit", req=req)
+    return render_template(
+        "requests/form.html",
+        form=form,
+        mode="edit",
+        req=req,
+        **_cf_form(req.id),
+    )
 
 
 @requests_bp.route("/<uuid:request_id>/delete", methods=["POST"])
@@ -790,6 +869,8 @@ def cancel_request(request_id: uuid.UUID):
 def add_comment(request_id: uuid.UUID):
     req = RequestRepository.get_by_id(request_id)
     if req is None:
+        if is_ajax():
+            return ajax_error("Заявка не найдена.", status=404)
         flash("Заявка не найдена.", "danger")
         return redirect(url_for("requests.index"))
 
@@ -797,9 +878,19 @@ def add_comment(request_id: uuid.UUID):
     if form.validate_on_submit():
         try:
             RequestService.add_comment(req, form.body.data, current_user.id)
+            if is_ajax():
+                return ajax_ok("Комментарий добавлен.")
             flash("Комментарий добавлен.", "success")
         except ValidationError as exc:
+            if is_ajax():
+                return ajax_error(str(exc), status=422)
             flash(str(exc), "danger")
+    elif is_ajax():
+        return ajax_error(
+            form_errors_message(form),
+            errors=form.errors,
+            status=422,
+        )
     return redirect(url_for("requests.detail", request_id=req.id))
 
 

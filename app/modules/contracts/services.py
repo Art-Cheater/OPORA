@@ -5,6 +5,8 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal, InvalidOperation
+from enum import Enum
 from typing import Any
 
 from flask import request
@@ -67,6 +69,7 @@ class ContractPayload:
     description: str | None
     status: str
     contract_date: date | None
+    end_date: date | None
     responsible_id: uuid.UUID | None
     contractor_name: str = ""
     amount: Any = 0
@@ -83,6 +86,7 @@ class ContractService:
         "description",
         "status",
         "contract_date",
+        "end_date",
         "responsible_id",
         "contractor_name",
         "amount",
@@ -113,19 +117,41 @@ class ContractService:
             raise ValidationError("Номер контракта обязателен.")
         if not payload.title.strip():
             raise ValidationError("Название контракта обязательно.")
+        if not (payload.contractor_name or "").strip():
+            raise ValidationError("Укажите подрядчика.")
+        try:
+            amount = Decimal(str(payload.amount))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValidationError("Введите корректную сумму контракта.") from exc
+        if not amount.is_finite() or amount <= 0:
+            raise ValidationError("Сумма контракта должна быть больше нуля.")
+        if not isinstance(payload.end_date, date):
+            raise ValidationError("Укажите дату окончания контракта.")
+        payload.amount = amount
+
+    @staticmethod
+    def _json_safe(value: Any) -> Any:
+        """Преобразовать значения ORM в типы, поддерживаемые JSON/JSONB."""
+        if isinstance(value, uuid.UUID):
+            return str(value)
+        if isinstance(value, Decimal):
+            return format(value, "f")
+        if isinstance(value, date):
+            return value.isoformat()
+        if isinstance(value, Enum):
+            return ContractService._json_safe(value.value)
+        if isinstance(value, dict):
+            return {str(key): ContractService._json_safe(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple, set)):
+            return [ContractService._json_safe(item) for item in value]
+        return value
 
     @staticmethod
     def _snapshot(contract: Contract) -> dict[str, Any]:
-        data: dict[str, Any] = {}
-        for field in ContractService.TRACKED_FIELDS:
-            value = getattr(contract, field)
-            if isinstance(value, uuid.UUID):
-                data[field] = str(value)
-            elif isinstance(value, date):
-                data[field] = value.isoformat()
-            else:
-                data[field] = value
-        return data
+        return {
+            field: ContractService._json_safe(getattr(contract, field))
+            for field in ContractService.TRACKED_FIELDS
+        }
 
     @staticmethod
     def _diff(old: dict[str, Any], new: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -153,8 +179,8 @@ class ContractService:
             entity_type=EntityType.CONTRACT.value,
             entity_id=entity_id,
             description=description,
-            old_values=old_values,
-            new_values=new_values,
+            old_values=cls._json_safe(old_values),
+            new_values=cls._json_safe(new_values),
         )
 
     @staticmethod
@@ -173,7 +199,7 @@ class ContractService:
                 previous_status=previous_status,
                 action=action,
                 comment=comment,
-                details=details,
+                details=ContractService._json_safe(details),
                 changed_by=user_id,
                 created_by=user_id,
                 updated_by=user_id,
@@ -213,6 +239,7 @@ class ContractService:
             description=cls._normalize_text(payload.description),
             status=payload.status,
             contract_date=payload.contract_date,
+            end_date=payload.end_date,
             responsible_id=payload.responsible_id,
             contractor_name=(payload.contractor_name or "").strip(),
             amount=payload.amount or 0,
@@ -281,6 +308,7 @@ class ContractService:
             description=cls._normalize_text(payload.description),
             status=payload.status,
             contract_date=payload.contract_date,
+            end_date=payload.end_date,
             responsible_id=payload.responsible_id,
             contractor_name=(payload.contractor_name or "").strip(),
             amount=payload.amount or 0,
@@ -338,6 +366,7 @@ class ContractService:
         contract.description = cls._normalize_text(payload.description)
         contract.status = payload.status
         contract.contract_date = payload.contract_date
+        contract.end_date = payload.end_date
         contract.responsible_id = payload.responsible_id
         contract.contractor_name = (payload.contractor_name or "").strip()
         contract.amount = payload.amount or 0

@@ -2,6 +2,7 @@
 {% from "macros/ui.html" import page_header %}
 {% from "macros/badges.html" import project_status_badge %}
 {% from "macros/files.html" import file_gallery %}
+{% from "macros/custom_fields.html" import custom_fields_detail with context %}
 
 {% block title %}{{ project.code }} — {{ app_name }}{% endblock %}
 
@@ -12,9 +13,11 @@
     <i class="bi bi-hammer"></i> В заявку на торги
 </a>
 {% endif %}
+{% if current_user.has_permission('projects.edit') %}
 <a href="{{ url_for('projects.edit', project_id=project.id) }}" class="btn btn-primary">
     <i class="bi bi-pencil-square"></i> Редактировать
 </a>
+{% endif %}
 {% endcall %}
 {% endblock %}
 
@@ -25,7 +28,7 @@
             <div class="card-header"><i class="bi bi-card-text"></i>Детали проекта</div>
             <div class="card-body">
                 <div class="row g-3">
-                    {% if project.work_object %}
+                    {% if project.work_object and current_user.can_view_field('projects', 'object_id') %}
                     <div class="col-md-12">
                         <small class="text-muted">Объект</small>
                         <div>
@@ -33,10 +36,13 @@
                         </div>
                     </div>
                     {% endif %}
+                    {% if current_user.can_view_field('projects', 'status') %}
                     <div class="col-md-4">
                         <small class="text-muted">Статус</small>
                         <div>{{ project_status_badge(project.status) }}</div>
                     </div>
+                    {% endif %}
+                    {% if current_user.can_view_field('projects', 'progress_percent') %}
                     <div class="col-md-4">
                         <small class="text-muted">Готовность</small>
                         <div class="d-flex align-items-center gap-2 mt-1">
@@ -46,18 +52,26 @@
                             <span class="fw-medium">{{ project.progress_percent }}%</span>
                         </div>
                     </div>
+                    {% endif %}
+                    {% if current_user.can_view_field('projects', 'responsible_id') %}
                     <div class="col-md-4">
                         <small class="text-muted">Ответственный</small>
                         <div class="fw-medium">{{ project.responsible.full_name if project.responsible else "—" }}</div>
                     </div>
+                    {% endif %}
+                    {% if current_user.can_view_field('projects', 'start_date') %}
                     <div class="col-md-6">
                         <small class="text-muted">Дата начала</small>
                         <div>{{ project.start_date.strftime('%d.%m.%Y') if project.start_date else "—" }}</div>
                     </div>
+                    {% endif %}
+                    {% if current_user.can_view_field('projects', 'end_date') %}
                     <div class="col-md-6">
                         <small class="text-muted">Дата окончания</small>
                         <div>{{ project.end_date.strftime('%d.%m.%Y') if project.end_date else "—" }}</div>
                     </div>
+                    {% endif %}
+                    {% if current_user.can_view_field('projects', 'executor_ids') %}
                     <div class="col-12">
                         <small class="text-muted">Исполнители</small>
                         <div class="mt-1">
@@ -70,10 +84,14 @@
                             {% endif %}
                         </div>
                     </div>
+                    {% endif %}
+                    {% if current_user.can_view_field('projects', 'description') %}
                     <div class="col-12">
                         <small class="text-muted">Описание</small>
-                        <div class="mt-1">{{ project.description or "—" }}</div>
+                        <div class="mt-1 text-pre-wrap">{{ project.description or "—" }}</div>
                     </div>
+                    {% endif %}
+                    {{ custom_fields_detail(custom_field_details) }}
                 </div>
             </div>
         </div>

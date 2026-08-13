@@ -98,26 +98,6 @@
     }
   }
 
-  async function formatAddressField(form) {
-    const input = addressInput(form);
-    if (!input) return;
-    const raw = (input.value || "").trim();
-    if (raw.length < 2) return;
-    try {
-      const res = await fetch(
-        `/requests/api/format-address?address=${encodeURIComponent(raw)}`,
-        { headers: { "X-Requested-With": "XMLHttpRequest" } }
-      );
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data.address && data.address !== raw) {
-        input.value = data.address;
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-
   function bindAddressCheck(form) {
     const input = addressInput(form);
     if (!input || input.dataset.repeatBound) return;
@@ -127,9 +107,175 @@
       checkTimer = setTimeout(() => checkAddress(form), 350);
     };
     input.addEventListener("input", schedule);
-    input.addEventListener("blur", async () => {
-      await formatAddressField(form);
-      await checkAddress(form);
+    input.addEventListener("blur", () => checkAddress(form));
+  }
+
+  const ADDRESS_FIELDS = [
+    "address_selection_token",
+    "normalized_address",
+    "region",
+    "district",
+    "settlement",
+    "street",
+    "house",
+    "address_source",
+    "address_external_id",
+    "latitude",
+    "longitude",
+  ];
+
+  function setField(form, name, value) {
+    const field = form.querySelector(`[name="${name}"]`);
+    if (field) field.value = value ?? "";
+  }
+
+  function clearAddressSelection(form) {
+    ADDRESS_FIELDS.forEach((name) => setField(form, name, ""));
+    const input = addressInput(form);
+    if (input) delete input.dataset.selectedAddress;
+  }
+
+  function syncOriginalAddress(form) {
+    const input = addressInput(form);
+    if (!input) return;
+    if (!input.dataset.selectedAddress) {
+      setField(form, "original_address", input.value.trim());
+    }
+  }
+
+  function applyAddressSuggestion(form, suggestion) {
+    const input = addressInput(form);
+    if (!input || !suggestion?.normalized_address) return;
+    setField(form, "original_address", suggestion.original_address || input.value.trim());
+    setField(form, "address_selection_token", suggestion.selection_token);
+    ADDRESS_FIELDS.forEach((name) => setField(form, name, suggestion[name]));
+    input.value = suggestion.normalized_address;
+    input.dataset.selectedAddress = "1";
+    input.setAttribute("aria-expanded", "false");
+    const status = form.querySelector("[data-address-status]");
+    if (status) {
+      status.textContent = suggestion.other_settlement
+        ? `Выбран другой населённый пункт: ${suggestion.settlement || "Кировская область"}`
+        : "Адрес выбран, координаты сохранятся вместе с заявкой.";
+      status.classList.toggle("text-warning", !!suggestion.other_settlement);
+      status.classList.toggle("text-success", !suggestion.other_settlement);
+    }
+    const list = form.querySelector("[data-address-suggestions]");
+    if (list) {
+      list.replaceChildren();
+      list.classList.add("d-none");
+    }
+    checkAddress(form);
+  }
+
+  function renderAddressSuggestions(form, suggestions) {
+    const list = form.querySelector("[data-address-suggestions]");
+    const input = addressInput(form);
+    if (!list || !input) return;
+    list.replaceChildren();
+    suggestions.forEach((suggestion) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "list-group-item list-group-item-action";
+      button.setAttribute("role", "option");
+
+      const title = document.createElement("div");
+      title.className = "fw-medium";
+      title.textContent = suggestion.normalized_address;
+      button.appendChild(title);
+
+      const meta = document.createElement("small");
+      meta.className = suggestion.other_settlement ? "text-warning-emphasis" : "text-muted";
+      meta.textContent = suggestion.other_settlement
+        ? `Другой населённый пункт: ${suggestion.settlement || "Кировская область"}`
+        : [suggestion.street, suggestion.house ? `дом ${suggestion.house}` : ""]
+            .filter(Boolean)
+            .join(", ");
+      if (meta.textContent) button.appendChild(meta);
+      button.addEventListener("click", () => applyAddressSuggestion(form, suggestion));
+      list.appendChild(button);
+    });
+    list.classList.toggle("d-none", suggestions.length === 0);
+    input.setAttribute("aria-expanded", suggestions.length ? "true" : "false");
+  }
+
+  function bindAddressSuggestions(form) {
+    const input = addressInput(form);
+    if (!input || input.dataset.suggestionsBound) return;
+    input.dataset.suggestionsBound = "1";
+    if (form.querySelector("[name='normalized_address']")?.value) {
+      input.dataset.selectedAddress = "1";
+    } else {
+      syncOriginalAddress(form);
+    }
+
+    let timer = null;
+    let controller = null;
+    let sequence = 0;
+    const status = form.querySelector("[data-address-status]");
+    const list = form.querySelector("[data-address-suggestions]");
+
+    input.addEventListener("input", () => {
+      clearTimeout(timer);
+      controller?.abort();
+      controller = null;
+      sequence += 1;
+      clearAddressSelection(form);
+      syncOriginalAddress(form);
+      if (list) {
+        list.replaceChildren();
+        list.classList.add("d-none");
+      }
+      input.setAttribute("aria-expanded", "false");
+      if (status) {
+        status.classList.remove("text-success", "text-warning");
+        status.textContent =
+          input.value.trim().length < 3
+            ? "Введите не менее трёх символов."
+            : "Ищем адрес… Сохранение формы не блокируется.";
+      }
+      if (input.value.trim().length < 3) return;
+
+      const requestSequence = sequence;
+      timer = setTimeout(async () => {
+        controller = new AbortController();
+        try {
+          const params = new URLSearchParams({ q: input.value.trim() });
+          const response = await fetch(`/requests/api/address-suggestions?${params}`, {
+            headers: { "X-Requested-With": "XMLHttpRequest" },
+            signal: controller.signal,
+          });
+          if (!response.ok) throw new Error("suggestions unavailable");
+          const data = await response.json();
+          if (requestSequence !== sequence) return;
+          const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+          renderAddressSuggestions(form, suggestions);
+          if (status) {
+            status.textContent = suggestions.length
+              ? "Выберите точный адрес. Другие населённые пункты отмечены отдельно."
+              : "Подсказок нет — введённый адрес всё равно можно сохранить.";
+          }
+        } catch (error) {
+          if (error?.name === "AbortError" || requestSequence !== sequence) return;
+          if (status) {
+            status.textContent =
+              "Сервис подсказок недоступен — введённый адрес можно сохранить.";
+          }
+        }
+      }, 400);
+    });
+
+    input.addEventListener("blur", () => {
+      window.setTimeout(() => {
+        list?.classList.add("d-none");
+        input.setAttribute("aria-expanded", "false");
+      }, 150);
+    });
+    input.addEventListener("focus", () => {
+      if (list?.children.length) {
+        list.classList.remove("d-none");
+        input.setAttribute("aria-expanded", "true");
+      }
     });
   }
 
@@ -160,6 +306,7 @@
   }
 
   async function handleCreateSubmit(form, nativeSubmit) {
+    syncOriginalAddress(form);
     if (!isCreateForm(form)) {
       return nativeSubmit();
     }
@@ -213,6 +360,8 @@
     form.dataset.requestsInited = "1";
     toggleBarrier(form);
     bindAddressCheck(form);
+    bindAddressSuggestions(form);
+    form.addEventListener("submit", () => syncOriginalAddress(form));
   }
 
   window.OporaRequestsForm = {

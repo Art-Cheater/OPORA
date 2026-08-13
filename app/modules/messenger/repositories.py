@@ -5,9 +5,11 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import contains_eager, joinedload, selectinload
 
 from app.extensions import db
+from app.models.auth.associations import UserRole
+from app.models.auth.role import Role
 from app.models.auth.user import User
 from app.models.base import as_utc_aware, utcnow
 from app.models.messenger.messenger_conversation import MessengerConversation
@@ -19,9 +21,24 @@ class MessengerRepository:
     """Доступ к данным мессенджера."""
 
     @staticmethod
+    def _conversation_options():
+        return (
+            joinedload(MessengerConversation.participant_a)
+            .selectinload(User.user_roles)
+            .joinedload(UserRole.role)
+            .lazyload(Role.role_permissions),
+            joinedload(MessengerConversation.participant_b)
+            .selectinload(User.user_roles)
+            .joinedload(UserRole.role)
+            .lazyload(Role.role_permissions),
+        )
+
+    @staticmethod
     def get_conversation(conversation_id: uuid.UUID) -> MessengerConversation | None:
         return db.session.scalar(
-            select(MessengerConversation).where(
+            select(MessengerConversation)
+            .options(*MessengerRepository._conversation_options())
+            .where(
                 MessengerConversation.id == conversation_id,
                 MessengerConversation.active_filter(),
             )
@@ -44,7 +61,9 @@ class MessengerRepository:
 
         a_id, b_id = MessengerConversation.ordered_pair(user_id, peer_id)
         conversation = db.session.scalar(
-            select(MessengerConversation).where(
+            select(MessengerConversation)
+            .options(*cls._conversation_options())
+            .where(
                 MessengerConversation.participant_a_id == a_id,
                 MessengerConversation.participant_b_id == b_id,
                 MessengerConversation.active_filter(),
@@ -67,6 +86,7 @@ class MessengerRepository:
     def list_conversations(user_id: uuid.UUID) -> list[MessengerConversation]:
         stmt = (
             select(MessengerConversation)
+            .options(*MessengerRepository._conversation_options())
             .where(
                 MessengerConversation.active_filter(),
                 or_(
@@ -80,6 +100,29 @@ class MessengerRepository:
             )
         )
         return list(db.session.scalars(stmt))
+
+    @staticmethod
+    def unread_counts_for_conversations(
+        conversation_ids: list[uuid.UUID],
+        user_id: uuid.UUID,
+    ) -> dict[uuid.UUID, int]:
+        """Aggregate unread counts for a conversation list in one query."""
+        if not conversation_ids:
+            return {}
+        rows = db.session.execute(
+            select(
+                MessengerMessage.conversation_id,
+                func.count(MessengerMessage.id),
+            )
+            .where(
+                MessengerMessage.conversation_id.in_(conversation_ids),
+                MessengerMessage.sender_id != user_id,
+                MessengerMessage.is_read.is_(False),
+                MessengerMessage.active_filter(),
+            )
+            .group_by(MessengerMessage.conversation_id)
+        )
+        return {conversation_id: int(count) for conversation_id, count in rows}
 
     @staticmethod
     def unread_count_for_conversation(conversation_id: uuid.UUID, user_id: uuid.UUID) -> int:
@@ -121,12 +164,12 @@ class MessengerRepository:
         stmt = (
             select(MessengerMessage)
             .options(
-                selectinload(MessengerMessage.conversation).selectinload(
-                    MessengerConversation.participant_a
-                ),
-                selectinload(MessengerMessage.conversation).selectinload(
-                    MessengerConversation.participant_b
-                ),
+                contains_eager(MessengerMessage.conversation)
+                .joinedload(MessengerConversation.participant_a)
+                .lazyload(User.user_roles),
+                contains_eager(MessengerMessage.conversation)
+                .joinedload(MessengerConversation.participant_b)
+                .lazyload(User.user_roles),
             )
             .join(
                 MessengerConversation,
@@ -169,8 +212,10 @@ class MessengerRepository:
         return db.session.scalar(
             select(MessengerMessage)
             .options(
-                selectinload(MessengerMessage.reply_to).selectinload(MessengerMessage.sender),
-                selectinload(MessengerMessage.sender),
+                joinedload(MessengerMessage.reply_to)
+                .joinedload(MessengerMessage.sender)
+                .lazyload(User.user_roles),
+                joinedload(MessengerMessage.sender).lazyload(User.user_roles),
             )
             .where(
                 MessengerMessage.id == message_id,
@@ -188,8 +233,10 @@ class MessengerRepository:
         stmt = (
             select(MessengerMessage)
             .options(
-                selectinload(MessengerMessage.reply_to).selectinload(MessengerMessage.sender),
-                selectinload(MessengerMessage.sender),
+                joinedload(MessengerMessage.reply_to)
+                .joinedload(MessengerMessage.sender)
+                .lazyload(User.user_roles),
+                joinedload(MessengerMessage.sender).lazyload(User.user_roles),
             )
             .where(
                 MessengerMessage.conversation_id == conversation_id,
@@ -212,6 +259,22 @@ class MessengerRepository:
         q = f"%{query.strip()}%"
         stmt = (
             select(MessengerMessage)
+            .options(
+                joinedload(MessengerMessage.reply_to)
+                .joinedload(MessengerMessage.sender)
+                .lazyload(User.user_roles),
+                joinedload(MessengerMessage.sender).lazyload(User.user_roles),
+                contains_eager(MessengerMessage.conversation)
+                .joinedload(MessengerConversation.participant_a)
+                .selectinload(User.user_roles)
+                .joinedload(UserRole.role)
+                .lazyload(Role.role_permissions),
+                contains_eager(MessengerMessage.conversation)
+                .joinedload(MessengerConversation.participant_b)
+                .selectinload(User.user_roles)
+                .joinedload(UserRole.role)
+                .lazyload(Role.role_permissions),
+            )
             .join(
                 MessengerConversation,
                 MessengerMessage.conversation_id == MessengerConversation.id,
@@ -234,11 +297,25 @@ class MessengerRepository:
         return list(db.session.scalars(stmt))
 
     @staticmethod
-    def list_users(current_user_id: uuid.UUID, query: str = "") -> list[User]:
-        """Все сотрудники системы (кроме текущего пользователя)."""
-        stmt = select(User).where(
-            User.active_filter(),
-            User.id != current_user_id,
+    def list_users(
+        current_user_id: uuid.UUID,
+        query: str = "",
+        *,
+        limit: int = 50,
+    ) -> list[User]:
+        """Bounded employee lookup excluding the current user."""
+        limit = max(1, min(int(limit), 100))
+        stmt = (
+            select(User)
+            .options(
+                selectinload(User.user_roles)
+                .joinedload(UserRole.role)
+                .lazyload(Role.role_permissions)
+            )
+            .where(
+                User.active_filter(),
+                User.id != current_user_id,
+            )
         )
         if query.strip():
             q = f"%{query.strip()}%"
@@ -251,7 +328,7 @@ class MessengerRepository:
                     User.phone.ilike(q),
                 )
             )
-        stmt = stmt.order_by(User.full_name.asc())
+        stmt = stmt.order_by(User.full_name.asc()).limit(limit)
         return list(db.session.scalars(stmt))
 
     @staticmethod

@@ -16,61 +16,7 @@
       {% if mode == 'edit' and req %}data-request-id="{{ req.id }}"{% endif %}>
     <div class="card-body">
         {{ form.hidden_tag() }}
-        <div class="row g-3">
-            <div class="col-md-4">
-                {{ form.number.label(class="form-label") }}
-                {{ form.number(class="form-control") }}
-            </div>
-            <div class="col-md-8">
-                {{ form.address.label(class="form-label") }}
-                {{ form.address(class="form-control", placeholder="улица, дом (город Киров)") }}
-                <div class="alert alert-warning py-2 mt-2 mb-0 small d-none" data-address-hint></div>
-            </div>
-            <div class="col-md-6">
-                {{ form.pp.label(class="form-label") }}
-                {{ form.pp(class="form-control", placeholder="Пункт питания") }}
-            </div>
-            <div class="col-md-6">
-                {{ form.received_at.label(class="form-label") }}
-                {{ form.received_at(class="form-control", type="datetime-local") }}
-            </div>
-            <div class="col-md-6">
-                {{ form.dispatcher_name.label(class="form-label") }}
-                {{ form.dispatcher_name(class="form-select") }}
-            </div>
-            <div class="col-md-12">
-                {{ form.description.label(class="form-label") }}
-                {{ form.description(class="form-control", rows=4) }}
-            </div>
-            <div class="col-md-4">
-                {{ form.phone.label(class="form-label") }}
-                {{ form.phone(class="form-control opora-phone-mask", placeholder="+7 (___) ___-__-__") }}
-            </div>
-            <div class="col-md-4">
-                {{ form.applicant_name.label(class="form-label") }}
-                {{ form.applicant_name(class="form-control") }}
-            </div>
-            <div class="col-md-4">
-                {{ form.priority.label(class="form-label") }}
-                {{ form.priority(class="form-select") }}
-            </div>
-            <div class="col-md-4">
-                <div class="form-check mt-4 pt-2">
-                    {{ form.has_barrier(class="form-check-input", **{'data-barrier-toggle': '1'}) }}
-                    <label class="form-check-label" for="{{ form.has_barrier.id }}">{{ form.has_barrier.label.text }}</label>
-                </div>
-            </div>
-            <div class="col-md-8 {% if not form.has_barrier.data %}d-none{% endif %}" data-barrier-phone-wrap>
-                {{ form.barrier_phone.label(class="form-label") }}
-                {{ form.barrier_phone(class="form-control opora-phone-mask", placeholder="+7 (___) ___-__-__") }}
-            </div>
-            {% if mode == 'edit' and req %}
-            <div class="col-md-6">
-                <label class="form-label">Статус</label>
-                <input class="form-control" value="{{ req.status.name if req.status else '—' }}" disabled>
-            </div>
-            {% endif %}
-        </div>
+        {% include "requests/partials/form_fields.html" %}
     </div>
     <div class="card-footer d-flex gap-2 justify-content-end">
         <a href="{{ url_for('requests.index') }}" class="btn btn-outline-secondary">Отмена</a>

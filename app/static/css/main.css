@@ -485,6 +485,11 @@ a { text-decoration: none; }
 .dashboard-card:hover .card { box-shadow: var(--opora-shadow-hover); transform: translateY(-2px); }
 .dashboard-card--disabled { pointer-events: none; opacity: 0.55; }
 .dashboard-row { cursor: pointer; transition: background 0.15s; }
+
+.text-pre-wrap {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
 .dashboard-row:hover { background: rgba(245, 124, 0, 0.06); }
 
 .roles-admin__list { max-height: calc(100vh - 280px); overflow-y: auto; }

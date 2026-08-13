@@ -1,0 +1,19 @@
+{% from "macros/forms.html" import modal_field, form_errors_alert with context %}
+{{ form_errors_alert(form) }}
+<div class="row g-3">
+    {{ modal_field(form.work_type, col=6, module='objects') }}
+    {{ modal_field(form.object_kind, col=6, module='objects') }}
+    {{ modal_field(form.address, col=12, placeholder='ул. … / д. … / участок …', module='objects') }}
+    {{ modal_field(form.full_name, col=12, placeholder='Как в плане: тип + адрес', module='objects', permission_field='name') }}
+    {{ modal_field(form.plan_year, col=4, module='objects') }}
+    {{ modal_field(form.work_deadline, col=8, module='objects') }}
+    {{ modal_field(form.court_decision_number, col=12, module='objects') }}
+    {{ modal_field(form.contract_number, col=4, module='objects') }}
+    {{ modal_field(form.contract_date, col=4, module='objects') }}
+    {{ modal_field(form.status, col=4, module='objects') }}
+    {{ modal_field(form.contractor_name, col=12, module='objects') }}
+    {{ modal_field(form.contract_amount, col=6, module='objects') }}
+    {{ modal_field(form.budget_amount, col=6, module='objects') }}
+    {{ modal_field(form.result_text, col=12, module='objects') }}
+    {{ modal_field(form.notes, col=12, rows=4, module='objects') }}
+</div>

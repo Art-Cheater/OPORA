@@ -98,8 +98,17 @@
                             {% if req.repeat_count and req.repeat_count > 0 %}
                             <span class="badge text-bg-danger ms-2">повтор ×{{ req.repeat_count }}</span>
                             {% endif %}
+                            {% if req.original_address and req.original_address != req.address %}
+                            <div class="small text-muted mt-1">Введено: {{ req.original_address }}</div>
+                            {% endif %}
                         </div>
                     </div>
+                    {% if is_builtin_visible('requests', 'district') and current_user.can_view_field('requests', 'district') %}
+                    <div class="col-md-6">
+                        <small class="text-muted">{{ builtin_label('requests', 'district', 'Район') }}</small>
+                        <div class="fw-medium">{{ req.district or "—" }}</div>
+                    </div>
+                    {% endif %}
                     <div class="col-12">
                         <small class="text-muted">Даты обращений</small>
                         <div class="mt-1">
@@ -161,10 +170,19 @@
         <div class="card mb-4">
             <div class="card-header"><i class="bi bi-map"></i>Карта (OpenStreetMap)</div>
             <div class="card-body">
+                {% if req.latitude is not none and req.longitude is not none %}
                 <div id="requestMap" style="height: 360px; border-radius: 12px;"></div>
                 <input type="hidden" id="requestAddress" value="{{ req.address }}">
-                <input type="hidden" id="requestLat" value="{{ req.latitude or '' }}">
-                <input type="hidden" id="requestLng" value="{{ req.longitude or '' }}">
+                <input type="hidden" id="requestLat" value="{{ req.latitude }}">
+                <input type="hidden" id="requestLng" value="{{ req.longitude }}">
+                <a class="btn btn-sm btn-outline-primary mt-3"
+                   href="https://www.openstreetmap.org/?mlat={{ req.latitude }}&mlon={{ req.longitude }}#map=17/{{ req.latitude }}/{{ req.longitude }}"
+                   target="_blank" rel="noopener noreferrer">
+                    <i class="bi bi-box-arrow-up-right"></i> Открыть точку на карте
+                </a>
+                {% else %}
+                <div class="text-muted">Координаты для этой заявки не сохранены.</div>
+                {% endif %}
             </div>
         </div>
 

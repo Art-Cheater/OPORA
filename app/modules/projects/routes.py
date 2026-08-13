@@ -281,7 +281,12 @@ def create():
             form_action=url_for("projects.create"),
                         **_cf_form(),
         )
-    return render_template("projects/form.html", form=form, mode="create")
+    return render_template(
+        "projects/form.html",
+        form=form,
+        mode="create",
+        **_cf_form(),
+    )
 
 
 @projects_bp.route("/<uuid:project_id>")
@@ -341,6 +346,7 @@ def detail(project_id: uuid.UUID):
             comments=comments,
             attachments=attachments,
             file_items=file_items,
+            comment_form=comment_form,
             **custom_field_detail_context(_CF, project.id, current_user),
         )
 
@@ -353,6 +359,7 @@ def detail(project_id: uuid.UUID):
         comment_form=comment_form,
         document_form=document_form,
         attachment_form=attachment_form,
+        **custom_field_detail_context(_CF, project.id, current_user),
     )
 
 
@@ -411,7 +418,13 @@ def edit(project_id: uuid.UUID):
             form_action=url_for("projects.edit", project_id=project.id),
                         **_cf_form(project.id),
         )
-    return render_template("projects/form.html", form=form, mode="edit", project=project)
+    return render_template(
+        "projects/form.html",
+        form=form,
+        mode="edit",
+        project=project,
+        **_cf_form(project.id),
+    )
 
 
 @projects_bp.route("/<uuid:project_id>/delete", methods=["POST"])

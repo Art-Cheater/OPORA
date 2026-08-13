@@ -109,7 +109,10 @@ class ObjectForm(FlaskForm):
         description="Заполняется для типа «Судебный»",
     )
     result_text = StringField("Результат", validators=[Optional(), Length(max=500)])
-    notes = TextAreaField("Примечание", validators=[Optional(), Length(max=10000)])
+    notes = TextAreaField(
+        "Основание для проведения работ",
+        validators=[Optional(), Length(max=10000)],
+    )
     status = SelectField("Статус", choices=OBJECT_STATUS_CHOICES, validators=[DataRequired()])
     submit = SubmitField("Сохранить")
 

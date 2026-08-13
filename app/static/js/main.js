@@ -181,6 +181,8 @@ function initMessengerUnreadBadge() {
         document.body?.dataset?.messengerUnreadInterval || 15000
     );
     const onMessengerPage = Boolean(document.getElementById("messengerApp"));
+    // messenger.js owns unread polling on its page; do not start a second loop.
+    if (onMessengerPage) return;
 
     function applyTotal(total, preview) {
         if (badge) {

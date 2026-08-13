@@ -1,21 +1,7 @@
-{% from "macros/forms.html" import modal_field, form_errors_alert with context %}
-{% from "macros/custom_fields.html" import custom_fields_form with context %}
 <form method="POST" action="{{ form_action }}" class="opora-modal-form">
     {{ form.hidden_tag() }}
-    {{ form_errors_alert(form) }}
-    <div class="row g-3">
-        {{ modal_field(form.code, col=3, module='projects') }}
-        {{ modal_field(form.name, col=9, module='projects') }}
-        {{ modal_field(form.object_id, col=12, module='projects') }}
-        {{ modal_field(form.description, col=12, rows=3, module='projects') }}
-        {{ modal_field(form.status, col=3, module='projects') }}
-        {{ modal_field(form.progress_percent, col=3, module='projects') }}
-        {{ modal_field(form.start_date, col=3, module='projects') }}
-        {{ modal_field(form.end_date, col=3, module='projects') }}
-        {{ modal_field(form.responsible_id, col=6, module='projects') }}
-        {{ modal_field(form.executor_ids, col=6, size=4, module='projects') }}
-        {{ custom_fields_form(custom_fields, custom_field_values, custom_field_module) }}
-    </div>    <div class="modal-form-footer">
+    {% include "projects/partials/form_fields.html" %}
+    <div class="modal-form-footer">
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
         {{ form.submit(class="btn btn-primary") }}
     </div>

@@ -100,7 +100,24 @@
                         {% if req.repeat_count and req.repeat_count > 0 %}
                         <span class="badge text-bg-danger ms-1">повтор ×{{ req.repeat_count }}</span>
                         {% endif %}
+                        {% if req.original_address and req.original_address != req.address %}
+                        <div class="small text-muted mt-1">Введено: {{ req.original_address }}</div>
+                        {% endif %}
+                        {% if req.latitude is not none and req.longitude is not none %}
+                        <div class="mt-2">
+                            <a href="https://www.openstreetmap.org/?mlat={{ req.latitude }}&mlon={{ req.longitude }}#map=17/{{ req.latitude }}/{{ req.longitude }}"
+                               target="_blank" rel="noopener noreferrer">Открыть точку на карте</a>
+                        </div>
+                        {% endif %}
                     </div>
+                </div>
+            </div>
+            {% endif %}
+            {% if is_builtin_visible('requests', 'district') and current_user.can_view_field('requests', 'district') %}
+            <div class="col-md-6">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">{{ builtin_label('requests', 'district', 'Район') }}</div>
+                    <div>{{ req.district or "—" }}</div>
                 </div>
             </div>
             {% endif %}
@@ -147,6 +164,19 @@
                 {% else %}
                 <div class="text-muted small">Комментариев пока нет.</div>
                 {% endfor %}
+                {% if current_user.has_permission('requests.edit') %}
+                <form method="POST"
+                      action="{{ url_for('requests.add_comment', request_id=req.id) }}"
+                      class="mt-3"
+                      data-opora-detail-form>
+                    {{ comment_form.hidden_tag() }}
+                    <label class="form-label" for="{{ comment_form.body.id }}">{{ comment_form.body.label.text }}</label>
+                    {{ comment_form.body(class="form-control", rows=3, placeholder="Введите комментарий") }}
+                    <button type="submit" class="btn btn-primary mt-2">
+                        <i class="bi bi-send"></i> Добавить комментарий
+                    </button>
+                </form>
+                {% endif %}
             </div>
             <div class="tab-pane fade" id="reqTabFiles">
                 {% from "macros/files.html" import file_gallery %}

@@ -18,6 +18,13 @@ def _use_sqlite() -> bool:
     return os.getenv("USE_SQLITE", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _sqlite_url() -> str:
     """Файл SQLite в instance/opora.db (или DATABASE_URL=sqlite:///...)."""
     raw = os.getenv("DATABASE_URL", "").strip()
@@ -130,6 +137,45 @@ class Config:
     # Короткий poll вместо SSE: не держит воркеры gunicorn
     # Реже опрос непрочитанных — меньше нагрузка на воркеры при открытых вкладках
     MESSENGER_UNREAD_INTERVAL_MS = int(os.getenv("MESSENGER_UNREAD_INTERVAL_MS", "45000"))
+
+    # Серверные адресные подсказки. Браузер к Nominatim напрямую не обращается.
+    GEOCODING_PROVIDER = os.getenv("GEOCODING_PROVIDER", "nominatim").strip().lower()
+    NOMINATIM_BASE_URL = os.getenv(
+        "NOMINATIM_BASE_URL", "https://nominatim.openstreetmap.org"
+    ).strip()
+    NOMINATIM_USER_AGENT = os.getenv(
+        "NOMINATIM_USER_AGENT",
+        "OPORA-address/0.1 (configure NOMINATIM_USER_AGENT)",
+    ).strip()
+    NOMINATIM_VIEWBOX = os.getenv(
+        "NOMINATIM_VIEWBOX",
+        "41.17,61.07,53.92,56.03",
+    ).strip()
+    GEOCODING_TIMEOUT_SECONDS = float(os.getenv("GEOCODING_TIMEOUT_SECONDS", "2.5"))
+    GEOCODING_CACHE_TTL_SECONDS = float(
+        os.getenv("GEOCODING_CACHE_TTL_SECONDS", "600")
+    )
+    GEOCODING_CACHE_MAX_SIZE = int(os.getenv("GEOCODING_CACHE_MAX_SIZE", "512"))
+    NOMINATIM_RATE_LIMIT_SECONDS = float(
+        os.getenv("NOMINATIM_RATE_LIMIT_SECONDS", "1.0")
+    )
+    ADDRESS_SUGGESTION_LIMIT = int(os.getenv("ADDRESS_SUGGESTION_LIMIT", "8"))
+    ADDRESS_SELECTION_TOKEN_MAX_AGE = int(
+        os.getenv("ADDRESS_SELECTION_TOKEN_MAX_AGE", "3600")
+    )
+    MESSENGER_USER_LOOKUP_LIMIT = int(os.getenv("MESSENGER_USER_LOOKUP_LIMIT", "50"))
+
+    # Профилировщик полностью выключен по умолчанию и никогда не пишет SQL-параметры.
+    PERFORMANCE_PROFILER_ENABLED = _env_bool("PERFORMANCE_PROFILER_ENABLED")
+    PERFORMANCE_PROFILER_LOG_ALL = _env_bool("PERFORMANCE_PROFILER_LOG_ALL")
+    PERFORMANCE_PROFILER_RESPONSE_HEADERS = _env_bool(
+        "PERFORMANCE_PROFILER_RESPONSE_HEADERS"
+    )
+    PERFORMANCE_SLOW_REQUEST_MS = int(os.getenv("PERFORMANCE_SLOW_REQUEST_MS", "500"))
+    PERFORMANCE_SLOW_QUERY_MS = int(os.getenv("PERFORMANCE_SLOW_QUERY_MS", "100"))
+    PERFORMANCE_QUERY_COUNT_WARNING = int(
+        os.getenv("PERFORMANCE_QUERY_COUNT_WARNING", "30")
+    )
 
 
 class DevelopmentConfig(Config):

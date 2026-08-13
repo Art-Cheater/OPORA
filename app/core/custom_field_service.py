@@ -240,10 +240,11 @@ class CustomFieldService:
     @classmethod
     def detail_context(cls, module_code: str, entity_id: uuid.UUID, user: User) -> dict[str, Any]:
         items = []
+        values = cls.get_values_map(module_code, entity_id)
         for field in cls.list_for_module(module_code):
             if not user.can_view_field(module_code, field.code):
                 continue
-            raw = cls.get_values_map(module_code, entity_id).get(field.code)
+            raw = values.get(field.code)
             items.append({"field": field, "display": cls.format_display(field, raw)})
         return {"custom_field_details": items}
 

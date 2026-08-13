@@ -1,60 +1,11 @@
 {% from "macros/badges.html" import contract_status_badge, contract_type_badge %}
-{% from "macros/custom_fields.html" import custom_fields_detail with context %}
 <span class="d-none" data-opora-card-title>{{ contract.number }} — {{ contract.title }}</span>
 <span class="d-none" data-opora-card-badge>{{ contract_status_badge(contract.status) }}</span>
 
 <div class="row g-4">
     <div class="col-lg-7">
         <div class="row g-3">
-            {% if is_builtin_visible('contracts', 'contract_type') %}
-            <div class="col-md-4">
-                <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">{{ builtin_label('contracts', 'contract_type', 'Тип') }}</div>
-                    <div>{{ contract_type_badge(contract.contract_type) }}</div>
-                </div>
-            </div>
-            {% endif %}
-            {% if is_builtin_visible('contracts', 'status') %}
-            <div class="col-md-4">
-                <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">{{ builtin_label('contracts', 'status', 'Статус') }}</div>
-                    <div>{{ contract_status_badge(contract.status) }}</div>
-                </div>
-            </div>
-            {% endif %}
-            {% if is_builtin_visible('contracts', 'contract_date') %}
-            <div class="col-md-4">
-                <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">{{ builtin_label('contracts', 'contract_date', 'Дата') }}</div>
-                    <div>{{ contract.contract_date.strftime('%d.%m.%Y') if contract.contract_date else "—" }}</div>
-                </div>
-            </div>
-            {% endif %}
-            {% if is_builtin_visible('contracts', 'responsible_id') %}
-            <div class="col-md-6">
-                <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">{{ builtin_label('contracts', 'responsible_id', 'Ответственный') }}</div>
-                    <div>{{ contract.responsible.full_name if contract.responsible else "—" }}</div>
-                </div>
-            </div>
-            {% endif %}
-            {% if is_builtin_visible('contracts', 'number') %}
-            <div class="col-md-6">
-                <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">{{ builtin_label('contracts', 'number', 'Номер') }}</div>
-                    <div>{{ contract.number }}</div>
-                </div>
-            </div>
-            {% endif %}
-            {% if is_builtin_visible('contracts', 'description') %}
-            <div class="col-12">
-                <div class="opora-detail-field">
-                    <div class="opora-detail-field__label">{{ builtin_label('contracts', 'description', 'Описание') }}</div>
-                    <div>{{ contract.description or "—" }}</div>
-                </div>
-            </div>
-            {% endif %}
-            {{ custom_fields_detail(custom_field_details) }}
+            {% include "contracts/partials/detail_fields.html" %}
         </div>
     </div>
     <div class="col-lg-5">
@@ -65,6 +16,16 @@
         </ul>
         <div class="tab-content">
             <div class="tab-pane fade show active" id="ctrTabComments">
+                {% if current_user.has_permission('contracts.edit') %}
+                <form method="POST"
+                      action="{{ url_for('contracts.add_comment', contract_id=contract.id) }}"
+                      class="mb-3"
+                      data-opora-detail-form>
+                    {{ comment_form.hidden_tag() }}
+                    {{ comment_form.body(class="form-control mb-2", rows=2, placeholder="Введите комментарий...") }}
+                    {{ comment_form.submit(class="btn btn-primary btn-sm") }}
+                </form>
+                {% endif %}
                 {% for item in comments %}
                 <div class="border rounded-3 p-3 mb-2">
                     <div class="d-flex justify-content-between">

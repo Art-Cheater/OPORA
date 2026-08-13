@@ -46,6 +46,15 @@ class RequestPayload:
     title: str
     description: str | None
     address: str
+    original_address: str | None
+    normalized_address: str | None
+    region: str | None
+    district: str | None
+    settlement: str | None
+    street: str | None
+    house: str | None
+    address_source: str | None
+    address_external_id: str | None
     pp: str | None
     received_at: Any
     dispatcher_name: str | None
@@ -69,6 +78,15 @@ class RequestService:
         "title",
         "description",
         "address",
+        "original_address",
+        "normalized_address",
+        "region",
+        "district",
+        "settlement",
+        "street",
+        "house",
+        "address_source",
+        "address_external_id",
         "pp",
         "received_at",
         "dispatcher_name",
@@ -134,9 +152,13 @@ class RequestService:
             raise ValidationError("Номер заявки обязателен.")
         if not (payload.address or "").strip():
             raise ValidationError("Адрес обязателен.")
-        payload.address = cls.format_address(payload.address)
+        cls._prepare_address(payload)
         if not payload.address:
             raise ValidationError("Адрес обязателен.")
+        if payload.latitude is not None and not Decimal("-90") <= payload.latitude <= Decimal("90"):
+            raise ValidationError("Широта должна быть в диапазоне от -90 до 90.")
+        if payload.longitude is not None and not Decimal("-180") <= payload.longitude <= Decimal("180"):
+            raise ValidationError("Долгота должна быть в диапазоне от -180 до 180.")
         # title заполняется из адреса автоматически
         if not (payload.title or "").strip():
             payload.title = payload.address[:500]
@@ -151,6 +173,65 @@ class RequestService:
         status = db.session.get(RequestStatus, payload.status_id)
         if status is None or status.deleted_at is not None:
             raise ValidationError("Выбранный статус не найден.")
+
+    @classmethod
+    def _prepare_address(cls, payload: RequestPayload) -> None:
+        """Применяет выбранную подсказку или быстрый локальный fallback без сети."""
+
+        from app.core.address import HeuristicGeocodingProvider
+
+        current_address = (payload.address or "").strip()
+        selected = (payload.normalized_address or "").strip()
+        original = (payload.original_address or "").strip()
+        selection_is_current = bool(selected) and current_address in {
+            selected,
+            selected[:500],
+            original,
+        }
+        submitted = (
+            (original or current_address).strip()
+            if selection_is_current
+            else current_address
+        )
+        if selection_is_current:
+            payload.original_address = submitted
+            payload.normalized_address = selected
+            payload.address = selected[:500]
+            payload.region = cls._normalize_text(payload.region)
+            payload.district = cls._normalize_text(payload.district)
+            payload.settlement = cls._normalize_text(payload.settlement)
+            payload.street = cls._normalize_text(payload.street)
+            payload.house = cls._normalize_text(payload.house)
+            payload.address_source = cls._normalize_text(payload.address_source) or "selected"
+            payload.address_external_id = cls._normalize_text(payload.address_external_id)
+            return
+
+        payload.latitude = None
+        payload.longitude = None
+        fallback = HeuristicGeocodingProvider().search(submitted, limit=1)
+        if not fallback:
+            payload.original_address = submitted
+            payload.normalized_address = submitted
+            payload.address = submitted[:500]
+            payload.region = None
+            payload.district = None
+            payload.settlement = None
+            payload.street = None
+            payload.house = None
+            payload.address_source = "manual"
+            payload.address_external_id = None
+            return
+        suggestion = fallback[0]
+        payload.original_address = submitted
+        payload.normalized_address = suggestion.normalized_address
+        payload.address = suggestion.normalized_address[:500]
+        payload.region = suggestion.region
+        payload.district = suggestion.district
+        payload.settlement = suggestion.settlement
+        payload.street = suggestion.street
+        payload.house = suggestion.house
+        payload.address_source = suggestion.address_source
+        payload.address_external_id = None
 
     @staticmethod
     def _snapshot(req: Request) -> dict[str, Any]:
@@ -326,6 +407,15 @@ class RequestService:
             title=payload.title.strip() or payload.address[:500],
             description=cls._normalize_text(payload.description),
             address=payload.address,
+            original_address=payload.original_address,
+            normalized_address=payload.normalized_address,
+            region=payload.region,
+            district=payload.district,
+            settlement=payload.settlement,
+            street=payload.street,
+            house=payload.house,
+            address_source=payload.address_source,
+            address_external_id=payload.address_external_id,
             pp=cls._normalize_text(payload.pp),
             received_at=payload.received_at,
             dispatcher_name=cls._normalize_text(payload.dispatcher_name),
@@ -383,6 +473,15 @@ class RequestService:
         req.title = (payload.title.strip() or payload.address)[:500]
         req.description = cls._normalize_text(payload.description)
         req.address = payload.address
+        req.original_address = payload.original_address
+        req.normalized_address = payload.normalized_address
+        req.region = payload.region
+        req.district = payload.district
+        req.settlement = payload.settlement
+        req.street = payload.street
+        req.house = payload.house
+        req.address_source = payload.address_source
+        req.address_external_id = payload.address_external_id
         req.pp = cls._normalize_text(payload.pp)
         req.received_at = payload.received_at
         req.dispatcher_name = cls._normalize_text(payload.dispatcher_name)

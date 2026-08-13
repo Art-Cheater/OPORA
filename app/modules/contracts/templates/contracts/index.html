@@ -45,6 +45,14 @@
                 {{ filter_form.date_to(class="form-control", type="date") }}
             </div>
             <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.end_date_from.label.text }}</label>
+                {{ filter_form.end_date_from(class="form-control", type="date") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.end_date_to.label.text }}</label>
+                {{ filter_form.end_date_to(class="form-control", type="date") }}
+            </div>
+            <div class="col-lg-2">
                 <label class="form-label">{{ filter_form.sort_by.label.text }}</label>
                 {{ filter_form.sort_by(class="form-select") }}
             </div>

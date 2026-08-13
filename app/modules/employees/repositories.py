@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass
 
 from sqlalchemy import or_
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.extensions import db
 from app.models.auth.associations import UserRole
@@ -43,7 +44,13 @@ class EmployeeRepository:
             except ValueError:
                 return None
         return db.session.scalar(
-            db.select(User).where(User.id == user_id, User.active_filter())
+            db.select(User)
+            .options(
+                selectinload(User.user_roles)
+                .joinedload(UserRole.role)
+                .lazyload(Role.role_permissions)
+            )
+            .where(User.id == user_id, User.active_filter())
         )
 
     @staticmethod
@@ -68,7 +75,15 @@ class EmployeeRepository:
 
     @classmethod
     def paginated_list(cls, filters: EmployeeFilter, page: int = 1, per_page: int = 20):
-        stmt = db.select(User).where(User.active_filter())
+        stmt = (
+            db.select(User)
+            .options(
+                selectinload(User.user_roles)
+                .joinedload(UserRole.role)
+                .lazyload(Role.role_permissions)
+            )
+            .where(User.active_filter())
+        )
 
         if filters.q:
             q = f"%{filters.q.strip()}%"
