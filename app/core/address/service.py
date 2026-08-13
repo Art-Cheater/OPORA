@@ -92,10 +92,30 @@ class AddressSuggestionService:
         *,
         fallback: GeocodingProvider | None = None,
         default_limit: int = 8,
+        provider_timeout_seconds: float = 0.45,
     ) -> None:
         self.provider = provider
         self.fallback = fallback or HeuristicGeocodingProvider()
         self.default_limit = min(max(int(default_limit), 1), 20)
+        self.provider_timeout_seconds = max(0.0, float(provider_timeout_seconds))
+
+    def _search_provider(self, query: str, limit: int) -> list[AddressSuggestion]:
+        found: list[AddressSuggestion] = []
+
+        def run() -> None:
+            try:
+                found.extend(self.provider.search(query, limit=limit))
+            except GeocodingError:
+                return
+
+        timeout = self.provider_timeout_seconds
+        if timeout <= 0:
+            run()
+            return found
+        worker = threading.Thread(target=run, daemon=True, name="opora-geocode")
+        worker.start()
+        worker.join(timeout)
+        return found
 
     def suggest(self, query: str, *, limit: int | None = None) -> list[AddressSuggestion]:
         cleaned = " ".join((query or "").split())
@@ -107,17 +127,13 @@ class AddressSuggestionService:
         if "кировск" not in folded and "кировская область" not in folded:
             regional_query = f"{cleaned}, Кировская область"
 
-        try:
-            found = self.provider.search(regional_query, limit=safe_limit)
-        except GeocodingError:
-            found = []
-
+        found = self._search_provider(regional_query, safe_limit)
         ranked = self._rank_region(found, cleaned)
         if ranked:
             return ranked[:safe_limit]
         return [
             replace(item.with_query(cleaned), other_settlement=False)
-            for item in self.fallback.search(cleaned, limit=1)
+            for item in self.fallback.search(cleaned, limit=safe_limit)
         ]
 
     @classmethod
@@ -186,6 +202,9 @@ def get_address_suggestion_service() -> AddressSuggestionService:
         service = AddressSuggestionService(
             provider,
             default_limit=int(current_app.config.get("ADDRESS_SUGGESTION_LIMIT", 8)),
+            provider_timeout_seconds=float(
+                current_app.config.get("GEOCODING_SUGGEST_TIMEOUT_SECONDS") or 0.45
+            ),
         )
         current_app.extensions[extension_key] = service
         return service

@@ -122,13 +122,14 @@ class StartRateLimiter:
         self._lock = threading.Lock()
 
     def wait(self) -> None:
-        with self._lock:
-            now = self._clock()
-            delay = self._next_start - now
-            if delay > 0:
-                self._sleep(delay)
+        while True:
+            with self._lock:
                 now = self._clock()
-            self._next_start = max(now, self._next_start) + self.interval_seconds
+                delay = self._next_start - now
+                if delay <= 0:
+                    self._next_start = now + self.interval_seconds
+                    return
+            self._sleep(delay)
 
 
 class NominatimGeocodingProvider(GeocodingProvider):
@@ -241,12 +242,21 @@ class NominatimGeocodingProvider(GeocodingProvider):
         osm_type = str(item.get("osm_type") or "").strip()
         osm_id = str(item.get("osm_id") or "").strip()
         external_id = f"{osm_type}/{osm_id}" if osm_type and osm_id else None
+        district = (
+            str(
+                address.get("city_district")
+                or address.get("suburb")
+                or address.get("county")
+                or address.get("state_district")
+                or ""
+            ).strip()
+            or None
+        )
         return AddressSuggestion(
             original_address=query,
             normalized_address=display_name,
             region=str(address.get("state") or "").strip() or None,
-            district=str(address.get("county") or address.get("state_district") or "").strip()
-            or None,
+            district=district,
             settlement=settlement,
             street=street,
             house=str(address.get("house_number") or "").strip() or None,

@@ -370,7 +370,10 @@
     checkAddress,
   };
 
-  document.addEventListener("DOMContentLoaded", () => {
+  document.addEventListener("DOMContentLoaded", boot);
+  if (document.readyState !== "loading") boot();
+
+  function boot() {
     document.querySelectorAll("[data-requests-form]").forEach(init);
-  });
+  }
 })();

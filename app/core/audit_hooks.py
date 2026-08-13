@@ -13,6 +13,8 @@ def register_audit_hooks(app: Flask) -> None:
 
     @app.after_request
     def auto_audit_log(response):
+        if request.endpoint == "static" or (request.path or "").startswith("/static/"):
+            return response
         if not current_user.is_authenticated:
             return response
         if response.status_code >= 400:

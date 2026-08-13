@@ -8,7 +8,7 @@
     <div class="col-md-8">
         {{ form.address.label(class="form-label") }}
         {% if current_user.can_edit_field('requests', 'address') %}
-        <div class="position-relative">
+        <div class="position-relative" style="overflow: visible;">
             {{ form.address(class="form-control" + (" is-invalid" if form.address.errors else ""), placeholder="Начните вводить улицу и дом", autocomplete="off", role="combobox", **{'aria-autocomplete': 'list', 'aria-expanded': 'false', 'data-address-input': '1'}) }}
             <div class="list-group position-absolute start-0 end-0 shadow d-none"
                  style="z-index: 1060; max-height: 18rem; overflow-y: auto;"

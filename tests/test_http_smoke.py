@@ -258,4 +258,25 @@ def test_static_assets_are_public_cached_and_not_cdn_fallback(client, admin_clie
     assert "cdn.jsdelivr.net" not in html
     assert "static/css/main.css?v=" in html
     assert "static/vendor/bootstrap.min.css?v=" in html
+    assert "static/js/requests-form.js?v=" in html
+
+    first = client.get("/static/css/main.css")
+    etag = first.headers.get("ETag")
+    assert etag
+    cached = client.get("/static/css/main.css", headers={"If-None-Match": etag})
+    assert cached.status_code == 304
+    cache = cached.headers.get("Cache-Control", "")
+    assert "max-age" in cache
+    assert "immutable" in cache
+
+
+def test_logged_in_static_does_not_hit_the_database(admin_client, app):
+    from app.core.performance import count_queries
+    from app.extensions import db
+
+    with app.app_context():
+        with count_queries(db.engine) as counter:
+            response = admin_client.get("/static/js/main.js")
+        assert response.status_code == 200
+        assert counter.count == 0
 

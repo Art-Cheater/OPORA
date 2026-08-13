@@ -63,6 +63,7 @@ def test_nominatim_uses_user_agent_timeout_and_cache():
                     "address": {
                         "state": "Кировская область",
                         "city": "Киров",
+                        "city_district": "Ленинский район",
                         "road": "улица Лепсе",
                         "house_number": "79",
                     },
@@ -89,6 +90,7 @@ def test_nominatim_uses_user_agent_timeout_and_cache():
     assert first == second
     assert first[0].address_external_id == "way/123"
     assert first[0].street == "улица Лепсе"
+    assert first[0].district == "Ленинский район"
 
 
 def test_service_prioritizes_kirov_and_marks_other_settlement():
@@ -132,6 +134,25 @@ def test_service_falls_back_without_blocking_on_provider_error():
     assert results[0].normalized_address == "Киров, улица Лепсе, дом 79"
     assert results[0].address_source == "heuristic"
     assert results[0].latitude is None
+
+
+def test_service_returns_heuristic_when_provider_is_slow():
+    import time
+
+    class SlowProvider(GeocodingProvider):
+        def search(self, query: str, *, limit: int = 8) -> list[AddressSuggestion]:
+            time.sleep(1.5)
+            return []
+
+    service = AddressSuggestionService(SlowProvider(), provider_timeout_seconds=0.15)
+    started = time.monotonic()
+    results = service.suggest("Лепсе 79")
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 0.8
+    assert results
+    assert results[0].address_source == "heuristic"
+    assert results[0].normalized_address == "Киров, улица Лепсе, дом 79"
 
 
 def test_address_suggestions_endpoint_requires_login(client):

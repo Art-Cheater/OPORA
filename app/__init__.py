@@ -10,6 +10,11 @@ from app.modules.auth.repositories import UserRepository
 from app.modules.registry import register_blueprints
 
 
+def _is_static_request(request) -> bool:
+    """True для CSS/JS/шрифтов: без сессии, аудита и запросов в БД."""
+    return request.endpoint == "static" or (request.path or "").startswith("/static/")
+
+
 def create_app(config_name: str | None = None) -> Flask:
     """Создаёт и настраивает экземпляр Flask-приложения."""
     app = Flask(
@@ -73,7 +78,7 @@ def _configure_static_assets(app: Flask) -> None:
     def _cache_static_assets(response):
         from flask import request
 
-        if request.endpoint == "static" and response.status_code == 200:
+        if request.endpoint == "static" and response.status_code in (200, 304):
             response.headers["Cache-Control"] = "public, max-age=2592000, immutable"
         return response
 
@@ -136,6 +141,11 @@ def _init_extensions(app: Flask) -> None:
 
     @login_manager.user_loader
     def load_user(user_id: str):
+        from flask import has_request_context, request
+
+        # CSS/JS не должны грузить RBAC: иначе 304 статики ждут SQLite и висят по 5–6 с.
+        if has_request_context() and _is_static_request(request):
+            return None
         return UserRepository.get_by_id(user_id)
 
 
@@ -210,7 +220,7 @@ def _register_security_hooks(app: Flask) -> None:
         from flask_login import current_user, logout_user
 
         # CSS/JS не должны ходить в БД за current_user — иначе статика встаёт в очередь за HTML.
-        if request.endpoint == "static" or (request.path or "").startswith("/static/"):
+        if _is_static_request(request):
             return
 
         if not current_user.is_authenticated:
