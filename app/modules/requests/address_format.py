@@ -50,7 +50,7 @@ def _title_ru(text: str) -> str:
     return " ".join(parts)
 
 
-def _detect_street_type(street: str) -> tuple[str, str]:
+def _detect_street_type(street: str, *, default: str | None = "улица") -> tuple[str | None, str]:
     raw = street.strip(" ,.-")
     for pattern, label in _STREET_TYPES:
         m = re.match(rf"^(?:{pattern})\s+(.+)$", raw, flags=re.IGNORECASE)
@@ -59,7 +59,31 @@ def _detect_street_type(street: str) -> tuple[str, str]:
         m = re.match(rf"^(.+?)\s+(?:{pattern})$", raw, flags=re.IGNORECASE)
         if m:
             return label, m.group(1).strip(" ,.-")
-    return "улица", raw
+    return default, raw
+
+
+def split_address_query(address: str | None) -> tuple[str | None, str, str]:
+    """Возвращает (тип улицы или None, имя, номер дома)."""
+    text = _MULTI_SPACE.sub(" ", (address or "").strip())
+    text = _CITY_PREFIX.sub("", text).strip(" ,.-")
+    house = ""
+    street_part = text
+    matched = _HOUSE_TAIL.search(text)
+    if matched:
+        house = matched.group("house").replace(" ", "")
+        street_part = text[: matched.start()].strip(" ,.-")
+    if not house:
+        glued = re.match(
+            r"^(?P<name>.+?)(?P<house>\d+[а-яёa-z]?(?:/\d+[а-яёa-z]?)?)$",
+            street_part,
+            re.I,
+        )
+        if glued and not re.search(r"\d", glued.group("name")):
+            street_part = glued.group("name").strip(" ,.-")
+            house = glued.group("house")
+    stype, name = _detect_street_type(street_part, default=None)
+    name = _title_ru(_HOUSE_PREFIX.sub("", (name or "").strip(" ,.-")))
+    return stype, name, house
 
 
 def format_address(address: str | None) -> str:
@@ -68,11 +92,10 @@ def format_address(address: str | None) -> str:
     if not text:
         return ""
 
-    text = _CITY_PREFIX.sub("", text).strip(" ,.-")
-    if not text:
+    stripped = _CITY_PREFIX.sub("", text).strip(" ,.-")
+    if not stripped:
         return CITY
 
-    # Уже канонический вид
     canon = re.match(
         r"^киров,\s*(?P<stype>улица|проспект|переулок|бульвар|площадь|шоссе|набережная|"
         r"микрорайон|проезд|тупик|аллея|тракт)\s+(?P<name>.+?),\s*дом\s+(?P<house>.+)$",
@@ -85,30 +108,13 @@ def format_address(address: str | None) -> str:
             f"дом {canon.group('house').replace(' ', '')}"
         )
 
-    house = ""
-    street_part = text
-    m = _HOUSE_TAIL.search(text)
-    if m:
-        house = m.group("house").replace(" ", "")
-        street_part = text[: m.start()].strip(" ,.-")
-
-    if not street_part and house:
-        # Только номер без улицы — не угадываем
+    stype, name, house = split_address_query(address)
+    if not name and not house:
+        return CITY
+    if not name:
         return f"{CITY}, дом {house}"
 
-    # «лепсе79» без пробела
-    if not house:
-        glued = re.match(r"^(?P<name>.+?)(?P<house>\d+[а-яёa-z]?(?:/\d+[а-яёa-z]?)?)$", street_part, re.I)
-        if glued and not re.search(r"\d", glued.group("name")):
-            street_part = glued.group("name").strip(" ,.-")
-            house = glued.group("house")
-
-    stype, name = _detect_street_type(street_part)
-    name = _title_ru(_HOUSE_PREFIX.sub("", name).strip(" ,.-"))
-    if not name:
-        return f"{CITY}, дом {house}" if house else CITY
-
-    result = f"{CITY}, {stype} {name}"
+    result = f"{CITY}, {stype or 'улица'} {name}"
     if house:
         result += f", дом {_HOUSE_PREFIX.sub('', house).strip()}"
     return result

@@ -129,12 +129,24 @@ class AddressSuggestionService:
 
         found = self._search_provider(regional_query, safe_limit)
         ranked = self._rank_region(found, cleaned)
-        if ranked:
-            return ranked[:safe_limit]
-        return [
+        catalog = [
             replace(item.with_query(cleaned), other_settlement=False)
             for item in self.fallback.search(cleaned, limit=safe_limit)
         ]
+        merged: list[AddressSuggestion] = []
+        seen: set[tuple[str, str]] = set()
+        for item in catalog + ranked:
+            key = (
+                (item.street or item.normalized_address).casefold(),
+                (item.district or ""),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(item)
+            if len(merged) >= safe_limit:
+                break
+        return merged
 
     @classmethod
     def _rank_region(

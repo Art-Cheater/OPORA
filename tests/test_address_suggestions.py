@@ -112,7 +112,7 @@ def test_service_prioritizes_kirov_and_marks_other_settlement():
             ),
         ]
     )
-    service = AddressSuggestionService(provider)
+    service = AddressSuggestionService(provider, fallback=StubProvider([]))
 
     results = service.suggest("Лепсе 79")
 
@@ -130,9 +130,10 @@ def test_service_falls_back_without_blocking_on_provider_error():
 
     results = service.suggest("Лепсе 79")
 
-    assert len(results) == 1
+    assert len(results) >= 1
     assert results[0].normalized_address == "Киров, улица Лепсе, дом 79"
-    assert results[0].address_source == "heuristic"
+    assert results[0].address_source == "catalog"
+    assert results[0].district == "Ленинский район"
     assert results[0].latitude is None
 
 
@@ -151,8 +152,32 @@ def test_service_returns_heuristic_when_provider_is_slow():
 
     assert elapsed < 0.8
     assert results
-    assert results[0].address_source == "heuristic"
+    assert results[0].address_source == "catalog"
     assert results[0].normalized_address == "Киров, улица Лепсе, дом 79"
+    assert results[0].district == "Ленинский район"
+
+
+def test_catalog_corrects_typos_and_street_type():
+    from app.core.address.catalog import search_streets
+    from app.core.address.providers import HeuristicGeocodingProvider
+
+    lepse = search_streets("лепме")
+    assert lepse
+    assert lepse[0].normalized_address == "Киров, улица Лепсе"
+    assert lepse[0].district == "Ленинский район"
+    assert "Лепме" not in lepse[0].normalized_address
+
+    with_house = HeuristicGeocodingProvider().search("лепме 79")
+    assert with_house[0].normalized_address == "Киров, улица Лепсе, дом 79"
+    assert with_house[0].district == "Ленинский район"
+    assert with_house[0].house == "79"
+
+    lane = HeuristicGeocodingProvider().search("искожевский")
+    assert lane
+    assert lane[0].street == "переулок Искожевский"
+    assert lane[0].normalized_address == "Киров, переулок Искожевский"
+    assert lane[0].district == "Ленинский район"
+    assert all("улица Искожевский" not in (item.street or "") for item in lane)
 
 
 def test_address_suggestions_endpoint_requires_login(client):
@@ -179,7 +204,8 @@ def test_address_suggestions_endpoint_returns_structured_results(admin_client):
                     address_external_id="way/123",
                 )
             ]
-        )
+        ),
+        fallback=StubProvider([]),
     )
     admin_client.application.extensions["address_suggestion_service"] = service
 
@@ -190,6 +216,17 @@ def test_address_suggestions_endpoint_returns_structured_results(admin_client):
     assert suggestion["normalized_address"].startswith("Лепсе")
     assert suggestion["latitude"] == 58.603
     assert suggestion["other_settlement"] is False
+
+
+def test_address_suggestions_endpoint_corrects_typo_from_catalog(admin_client):
+    response = admin_client.get("/requests/api/address-suggestions?q=лепме")
+
+    assert response.status_code == 200
+    items = response.get_json()["suggestions"]
+    assert items
+    assert items[0]["normalized_address"].startswith("Киров, улица Лепсе")
+    assert items[0]["district"] == "Ленинский район"
+    assert items[0]["selection_token"]
 
 
 def test_request_service_persists_selected_address_metadata(app):

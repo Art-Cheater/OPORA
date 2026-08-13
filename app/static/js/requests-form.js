@@ -188,7 +188,7 @@
       meta.className = suggestion.other_settlement ? "text-warning-emphasis" : "text-muted";
       meta.textContent = suggestion.other_settlement
         ? `Другой населённый пункт: ${suggestion.settlement || "Кировская область"}`
-        : [suggestion.street, suggestion.house ? `дом ${suggestion.house}` : ""]
+        : [suggestion.district, suggestion.street, suggestion.house ? `дом ${suggestion.house}` : ""]
             .filter(Boolean)
             .join(", ");
       if (meta.textContent) button.appendChild(meta);

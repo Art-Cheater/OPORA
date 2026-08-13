@@ -13,8 +13,6 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from app.modules.requests.address_format import format_address
-
 
 class GeocodingError(RuntimeError):
     """Внешний геокодер не смог безопасно выполнить запрос."""
@@ -268,31 +266,24 @@ class NominatimGeocodingProvider(GeocodingProvider):
 
 
 class HeuristicGeocodingProvider(GeocodingProvider):
-    """Локальная подсказка для Кирова, когда внешний сервис недоступен."""
+    """Локальный справочник улиц Кирова: тип, район, исправление опечаток."""
 
     def search(self, query: str, *, limit: int = 8) -> list[AddressSuggestion]:
-        cleaned = " ".join((query or "").split())
-        normalized = format_address(cleaned)
-        if not normalized:
-            return []
+        from app.core.address.catalog import search_streets
 
-        street = None
-        house = None
-        parts = [part.strip() for part in normalized.split(",")]
-        if len(parts) >= 2 and not parts[1].casefold().startswith("дом "):
-            street = parts[1]
-        for part in parts[1:]:
-            if part.casefold().startswith("дом "):
-                house = part[4:].strip() or None
-                break
+        cleaned = " ".join((query or "").split())
+        if not cleaned:
+            return []
         return [
             AddressSuggestion(
                 original_address=cleaned,
-                normalized_address=normalized,
+                normalized_address=hit.normalized_address,
                 region="Кировская область",
+                district=hit.district,
                 settlement="Киров",
-                street=street,
-                house=house,
-                address_source="heuristic",
+                street=hit.street_label,
+                house=hit.house or None,
+                address_source="catalog",
             )
+            for hit in search_streets(cleaned, limit=limit)
         ]
