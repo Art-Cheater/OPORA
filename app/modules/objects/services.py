@@ -28,6 +28,7 @@ WORK_TYPE_DEFAULT = "Устройство наружного освещения"
 AUTO_PROJECT_RESULT = (
     "Обследование проведено, ТЗ подготовлено, локально-сметный расчет готов."
 )
+TZ_RESULT_ALT = "Подготовлено техническое задание и локально-сметный расчет"
 _CLOSED_PROJECT_STATUSES = (
     ProjectStatus.COMPLETED.value,
     ProjectStatus.CANCELLED.value,
@@ -43,6 +44,11 @@ _RESULT_ACTIVE_RE = re.compile(
     r"подготовка\s+рабочей\s+документации|ид[её]т\s+подготовка\s+рабочей",
     re.IGNORECASE,
 )
+_RESULT_TENDER_RE = re.compile(
+    r"в\s+закупках|заявка\s+у\s+экономистов",
+    re.IGNORECASE,
+)
+_RESULT_CLOSED_RE = re.compile(r"принят|выполнен", re.IGNORECASE)
 
 # Строки-мусор внизу листов Excel (подписи, «План/Остаток» и т.п.)
 _JUNK_NAME_RE = re.compile(
@@ -87,23 +93,148 @@ class ObjectService:
 
     @classmethod
     def should_create_project(cls, result_text: str | None) -> bool:
-        return cls._normalized_result(result_text) == cls._normalized_result(
-            AUTO_PROJECT_RESULT
+        return cls._needs_project(result_text)
+
+    @classmethod
+    def _needs_project(cls, result_text: str | None) -> bool:
+        if cls._is_closed_result(result_text):
+            return False
+        folded = cls._normalized_result(result_text)
+        if not folded:
+            return False
+        if folded == cls._normalized_result(AUTO_PROJECT_RESULT):
+            return True
+        if folded == cls._normalized_result(TZ_RESULT_ALT):
+            return True
+        return bool(_RESULT_DRAFT_RE.search(result_text or ""))
+
+    @classmethod
+    def _needs_tender(cls, result_text: str | None) -> bool:
+        if cls._is_closed_result(result_text):
+            return False
+        return bool(_RESULT_TENDER_RE.search(result_text or ""))
+
+    @classmethod
+    def _is_closed_result(cls, result_text: str | None) -> bool:
+        return bool(_RESULT_CLOSED_RE.search(result_text or ""))
+
+    @classmethod
+    def _needs_contract(cls, obj: WorkObject) -> bool:
+        if not (obj.contract_number or "").strip():
+            return False
+        return not cls._is_closed_result(obj.result_text)
+
+    @classmethod
+    def _active_project(cls, obj: WorkObject) -> Project | None:
+        return db.session.scalar(
+            db.select(Project)
+            .where(
+                Project.object_id == obj.id,
+                Project.active_filter(),
+                Project.status.notin_(_CLOSED_PROJECT_STATUSES),
+            )
+            .order_by(Project.created_at.asc())
+            .limit(1)
         )
+
+    @classmethod
+    def _active_tender(cls, obj: WorkObject, project: Project | None = None):
+        from app.models.tenders.tender_application import TenderApplication
+        from app.models.tenders.tender_project import TenderProject
+
+        tender = db.session.scalar(
+            db.select(TenderApplication)
+            .where(
+                TenderApplication.object_id == obj.id,
+                TenderApplication.active_filter(),
+            )
+            .order_by(TenderApplication.created_at.asc())
+            .limit(1)
+        )
+        if tender is not None:
+            return tender
+        if project is None:
+            return None
+        return db.session.scalar(
+            db.select(TenderApplication)
+            .join(TenderProject, TenderProject.tender_id == TenderApplication.id)
+            .where(
+                TenderProject.project_id == project.id,
+                TenderProject.active_filter(),
+                TenderApplication.active_filter(),
+            )
+            .order_by(TenderApplication.created_at.asc())
+            .limit(1)
+        )
+
+    @classmethod
+    def _active_contract(cls, obj: WorkObject):
+        from app.models.contracts.contract import Contract
+        from app.models.contracts.contract_object import ContractObject
+
+        return db.session.scalar(
+            db.select(Contract)
+            .join(ContractObject, ContractObject.contract_id == Contract.id)
+            .where(
+                ContractObject.object_id == obj.id,
+                Contract.active_filter(),
+            )
+            .order_by(Contract.created_at.asc())
+            .limit(1)
+        )
+
+    @classmethod
+    def related_chain(cls, obj: WorkObject) -> dict:
+        """Активные проект / заявка / контракт объекта — для ссылок с карточки."""
+        project = cls._active_project(obj)
+        return {
+            "project": project,
+            "tender": cls._active_tender(obj, project),
+            "contract": cls._active_contract(obj),
+        }
+
+    @classmethod
+    def _apply_plan_volumes(cls, project: Project, volumes: dict | None) -> None:
+        if not volumes:
+            return
+        if volumes.get("sip_meters") is not None:
+            project.sip_meters = volumes["sip_meters"]
+        if volumes.get("poles_count") is not None:
+            project.poles_count = volumes["poles_count"]
+        if volumes.get("lights_count") is not None:
+            project.lights_count = volumes["lights_count"]
+        if volumes.get("shuno_count") is not None:
+            project.shuno_count = volumes["shuno_count"]
 
     @classmethod
     def _ensure_project_for_result(
         cls,
         obj: WorkObject,
         user_id: uuid.UUID,
+        volumes: dict | None = None,
+    ) -> Project | None:
+        """Совместимость: создать проект по результату ТЗ/ЛСР."""
+        return cls._ensure_chain_for_result(obj, user_id, volumes=volumes)
+
+    @classmethod
+    def _ensure_chain_for_result(
+        cls,
+        obj: WorkObject,
+        user_id: uuid.UUID,
+        volumes: dict | None = None,
     ) -> Project | None:
         """
-        Идемпотентно создать проект для целевого результата.
+        Идемпотентно создать черновики по колонке «Результат» и номеру контракта.
 
-        Метод не фиксирует транзакцию: объект, проект, аудит и история
-        сохраняются одним commit вызывающей операции.
+        Метод не фиксирует транзакцию.
         """
-        if not cls.should_create_project(obj.result_text):
+        if obj.status == WorkObjectStatus.COMPLETED.value and cls._is_closed_result(obj.result_text):
+            return cls._active_project(obj)
+
+        need_contract = cls._needs_contract(obj)
+        need_tender = need_contract or cls._needs_tender(obj.result_text)
+        need_project = need_tender or need_contract or cls._needs_project(obj.result_text)
+        if not need_project:
             return None
 
         db.session.flush()
@@ -115,37 +246,75 @@ class ObjectService:
         if locked_obj is not None:
             obj = locked_obj
 
-        existing = db.session.scalar(
-            db.select(Project)
-            .where(
-                Project.object_id == obj.id,
-                Project.active_filter(),
-                Project.status.notin_(_CLOSED_PROJECT_STATUSES),
+        project = cls._active_project(obj)
+        if project is None:
+            project = ProjectService.create_project(
+                ProjectPayload(
+                    code=ProjectRepository.next_code(),
+                    name=(obj.display_address or obj.name)[:500],
+                    description=obj.result_text,
+                    status=ProjectStatus.DRAFT.value,
+                    progress_percent=0,
+                    start_date=None,
+                    end_date=None,
+                    responsible_id=user_id,
+                    executor_ids=[],
+                    object_id=obj.id,
+                    sip_meters=(volumes or {}).get("sip_meters"),
+                    poles_count=(volumes or {}).get("poles_count"),
+                    lights_count=(volumes or {}).get("lights_count"),
+                    shuno_count=(volumes or {}).get("shuno_count"),
+                ),
+                user_id,
+                commit=False,
+                allow_busy_object=True,
             )
-            .order_by(Project.created_at.asc())
-            .limit(1)
-        )
+        else:
+            cls._apply_plan_volumes(project, volumes)
+
         obj.status = WorkObjectStatus.IN_PROJECT.value
         obj.updated_by = user_id
-        if existing is not None:
-            return existing
 
-        return ProjectService.create_project(
-            ProjectPayload(
-                code=ProjectRepository.next_code(),
-                name=(obj.display_address or obj.name)[:500],
-                description=obj.result_text,
-                status=ProjectStatus.DRAFT.value,
-                progress_percent=0,
-                start_date=None,
-                end_date=None,
-                responsible_id=user_id,
-                executor_ids=[],
-                object_id=obj.id,
-            ),
+        if not need_tender:
+            return project
+
+        from app.models.enums import TenderApplicationStatus
+        from app.modules.tenders.repositories import TenderRepository
+        from app.modules.tenders.services import TenderPayload, TenderService
+
+        tender = cls._active_tender(obj, project)
+        if tender is None:
+            tender = TenderService.create(
+                TenderPayload(
+                    number=TenderRepository.next_number(),
+                    title=(obj.display_address or obj.name)[:500],
+                    description=obj.result_text,
+                    status=TenderApplicationStatus.DRAFT.value,
+                    responsible_id=user_id,
+                    project_ids=[project.id],
+                    object_id=obj.id,
+                    work_deadline=obj.work_deadline,
+                    published_at=None,
+                ),
+                user_id,
+                commit=False,
+            )
+        obj.status = WorkObjectStatus.IN_TENDER.value
+        obj.updated_by = user_id
+
+        if not need_contract:
+            return project
+
+        from app.modules.contracts.services import ContractService
+
+        ContractService.create_draft_from_plan(
+            obj,
             user_id,
+            project=project,
+            tender=tender,
             commit=False,
         )
+        return project
 
     @staticmethod
     def suggested_project_status(result_text: str | None) -> str | None:
@@ -159,7 +328,7 @@ class ObjectService:
             return None
         if _RESULT_ACTIVE_RE.search(text):
             return ProjectStatus.ACTIVE.value
-        if _RESULT_DRAFT_RE.search(text):
+        if _RESULT_DRAFT_RE.search(text) or _RESULT_TENDER_RE.search(text):
             return ProjectStatus.DRAFT.value
         return None
 
@@ -247,6 +416,19 @@ class ObjectService:
         except InvalidOperation:
             return None
 
+    @staticmethod
+    def _as_int(value) -> int | None:
+        if value is None or value == "":
+            return None
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        decimal_value = ObjectService._as_decimal(value)
+        if decimal_value is None:
+            return None
+        return int(decimal_value)
+
     @classmethod
     def split_type_and_address(cls, raw_name: str) -> tuple[str, str]:
         """
@@ -326,6 +508,14 @@ class ObjectService:
                 mapping["result"] = idx
             elif "примечан" in h:
                 mapping["notes"] = idx
+            elif "светильник" in h:
+                mapping["lights"] = idx
+            elif "опор" in h:
+                mapping["poles"] = idx
+            elif "сип" in h:
+                mapping["sip"] = idx
+            elif "шуно" in h or "шкаф" in h:
+                mapping["shuno"] = idx
             elif h.strip().startswith("№") or "п/п" in h:
                 mapping["num"] = idx
         return mapping
@@ -442,6 +632,19 @@ class ObjectService:
                 if "notes" in cols and cols["notes"] < len(row):
                     notes = cls._as_text(row[cols["notes"]])
 
+                sip_meters = None
+                if "sip" in cols and cols["sip"] < len(row):
+                    sip_meters = cls._as_decimal(row[cols["sip"]])
+                poles_count = None
+                if "poles" in cols and cols["poles"] < len(row):
+                    poles_count = cls._as_int(row[cols["poles"]])
+                lights_count = None
+                if "lights" in cols and cols["lights"] < len(row):
+                    lights_count = cls._as_int(row[cols["lights"]])
+                shuno_count = None
+                if "shuno" in cols and cols["shuno"] < len(row):
+                    shuno_count = cls._as_int(row[cols["shuno"]])
+
                 status = WorkObjectStatus.FREE.value
                 # Номер контракта в плане — справочное поле, не блокирует создание проекта в Опоре
                 if result_text and re.search(r"выполнен|принят", result_text, re.IGNORECASE):
@@ -465,6 +668,10 @@ class ObjectService:
                         "source_sheet": sheet_name.strip()[:100],
                         "notes": notes,
                         "status": status,
+                        "sip_meters": sip_meters,
+                        "poles_count": poles_count,
+                        "lights_count": lights_count,
+                        "shuno_count": shuno_count,
                     }
                 )
         wb.close()
@@ -550,7 +757,16 @@ class ObjectService:
                 obj.status = data["status"]
                 obj.updated_by = user_id
                 result.updated += 1
-            cls._ensure_project_for_result(obj, user_id)
+            cls._ensure_chain_for_result(
+                obj,
+                user_id,
+                volumes={
+                    "sip_meters": data.get("sip_meters"),
+                    "poles_count": data.get("poles_count"),
+                    "lights_count": data.get("lights_count"),
+                    "shuno_count": data.get("shuno_count"),
+                },
+            )
 
         AuditService.log(
             user_id=user_id,

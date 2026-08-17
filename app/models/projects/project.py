@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, ForeignKey, Index, Integer, String, Text, text
+from sqlalchemy import Date, ForeignKey, Index, Integer, Numeric, String, Text, text
 from app.models.types import GUID, SearchVectorType
 from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
@@ -53,6 +54,14 @@ class Project(ActiveRecordMixin, BaseModel):
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     progress_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sip_meters: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    poles_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    lights_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    shuno_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sip_meters_fact: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    poles_count_fact: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    lights_count_fact: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    shuno_count_fact: Mapped[int | None] = mapped_column(Integer, nullable=True)
     search_vector: Mapped[str | None] = deferred(
         mapped_column(SearchVectorType, nullable=True)
     )
@@ -127,6 +136,16 @@ class Project(ActiveRecordMixin, BaseModel):
             for member in self.active_members
             if member.role_in_project == ProjectMemberRole.EXECUTOR.value and member.user is not None
         ]
+
+    @property
+    def cabinet_label(self) -> str:
+        """ШУНО для освещения, шкафы — для техприсоединения."""
+        from app.models.enums import WorkObjectKind
+
+        kind = self.work_object.object_kind if self.work_object is not None else None
+        if kind == WorkObjectKind.TECH_CONNECT.value:
+            return "Шкафы, шт."
+        return "ШУНО, шт."
 
     def __repr__(self) -> str:
         return f"<Project {self.code}>"

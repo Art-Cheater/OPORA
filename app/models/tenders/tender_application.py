@@ -38,6 +38,7 @@ class TenderApplication(ActiveRecordMixin, BaseModel):
         Index("ix_tender_applications_responsible_id", "responsible_id"),
         Index("ix_tender_applications_object_id", "object_id"),
         Index("ix_tender_applications_deleted_created", "deleted_at", "created_at"),
+        Index("ix_tender_applications_work_deadline_date", "work_deadline_date"),
     )
 
     number: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -58,6 +59,7 @@ class TenderApplication(ActiveRecordMixin, BaseModel):
         nullable=True,
     )
     work_deadline: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    work_deadline_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     published_at: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     responsible_id: Mapped[uuid.UUID | None] = mapped_column(

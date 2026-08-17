@@ -9,6 +9,7 @@ from wtforms import (
     DecimalField,
     IntegerField,
     SelectField,
+    SelectMultipleField,
     StringField,
     SubmitField,
     TextAreaField,
@@ -20,7 +21,7 @@ from app.models.enums import WorkObjectKind, WorkObjectStatus
 OBJECT_STATUS_CHOICES = [
     (WorkObjectStatus.FREE.value, "Свободен"),
     (WorkObjectStatus.IN_PROJECT.value, "В проекте"),
-    (WorkObjectStatus.IN_TENDER.value, "На торгах"),
+    (WorkObjectStatus.IN_TENDER.value, "В закупках"),
     (WorkObjectStatus.IN_CONTRACT.value, "В контракте"),
     (WorkObjectStatus.COMPLETED.value, "Выполнен"),
     (WorkObjectStatus.ARCHIVED.value, "В архиве"),
@@ -39,17 +40,22 @@ OBJECT_KIND_LABELS = dict(OBJECT_KIND_CHOICES)
 
 class ObjectFilterForm(FlaskForm):
     q = StringField("Поиск", validators=[Optional(), Length(max=255)])
-    status = SelectField(
+    status = SelectMultipleField(
         "Статус",
-        choices=[("", "Все статусы")] + OBJECT_STATUS_CHOICES,
+        choices=OBJECT_STATUS_CHOICES,
         validators=[Optional()],
+        validate_choice=False,
     )
-    object_kind = SelectField(
+    object_kind = SelectMultipleField(
         "Тип объекта",
-        choices=[("", "Все типы")] + OBJECT_KIND_CHOICES,
+        choices=OBJECT_KIND_CHOICES,
         validators=[Optional()],
+        validate_choice=False,
     )
     plan_year = StringField("Год плана", validators=[Optional(), Length(max=4)])
+    contractor_name = StringField("Подрядчик", validators=[Optional(), Length(max=500)])
+    deadline_from = DateField("Срок с", validators=[Optional()], format="%Y-%m-%d")
+    deadline_to = DateField("Срок по", validators=[Optional()], format="%Y-%m-%d")
     sort_by = SelectField(
         "Сортировка",
         choices=[

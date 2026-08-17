@@ -4,14 +4,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
+from decimal import Decimal
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 
 from app.extensions import db
 from app.models.auth.user import User
+from app.models.contracts.contract import Contract
+from app.models.contracts.contract_object import ContractObject
+from app.models.projects.project import Project
 from app.models.requests.request import Request
 from app.models.requests.request_history import RequestHistory
 from app.models.requests.request_status import RequestStatus
+from app.models.work_objects.work_object import WorkObject
 from app.modules.requests.workflow import STATUS_CANCELLED, STATUS_COMPLETED
 
 
@@ -59,6 +64,38 @@ class RequestsReport:
     median_hours_to_complete: float | None
     by_status: list[StatusStat]
     by_master: list[MasterStat] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ObjectReportRow:
+    object_id: str
+    object_name: str
+    contract_id: str | None
+    contract_number: str
+    contractor: str
+    start_date: date | None
+    end_date: date | None
+    amount: Decimal
+    sip_meters: Decimal | None
+    poles_count: int | None
+    lights_count: int | None
+    shuno_count: int | None
+    nmck: Decimal | None
+    remainder: Decimal | None
+
+
+@dataclass(frozen=True)
+class ObjectsReport:
+    period: PeriodRange
+    rows: list[ObjectReportRow]
+    total_amount: Decimal
+    total_sip: Decimal
+    total_poles: int
+    total_lights: int
+    total_shuno: int
+    total_nmck: Decimal
+    total_final: Decimal
+    total_remainder: Decimal
 
 
 def resolve_period(
@@ -311,4 +348,179 @@ class ReportsService:
         rows.extend([[], ["Мастер", "Выполнено за период", "Открыто сейчас"]])
         for m in report.by_master:
             rows.append([m.full_name, str(m.completed), str(m.assigned_open)])
+        return rows
+
+    @staticmethod
+    def _as_decimal(value) -> Decimal:
+        if value is None:
+            return Decimal("0")
+        if isinstance(value, Decimal):
+            return value
+        return Decimal(str(value))
+
+    @classmethod
+    def objects_report(cls, period: PeriodRange) -> ObjectsReport:
+        start_col = func.coalesce(Contract.start_date, Contract.contract_date)
+        end_col = Contract.end_date
+        overlap = and_(
+            or_(start_col.is_(None), start_col <= period.date_to),
+            or_(end_col.is_(None), end_col >= period.date_from),
+        )
+        pairs = db.session.execute(
+            select(WorkObject, Contract)
+            .select_from(ContractObject)
+            .join(Contract, Contract.id == ContractObject.contract_id)
+            .join(WorkObject, WorkObject.id == ContractObject.object_id)
+            .where(
+                WorkObject.active_filter(),
+                Contract.deleted_at.is_(None),
+                overlap,
+            )
+            .order_by(WorkObject.name.asc(), Contract.number.asc())
+        ).all()
+
+        object_ids = [obj.id for obj, _contract in pairs]
+        projects_by_object: dict = {}
+        if object_ids:
+            for project in db.session.scalars(
+                select(Project)
+                .where(
+                    Project.object_id.in_(object_ids),
+                    Project.active_filter(),
+                )
+                .order_by(Project.created_at.asc())
+            ):
+                projects_by_object.setdefault(project.object_id, project)
+
+        rows: list[ObjectReportRow] = []
+        total_amount = Decimal("0")
+        total_sip = Decimal("0")
+        total_poles = 0
+        total_lights = 0
+        total_shuno = 0
+        total_nmck = Decimal("0")
+        total_final = Decimal("0")
+
+        for obj, contract in pairs:
+            project = projects_by_object.get(obj.id)
+            amount = cls._as_decimal(contract.amount)
+            nmck = obj.budget_amount
+            remainder = None
+            if nmck is not None:
+                remainder = cls._as_decimal(nmck) - amount
+            sip = project.sip_meters if project is not None else None
+            poles = project.poles_count if project is not None else None
+            lights = project.lights_count if project is not None else None
+            shuno = project.shuno_count if project is not None else None
+            rows.append(
+                ObjectReportRow(
+                    object_id=str(obj.id),
+                    object_name=obj.name or obj.display_address,
+                    contract_id=str(contract.id),
+                    contract_number=contract.number or obj.contract_number or "—",
+                    contractor=contract.contractor_name or obj.contractor_name or "—",
+                    start_date=contract.start_date or contract.contract_date,
+                    end_date=contract.end_date,
+                    amount=amount,
+                    sip_meters=sip,
+                    poles_count=poles,
+                    lights_count=lights,
+                    shuno_count=shuno,
+                    nmck=nmck,
+                    remainder=remainder,
+                )
+            )
+            total_amount += amount
+            total_final += amount
+            if sip is not None:
+                total_sip += cls._as_decimal(sip)
+            if poles is not None:
+                total_poles += poles
+            if lights is not None:
+                total_lights += lights
+            if shuno is not None:
+                total_shuno += shuno
+            if nmck is not None:
+                total_nmck += cls._as_decimal(nmck)
+
+        return ObjectsReport(
+            period=period,
+            rows=rows,
+            total_amount=total_amount,
+            total_sip=total_sip,
+            total_poles=total_poles,
+            total_lights=total_lights,
+            total_shuno=total_shuno,
+            total_nmck=total_nmck,
+            total_final=total_final,
+            total_remainder=total_nmck - total_final,
+        )
+
+    @classmethod
+    def objects_report_csv_rows(cls, report: ObjectsReport) -> list[list[str]]:
+        def money(value: Decimal | None) -> str:
+            if value is None:
+                return ""
+            return format(value, "f")
+
+        def num(value) -> str:
+            if value is None:
+                return ""
+            return str(value)
+
+        def fmt_date(value: date | None) -> str:
+            return value.strftime("%d.%m.%Y") if value else ""
+
+        rows: list[list[str]] = [
+            [
+                "Наименование объекта",
+                "№ контракта",
+                "Подрядчик",
+                "Начало работ",
+                "Окончание работ",
+                "Сумма",
+                "СИП, метры",
+                "Опоры, шт.",
+                "Светильники, шт.",
+                "ШУНО",
+                "НМЦК",
+                "Конечная стоимость",
+                "Остаток",
+            ]
+        ]
+        for item in report.rows:
+            rows.append(
+                [
+                    item.object_name,
+                    item.contract_number,
+                    item.contractor,
+                    fmt_date(item.start_date),
+                    fmt_date(item.end_date),
+                    money(item.amount),
+                    num(item.sip_meters),
+                    num(item.poles_count),
+                    num(item.lights_count),
+                    num(item.shuno_count),
+                    money(item.nmck),
+                    money(item.amount),
+                    money(item.remainder),
+                ]
+            )
+        rows.append(
+            [
+                "Итог",
+                "",
+                "",
+                "",
+                "",
+                money(report.total_amount),
+                money(report.total_sip),
+                str(report.total_poles),
+                str(report.total_lights),
+                str(report.total_shuno),
+                money(report.total_nmck),
+                money(report.total_final),
+                money(report.total_remainder),
+            ]
+        )
         return rows

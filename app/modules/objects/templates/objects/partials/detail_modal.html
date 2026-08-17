@@ -6,7 +6,11 @@
     <a href="{{ url_for('objects.detail', object_id=obj.id, full=1) }}" class="btn btn-outline-primary btn-sm">
         <i class="bi bi-box-arrow-up-right"></i> Полная страница
     </a>
-    {% if current_user.has_permission('projects.create') and can_create_project %}
+    {% if linked_project and current_user.has_permission('projects.view') %}
+    <a href="{{ url_for('projects.detail', project_id=linked_project.id) }}" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-folder2-open"></i> Проект
+    </a>
+    {% elif current_user.has_permission('projects.create') and can_create_project %}
     <a href="{{ url_for('projects.create', object_id=obj.id, status=suggested_project_status or 'draft') }}"
        class="btn btn-primary btn-sm">
         <i class="bi bi-folder-plus"></i>
@@ -17,7 +21,16 @@
         {% endif %}
     </a>
     {% endif %}
-    {% if current_user.has_permission('contracts.create') and can_create_contract %}
+    {% if linked_tender and current_user.has_permission('tenders.view') %}
+    <a href="{{ url_for('tenders.detail', tender_id=linked_tender.id) }}" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-hammer"></i> Заявка на торги
+    </a>
+    {% endif %}
+    {% if linked_contract and current_user.has_permission('contracts.view') %}
+    <a href="{{ url_for('contracts.detail', contract_id=linked_contract.id) }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-file-earmark-text"></i> Контракт
+    </a>
+    {% elif current_user.has_permission('contracts.create') and can_create_contract %}
     <a href="{{ url_for('contracts.create', object_id=obj.id) }}" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-file-earmark-text"></i> Создать контракт
     </a>

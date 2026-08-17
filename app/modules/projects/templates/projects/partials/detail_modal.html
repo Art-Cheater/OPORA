@@ -85,6 +85,38 @@
                 </div>
             </div>
             {% endif %}
+            {% if is_builtin_visible('projects', 'sip_meters') and current_user.can_view_field('projects', 'sip_meters') %}
+            <div class="col-md-3">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">СИП, м (план)</div>
+                    <div>{% if project.sip_meters is not none %}{{ project.sip_meters }}{% else %}—{% endif %}</div>
+                </div>
+            </div>
+            {% endif %}
+            {% if is_builtin_visible('projects', 'poles_count') and current_user.can_view_field('projects', 'poles_count') %}
+            <div class="col-md-3">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Опоры, шт.</div>
+                    <div>{% if project.poles_count is not none %}{{ project.poles_count }}{% else %}—{% endif %}</div>
+                </div>
+            </div>
+            {% endif %}
+            {% if is_builtin_visible('projects', 'lights_count') and current_user.can_view_field('projects', 'lights_count') %}
+            <div class="col-md-3">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Светильники, шт.</div>
+                    <div>{% if project.lights_count is not none %}{{ project.lights_count }}{% else %}—{% endif %}</div>
+                </div>
+            </div>
+            {% endif %}
+            {% if is_builtin_visible('projects', 'shuno_count') and current_user.can_view_field('projects', 'shuno_count') %}
+            <div class="col-md-3">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">{{ project.cabinet_label }}</div>
+                    <div>{% if project.shuno_count is not none %}{{ project.shuno_count }}{% else %}—{% endif %}</div>
+                </div>
+            </div>
+            {% endif %}
             {{ custom_fields_detail(custom_field_details) }}
         </div>
     </div>

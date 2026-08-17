@@ -20,3 +20,7 @@ class RequestsReportForm(FlaskForm):
     date_from = DateField("С", validators=[Optional()], format="%Y-%m-%d")
     date_to = DateField("По", validators=[Optional()], format="%Y-%m-%d")
     submit = SubmitField("Показать")
+
+
+class ObjectsReportForm(RequestsReportForm):
+    """Тот же период, отдельный класс для шаблона отчёта по объектам."""

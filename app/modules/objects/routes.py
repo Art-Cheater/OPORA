@@ -80,6 +80,20 @@ def _prepare_object_form(form: ObjectForm) -> None:
     form.notes.label.text = "Основание для проведения работ"
 
 
+def _object_filters_from_request() -> ObjectFilter:
+    return ObjectFilter(
+        q=request.args.get("q", ""),
+        statuses=[item for item in request.args.getlist("status") if item],
+        object_kinds=[item for item in request.args.getlist("object_kind") if item],
+        plan_year=request.args.get("plan_year", ""),
+        contractor_name=request.args.get("contractor_name", ""),
+        deadline_from=request.args.get("deadline_from", ""),
+        deadline_to=request.args.get("deadline_to", ""),
+        sort_by=request.args.get("sort_by", "created_at"),
+        sort_dir=request.args.get("sort_dir", "desc"),
+    )
+
+
 def _uuid_or_none(value: str) -> uuid.UUID | None:
     if not value:
         return None
@@ -129,14 +143,7 @@ def _render_form_modal(form: ObjectForm, form_action: str, modal_title: str):
 def index():
     filter_form = ObjectFilterForm(request.args)
     import_form = ObjectImportForm()
-    filters = ObjectFilter(
-        q=request.args.get("q", ""),
-        status=request.args.get("status", ""),
-        object_kind=request.args.get("object_kind", ""),
-        plan_year=request.args.get("plan_year", ""),
-        sort_by=request.args.get("sort_by", "created_at"),
-        sort_dir=request.args.get("sort_dir", "desc"),
-    )
+    filters = _object_filters_from_request()
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 20, type=int)
     pagination = ObjectRepository.paginated_list(filters, page=page, per_page=per_page)
@@ -155,14 +162,7 @@ def index():
 @login_required
 @permission_required(PERM_OBJECTS_VIEW)
 def table():
-    filters = ObjectFilter(
-        q=request.args.get("q", ""),
-        status=request.args.get("status", ""),
-        object_kind=request.args.get("object_kind", ""),
-        plan_year=request.args.get("plan_year", ""),
-        sort_by=request.args.get("sort_by", "created_at"),
-        sort_dir=request.args.get("sort_dir", "desc"),
-    )
+    filters = _object_filters_from_request()
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 20, type=int)
     pagination = ObjectRepository.paginated_list(filters, page=page, per_page=per_page)
@@ -293,12 +293,17 @@ def detail(object_id: uuid.UUID):
         is not None
     )
     suggested = ObjectService.suggested_project_status(obj.result_text)
+    chain = ObjectService.related_chain(obj)
+    linked_project = chain["project"]
+    linked_tender = chain["tender"]
+    linked_contract = chain["contract"]
     can_create_project = (not has_active_project) and obj.status not in (
         "in_tender",
+        "in_contract",
         "completed",
         "archived",
     )
-    can_create_contract = ObjectService.can_create_contract_from_plan(obj)
+    can_create_contract = ObjectService.can_create_contract_from_plan(obj) and linked_contract is None
     ctx = {
         "obj": obj,
         "status_labels": OBJECT_STATUS_LABELS,
@@ -306,6 +311,9 @@ def detail(object_id: uuid.UUID):
         "suggested_project_status": suggested,
         "can_create_project": can_create_project,
         "can_create_contract": can_create_contract,
+        "linked_project": linked_project,
+        "linked_tender": linked_tender,
+        "linked_contract": linked_contract,
     }
     if is_ajax() and not request.args.get("full"):
         return render_template("objects/partials/detail_modal.html", **ctx)

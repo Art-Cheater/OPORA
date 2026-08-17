@@ -1,0 +1,12 @@
+{% from "macros/ui.html" import page_header %}
+
+<div class="mb-3 d-flex flex-wrap gap-2">
+    <a href="{{ url_for('reports.requests') }}"
+       class="btn btn-sm {% if request.endpoint == 'reports.requests' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+        Заявки
+    </a>
+    <a href="{{ url_for('reports.objects') }}"
+       class="btn btn-sm {% if request.endpoint == 'reports.objects' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+        Объекты
+    </a>
+</div>

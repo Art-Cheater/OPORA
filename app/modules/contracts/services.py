@@ -23,6 +23,7 @@ from app.models.enums import (
     AuditAction,
     ContractDocumentType,
     ContractStatus,
+    ContractType,
     EntityType,
     ProjectStatus,
     TenderApplicationStatus,
@@ -266,6 +267,105 @@ class ContractService:
         cls._log_audit(user_id, AuditAction.CREATE.value, contract.id, f"Создан контракт {contract.number}", None, snapshot)
         cls._log_history(contract, user_id, "create", "Контракт создан", {"created": snapshot})
         db.session.commit()
+        return contract
+
+    @classmethod
+    def _ensure_object_link(cls, contract: Contract, work_object: WorkObject, user_id: uuid.UUID) -> None:
+        existing = db.session.scalar(
+            db.select(ContractObject).where(
+                ContractObject.contract_id == contract.id,
+                ContractObject.object_id == work_object.id,
+            )
+        )
+        if existing is None:
+            db.session.add(
+                ContractObject(
+                    contract_id=contract.id,
+                    object_id=work_object.id,
+                    created_by=user_id,
+                    updated_by=user_id,
+                )
+            )
+
+    @classmethod
+    def create_draft_from_plan(
+        cls,
+        obj: WorkObject,
+        user_id: uuid.UUID,
+        *,
+        project: Project | None = None,
+        tender: TenderApplication | None = None,
+        commit: bool = False,
+    ) -> Contract:
+        """Черновик контракта по полям плана освещения. Сумма и срок могут быть пустыми."""
+        from app.modules.tenders.services import TenderService
+
+        number = (obj.contract_number or "").strip()
+        if not number:
+            raise ValidationError("Номер контракта обязателен.")
+
+        existing = db.session.scalar(
+            db.select(Contract).where(Contract.number == number, Contract.active_filter())
+        )
+        if existing is not None:
+            cls._ensure_object_link(existing, obj, user_id)
+            if project is not None and existing.project_id is None:
+                existing.project_id = project.id
+            if tender is not None and existing.tender_application_id is None:
+                existing.tender_application_id = tender.id
+            obj.status = WorkObjectStatus.IN_CONTRACT.value
+            obj.updated_by = user_id
+            if project is not None:
+                project.status = ProjectStatus.IN_CONTRACT.value
+                project.updated_by = user_id
+            if commit:
+                db.session.commit()
+            return existing
+
+        amount = obj.contract_amount
+        if amount is None:
+            amount = obj.budget_amount
+        if amount is None:
+            amount = Decimal("0")
+        contractor = (obj.contractor_name or "").strip() or "Не указан"
+        title = (obj.name or obj.display_address or number)[:500]
+        contract = Contract(
+            contract_type=ContractType.WORK.value,
+            number=number[:100],
+            title=title,
+            description=cls._normalize_text(obj.result_text),
+            status=ContractStatus.DRAFT.value,
+            contract_date=obj.contract_date,
+            start_date=obj.contract_date,
+            end_date=TenderService.parse_deadline_date(obj.work_deadline),
+            responsible_id=user_id,
+            contractor_name=contractor[:500],
+            amount=amount,
+            tender_application_id=tender.id if tender is not None else None,
+            project_id=project.id if project is not None else None,
+            created_by=user_id,
+            updated_by=user_id,
+        )
+        db.session.add(contract)
+        db.session.flush()
+        cls._ensure_object_link(contract, obj, user_id)
+        obj.status = WorkObjectStatus.IN_CONTRACT.value
+        obj.updated_by = user_id
+        if project is not None:
+            project.status = ProjectStatus.IN_CONTRACT.value
+            project.updated_by = user_id
+        snapshot = cls._snapshot(contract)
+        cls._log_audit(
+            user_id,
+            AuditAction.CREATE.value,
+            contract.id,
+            f"Черновик контракта {contract.number} по объекту плана",
+            None,
+            snapshot,
+        )
+        cls._log_history(contract, user_id, "create", "Черновик контракта из плана", {"created": snapshot})
+        if commit:
+            db.session.commit()
         return contract
 
     @classmethod

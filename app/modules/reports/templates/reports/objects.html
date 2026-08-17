@@ -1,0 +1,130 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}Отчёт по объектам — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Отчёт по объектам", "Контракты и плановые объёмы за период", "geo-alt") %}
+{% if can_export %}
+<a href="{{ url_for('reports.objects_export', **request.args) }}" class="btn btn-outline-primary">
+    <i class="bi bi-download"></i> Экспорт Excel
+</a>
+{% endif %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+{% include "reports/partials/nav.html" %}
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-calendar3"></i>Период</div>
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('reports.objects') }}" class="row g-3 align-items-end" id="reportsPeriodForm">
+            <div class="col-md-3">
+                <label class="form-label">{{ form.period.label.text }}</label>
+                {{ form.period(class="form-select", id="reportPeriod") }}
+            </div>
+            <div class="col-md-3 report-custom-dates">
+                <label class="form-label">{{ form.date_from.label.text }}</label>
+                {{ form.date_from(class="form-control", type="date") }}
+            </div>
+            <div class="col-md-3 report-custom-dates">
+                <label class="form-label">{{ form.date_to.label.text }}</label>
+                {{ form.date_to(class="form-control", type="date") }}
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-arrow-repeat"></i> Показать
+                </button>
+            </div>
+        </form>
+        <div class="form-text mt-2">{{ report.period.label }}. Период — по началу и окончанию работ контракта. Объёмы — плановые.</div>
+    </div>
+</div>
+
+<div class="table-card">
+    <table class="table table-opora">
+        <thead>
+            <tr>
+                <th>Наименование объекта</th>
+                <th>№ контракта</th>
+                <th>Подрядчик</th>
+                <th>Начало работ</th>
+                <th>Окончание работ</th>
+                <th class="text-end">Сумма</th>
+                <th class="text-end">СИП, м</th>
+                <th class="text-end">Опоры, шт.</th>
+                <th class="text-end">Светильники, шт.</th>
+                <th class="text-end">ШУНО</th>
+                <th class="text-end">НМЦК</th>
+                <th class="text-end">Конечная стоимость</th>
+                <th class="text-end">Остаток</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in report.rows %}
+            <tr>
+                <td>
+                    <a href="{{ url_for('objects.detail', object_id=row.object_id) }}">{{ row.object_name }}</a>
+                </td>
+                <td>
+                    {% if row.contract_id %}
+                    <a href="{{ url_for('contracts.detail', contract_id=row.contract_id) }}">{{ row.contract_number }}</a>
+                    {% else %}
+                    {{ row.contract_number }}
+                    {% endif %}
+                </td>
+                <td>{{ row.contractor }}</td>
+                <td>{{ row.start_date.strftime('%d.%m.%Y') if row.start_date else "—" }}</td>
+                <td>{{ row.end_date.strftime('%d.%m.%Y') if row.end_date else "—" }}</td>
+                <td class="text-end">{{ row.amount }}</td>
+                <td class="text-end">{% if row.sip_meters is not none %}{{ row.sip_meters }}{% else %}—{% endif %}</td>
+                <td class="text-end">{% if row.poles_count is not none %}{{ row.poles_count }}{% else %}—{% endif %}</td>
+                <td class="text-end">{% if row.lights_count is not none %}{{ row.lights_count }}{% else %}—{% endif %}</td>
+                <td class="text-end">{% if row.shuno_count is not none %}{{ row.shuno_count }}{% else %}—{% endif %}</td>
+                <td class="text-end">{% if row.nmck is not none %}{{ row.nmck }}{% else %}—{% endif %}</td>
+                <td class="text-end">{{ row.amount }}</td>
+                <td class="text-end">{% if row.remainder is not none %}{{ row.remainder }}{% else %}—{% endif %}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="13" class="table-empty">
+                    <i class="bi bi-inbox"></i> За период нет объектов с контрактом
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        {% if report.rows %}
+        <tfoot>
+            <tr class="fw-medium">
+                <td colspan="5">Итог</td>
+                <td class="text-end">{{ report.total_amount }}</td>
+                <td class="text-end">{{ report.total_sip }}</td>
+                <td class="text-end">{{ report.total_poles }}</td>
+                <td class="text-end">{{ report.total_lights }}</td>
+                <td class="text-end">{{ report.total_shuno }}</td>
+                <td class="text-end">{{ report.total_nmck }}</td>
+                <td class="text-end">{{ report.total_final }}</td>
+                <td class="text-end">{{ report.total_remainder }}</td>
+            </tr>
+        </tfoot>
+        {% endif %}
+    </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const period = document.getElementById("reportPeriod");
+  const customBlocks = document.querySelectorAll(".report-custom-dates");
+  function sync() {
+    const show = period && period.value === "custom";
+    customBlocks.forEach((el) => {
+      el.classList.toggle("d-none", !show);
+    });
+  }
+  period?.addEventListener("change", sync);
+  sync();
+})();
+</script>
+{% endblock %}

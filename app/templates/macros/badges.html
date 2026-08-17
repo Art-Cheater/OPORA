@@ -26,6 +26,26 @@
     {% endif %}
 {% endmacro %}
 
+{% macro object_status_badge(status, label=none) %}
+    {% set s = (status or '')|lower %}
+    {% set text = label or status %}
+    {% if s == 'free' %}
+        <span class="badge badge-status badge-neutral">{{ text }}</span>
+    {% elif s == 'in_project' %}
+        <span class="badge badge-status badge-in-progress">{{ text }}</span>
+    {% elif s == 'in_tender' %}
+        <span class="badge badge-status badge-in-progress">{{ text }}</span>
+    {% elif s == 'in_contract' %}
+        <span class="badge badge-status badge-in-progress">{{ text }}</span>
+    {% elif s == 'completed' %}
+        <span class="badge badge-status badge-done">{{ text }}</span>
+    {% elif s == 'archived' %}
+        <span class="badge badge-status badge-neutral">{{ text }}</span>
+    {% else %}
+        <span class="badge badge-status badge-neutral">{{ text }}</span>
+    {% endif %}
+{% endmacro %}
+
 {% macro success_badge(success) %}
     {% if success %}
         <span class="badge badge-status badge-done">Успешно</span>
@@ -41,7 +61,7 @@
     {% elif s == 'active' %}
         <span class="badge badge-status badge-in-progress">В работе</span>
     {% elif s == 'in_tender' %}
-        <span class="badge badge-status badge-in-progress">На торгах</span>
+        <span class="badge badge-status badge-in-progress">В закупках</span>
     {% elif s == 'in_contract' %}
         <span class="badge badge-status badge-in-progress">В контракте</span>
     {% elif s == 'on_hold' %}

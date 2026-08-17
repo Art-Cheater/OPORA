@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 from typing import Any
 
 from flask import request
@@ -34,6 +35,14 @@ class ProjectPayload:
     responsible_id: uuid.UUID | None
     executor_ids: list[uuid.UUID]
     object_id: uuid.UUID | None
+    sip_meters: Decimal | None = None
+    poles_count: int | None = None
+    lights_count: int | None = None
+    shuno_count: int | None = None
+    sip_meters_fact: Decimal | None = None
+    poles_count_fact: int | None = None
+    lights_count_fact: int | None = None
+    shuno_count_fact: int | None = None
 
 
 class ProjectService:
@@ -49,6 +58,14 @@ class ProjectService:
         "end_date",
         "manager_id",
         "object_id",
+        "sip_meters",
+        "poles_count",
+        "lights_count",
+        "shuno_count",
+        "sip_meters_fact",
+        "poles_count_fact",
+        "lights_count_fact",
+        "shuno_count_fact",
     ]
 
     @staticmethod
@@ -70,7 +87,13 @@ class ProjectService:
         return stripped if stripped else None
 
     @classmethod
-    def validate_payload(cls, payload: ProjectPayload, *, project: Project | None = None) -> None:
+    def validate_payload(
+        cls,
+        payload: ProjectPayload,
+        *,
+        project: Project | None = None,
+        allow_busy_object: bool = False,
+    ) -> None:
         if not payload.code.strip():
             raise ValidationError("Код проекта обязателен.")
         if not payload.name.strip():
@@ -105,12 +128,12 @@ class ProjectService:
 
         if project is None or project.object_id != payload.object_id:
             # Статус «в контракте» из плана освещения — справочный; блокируем только торги/завершённые
-            if work_object.status in (
+            if not allow_busy_object and work_object.status in (
                 WorkObjectStatus.IN_TENDER.value,
                 WorkObjectStatus.COMPLETED.value,
                 WorkObjectStatus.ARCHIVED.value,
             ):
-                raise ValidationError("Объект занят (на торгах, завершён или в архиве).")
+                raise ValidationError("Объект занят (в закупках, завершён или в архиве).")
 
     @staticmethod
     def _snapshot(project: Project) -> dict[str, Any]:
@@ -121,6 +144,8 @@ class ProjectService:
                 data[field] = str(value)
             elif isinstance(value, date):
                 data[field] = value.isoformat()
+            elif isinstance(value, Decimal):
+                data[field] = format(value, "f")
             else:
                 data[field] = value
         data["executor_ids"] = [
@@ -221,6 +246,7 @@ class ProjectService:
         user_id: uuid.UUID,
         *,
         commit: bool = True,
+        allow_busy_object: bool = False,
     ) -> Project:
         """
         Создать проект в текущей транзакции.
@@ -230,7 +256,7 @@ class ProjectService:
         выполняет всю валидацию, аудит и историю, но транзакцией управляет
         вызывающий сервис.
         """
-        cls.validate_payload(payload)
+        cls.validate_payload(payload, allow_busy_object=allow_busy_object)
         exists = db.session.scalar(
             db.select(Project).where(
                 Project.code == payload.code.strip(),
@@ -250,6 +276,14 @@ class ProjectService:
             end_date=payload.end_date,
             manager_id=payload.responsible_id,
             object_id=payload.object_id,
+            sip_meters=payload.sip_meters,
+            poles_count=payload.poles_count,
+            lights_count=payload.lights_count,
+            shuno_count=payload.shuno_count,
+            sip_meters_fact=payload.sip_meters_fact,
+            poles_count_fact=payload.poles_count_fact,
+            lights_count_fact=payload.lights_count_fact,
+            shuno_count_fact=payload.shuno_count_fact,
             created_by=user_id,
             updated_by=user_id,
         )
@@ -290,6 +324,14 @@ class ProjectService:
         project.end_date = payload.end_date
         project.manager_id = payload.responsible_id
         project.object_id = payload.object_id
+        project.sip_meters = payload.sip_meters
+        project.poles_count = payload.poles_count
+        project.lights_count = payload.lights_count
+        project.shuno_count = payload.shuno_count
+        project.sip_meters_fact = payload.sip_meters_fact
+        project.poles_count_fact = payload.poles_count_fact
+        project.lights_count_fact = payload.lights_count_fact
+        project.shuno_count_fact = payload.shuno_count_fact
         project.updated_by = user_id
 
         if previous_object_id and previous_object_id != payload.object_id:

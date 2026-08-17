@@ -20,6 +20,8 @@ def test_admin_pages(admin_client):
         "/tenders/",
         "/contracts/",
         "/reports/requests",
+        "/reports/",
+        "/reports/objects",
         "/audit/",
         "/search/api?q=test",
         "/messenger/",

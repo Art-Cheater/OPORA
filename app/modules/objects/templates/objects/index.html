@@ -23,11 +23,13 @@
             </div>
             <div class="col-lg-2">
                 <label class="form-label">{{ filter_form.object_kind.label.text }}</label>
-                {{ filter_form.object_kind(class="form-select") }}
+                {{ filter_form.object_kind(class="form-select", multiple=true, size=3) }}
+                <div class="form-text">Можно несколько</div>
             </div>
             <div class="col-lg-2">
                 <label class="form-label">{{ filter_form.status.label.text }}</label>
-                {{ filter_form.status(class="form-select") }}
+                {{ filter_form.status(class="form-select", multiple=true, size=3) }}
+                <div class="form-text">Можно несколько</div>
             </div>
             <div class="col-lg-1">
                 <label class="form-label">{{ filter_form.plan_year.label.text }}</label>
@@ -39,6 +41,26 @@
             </div>
             <div class="col-lg-2 d-flex align-items-end">
                 <button type="button" id="objectFilterReset" class="btn btn-outline-primary w-100">Сброс</button>
+            </div>
+            <div class="col-12">
+                <details class="mt-1">
+                    <summary class="small text-muted" style="cursor: pointer;">Расширенные фильтры</summary>
+                    <div class="row g-3 mt-1">
+                        <div class="col-lg-3">
+                            <label class="form-label">{{ filter_form.contractor_name.label.text }}</label>
+                            {{ filter_form.contractor_name(class="form-control", placeholder="Подрядчик") }}
+                        </div>
+                        <div class="col-lg-3">
+                            <label class="form-label">{{ filter_form.deadline_from.label.text }}</label>
+                            {{ filter_form.deadline_from(class="form-control", type="date") }}
+                            <div class="form-text">По сроку выполнения заявки на торги</div>
+                        </div>
+                        <div class="col-lg-3">
+                            <label class="form-label">{{ filter_form.deadline_to.label.text }}</label>
+                            {{ filter_form.deadline_to(class="form-control", type="date") }}
+                        </div>
+                    </div>
+                </details>
             </div>
         </form>
     </div>

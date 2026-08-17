@@ -91,6 +91,56 @@
                         <div class="mt-1 text-pre-wrap">{{ project.description or "—" }}</div>
                     </div>
                     {% endif %}
+                    <div class="col-12"><small class="text-muted">Объёмы (план)</small></div>
+                    {% if current_user.can_view_field('projects', 'sip_meters') %}
+                    <div class="col-md-3">
+                        <small class="text-muted">СИП, м</small>
+                        <div>{% if project.sip_meters is not none %}{{ project.sip_meters }}{% else %}—{% endif %}</div>
+                    </div>
+                    {% endif %}
+                    {% if current_user.can_view_field('projects', 'poles_count') %}
+                    <div class="col-md-3">
+                        <small class="text-muted">Опоры, шт.</small>
+                        <div>{% if project.poles_count is not none %}{{ project.poles_count }}{% else %}—{% endif %}</div>
+                    </div>
+                    {% endif %}
+                    {% if current_user.can_view_field('projects', 'lights_count') %}
+                    <div class="col-md-3">
+                        <small class="text-muted">Светильники, шт.</small>
+                        <div>{% if project.lights_count is not none %}{{ project.lights_count }}{% else %}—{% endif %}</div>
+                    </div>
+                    {% endif %}
+                    {% if current_user.can_view_field('projects', 'shuno_count') %}
+                    <div class="col-md-3">
+                        <small class="text-muted">{{ project.cabinet_label }}</small>
+                        <div>{% if project.shuno_count is not none %}{{ project.shuno_count }}{% else %}—{% endif %}</div>
+                    </div>
+                    {% endif %}
+                    <div class="col-12"><small class="text-muted">Объёмы (факт, после приёмки)</small></div>
+                    {% if current_user.can_view_field('projects', 'sip_meters_fact') %}
+                    <div class="col-md-3">
+                        <small class="text-muted">СИП, м</small>
+                        <div>{% if project.sip_meters_fact is not none %}{{ project.sip_meters_fact }}{% else %}—{% endif %}</div>
+                    </div>
+                    {% endif %}
+                    {% if current_user.can_view_field('projects', 'poles_count_fact') %}
+                    <div class="col-md-3">
+                        <small class="text-muted">Опоры, шт.</small>
+                        <div>{% if project.poles_count_fact is not none %}{{ project.poles_count_fact }}{% else %}—{% endif %}</div>
+                    </div>
+                    {% endif %}
+                    {% if current_user.can_view_field('projects', 'lights_count_fact') %}
+                    <div class="col-md-3">
+                        <small class="text-muted">Светильники, шт.</small>
+                        <div>{% if project.lights_count_fact is not none %}{{ project.lights_count_fact }}{% else %}—{% endif %}</div>
+                    </div>
+                    {% endif %}
+                    {% if current_user.can_view_field('projects', 'shuno_count_fact') %}
+                    <div class="col-md-3">
+                        <small class="text-muted">{{ project.cabinet_label }}</small>
+                        <div>{% if project.shuno_count_fact is not none %}{{ project.shuno_count_fact }}{% else %}—{% endif %}</div>
+                    </div>
+                    {% endif %}
                     {{ custom_fields_detail(custom_field_details) }}
                 </div>
             </div>

@@ -148,3 +148,107 @@ def test_object_full_page_and_modal_share_notes_label(admin_client):
     assert modal.status_code == 200
     assert expected in full_page.get_data(as_text=True)
     assert expected in modal.get_data(as_text=True)
+
+
+def test_tz_alt_result_creates_project_in_project_status(app):
+    with app.app_context():
+        user_id = _admin_id()
+        obj = ObjectService.create(
+            _payload(
+                "ул. ТЗ Альтернативная, 4",
+                "Подготовлено техническое задание и локально-сметный расчет",
+            ),
+            user_id,
+        )
+        assert obj.status == WorkObjectStatus.IN_PROJECT.value
+        assert len(_projects_for(obj)) == 1
+        assert _projects_for(obj)[0].status == ProjectStatus.DRAFT.value
+
+
+def test_procurement_result_creates_tender_draft(app):
+    from app.models.tenders.tender_application import TenderApplication
+
+    with app.app_context():
+        user_id = _admin_id()
+        obj = ObjectService.create(
+            _payload("ул. Закупки, 5", "В закупках"),
+            user_id,
+        )
+        tenders = list(
+            db.session.scalars(
+                db.select(TenderApplication).where(
+                    TenderApplication.object_id == obj.id,
+                    TenderApplication.active_filter(),
+                )
+            )
+        )
+        assert obj.status == WorkObjectStatus.IN_TENDER.value
+        assert len(_projects_for(obj)) == 1
+        assert len(tenders) == 1
+        assert tenders[0].work_deadline_date is None
+
+
+def test_contract_number_creates_full_chain_unless_accepted(app):
+    from datetime import date
+
+    from app.models.contracts.contract import Contract
+    from app.models.contracts.contract_object import ContractObject
+    from app.models.tenders.tender_application import TenderApplication
+
+    with app.app_context():
+        user_id = _admin_id()
+        payload = _payload("ул. Контрактная, 6", "Работы ведутся")
+        payload.contract_number = "К-100"
+        payload.contractor_name = "ООО Свет"
+        payload.contract_amount = None
+        payload.budget_amount = None
+        payload.work_deadline = "31.12.2026"
+        obj = ObjectService.create(payload, user_id)
+
+        tenders = list(
+            db.session.scalars(
+                db.select(TenderApplication).where(TenderApplication.object_id == obj.id)
+            )
+        )
+        contracts = list(
+            db.session.scalars(
+                db.select(Contract)
+                .join(ContractObject, ContractObject.contract_id == Contract.id)
+                .where(ContractObject.object_id == obj.id)
+            )
+        )
+        assert obj.status == WorkObjectStatus.IN_CONTRACT.value
+        assert len(_projects_for(obj)) == 1
+        assert len(tenders) == 1
+        assert tenders[0].work_deadline_date == date(2026, 12, 31)
+        assert len(contracts) == 1
+        assert contracts[0].number == "К-100"
+
+        ObjectService.update(obj, payload, user_id)
+        assert len(_projects_for(obj)) == 1
+        assert (
+            db.session.scalar(db.select(db.func.count(Contract.id)).where(Contract.number == "К-100"))
+            == 1
+        )
+
+
+def test_accepted_result_does_not_create_contract_draft(app):
+    from app.models.contracts.contract import Contract
+    from app.models.contracts.contract_object import ContractObject
+
+    with app.app_context():
+        user_id = _admin_id()
+        payload = _payload("ул. Принятая, 7", "Объект принят заказчиком")
+        payload.contract_number = "К-200"
+        payload.status = WorkObjectStatus.COMPLETED.value
+        obj = ObjectService.create(payload, user_id)
+        contracts = list(
+            db.session.scalars(
+                db.select(Contract)
+                .join(ContractObject, ContractObject.contract_id == Contract.id)
+                .where(ContractObject.object_id == obj.id)
+            )
+        )
+        assert obj.status == WorkObjectStatus.COMPLETED.value
+        assert contracts == []
+        assert _projects_for(obj) == []

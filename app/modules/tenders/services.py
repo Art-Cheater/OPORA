@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from app.core.audit_service import AuditService
@@ -51,6 +52,31 @@ class TenderService:
             return None
         stripped = value.strip()
         return stripped if stripped else None
+
+    @staticmethod
+    def parse_deadline_date(value: str | None) -> date | None:
+        """Разобрать «Срок выполнения» заявки: дата или год → 31.12 этого года."""
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        if re.fullmatch(r"\d{4}", text):
+            year = int(text)
+            if 2000 <= year <= 2100:
+                return date(year, 12, 31)
+        for fmt in ("%d.%m.%Y", "%Y-%m-%d", "%d.%m.%y"):
+            try:
+                return datetime.strptime(text[:10], fmt).date()
+            except ValueError:
+                continue
+        match = re.search(r"(\d{2}\.\d{2}\.\d{4})", text)
+        if match:
+            try:
+                return datetime.strptime(match.group(1), "%d.%m.%Y").date()
+            except ValueError:
+                return None
+        return None
 
     @classmethod
     def _load_projects(cls, project_ids: list[uuid.UUID]) -> list[Project]:
@@ -182,7 +208,7 @@ class TenderService:
                     project.work_object.updated_by = user_id
 
     @classmethod
-    def create(cls, payload: TenderPayload, user_id: uuid.UUID) -> TenderApplication:
+    def create(cls, payload: TenderPayload, user_id: uuid.UUID, *, commit: bool = True) -> TenderApplication:
         if not payload.number.strip() or not payload.title.strip():
             raise ValidationError("Номер и название обязательны.")
         exists = db.session.scalar(
@@ -200,6 +226,7 @@ class TenderService:
             projects=projects,
         )
 
+        deadline = cls._normalize(payload.work_deadline)
         tender = TenderApplication(
             number=payload.number.strip(),
             title=payload.title.strip(),
@@ -207,7 +234,8 @@ class TenderService:
             status=payload.status or TenderApplicationStatus.DRAFT.value,
             responsible_id=payload.responsible_id,
             object_id=payload.object_id,
-            work_deadline=cls._normalize(payload.work_deadline),
+            work_deadline=deadline,
+            work_deadline_date=cls.parse_deadline_date(deadline),
             published_at=payload.published_at,
             created_by=user_id,
             updated_by=user_id,
@@ -225,7 +253,8 @@ class TenderService:
             description=f"Создана заявка на торги {tender.number}",
             new_values={"number": tender.number, "status": tender.status},
         )
-        db.session.commit()
+        if commit:
+            db.session.commit()
         return tender
 
     @classmethod
@@ -250,6 +279,7 @@ class TenderService:
         tender.responsible_id = payload.responsible_id
         tender.object_id = payload.object_id
         tender.work_deadline = cls._normalize(payload.work_deadline)
+        tender.work_deadline_date = cls.parse_deadline_date(tender.work_deadline)
         tender.published_at = payload.published_at
         tender.updated_by = user_id
         if previous in (

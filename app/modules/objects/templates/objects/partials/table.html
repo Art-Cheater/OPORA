@@ -1,10 +1,11 @@
 {% from "macros/crud.html" import table_actions %}
 {% from "macros/ui.html" import sortable_th %}
-{% from "macros/badges.html" import object_row_class %}
+{% from "macros/badges.html" import object_row_class, object_status_badge %}
 
 {% set sort_by = sort_by|default(request.args.get('sort_by', 'created_at'), true) %}
 {% set sort_dir = sort_dir|default(request.args.get('sort_dir', 'desc'), true) %}
 {% set kind_labels = kind_labels|default({}, true) %}
+{% set status_labels = status_labels|default({}, true) %}
 
 <div class="table-card">
     <table class="table table-opora">
@@ -12,6 +13,7 @@
             <tr>
                 {{ sortable_th("Адрес", "address", sort_by, sort_dir) }}
                 {{ sortable_th("Тип", "object_kind", sort_by, sort_dir) }}
+                {{ sortable_th("Статус", "status", sort_by, sort_dir) }}
                 {{ sortable_th("Срок выполнения работ", "work_deadline", sort_by, sort_dir) }}
                 {{ sortable_th("Номер контракта", "contract_number", sort_by, sort_dir) }}
                 {{ sortable_th("Дата заключения", "contract_date", sort_by, sort_dir) }}
@@ -29,6 +31,7 @@
                     {% endif %}
                 </td>
                 <td>{{ kind_labels.get(obj.object_kind, obj.object_kind) or "—" }}</td>
+                <td>{{ object_status_badge(obj.status, status_labels.get(obj.status, obj.status)) }}</td>
                 <td>{{ obj.work_deadline or "—" }}</td>
                 <td>{{ obj.contract_number or "—" }}</td>
                 <td>
@@ -51,7 +54,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="7" class="table-empty">
+                <td colspan="8" class="table-empty">
                     <i class="bi bi-inbox"></i> Объектов пока нет
                 </td>
             </tr>

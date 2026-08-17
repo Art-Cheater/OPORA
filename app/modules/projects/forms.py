@@ -5,6 +5,7 @@ from __future__ import annotations
 from flask_wtf import FlaskForm
 from wtforms import (
     DateField,
+    DecimalField,
     IntegerField,
     MultipleFileField,
     SelectField,
@@ -21,7 +22,7 @@ from app.models.enums import ProjectDocumentType, ProjectStatus
 PROJECT_STATUS_CHOICES = [
     (ProjectStatus.DRAFT.value, "Черновик"),
     (ProjectStatus.ACTIVE.value, "В работе"),
-    (ProjectStatus.IN_TENDER.value, "На торгах"),
+    (ProjectStatus.IN_TENDER.value, "В закупках"),
     (ProjectStatus.IN_CONTRACT.value, "В контракте"),
     (ProjectStatus.COMPLETED.value, "Завершён"),
     (ProjectStatus.CANCELLED.value, "Отменён"),
@@ -88,6 +89,24 @@ class ProjectForm(FlaskForm):
     end_date = DateField("Дата окончания", validators=[Optional()], format="%Y-%m-%d")
     responsible_id = SelectField("Ответственный", choices=[], validators=[Optional()])
     executor_ids = SelectMultipleField("Исполнители", choices=[], validators=[Optional()])
+    sip_meters = DecimalField("СИП, метры (план)", places=2, validators=[Optional(), NumberRange(min=0)])
+    poles_count = IntegerField("Опоры, шт. (план)", validators=[Optional(), NumberRange(min=0)])
+    lights_count = IntegerField("Светильники, шт. (план)", validators=[Optional(), NumberRange(min=0)])
+    shuno_count = IntegerField("ШУНО / шкафы, шт. (план)", validators=[Optional(), NumberRange(min=0)])
+    sip_meters_fact = DecimalField(
+        "СИП, метры (факт)",
+        places=2,
+        validators=[Optional(), NumberRange(min=0)],
+    )
+    poles_count_fact = IntegerField("Опоры, шт. (факт)", validators=[Optional(), NumberRange(min=0)])
+    lights_count_fact = IntegerField(
+        "Светильники, шт. (факт)",
+        validators=[Optional(), NumberRange(min=0)],
+    )
+    shuno_count_fact = IntegerField(
+        "ШУНО / шкафы, шт. (факт)",
+        validators=[Optional(), NumberRange(min=0)],
+    )
     submit = SubmitField("Сохранить")
 
 
