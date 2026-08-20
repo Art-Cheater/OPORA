@@ -1,0 +1,59 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}Прогон ЕИС — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Прогон " ~ run.started_at.strftime('%d.%m.%Y %H:%M'), run.status, "journal-text") %}
+<a class="btn btn-outline-primary" href="{{ url_for('eis.index') }}">К журналу</a>
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<p class="text-muted">
+    {{ 'По расписанию' if run.trigger == 'schedule' else 'Вручную' }}
+    {% if run.user %} · {{ run.user.full_name }}{% endif %}
+    {% if run.finished_at %} · завершён {{ run.finished_at.strftime('%H:%M') }}{% endif %}
+</p>
+
+<div class="mb-3">
+    <a class="btn btn-sm btn-outline-primary {% if not kind %}active{% endif %}" href="{{ url_for('eis.run_detail', run_id=run.id) }}">Все</a>
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('eis.run_detail', run_id=run.id, kind='created') }}">Создано</a>
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('eis.run_detail', run_id=run.id, kind='updated') }}">Обновлено</a>
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('eis.run_detail', run_id=run.id, kind='unmatched') }}">Без объекта</a>
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('eis.run_detail', run_id=run.id, kind='error') }}">Ошибки</a>
+</div>
+
+<div class="table-card">
+    <table class="table table-opora">
+        <thead>
+            <tr>
+                <th>Время</th>
+                <th>Событие</th>
+                <th>Сущность</th>
+                <th>Номер ЕИС</th>
+                <th>Сообщение</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in events.items %}
+            <tr>
+                <td class="text-muted">{{ item.created_at.strftime('%H:%M:%S') }}</td>
+                <td>{{ item.kind }}</td>
+                <td>{{ item.entity_type or '—' }}</td>
+                <td>
+                    {% if item.url %}
+                    <a href="{{ item.url }}" target="_blank" rel="noopener">{{ item.eis_number or 'ссылка' }}</a>
+                    {% else %}
+                    {{ item.eis_number or '—' }}
+                    {% endif %}
+                </td>
+                <td>{{ item.message }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="table-empty">Нет событий</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

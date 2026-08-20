@@ -18,9 +18,13 @@ from app.models.messenger.messenger_message import MessengerMessage
 from app.models.messenger.user_presence import UserPresence
 from app.models.communication.notification import Notification
 from app.models.contracts.contract import Contract
+from app.models.contracts.contract_contractor import ContractContractor
 from app.models.contracts.contract_document import ContractDocument
 from app.models.contracts.contract_history import ContractHistory
 from app.models.contracts.contract_object import ContractObject
+from app.models.contractors.contractor import Contractor
+from app.models.eis.eis_import_event import EisImportEvent
+from app.models.eis.eis_import_run import EisImportRun
 from app.models.files.attachment import Attachment
 from app.models.projects.project import Project
 from app.models.projects.project_document import ProjectDocument
@@ -67,9 +71,13 @@ __all__ = [
     "TenderDocument",
     "TenderProject",
     "Contract",
+    "ContractContractor",
     "ContractDocument",
     "ContractHistory",
     "ContractObject",
+    "Contractor",
+    "EisImportRun",
+    "EisImportEvent",
     "Message",
     "MessengerConversation",
     "MessengerMessage",

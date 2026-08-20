@@ -1,0 +1,648 @@
+<html><body><div class="price">
+                
+                    <span class="cardMainInfo__title">
+                        Начальная цена
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    </span>
+                    <span class="cardMainInfo__content cost">
+                        1 781 331,13 ₽
+                    </span>
+                
+            </div><div class="cardMainInfo__status">
+                    <span class="cardMainInfo__purchaseLink distancedText">
+                        <a href="#" target="_blank">№ 0740300000126000802</a>
+                    </span>
+                    <span class="cardMainInfo__state distancedText">Определение поставщика завершено</span>
+                </div>
+            </div>
+            <div class="sectionMainInfo__body">
+                
+                
+                
+                    <div class="cardMainInfo__section">
+                        <span class="cardMainInfo__title">Объект закупки</span>
+                        <span class="cardMainInfo__content text-break">Выполнение работ по устройству недостающего электрического освещения д. Загоски в г. Кирове</span>
+                    </div>
+                
+                
+                <div class="cardMainInfo__section">
+                    <span class="cardMainInfo__title">
+                        
+                            
+                            
+                                Организация, осуществляющая размещение
+                            
+                            
+                        
+                    </span>
+                    <span class="cardMainInfo__content">
+                        <a href="/epz/organization/view/info.html?organizationCode=07403000001" target="_blank">МУНИЦИПАЛЬНОЕ КАЗЕННОЕ УЧРЕЖДЕНИЕ "ЦЕНТР ПРОВЕДЕНИЯ ТОРГОВ И ЭНЕРГОЭФФЕКТИВНОСТИ"</a>
+                    </span>
+                </div>
+            </div>
+        </div>
+        <div class="sectionMainInfo borderRight col-3 colSpaceBetween">
+            <div class="price">
+                
+                    <span class="cardMainInfo__title">
+                        Начальная цена
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    </span>
+                    <span class="cardMainInfo__content cost">
+                        1 781 331,13 ₽
+                    </span>
+                
+            </div>
+            <div class="date">
+                <div class="row">
+                    <div class="cardMainInfo__section col-6">
+                        <span class="cardMainInfo__title">Размещено</span>
+                        <span class="cardMainInfo__content">
+                            21.07.2026 
+                        </span>
+                    </div>
+                    <div class="cardMainInfo__section col-6">
+                        
+                            <span class="cardMainInfo__title">Обновлено</span>
+                            <span class="cardMainInfo__content">
+                            29.07.2026 
+                        </span>
+                        
+                    </div>
+                </div>
+                <div class="cardMainInfo__section">
+                    
+                        <span class="cardMainInfo__title">Окончание подачи заявок</span>
+                        <span class="cardMainInfo__content">29.07.2026 </span>
+                    
+                </div>
+            </div>
+        </div>
+        <div class="sectionMainInfo col-3 colSpaceBetween mt-auto rel-links">
+            <div></div>
+            <div class="rel-links">
+                
+                    
+                        
+                            
+                        
+                        
+                    
+                    <a href="#positionKTRU">Позиция КТРУ</a>
+                
+                
+                    <a class="cursorPointer" onclick="openPlanGraphSearchUrl('263434528856343450100100540174321244')">Позиция
+                        плана-графика</a>
+                
+                
+                    <a class="cursorPointer" onclick="openContractUrl('0740300000126000802')">Контракт</a>
+                
+                
+                
+                    <a class="cursorPointer" onclick="openComplaintSearch('0740300000126000802')">Жалоба</a>
+                
+                
+                    <a class="cursorPointer" onclick="openUnscheduledInspection('0740300000126000802')">Внеплановая
+                        проверка</a>
+                
+                
+            </div>
+        </div>
+    </div>
+</div>
+<script type="text/javascript">
+    function openComplaintSearch(number) {
+        var url = "/epz/complaint/search/search_eis.html?searchString=" +
+            number +
+            "&strictEqual=on&fz94=on&cancelled=on&considered=on&regarded=on";
+        window.open(url);
+    }
+
+    function bankGuaranteeUrl(recordNotificationNumber) {
+        var regex = /(<([^>]+)>)/ig;
+        var removeXML = recordNotificationNumber.replace(regex, "");
+        var url = "/epz/bankguarantee/search/results.html?searchString=&orderNumber=" + removeXML + "&openMode=USE_DEFAULT_PARAMS";
+        url += "&published=on&rejected=on&terminated=on&stopped=on&application=on&contract=on&currencyId=1";
+        window.open(url);
+    }
+
+    function openContractUrl(number) {
+        var url = "/epz/contract/search/results.html?searchString=&orderNumber=" + number + "&openMode=USE_DEFAULT_PARAMS";
+        url += "&fz44=on&priceFrom=0&priceTo=200000000000&contractStageList=0%2C1%2C2%2C3&budgetaryFunds=on&extraBudgetaryFunds=on";
+        window.open(url);
+    }
+
+    function openPlanGraphSearchUrl(ikz) {
+        const pgzIKZInputNameYear = ikz.substring(0, 2);
+        const pgzIKZInputNameIkz = ikz.substring(2, 22);
+        const pgzIKZInputNameNumPZ = ikz.substring(22, 26);
+        const pgzIKZInputNameOkpd2 = ikz.substring(29, 33);
+        const pgzIKZInputNameKvr = ikz.substring(33, 36);
+        const url = "/epz/orderplan/search/results.html?fz44=on" +
+            "&pgzIKZInputNameYear=" + pgzIKZInputNameYear +
+            "&pgzIKZInputNameIkz=" + pgzIKZInputNameIkz +
+            "&pgzIKZInputNameNumPZ=" + pgzIKZInputNameNumPZ +
+            "&pgzIKZInputNameOkpd2=" + pgzIKZInputNameOkpd2 +
+            "&pgzIKZInputNameKvr=" + pgzIKZInputNameKvr;
+        window.open(url);
+    }
+
+    function openUnscheduledInspection(notificationNumber) {
+        var url = "/epz/unscheduledinspection/search/results.html?order=" + notificationNumber;
+        window.open(url);
+    }
+
+    function openRdik(rdikLink) {
+        var url = rdikLink;
+        window.open(url);
+    }
+
+    function openOrderRdik(notificationNumber) {
+        var url = window.location.href.split('/view')[0] + "/view/supplier-results.html?regNumber=" + notificationNumber + "#rdik";
+        window.open(url);
+    }
+</script>
+
+
+
+
+      
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="container">
+    <div class="tabsNav d-flex align-items-end">
+        
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+    <a href="/epz/order/notice/ea20/view/common-info.html?regNumber=0740300000126000802"
+
+            
+
+                
+
+                    class="tabsNav__item tabsNav__item_active"
+
+                
+
+                
+
+            
+
+    >
+
+        
+
+            
+
+            
+
+            
+
+                
+
+            
+
+        
+
+        Общая информация
+
+    </a>
+
+
+
+
+
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
+
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+    <a href="/epz/order/notice/ea20/view/documents.html?regNumber=0740300000126000802"
+
+            
+
+                
+
+                
+
+                    class="tabsNav__item"
+
+                
+
+            
+
+    >
+
+        
+
+            
+
+            
+
+            
+
+                
+
+            
+
+        
+
+        Документы
+
+    </a>
+
+
+
+
+        
+
+        
+
+        
+            
+                
+                    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+    <a href="/epz/order/notice/ea20/view/supplier-results.html?regNumber=0740300000126000802"
+
+            
+
+                
+
+                
+
+                    class="tabsNav__item"
+
+                
+
+            
+
+    >
+
+        
+
+            
+
+            
+
+            
+
+                
+
+            
+
+        
+
+        Результаты определения поставщика (подрядчика, исполнителя)
+
+    </a></body></html>

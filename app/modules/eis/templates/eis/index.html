@@ -1,0 +1,139 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}Импорт ЕИС — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Импорт ЕИС", "zakupki.gov.ru, поиск «освещения», Дирекция благоустройства", "cloud-download") %}
+{% if current_user.has_permission('eis.run') %}
+<form method="post" action="{{ url_for('eis.run_now') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-primary" type="submit" {% if running %}disabled{% endif %}>
+        <i class="bi bi-play-fill"></i>
+        {% if running %}Идёт прогон…{% else %}Запустить сейчас{% endif %}
+    </button>
+</form>
+{% endif %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+{% if latest %}
+<div class="card mb-4">
+    <div class="card-header">Последний прогон</div>
+    <div class="card-body">
+        <p class="mb-2">
+            {{ latest.started_at.strftime('%d.%m.%Y %H:%M') }}
+            ·
+            {% if latest.trigger == 'schedule' %}по расписанию{% else %}вручную{% endif %}
+            ·
+            статус <strong>{{ latest.status }}</strong>
+            {% if latest.user %} · {{ latest.user.full_name }}{% endif %}
+        </p>
+        {% if latest.summary %}
+        <div class="row g-2 small">
+            <div class="col-md-3">Проекты созданы: {{ latest.summary.get('created_projects', 0) }}</div>
+            <div class="col-md-3">Заявки созданы: {{ latest.summary.get('created_tenders', 0) }}</div>
+            <div class="col-md-3">Заявки обновлены: {{ latest.summary.get('updated_tenders', 0) }}</div>
+            <div class="col-md-3">Контракты созданы: {{ latest.summary.get('created_contracts', 0) }}</div>
+            <div class="col-md-3">Контракты обновлены: {{ latest.summary.get('updated_contracts', 0) }}</div>
+            <div class="col-md-3">Подрядчики: {{ latest.summary.get('created_contractors', 0) }}</div>
+            <div class="col-md-3">Без объекта: {{ latest.summary.get('unmatched', 0) }}</div>
+            <div class="col-md-3">Ошибки: {{ latest.summary.get('errors', 0) }}</div>
+        </div>
+        {% endif %}
+        {% if latest.error_message %}
+        <p class="text-danger mt-2 mb-0">{{ latest.error_message }}</p>
+        {% endif %}
+        <a class="btn btn-sm btn-outline-primary mt-3" href="{{ url_for('eis.run_detail', run_id=latest.id) }}">Журнал прогона</a>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info">Прогонов ещё не было. Запустите импорт вручную или дождитесь 12:00 / 18:00.</div>
+{% endif %}
+
+<div class="card mb-4">
+    <div class="card-header">Не сопоставлено / ошибки последнего прогона</div>
+    <div class="card-body p-0">
+        <table class="table table-opora mb-0">
+            <thead>
+                <tr>
+                    <th>Тип</th>
+                    <th>Номер ЕИС</th>
+                    <th>Сообщение</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in unmatched %}
+                <tr>
+                    <td>{{ item.kind }}</td>
+                    <td>
+                        {% if item.url %}
+                        <a href="{{ item.url }}" target="_blank" rel="noopener">{{ item.eis_number or 'ссылка' }}</a>
+                        {% else %}
+                        {{ item.eis_number or '—' }}
+                        {% endif %}
+                    </td>
+                    <td>{{ item.message }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" class="table-empty">Ошибок нет</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">История прогонов</div>
+    <div class="card-body p-0">
+        <table class="table table-opora mb-0">
+            <thead>
+                <tr>
+                    <th>Когда</th>
+                    <th>Как</th>
+                    <th>Статус</th>
+                    <th>Кто</th>
+                    <th>Сводка</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in runs.items %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('eis.run_detail', run_id=run.id) }}">
+                            {{ run.started_at.strftime('%d.%m.%Y %H:%M') }}
+                        </a>
+                    </td>
+                    <td>{{ 'расписание' if run.trigger == 'schedule' else 'вручную' }}</td>
+                    <td>{{ run.status }}</td>
+                    <td>{{ run.user.full_name if run.user else '—' }}</td>
+                    <td class="small text-muted">
+                        {% if run.summary %}
+                        +{{ run.summary.get('created_tenders', 0) }} заявок,
+                        +{{ run.summary.get('created_contracts', 0) }} контрактов,
+                        {{ run.summary.get('unmatched', 0) }} без объекта
+                        {% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="table-empty">История пуста</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% if runs.pages > 1 %}
+<nav class="mt-3">
+    <ul class="pagination pagination-sm">
+        {% for p in runs.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+        {% if p %}
+        <li class="page-item {% if p == runs.page %}active{% endif %}">
+            <a class="page-link" href="{{ url_for('eis.index', page=p) }}">{{ p }}</a>
+        </li>
+        {% endif %}
+        {% endfor %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

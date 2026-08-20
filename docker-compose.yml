@@ -43,6 +43,24 @@ services:
       retries: 5
       start_period: 60s
 
+  eis-sync:
+    build: .
+    container_name: opora_eis_sync
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      DB_HOST: db
+      DB_PORT: "5432"
+      FLASK_ENV: ${FLASK_ENV:-production}
+    command: ["flask", "eis-sync", "--loop"]
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   uploads_data:

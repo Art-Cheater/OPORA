@@ -55,6 +55,10 @@ Thumbs.db
 *.log
 logs/
 
+# EIS parser dumps
+_tmp_zakupki/
+data/zakupki/*.json
+
 # Docker
 docker-data/
 

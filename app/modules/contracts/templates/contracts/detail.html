@@ -66,6 +66,19 @@
                             {% endfor %}
                         </ul>
                     </div>
+                    {% if contract.contractors %}
+                    <div class="col-md-12">
+                        <small class="text-muted">Подрядчики</small>
+                        <ul class="mb-0">
+                            {% for item in contract.contractors %}
+                            <li>
+                                <a href="{{ url_for('contractors.detail', contractor_id=item.id) }}">{{ item.name }}</a>
+                                {% if item.inn %}<span class="text-muted">ИНН {{ item.inn }}</span>{% endif %}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>

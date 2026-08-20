@@ -129,6 +129,8 @@ class EntityType(str, Enum):
   PROJECT = "project"
   TENDER_APPLICATION = "tender_application"
   CONTRACT = "contract"
+  CONTRACTOR = "contractor"
+  EIS_IMPORT = "eis_import"
   MESSAGE = "message"
   NOTIFICATION = "notification"
   COMMENT = "comment"

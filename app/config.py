@@ -174,6 +174,13 @@ class Config:
     )
     MESSENGER_USER_LOOKUP_LIMIT = int(os.getenv("MESSENGER_USER_LOOKUP_LIMIT", "50"))
 
+    EIS_SYNC_HOURS = os.getenv("EIS_SYNC_HOURS", "12,18").strip()
+    EIS_SYNC_TIMEZONE = os.getenv("EIS_SYNC_TIMEZONE", "Europe/Moscow").strip() or "Europe/Moscow"
+    EIS_SYNC_PAGES = int(os.getenv("EIS_SYNC_PAGES", "20"))
+    EIS_SYNC_PER_PAGE = os.getenv("EIS_SYNC_PER_PAGE", "_50").strip() or "_50"
+    EIS_SYNC_DELAY = float(os.getenv("EIS_SYNC_DELAY", "1.2"))
+    EIS_SYNC_STALE_MINUTES = int(os.getenv("EIS_SYNC_STALE_MINUTES", "120"))
+
     # Профилировщик полностью выключен по умолчанию и никогда не пишет SQL-параметры.
     PERFORMANCE_PROFILER_ENABLED = _env_bool("PERFORMANCE_PROFILER_ENABLED")
     PERFORMANCE_PROFILER_LOG_ALL = _env_bool("PERFORMANCE_PROFILER_LOG_ALL")

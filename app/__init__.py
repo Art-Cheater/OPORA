@@ -418,6 +418,23 @@ def _register_cli_commands(app: Flask) -> None:
         count = ObjectService.wipe_all(user.id)
         click.echo(f"Удалено объектов: {count}")
 
+    @app.cli.command("eis-sync")
+    @click.option("--loop", "as_loop", is_flag=True, help="Ждать 12:00 и 18:00 и запускать снова")
+    @click.option("--user-email", default=None, help="Пользователь для аудита")
+    def eis_sync(as_loop: bool, user_email: str | None):
+        """Импорт закупок и контрактов ЕИС в Опору."""
+        from app.modules.eis.scheduler import run_loop, run_once
+
+        if as_loop:
+            run_loop()
+            return
+        try:
+            run_once(trigger="manual", user_email=user_email)
+        except Exception as exc:
+            click.echo(f"Ошибка импорта ЕИС: {exc}")
+            raise
+        click.echo("Импорт ЕИС завершён.")
+
     @app.cli.command("init-db")
     def init_db():
         """Создаёт схему (SQLite: create_all) и заполняет справочники + админа."""

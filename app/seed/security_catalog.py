@@ -9,6 +9,8 @@ SYSTEM_MODULES = [
     ("projects", "Проекты", "folder2-open", 20, "Управление проектами"),
     ("tenders", "Заявки на торги", "hammer", 25, "Заявки на торги / закупки"),
     ("contracts", "Договоры", "file-earmark-text", 30, "Управление договорами"),
+    ("contractors", "Подрядчики", "building", 32, "Справочник подрядчиков"),
+    ("eis", "Импорт ЕИС", "cloud-download", 34, "Парсер zakupki.gov.ru"),
     ("users", "Сотрудники", "people", 40, "Управление сотрудниками"),
     ("materials", "Материалы", "box-seam", 50, "Склад и материалы"),
     ("reports", "Отчёты", "bar-chart", 60, "Отчётность"),
@@ -113,6 +115,15 @@ MODULE_FIELDS: dict[str, list[tuple[str, str, int]]] = {
         ("amount", "Сумма", 100),
         ("end_date", "Дата окончания", 110),
     ],
+    "contractors": [
+        ("name", "Наименование", 10),
+        ("inn", "ИНН", 20),
+        ("kpp", "КПП", 30),
+        ("address", "Адрес", 40),
+        ("phone", "Телефон", 50),
+        ("email", "Email", 60),
+        ("notes", "Заметки", 70),
+    ],
     "users": [
         ("full_name", "ФИО", 10),
         ("email", "Email", 20),
@@ -153,6 +164,7 @@ FULL_ACTION_MODULES = (
     "projects",
     "tenders",
     "contracts",
+    "contractors",
     "users",
     "materials",
     "reports",
@@ -172,6 +184,8 @@ SPECIAL_PERMISSIONS = [
     ("users", "block", "Блокировка пользователей"),
     ("requests", "approve", "Одобрение заявок"),
     ("requests", "dispatch", "Диспетчеризация заявок"),
+    ("eis", "view", "Просмотр импорта ЕИС"),
+    ("eis", "run", "Запуск импорта ЕИС"),
 ]
 
 ACTION_LABELS = {

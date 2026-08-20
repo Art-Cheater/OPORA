@@ -4,6 +4,8 @@ from flask import Flask
 
 from app.modules.auth import auth_bp
 from app.modules.contracts import contracts_bp
+from app.modules.contractors import contractors_bp
+from app.modules.eis import eis_bp
 from app.modules.employees import employees_bp
 from app.modules.field_builder import field_builder_bp
 from app.modules.main import main_bp
@@ -27,6 +29,8 @@ ALL_BLUEPRINTS = [
     projects_bp,
     tenders_bp,
     contracts_bp,
+    contractors_bp,
+    eis_bp,
     employees_bp,
     positions_bp,
     roles_bp,

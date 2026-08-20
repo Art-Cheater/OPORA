@@ -55,6 +55,20 @@
                 <span>Контракты</span>
             </a>
             {% endif %}
+            {% if current_user.has_permission('contractors.view') %}
+            <a href="{{ url_for('contractors.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('contractors.') %}active{% endif %}">
+                <i class="bi bi-building"></i>
+                <span>Подрядчики</span>
+            </a>
+            {% endif %}
+            {% if current_user.has_permission('eis.view') %}
+            <a href="{{ url_for('eis.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('eis.') %}active{% endif %}">
+                <i class="bi bi-cloud-download"></i>
+                <span>Импорт ЕИС</span>
+            </a>
+            {% endif %}
             {% if current_user.has_permission('reports.view') %}
             <a href="{{ url_for('reports.index') }}"
                class="sidebar__link {% if request.endpoint and request.endpoint.startswith('reports.') %}active{% endif %}">

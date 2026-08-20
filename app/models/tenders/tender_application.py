@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, ForeignKey, Index, String, Text, text
+from sqlalchemy import Date, ForeignKey, Index, Numeric, String, Text, text
 from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from app.models.base import ActiveRecordMixin, BaseModel
@@ -39,6 +40,17 @@ class TenderApplication(ActiveRecordMixin, BaseModel):
         Index("ix_tender_applications_object_id", "object_id"),
         Index("ix_tender_applications_deleted_created", "deleted_at", "created_at"),
         Index("ix_tender_applications_work_deadline_date", "work_deadline_date"),
+        Index(
+            "ix_tender_applications_eis_reg_unique_active",
+            "eis_reg_number",
+            unique=True,
+            postgresql_where=text(
+                "deleted_at IS NULL AND eis_reg_number IS NOT NULL AND eis_reg_number != ''"
+            ),
+            sqlite_where=text(
+                "deleted_at IS NULL AND eis_reg_number IS NOT NULL AND eis_reg_number != ''"
+            ),
+        ),
     )
 
     number: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -61,6 +73,10 @@ class TenderApplication(ActiveRecordMixin, BaseModel):
     work_deadline: Mapped[str | None] = mapped_column(String(500), nullable=True)
     work_deadline_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     published_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    nmck: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    eis_reg_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    eis_status: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    eis_url: Mapped[str | None] = mapped_column(String(700), nullable=True)
 
     responsible_id: Mapped[uuid.UUID | None] = mapped_column(
         GUID(),

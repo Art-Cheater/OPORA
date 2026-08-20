@@ -1,0 +1,57 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}{% if contractor %}Редактирование{% else %}Новый подрядчик{% endif %} — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header(contractor.name if contractor else "Новый подрядчик", "Справочник подрядчиков", "building") %}
+<a href="{{ url_for('contractors.index') }}" class="btn btn-outline-primary">К списку</a>
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <form method="post">
+            {{ form.hidden_tag() }}
+            <div class="row g-3">
+                <div class="col-md-8">
+                    <label class="form-label">{{ form.name.label.text }}</label>
+                    {{ form.name(class="form-control") }}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">{{ form.inn.label.text }}</label>
+                    {{ form.inn(class="form-control") }}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">{{ form.kpp.label.text }}</label>
+                    {{ form.kpp(class="form-control") }}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">{{ form.kpp_largest.label.text }}</label>
+                    {{ form.kpp_largest(class="form-control") }}
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label">{{ form.address.label.text }}</label>
+                    {{ form.address(class="form-control") }}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">{{ form.phone.label.text }}</label>
+                    {{ form.phone(class="form-control") }}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">{{ form.email.label.text }}</label>
+                    {{ form.email(class="form-control") }}
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label">{{ form.notes.label.text }}</label>
+                    {{ form.notes(class="form-control", rows=3) }}
+                </div>
+                <div class="col-12">
+                    {{ form.submit(class="btn btn-primary") }}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
