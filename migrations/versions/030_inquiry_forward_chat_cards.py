@@ -3,14 +3,17 @@
 Revision ID: 030_inquiry_forward
 Revises: 029_inquiries
 Create Date: 2026-08-20
+
+GUID()/CHAR(36) нельзя использовать в add_column: на PostgreSQL колонка
+получается character(36), а users.id — uuid, и CREATE FOREIGN KEY валит
+flask db upgrade. Контейнер тогда не проходит healthcheck.
 """
 
 from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
-
-from app.models.types import GUID
+from sqlalchemy.dialects import postgresql
 
 revision = "030_inquiry_forward"
 down_revision = "029_inquiries"
@@ -18,25 +21,65 @@ branch_labels = None
 depends_on = None
 
 
-def _has_column(table: str, column: str) -> bool:
+def _guid():
     bind = op.get_bind()
-    insp = sa.inspect(bind)
-    if table not in insp.get_table_names():
+    if bind.dialect.name == "postgresql":
+        return postgresql.UUID(as_uuid=True)
+    return sa.Uuid()
+
+
+def _has_table(table: str) -> bool:
+    return table in sa.inspect(op.get_bind()).get_table_names()
+
+
+def _has_column(table: str, column: str) -> bool:
+    if not _has_table(table):
         return False
-    return column in {c["name"] for c in insp.get_columns(table)}
+    return column in {c["name"] for c in sa.inspect(op.get_bind()).get_columns(table)}
+
+
+def _column_type(table: str, column: str) -> str:
+    for col in sa.inspect(op.get_bind()).get_columns(table):
+        if col["name"] == column:
+            return str(col["type"]).lower()
+    return ""
 
 
 def _has_index(table: str, name: str) -> bool:
-    bind = op.get_bind()
-    insp = sa.inspect(bind)
-    if table not in insp.get_table_names():
+    if not _has_table(table):
         return False
-    return name in {idx["name"] for idx in insp.get_indexes(table)}
+    return name in {idx["name"] for idx in sa.inspect(op.get_bind()).get_indexes(table)}
+
+
+def _has_fk(table: str, name: str) -> bool:
+    if not _has_table(table):
+        return False
+    return name in {fk.get("name") for fk in sa.inspect(op.get_bind()).get_foreign_keys(table)}
+
+
+def _ensure_uuid_column(table: str, column: str) -> None:
+    if not _has_column(table, column):
+        op.add_column(table, sa.Column(column, _guid(), nullable=True))
+        return
+    typ = _column_type(table, column)
+    if op.get_bind().dialect.name == "postgresql" and "uuid" not in typ:
+        op.execute(
+            sa.text(
+                f'ALTER TABLE {table} ALTER COLUMN "{column}" TYPE uuid '
+                f'USING NULLIF("{column}"::text, \'\')::uuid'
+            )
+        )
 
 
 def upgrade() -> None:
-    if not _has_column("inquiries", "assigned_to"):
-        op.add_column("inquiries", sa.Column("assigned_to", GUID(), nullable=True))
+    _ensure_uuid_column("inquiries", "assigned_to")
+    _ensure_uuid_column("inquiries", "forwarded_by")
+    if not _has_column("inquiries", "forwarded_at"):
+        op.add_column(
+            "inquiries",
+            sa.Column("forwarded_at", sa.DateTime(timezone=True), nullable=True),
+        )
+    if not _has_fk("inquiries", "fk_inquiries_assigned_to_users"):
         op.create_foreign_key(
             "fk_inquiries_assigned_to_users",
             "inquiries",
@@ -45,8 +88,7 @@ def upgrade() -> None:
             ["id"],
             ondelete="SET NULL",
         )
-    if not _has_column("inquiries", "forwarded_by"):
-        op.add_column("inquiries", sa.Column("forwarded_by", GUID(), nullable=True))
+    if not _has_fk("inquiries", "fk_inquiries_forwarded_by_users"):
         op.create_foreign_key(
             "fk_inquiries_forwarded_by_users",
             "inquiries",
@@ -55,11 +97,6 @@ def upgrade() -> None:
             ["id"],
             ondelete="SET NULL",
         )
-    if not _has_column("inquiries", "forwarded_at"):
-        op.add_column(
-            "inquiries",
-            sa.Column("forwarded_at", sa.DateTime(timezone=True), nullable=True),
-        )
     if not _has_index("inquiries", "ix_inquiries_assigned_to"):
         op.create_index("ix_inquiries_assigned_to", "inquiries", ["assigned_to"])
     if not _has_index("inquiries", "ix_inquiries_forwarded_by"):
@@ -67,8 +104,7 @@ def upgrade() -> None:
 
     if not _has_column("messenger_messages", "card_type"):
         op.add_column("messenger_messages", sa.Column("card_type", sa.String(20), nullable=True))
-    if not _has_column("messenger_messages", "card_id"):
-        op.add_column("messenger_messages", sa.Column("card_id", GUID(), nullable=True))
+    _ensure_uuid_column("messenger_messages", "card_id")
     if not _has_column("messenger_messages", "card_title"):
         op.add_column("messenger_messages", sa.Column("card_title", sa.String(500), nullable=True))
     if not _has_column("messenger_messages", "card_subtitle"):
@@ -95,9 +131,11 @@ def downgrade() -> None:
         op.drop_index("ix_inquiries_assigned_to", table_name="inquiries")
     if _has_column("inquiries", "forwarded_at"):
         op.drop_column("inquiries", "forwarded_at")
-    if _has_column("inquiries", "forwarded_by"):
+    if _has_fk("inquiries", "fk_inquiries_forwarded_by_users"):
         op.drop_constraint("fk_inquiries_forwarded_by_users", "inquiries", type_="foreignkey")
+    if _has_column("inquiries", "forwarded_by"):
         op.drop_column("inquiries", "forwarded_by")
-    if _has_column("inquiries", "assigned_to"):
+    if _has_fk("inquiries", "fk_inquiries_assigned_to_users"):
         op.drop_constraint("fk_inquiries_assigned_to_users", "inquiries", type_="foreignkey")
+    if _has_column("inquiries", "assigned_to"):
         op.drop_column("inquiries", "assigned_to")
