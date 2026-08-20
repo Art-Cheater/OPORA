@@ -1,0 +1,123 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}Договора — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Договора", "Оборудование на опорах НО: Ростелеком, ТТК и другие", "broadcast") %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-geo-alt"></i> Есть ли оборудование по адресу?</div>
+    <div class="card-body">
+        <form class="row g-3" method="get">
+            <div class="col-lg-8">
+                <label class="form-label">{{ filter_form.q.label.text }}</label>
+                {{ filter_form.q(class="form-control", value=q, placeholder="ул. Труда, Орловская, Карла Либкнехта...") }}
+            </div>
+            <div class="col-lg-2 d-flex align-items-end">
+                <button class="btn btn-primary w-100" type="submit">Проверить</button>
+            </div>
+        </form>
+        {% if q %}
+            {% if hits %}
+            <div class="alert alert-warning mt-3 mb-0">
+                <strong>Есть оборудование.</strong> Найдено адресов: {{ hits|length }}.
+            </div>
+            <div class="table-responsive mt-3">
+                <table class="table table-opora mb-0">
+                    <thead>
+                        <tr>
+                            <th>Чьё</th>
+                            <th>Договор</th>
+                            <th>Адрес</th>
+                            <th>Крепления</th>
+                            <th>Опоры</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for hit in hits %}
+                        <tr>
+                            <td>{{ hit.agreement.customer_name or '—' }}</td>
+                            <td>
+                                <a href="{{ url_for('agreements.detail', agreement_id=hit.agreement.id) }}">
+                                    {{ hit.agreement.number or hit.agreement.title }}
+                                </a>
+                            </td>
+                            <td>{{ hit.site.address }}</td>
+                            <td>{{ hit.site.mounts_count if hit.site.mounts_count is not none else '—' }}</td>
+                            <td>{{ hit.site.poles_count if hit.site.poles_count is not none else '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-success mt-3 mb-0">
+                По запросу «{{ q }}» в загруженных договорах оборудования не видно.
+            </div>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+
+{% if current_user.has_permission('agreements.create') %}
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-upload"></i> Загрузить договор (.docx)</div>
+    <div class="card-body">
+        <form method="post" action="{{ url_for('agreements.upload') }}" enctype="multipart/form-data">
+            {{ upload_form.csrf_token }}
+            <div class="row g-3">
+                <div class="col-lg-8">
+                    {{ upload_form.file(class="form-control", accept=".docx") }}
+                </div>
+                <div class="col-lg-2">
+                    <button class="btn btn-primary w-100" type="submit">{{ upload_form.submit.label.text }}</button>
+                </div>
+            </div>
+            <div class="form-text mt-2">Файл как «Договор_24.docx»: наименование, заказчик и таблица адресной программы подтянутся сами.</div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<div class="table-card">
+    <table class="table table-opora">
+        <thead>
+            <tr>
+                <th>Договор</th>
+                <th>Заказчик</th>
+                <th>Срок</th>
+                <th>Адресов</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in pagination.items %}
+            <tr>
+                <td>
+                    <a class="fw-semibold" href="{{ url_for('agreements.detail', agreement_id=item.id) }}">{{ item.title }}</a>
+                    {% if item.number %}<div class="text-muted small">№ {{ item.number }}</div>{% endif %}
+                </td>
+                <td>{{ item.customer_name or '—' }}</td>
+                <td class="text-muted">
+                    {% if item.period_from or item.period_to %}
+                    {{ item.period_from.strftime('%d.%m.%Y') if item.period_from else '—' }}
+                    —
+                    {{ item.period_to.strftime('%d.%m.%Y') if item.period_to else '—' }}
+                    {% else %}—{% endif %}
+                </td>
+                <td>{{ item.sites|length }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4" class="table-empty">
+                    <i class="bi bi-inbox"></i> Договоров ещё нет — загрузите Word-файл
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

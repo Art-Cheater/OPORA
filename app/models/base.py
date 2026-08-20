@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, text
@@ -27,6 +28,23 @@ def as_utc_aware(dt: datetime | None) -> datetime | None:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
+
+
+def format_local_dt(
+    dt: datetime | None,
+    fmt: str = "%d.%m.%Y %H:%M",
+    tz_name: str = "Europe/Moscow",
+) -> str:
+    """UTC из БД → время для экрана (по умолчанию Москва)."""
+    aware = as_utc_aware(dt)
+    if aware is None:
+        return "—"
+    zone: timezone | ZoneInfo = timezone(timedelta(hours=3))
+    try:
+        zone = ZoneInfo(tz_name or "Europe/Moscow")
+    except Exception:
+        pass
+    return aware.astimezone(zone).strftime(fmt)
 
 
 class BaseModel(db.Model):

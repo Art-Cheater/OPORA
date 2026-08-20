@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 
 from app.integrations.zakupki.client import EisClient, EisFetchError
 from app.integrations.zakupki.config import (
+    EIS_YEAR_FROM,
+    EIS_YEAR_TO,
     STATUS_SUPPLIER_DEFINED,
     contract_card_url,
     contract_search_url,
@@ -14,6 +16,7 @@ from app.integrations.zakupki.config import (
 from app.integrations.zakupki.models import EisContract, EisOrder, ParseIssue
 from app.integrations.zakupki.parse import (
     is_supplier_defined,
+    keep_eis_listing,
     parse_contract_card,
     parse_contract_search,
     parse_order_notice,
@@ -29,11 +32,13 @@ class EisParseResult:
     issues: list[ParseIssue] = field(default_factory=list)
     contract_total: int | None = None
     order_total: int | None = None
+    skipped_old: int = 0
 
     def to_dict(self) -> dict:
         return {
             "contract_total": self.contract_total,
             "order_total": self.order_total,
+            "skipped_old": self.skipped_old,
             "contracts": [item.to_dict() for item in self.contracts],
             "orders": [item.to_dict() for item in self.orders],
             "import_errors": [item.to_dict() for item in self.issues],
@@ -50,14 +55,19 @@ class EisParser:
         pages: int = 1,
         limit: int | None = 3,
         per_page: str = "_10",
-    ) -> tuple[list[EisContract], list[ParseIssue], int | None]:
+        year_from: int = EIS_YEAR_FROM,
+        year_to: int = EIS_YEAR_TO,
+    ) -> tuple[list[EisContract], list[ParseIssue], int | None, int]:
         contracts: list[EisContract] = []
         issues: list[ParseIssue] = []
         total: int | None = None
         remaining = limit
+        skipped_old = 0
 
         for page in range(1, pages + 1):
-            url = contract_search_url(page=page, per_page=per_page)
+            url = contract_search_url(
+                page=page, per_page=per_page, year_from=year_from, year_to=year_to
+            )
             try:
                 html = self.client.get(url)
             except EisFetchError as exc:
@@ -70,6 +80,11 @@ class EisParser:
             if remaining is not None:
                 items = items[:remaining]
             for item in items:
+                if not keep_eis_listing(
+                    item["reestr_number"], item.get("listed_date"), year_from, year_to
+                ):
+                    skipped_old += 1
+                    continue
                 try:
                     card_html = self.client.get(item["url"])
                     contract = parse_contract_card(
@@ -101,7 +116,7 @@ class EisParser:
                     break
             if not listing["has_next"]:
                 break
-        return contracts, issues, total
+        return contracts, issues, total, skipped_old
 
     def fetch_orders(
         self,
@@ -110,14 +125,19 @@ class EisParser:
         limit: int | None = 3,
         per_page: str = "_10",
         with_contracts: bool = True,
-    ) -> tuple[list[EisOrder], list[ParseIssue], int | None]:
+        year_from: int = EIS_YEAR_FROM,
+        year_to: int = EIS_YEAR_TO,
+    ) -> tuple[list[EisOrder], list[ParseIssue], int | None, int]:
         orders: list[EisOrder] = []
         issues: list[ParseIssue] = []
         total: int | None = None
         remaining = limit
+        skipped_old = 0
 
         for page in range(1, pages + 1):
-            url = order_search_url(page=page, per_page=per_page)
+            url = order_search_url(
+                page=page, per_page=per_page, year_from=year_from, year_to=year_to
+            )
             try:
                 html = self.client.get(url)
             except EisFetchError as exc:
@@ -130,7 +150,17 @@ class EisParser:
             if remaining is not None:
                 items = items[:remaining]
             for item in items:
-                order, order_issues = self._load_order(item, with_contracts=with_contracts)
+                if not keep_eis_listing(
+                    item["reg_number"], item.get("listed_date"), year_from, year_to
+                ):
+                    skipped_old += 1
+                    continue
+                order, order_issues = self._load_order(
+                    item,
+                    with_contracts=with_contracts,
+                    year_from=year_from,
+                    year_to=year_to,
+                )
                 orders.append(order)
                 issues.extend(order_issues)
             if remaining is not None:
@@ -139,10 +169,15 @@ class EisParser:
                     break
             if not listing["has_next"]:
                 break
-        return orders, issues, total
+        return orders, issues, total, skipped_old
 
     def _load_order(
-        self, item: dict, *, with_contracts: bool
+        self,
+        item: dict,
+        *,
+        with_contracts: bool,
+        year_from: int = EIS_YEAR_FROM,
+        year_to: int = EIS_YEAR_TO,
     ) -> tuple[EisOrder, list[ParseIssue]]:
         issues: list[ParseIssue] = []
         url = item["url"]
@@ -215,6 +250,8 @@ class EisParser:
             return order, issues
 
         for reestr in order.contract_reestr_numbers:
+            if not keep_eis_listing(reestr, year_from=year_from, year_to=year_to):
+                continue
             card_url = contract_card_url(reestr)
             try:
                 card_html = self.client.get(card_url)
@@ -277,6 +314,8 @@ class EisParser:
         with_contracts: bool = True,
         contract_numbers: list[str] | None = None,
         order_numbers: list[str] | None = None,
+        year_from: int = EIS_YEAR_FROM,
+        year_to: int = EIS_YEAR_TO,
     ) -> EisParseResult:
         result = EisParseResult()
         targeted = bool(contract_numbers or order_numbers)
@@ -287,25 +326,33 @@ class EisParser:
                 if contract:
                     result.contracts.append(contract)
         elif not targeted and mode in {"both", "contracts"}:
-            contracts, issues, total = self.fetch_contracts(
-                pages=pages, limit=limit, per_page=per_page
+            contracts, issues, total, skipped = self.fetch_contracts(
+                pages=pages,
+                limit=limit,
+                per_page=per_page,
+                year_from=year_from,
+                year_to=year_to,
             )
             result.contracts = contracts
             result.issues.extend(issues)
             result.contract_total = total
+            result.skipped_old += skipped
         if order_numbers:
             for number in order_numbers:
                 order, issues = self.fetch_order(number, with_contracts=with_contracts)
                 result.orders.append(order)
                 result.issues.extend(issues)
         elif not targeted and mode in {"both", "orders"}:
-            orders, issues, total = self.fetch_orders(
+            orders, issues, total, skipped = self.fetch_orders(
                 pages=pages,
                 limit=limit,
                 per_page=per_page,
                 with_contracts=with_contracts,
+                year_from=year_from,
+                year_to=year_to,
             )
             result.orders = orders
             result.issues.extend(issues)
             result.order_total = total
+            result.skipped_old += skipped
         return result

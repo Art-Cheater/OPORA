@@ -62,6 +62,13 @@
                 <span>Подрядчики</span>
             </a>
             {% endif %}
+            {% if current_user.has_permission('agreements.view') %}
+            <a href="{{ url_for('agreements.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('agreements.') %}active{% endif %}">
+                <i class="bi bi-broadcast"></i>
+                <span>Договора</span>
+            </a>
+            {% endif %}
             {% if current_user.has_permission('eis.view') %}
             <a href="{{ url_for('eis.index') }}"
                class="sidebar__link {% if request.endpoint and request.endpoint.startswith('eis.') %}active{% endif %}">

@@ -10,7 +10,7 @@ from flask import current_app
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.extensions import db
-from app.integrations.zakupki.parse import order_object_names
+from app.integrations.zakupki.parse import keep_eis_listing, order_object_names
 from app.integrations.zakupki.models import EisContract, EisOrder, EisSupplier
 from app.integrations.zakupki.runner import EisParseResult, EisParser
 from app.models.base import utcnow
@@ -139,6 +139,7 @@ class EisImportService:
                 "created_contractors": 0,
                 "unmatched": 0,
                 "errors": 0,
+                "skipped_old": 0,
             },
         )
         db.session.add(run)
@@ -156,6 +157,8 @@ class EisImportService:
                     limit=None,
                     per_page=per_page or cfg.get("EIS_SYNC_PER_PAGE", "_50"),
                     with_contracts=True,
+                    year_from=int(cfg.get("EIS_YEAR_FROM", 2024)),
+                    year_to=int(cfg.get("EIS_YEAR_TO", 2100)),
                 )
             objects = list(
                 db.session.scalars(
@@ -172,8 +175,16 @@ class EisImportService:
                     entity_type="fetch",
                 )
                 self._bump(run, "errors")
+            if result.skipped_old:
+                run.summary["skipped_old"] = int(run.summary.get("skipped_old") or 0) + int(
+                    result.skipped_old
+                )
+                flag_modified(run, "summary")
             db.session.commit()
             for order in result.orders:
+                if self._out_of_year_range(order.reg_number, order.published_at):
+                    self._bump(run, "skipped_old")
+                    continue
                 try:
                     self._sync_order(run, order, objects, user_id)
                 except Exception as exc:
@@ -185,6 +196,9 @@ class EisImportService:
                         )
                     )
             for contract in result.contracts:
+                if self._out_of_year_range(contract.reestr_number, contract.contract_date):
+                    self._bump(run, "skipped_old")
+                    continue
                 try:
                     self._sync_contract(run, contract, objects, user_id, tender=None)
                 except Exception as exc:
@@ -240,6 +254,14 @@ class EisImportService:
         summary[key] = int(summary.get(key) or 0) + 1
         run.summary = summary
         flag_modified(run, "summary")
+
+    def _year_bounds(self) -> tuple[int, int]:
+        cfg = current_app.config
+        return int(cfg.get("EIS_YEAR_FROM", 2024)), int(cfg.get("EIS_YEAR_TO", 2100))
+
+    def _out_of_year_range(self, number: str | None, listed_date=None) -> bool:
+        year_from, year_to = self._year_bounds()
+        return not keep_eis_listing(number, listed_date, year_from, year_to)
 
     def _event(
         self,
@@ -349,6 +371,9 @@ class EisImportService:
         if map_tender_status(order.status) == TenderApplicationStatus.WON.value:
             linked = [item[1] for item in matched]
             for eis_contract in order.contracts:
+                if self._out_of_year_range(eis_contract.reestr_number, eis_contract.contract_date):
+                    self._bump(run, "skipped_old")
+                    continue
                 self._sync_contract(
                     run, eis_contract, objects, user_id, tender=tender, obj=primary_obj
                 )

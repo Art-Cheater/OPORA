@@ -1,0 +1,107 @@
+"""Маршруты договоров на опорах."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from flask import abort, current_app, flash, redirect, render_template, request, send_file, url_for
+from flask_login import current_user, login_required
+
+from app.core.decorators import permission_required
+from app.core.exceptions import ValidationError
+from app.core.forms_utils import form_errors_message
+from app.core.upload_utils import UploadValidationError
+from app.extensions import db
+from app.models.auth.constants import (
+    PERM_AGREEMENTS_CREATE,
+    PERM_AGREEMENTS_DELETE,
+    PERM_AGREEMENTS_VIEW,
+)
+from app.models.base import utcnow
+from app.modules.agreements.blueprint import agreements_bp
+from app.modules.agreements.forms import AgreementFilterForm, AgreementUploadForm
+from app.modules.agreements.repositories import AgreementFilter, AgreementRepository
+from app.modules.agreements.services import AgreementService
+
+
+@agreements_bp.route("/")
+@login_required
+@permission_required(PERM_AGREEMENTS_VIEW)
+def index():
+    filter_form = AgreementFilterForm(request.args)
+    q = request.args.get("q", "")
+    hits = AgreementService.search_address(q) if q.strip() else []
+    pagination = AgreementRepository.paginated_list(
+        AgreementFilter(q=q),
+        page=request.args.get("page", 1, type=int),
+        per_page=request.args.get("per_page", 20, type=int),
+    )
+    return render_template(
+        "agreements/index.html",
+        filter_form=filter_form,
+        pagination=pagination,
+        hits=hits,
+        q=q,
+        upload_form=AgreementUploadForm(),
+    )
+
+
+@agreements_bp.route("/upload", methods=["POST"])
+@login_required
+@permission_required(PERM_AGREEMENTS_CREATE)
+def upload():
+    form = AgreementUploadForm()
+    if not form.validate_on_submit():
+        flash(form_errors_message(form), "danger")
+        return redirect(url_for("agreements.index"))
+    try:
+        agreement = AgreementService.import_docx(form.file.data, current_user.id)
+    except (ValidationError, UploadValidationError) as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for("agreements.index"))
+    extra = f", адресов: {len(agreement.sites)}"
+    if agreement.parse_warning:
+        extra += f". {agreement.parse_warning}"
+    flash(f"Загружен {agreement.title}{extra}.", "success")
+    return redirect(url_for("agreements.detail", agreement_id=agreement.id))
+
+
+@agreements_bp.route("/<uuid:agreement_id>")
+@login_required
+@permission_required(PERM_AGREEMENTS_VIEW)
+def detail(agreement_id):
+    agreement = AgreementRepository.get_by_id(agreement_id)
+    if agreement is None:
+        abort(404)
+    return render_template("agreements/detail.html", agreement=agreement)
+
+
+@agreements_bp.route("/<uuid:agreement_id>/file")
+@login_required
+@permission_required(PERM_AGREEMENTS_VIEW)
+def download(agreement_id):
+    agreement = AgreementRepository.get_by_id(agreement_id)
+    if agreement is None or not agreement.storage_key:
+        abort(404)
+    path = Path(current_app.config["UPLOAD_FOLDER"]) / agreement.storage_key
+    if not path.is_file():
+        abort(404)
+    return send_file(
+        path,
+        as_attachment=True,
+        download_name=agreement.source_filename or path.name,
+    )
+
+
+@agreements_bp.route("/<uuid:agreement_id>/delete", methods=["POST"])
+@login_required
+@permission_required(PERM_AGREEMENTS_DELETE)
+def delete(agreement_id):
+    agreement = AgreementRepository.get_by_id(agreement_id)
+    if agreement is None:
+        abort(404)
+    agreement.deleted_at = utcnow()
+    agreement.updated_by = current_user.id
+    db.session.commit()
+    flash("Договор скрыт.", "info")
+    return redirect(url_for("agreements.index"))

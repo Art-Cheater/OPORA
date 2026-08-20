@@ -23,6 +23,8 @@ from app.models.contracts.contract_document import ContractDocument
 from app.models.contracts.contract_history import ContractHistory
 from app.models.contracts.contract_object import ContractObject
 from app.models.contractors.contractor import Contractor
+from app.models.agreements.pole_agreement import PoleAgreement
+from app.models.agreements.pole_agreement_site import PoleAgreementSite
 from app.models.eis.eis_import_event import EisImportEvent
 from app.models.eis.eis_import_run import EisImportRun
 from app.models.files.attachment import Attachment
@@ -76,6 +78,8 @@ __all__ = [
     "ContractHistory",
     "ContractObject",
     "Contractor",
+    "PoleAgreement",
+    "PoleAgreementSite",
     "EisImportRun",
     "EisImportEvent",
     "Message",

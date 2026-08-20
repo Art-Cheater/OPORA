@@ -17,6 +17,8 @@ CUSTOMER_ID_ORG = (
 )
 
 STATUS_SUPPLIER_DEFINED = "Определение поставщика завершено"
+EIS_YEAR_FROM = 2024
+EIS_YEAR_TO = 2100
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -25,7 +27,17 @@ USER_AGENT = (
 )
 
 
-def contract_search_url(page: int = 1, per_page: str = "_50") -> str:
+def _period(year_from: int, year_to: int) -> tuple[str, str]:
+    return f"01.01.{year_from}", f"31.12.{year_to}"
+
+
+def contract_search_url(
+    page: int = 1,
+    per_page: str = "_50",
+    year_from: int = EIS_YEAR_FROM,
+    year_to: int = EIS_YEAR_TO,
+) -> str:
+    date_from, date_to = _period(year_from, year_to)
     query = {
         "searchString": SEARCH_STRING,
         "morphology": "on",
@@ -46,11 +58,19 @@ def contract_search_url(page: int = 1, per_page: str = "_50") -> str:
         "sortDirection": "false",
         "recordsPerPage": per_page,
         "showLotsInfoHidden": "false",
+        "contractDateFrom": date_from,
+        "contractDateTo": date_to,
     }
     return f"{EIS_BASE}/epz/contract/search/results.html?{urlencode(query)}"
 
 
-def order_search_url(page: int = 1, per_page: str = "_50") -> str:
+def order_search_url(
+    page: int = 1,
+    per_page: str = "_50",
+    year_from: int = EIS_YEAR_FROM,
+    year_to: int = EIS_YEAR_TO,
+) -> str:
+    date_from, date_to = _period(year_from, year_to)
     query = {
         "searchString": SEARCH_STRING,
         "morphology": "on",
@@ -69,6 +89,8 @@ def order_search_url(page: int = 1, per_page: str = "_50") -> str:
         "currencyIdGeneral": "-1",
         "customerIdOrg": CUSTOMER_ID_ORG,
         "gws": "Выберите тип закупки",
+        "publishDateFrom": date_from,
+        "publishDateTo": date_to,
     }
     return f"{EIS_BASE}/epz/order/extendedsearch/results.html?{urlencode(query)}"
 

@@ -1,0 +1,70 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}{{ agreement.title }} — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header(agreement.title, agreement.customer_name or "Договор на опорах", "broadcast") %}
+<a class="btn btn-outline-primary" href="{{ url_for('agreements.index') }}">К списку</a>
+{% if agreement.storage_key %}
+<a class="btn btn-outline-primary" href="{{ url_for('agreements.download', agreement_id=agreement.id) }}">Скачать файл</a>
+{% endif %}
+{% if current_user.has_permission('agreements.delete') %}
+<form method="post" action="{{ url_for('agreements.delete', agreement_id=agreement.id) }}" class="d-inline" onsubmit="return confirm('Скрыть договор?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-outline-danger" type="submit">Удалить</button>
+</form>
+{% endif %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4"><div class="text-muted">Номер</div><div>{{ agreement.number or '—' }}</div></div>
+            <div class="col-md-4"><div class="text-muted">Заказчик</div><div>{{ agreement.customer_name or '—' }}</div></div>
+            <div class="col-md-4"><div class="text-muted">ИНН</div><div>{{ agreement.customer_inn or '—' }}</div></div>
+            <div class="col-md-8"><div class="text-muted">Предмет</div><div>{{ agreement.subject or '—' }}</div></div>
+            <div class="col-md-4">
+                <div class="text-muted">Срок</div>
+                <div>
+                    {{ agreement.period_from.strftime('%d.%m.%Y') if agreement.period_from else '—' }}
+                    —
+                    {{ agreement.period_to.strftime('%d.%m.%Y') if agreement.period_to else '—' }}
+                </div>
+            </div>
+        </div>
+        {% if agreement.parse_warning %}
+        <p class="text-warning mt-3 mb-0">{{ agreement.parse_warning }}</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="table-card">
+    <table class="table table-opora">
+        <thead>
+            <tr>
+                <th>№</th>
+                <th>Адрес</th>
+                <th>Узлы крепления</th>
+                <th>Опоры</th>
+                <th>Примечание</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for site in agreement.sites %}
+            <tr>
+                <td>{{ site.row_no or loop.index }}</td>
+                <td>{{ site.address }}</td>
+                <td>{{ site.mounts_count if site.mounts_count is not none else '—' }}</td>
+                <td>{{ site.poles_count if site.poles_count is not none else '—' }}</td>
+                <td>{{ site.note or '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="table-empty">Адресная программа пуста</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

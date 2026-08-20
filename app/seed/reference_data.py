@@ -134,7 +134,7 @@ class ReferenceDataService:
             PERM_AUDIT_VIEW, PERM_AUDIT_EXPORT,
             PERM_MESSENGER_USE, PERM_SEARCH_USE,
             "materials.view", "reports.view",
-            "contractors.view", "eis.view",
+            "contractors.view", "eis.view", "agreements.view", "agreements.create", "agreements.delete",
         ],
         ROLE_DISPATCHER: [
             PERM_PROFILE_VIEW, PERM_PROFILE_EDIT, PERM_USERS_VIEW,
@@ -143,6 +143,7 @@ class ReferenceDataService:
             PERM_TENDERS_VIEW,
             PERM_MESSENGER_USE, PERM_SEARCH_USE,
             "contractors.view",
+            "agreements.view", "agreements.create",
         ],
         ROLE_MASTER: [
             PERM_PROFILE_VIEW, PERM_PROFILE_EDIT,
@@ -151,6 +152,7 @@ class ReferenceDataService:
             PERM_TENDERS_VIEW,
             PERM_MESSENGER_USE, PERM_SEARCH_USE,
             "contractors.view",
+            "agreements.view",
         ],
         ROLE_EXECUTOR: [
             PERM_PROFILE_VIEW, PERM_PROFILE_EDIT,

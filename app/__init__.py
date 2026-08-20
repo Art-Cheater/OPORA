@@ -34,6 +34,7 @@ def create_app(config_name: str | None = None) -> Flask:
     _register_security_hooks(app)
     _register_error_handlers(app)
     _register_context_processors(app)
+    _register_template_filters(app)
     _register_cli_commands(app)
     _ensure_upload_folder(app)
 
@@ -331,6 +332,15 @@ def _register_context_processors(app: Flask) -> None:
             "is_builtin_visible": BuiltinFieldService.is_visible,
             "builtin_label": BuiltinFieldService.label,
         }
+
+
+def _register_template_filters(app: Flask) -> None:
+    @app.template_filter("local_dt")
+    def local_dt(value, fmt="%d.%m.%Y %H:%M"):
+        from app.models.base import format_local_dt
+
+        tz_name = app.config.get("EIS_SYNC_TIMEZONE") or "Europe/Moscow"
+        return format_local_dt(value, fmt=fmt, tz_name=tz_name)
 
 
 def _register_cli_commands(app: Flask) -> None:

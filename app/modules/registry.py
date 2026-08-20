@@ -2,6 +2,7 @@
 
 from flask import Flask
 
+from app.modules.agreements import agreements_bp
 from app.modules.auth import auth_bp
 from app.modules.contracts import contracts_bp
 from app.modules.contractors import contractors_bp
@@ -30,6 +31,7 @@ ALL_BLUEPRINTS = [
     tenders_bp,
     contracts_bp,
     contractors_bp,
+    agreements_bp,
     eis_bp,
     employees_bp,
     positions_bp,

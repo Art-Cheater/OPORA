@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from app.extensions import db
@@ -99,6 +99,14 @@ def test_distinctive_tokens_take_settlement_and_street():
     glued = distinctive_tokens("ул.Портовая в п. Сидоровка")
     assert "портовая" in glued
     assert "сидоровка" in glued
+
+
+def test_format_local_dt_shows_moscow():
+    from app.models.base import format_local_dt
+
+    utc = datetime(2026, 8, 20, 9, 6, tzinfo=timezone.utc)
+    assert format_local_dt(utc) == "20.08.2026 12:06"
+    assert format_local_dt(utc, fmt="%H:%M") == "12:06"
 
 
 def test_match_unique_village(app):
@@ -235,6 +243,29 @@ def test_import_matches_purchase_objects_not_header(app):
             )
         )
         assert any("Космонавтов" in event.message or "Васнецовых" in event.message for event in unmatched)
+
+
+def test_import_skips_years_before_2024(app):
+    with app.app_context():
+        user_id = _admin_id()
+        _object(user_id, "д. Студенец")
+        result = _parse_result()
+        result.orders[0].reg_number = "0740300000119000001"
+        result.orders[0].contracts[0].reestr_number = "3434528856319000001"
+        run = EisImportService().sync(
+            trigger="manual",
+            user_id=user_id,
+            parse_result=result,
+        )
+        assert run.status == "success"
+        assert (run.summary or {}).get("skipped_old", 0) >= 1
+        assert db.session.scalar(db.select(db.func.count(TenderApplication.id))) == 0
+        assert db.session.scalar(
+            db.select(db.func.count(EisImportEvent.id)).where(
+                EisImportEvent.run_id == run.id,
+                EisImportEvent.kind == "unmatched",
+            )
+        ) == 0
 
 
 def test_eis_window_admin_ok(admin_client):

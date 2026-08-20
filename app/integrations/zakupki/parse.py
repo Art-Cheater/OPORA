@@ -8,6 +8,8 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from app.integrations.zakupki.config import (
+    EIS_YEAR_FROM,
+    EIS_YEAR_TO,
     STATUS_SUPPLIER_DEFINED,
     absolute_url,
     contract_card_url,
@@ -150,6 +152,54 @@ def parse_money(value: str | None) -> Decimal | None:
         return None
 
 
+_DATA_BLOCK_DATE_RE = re.compile(
+    r'<div class="data-block__title">\s*(?P<title>[^<]+?)\s*</div>\s*'
+    r'<div class="data-block__value">\s*(?P<date>\d{2}\.\d{2}\.\d{4})',
+    re.S | re.I,
+)
+
+
+def eis_number_year(number: str | None) -> int | None:
+    """Год из номера ЕИС: после 11-значного кода заказчика идут две цифры года."""
+    digits = re.sub(r"\D", "", number or "")
+    if len(digits) < 13:
+        return None
+    year = 2000 + int(digits[11:13])
+    if 2010 <= year <= 2099:
+        return year
+    return None
+
+
+def in_eis_year_range(
+    year: int | None,
+    year_from: int = EIS_YEAR_FROM,
+    year_to: int = EIS_YEAR_TO,
+) -> bool:
+    if year is None:
+        return True
+    return year_from <= year <= year_to
+
+
+def keep_eis_listing(
+    number: str | None,
+    listed_date: date | None = None,
+    year_from: int = EIS_YEAR_FROM,
+    year_to: int = EIS_YEAR_TO,
+) -> bool:
+    year = eis_number_year(number)
+    if year is None and listed_date is not None:
+        year = listed_date.year
+    return in_eis_year_range(year, year_from, year_to)
+
+
+def _block_date(chunk: str, *titles: str) -> date | None:
+    wanted = {item.casefold() for item in titles}
+    for title, raw in _DATA_BLOCK_DATE_RE.findall(chunk):
+        if clean_text(title).casefold() in wanted:
+            return parse_date(raw)
+    return None
+
+
 def parse_total(html_text: str) -> int | None:
     match = _TOTAL_RE.search(html_text)
     return int(match.group(1)) if match else None
@@ -181,6 +231,7 @@ def parse_contract_search(html_text: str) -> dict:
                 "reestr_number": reestr,
                 "url": absolute_url(href),
                 "stage": clean_text(title_match.group(1)) if title_match else None,
+                "listed_date": _block_date(chunk, "Заключение контракта"),
             }
         )
     return {
@@ -209,6 +260,7 @@ def parse_order_search(html_text: str) -> dict:
                 "url": absolute_url(href),
                 "status": clean_text(title_match.group(1)) if title_match else None,
                 "object_title": clean_text(object_match.group(1)) if object_match else None,
+                "listed_date": _block_date(chunk, "Размещено"),
             }
         )
     return {

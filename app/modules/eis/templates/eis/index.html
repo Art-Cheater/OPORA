@@ -23,7 +23,7 @@
     <div class="card-header">Последний прогон</div>
     <div class="card-body">
         <p class="mb-2">
-            {{ latest.started_at.strftime('%d.%m.%Y %H:%M') }}
+            {{ latest.started_at|local_dt }} МСК
             ·
             {% if latest.trigger == 'schedule' %}по расписанию{% else %}вручную{% endif %}
             ·
@@ -39,6 +39,7 @@
             <div class="col-md-3">Контракты обновлены: {{ latest.summary.get('updated_contracts', 0) }}</div>
             <div class="col-md-3">Подрядчики: {{ latest.summary.get('created_contractors', 0) }}</div>
             <div class="col-md-3">Без объекта: {{ latest.summary.get('unmatched', 0) }}</div>
+            <div class="col-md-3">Старше 2024: {{ latest.summary.get('skipped_old', 0) }}</div>
             <div class="col-md-3">Ошибки: {{ latest.summary.get('errors', 0) }}</div>
         </div>
         {% endif %}
@@ -102,7 +103,7 @@
                 <tr>
                     <td>
                         <a href="{{ url_for('eis.run_detail', run_id=run.id) }}">
-                            {{ run.started_at.strftime('%d.%m.%Y %H:%M') }}
+                            {{ run.started_at|local_dt }} МСК
                         </a>
                     </td>
                     <td>{{ 'расписание' if run.trigger == 'schedule' else 'вручную' }}</td>

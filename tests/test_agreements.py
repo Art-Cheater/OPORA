@@ -1,0 +1,131 @@
+"""Договора на опорах: разбор Word и поиск оборудования."""
+
+from __future__ import annotations
+
+import io
+import zipfile
+from pathlib import Path
+
+from app.extensions import db
+from app.models.agreements.pole_agreement import PoleAgreement
+from app.modules.agreements.parse_docx import parse_agreement_docx
+from app.modules.agreements.services import AgreementService
+
+_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+_REAL_FILES = [
+    Path(r"e:\Договор_24.docx"),
+    Path(r"e:\Проект договора на 2026(один год)  от  Ростелекома  (1).docx"),
+    Path(r"e:\10-24 ДОГОВОР ТТК-Связь 3шт.docx"),
+]
+
+
+def _p(text: str) -> str:
+    return f'<w:p xmlns:w="{_W}"><w:r><w:t>{text}</w:t></w:r></w:p>'
+
+
+def _tc(text: str) -> str:
+    return f'<w:tc xmlns:w="{_W}"><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:tc>'
+
+
+def _tr(cells: list[str]) -> str:
+    inner = "".join(_tc(item) for item in cells)
+    return f'<w:tr xmlns:w="{_W}">{inner}</w:tr>'
+
+
+def make_sample_docx() -> bytes:
+    body = "".join(
+        [
+            _p("ДОГОВОР № 10 / 24"),
+            _p("на обслуживание узлов крепления"),
+            _p("для подвески волоконно-оптического кабеля"),
+            _p("на опорах наружного освещения"),
+            _p(
+                "Муниципальное казенное учреждение «Дирекция благоустройства города Кирова» "
+                "(далее – «Исполнитель»), и Общество с ограниченной ответственностью «ТТК-Связь» "
+                "(ООО «ТТК-Связь»), (далее – «Заказчик»), заключили настоящий договор."
+            ),
+            _p("1.2. Срок оказания услуг: с 01.01.2024 г. по 31.12.2024 г."),
+            f'<w:tbl xmlns:w="{_W}">'
+            + _tr(["№ п/п", "Адрес", "Количество узлов крепления (шт.)", "Количество опор (шт.)", "Примечание"])
+            + _tr(["1.", "ул. Карла Либкнехта", "1", "3", ""])
+            + _tr(["", "Итого:", "", "3", ""])
+            + "</w:tbl>",
+        ]
+    )
+    document = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<w:document xmlns:w="{_W}"><w:body>{body}</w:body></w:document>'
+    )
+    types = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        '<Default Extension="xml" ContentType="application/xml"/>'
+        '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+        "</Types>"
+    )
+    rels = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+        "</Relationships>"
+    )
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("[Content_Types].xml", types)
+        archive.writestr("_rels/.rels", rels)
+        archive.writestr("word/document.xml", document)
+    return buffer.getvalue()
+
+
+def test_parse_sample_address_program():
+    parsed = parse_agreement_docx(make_sample_docx())
+    assert parsed.number and "10" in parsed.number
+    assert parsed.customer_name and "ТТК" in parsed.customer_name
+    assert parsed.period_from.isoformat() == "2024-01-01"
+    assert len(parsed.sites) == 1
+    assert "Либкнехта" in parsed.sites[0].address
+    assert parsed.sites[0].poles_count == 3
+
+
+def test_parse_real_rostel_and_ttk_if_present():
+    available = [path for path in _REAL_FILES if path.is_file()]
+    if len(available) < 2:
+        return
+    parsed = [parse_agreement_docx(path) for path in available]
+    assert any(item.sites for item in parsed)
+    assert any(item.customer_name and "Ростелеком" in item.customer_name for item in parsed) or any(
+        item.customer_name and "ТТК" in item.customer_name for item in parsed
+    )
+
+
+def test_upload_and_address_lookup(admin_client, app):
+    resp = admin_client.get("/agreements/")
+    assert resp.status_code == 200
+    assert "Договора".encode("utf-8") in resp.data
+
+    uploaded = admin_client.post(
+        "/agreements/upload",
+        data={
+            "file": (io.BytesIO(make_sample_docx()), "ttk.docx"),
+            "submit": "Загрузить",
+        },
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    assert uploaded.status_code in {302, 303}
+
+    with app.app_context():
+        item = db.session.scalar(db.select(PoleAgreement))
+        assert item is not None
+        assert item.customer_name and "ТТК" in item.customer_name
+        assert item.sites
+
+    found = admin_client.get("/agreements/?q=Либкнехта")
+    assert found.status_code == 200
+    assert "Есть оборудование".encode("utf-8") in found.data
+    assert "ТТК".encode("utf-8") in found.data
+
+    missing = admin_client.get("/agreements/?q=улица Небылица")
+    assert missing.status_code == 200
+    assert "не видно".encode("utf-8") in missing.data

@@ -3,7 +3,10 @@
 from pathlib import Path
 
 from app.integrations.zakupki.parse import (
+    eis_number_year,
+    in_eis_year_range,
     is_supplier_defined,
+    keep_eis_listing,
     parse_contract_card,
     parse_contract_search,
     parse_money,
@@ -27,6 +30,7 @@ def test_parse_contract_search_links_and_stage():
     numbers = [item["reestr_number"] for item in listing["items"]]
     assert numbers[:2] == ["3434528856325000226", "3434528856326000110"]
     assert listing["items"][0]["stage"] == "Исполнение"
+    assert listing["items"][0]["listed_date"].isoformat() == "2025-11-18"
     assert listing["items"][0]["url"].endswith(
         "common-info.html?reestrNumber=3434528856325000226"
     )
@@ -62,6 +66,7 @@ def test_parse_order_search_object_and_status():
     assert first["status"] == "Подача заявок"
     assert "Гоголя" in (first["object_title"] or "")
     assert "освещения" in (first["object_title"] or "")
+    assert first["listed_date"].isoformat() == "2026-08-19"
     assert "common-info.html?regNumber=0740300000126000959" in first["url"]
 
 
@@ -125,6 +130,19 @@ def test_split_purchase_object_names_streets():
     assert "Портовая" in parts[0]
     assert parts[1].startswith("ул.")
     assert "проезд" in parts[2].casefold()
+
+
+def test_keep_eis_listing_from_2024_onward():
+    assert eis_number_year("0740300000126000959") == 2026
+    assert eis_number_year("3434528856325000226") == 2025
+    assert eis_number_year("0740300000119000123") == 2019
+    assert in_eis_year_range(2024)
+    assert in_eis_year_range(2026)
+    assert in_eis_year_range(2099)
+    assert not in_eis_year_range(2019)
+    assert not in_eis_year_range(2023)
+    assert keep_eis_listing("0740300000126000959")
+    assert not keep_eis_listing("0740300000119000123")
 
 
 def test_parse_money_nbsp_and_ruble():
