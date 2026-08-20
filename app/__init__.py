@@ -264,8 +264,8 @@ def _register_spa_nav(app: Flask) -> None:
 
         if getattr(g, "spa_nav", False):
             response.headers["X-Opora-Partial"] = "1"
-            response.headers["Vary"] = "X-Opora-Nav"
-            response.headers["Cache-Control"] = "private, no-store"
+            response.headers["Vary"] = "X-Opora-Nav, Cookie"
+            response.headers["Cache-Control"] = "private, max-age=30, stale-while-revalidate=90"
         return response
 
 

@@ -172,6 +172,128 @@ function initInstantNav(sidebar, closeSidebar) {
     const SHELL_ASSET = /bootstrap|main\.css|main\.js|opora-list|phone-mask|search\.js|search\.css|requests-form/;
     const SKELETON =
         '<div class="opora-loading" role="status"><div class="spinner-border text-primary"></div><div class="opora-loading__text">Загрузка…</div></div>';
+    const LIST_SHELLS = {
+        "/requests/": {
+            title: "Заявки",
+            subtitle: "Диспетчеризация: АБ → мастер → исполнение",
+            icon: "clipboard-check",
+            placeholder: "№, адрес, ПП, диспетчер…",
+            loading: "Загрузка заявок…",
+            baseUrl: "/requests",
+            filterFormId: "requestFilterForm",
+            tableContainerId: "requestsTableContainer",
+            paginationContainerId: "requestsPaginationContainer",
+            resetBtnId: "requestFilterReset",
+            pageLinkClass: "request-page-link",
+            viewMode: "page",
+            createTitle: "Новая заявка",
+        },
+        "/objects/": {
+            title: "Объекты",
+            subtitle: "Адресные лоты работ",
+            icon: "geo-alt",
+            placeholder: "Наименование, адрес…",
+            loading: "Загрузка объектов…",
+            baseUrl: "/objects",
+            filterFormId: "objectFilterForm",
+            tableContainerId: "objectsTableContainer",
+            paginationContainerId: "objectsPaginationContainer",
+            resetBtnId: "objectFilterReset",
+            pageLinkClass: "object-page-link",
+            viewMode: "modal",
+            createTitle: "Новый объект",
+        },
+        "/projects/": {
+            title: "Проекты",
+            subtitle: "Управление проектами предприятия",
+            icon: "folder2-open",
+            placeholder: "Код, название, описание…",
+            loading: "Загрузка проектов…",
+            baseUrl: "/projects",
+            filterFormId: "projectFilterForm",
+            tableContainerId: "projectsTableContainer",
+            paginationContainerId: "projectsPaginationContainer",
+            resetBtnId: "projectFilterReset",
+            pageLinkClass: "project-page-link",
+            viewMode: "modal",
+            createTitle: "Новый проект",
+        },
+        "/tenders/": {
+            title: "Заявки на торги",
+            subtitle: "Пакеты проектов для закупок",
+            icon: "hammer",
+            placeholder: "Номер, название…",
+            loading: "Загрузка торгов…",
+            baseUrl: "/tenders",
+            filterFormId: "tenderFilterForm",
+            tableContainerId: "tendersTableContainer",
+            paginationContainerId: "tendersPaginationContainer",
+            resetBtnId: "tenderFilterReset",
+            pageLinkClass: "tender-page-link",
+            viewMode: "page",
+            createTitle: "Новая заявка на торги",
+        },
+        "/contracts/": {
+            title: "Контракты",
+            subtitle: "Управление договорами предприятия",
+            icon: "file-earmark-text",
+            placeholder: "Номер, название…",
+            loading: "Загрузка контрактов…",
+            baseUrl: "/contracts",
+            filterFormId: "contractFilterForm",
+            tableContainerId: "contractsTableContainer",
+            paginationContainerId: "contractsPaginationContainer",
+            resetBtnId: "contractFilterReset",
+            pageLinkClass: "contract-page-link",
+            viewMode: "modal",
+            createTitle: "Новый контракт",
+        },
+        "/contractors/": {
+            title: "Подрядчики",
+            subtitle: "Организации из контрактов и ЕИС",
+            icon: "building",
+            placeholder: "Название, ИНН, адрес…",
+            loading: "Загрузка подрядчиков…",
+            baseUrl: "/contractors",
+            filterFormId: "contractorFilterForm",
+            tableContainerId: "contractorsTableContainer",
+            paginationContainerId: "contractorsPaginationContainer",
+            resetBtnId: "contractorFilterReset",
+            pageLinkClass: "contractor-page-link",
+            viewMode: "page",
+            createTitle: "Новый подрядчик",
+        },
+        "/employees/": {
+            title: "Сотрудники",
+            subtitle: "Управление персоналом",
+            icon: "people",
+            placeholder: "ФИО, email, должность…",
+            loading: "Загрузка сотрудников…",
+            baseUrl: "/employees",
+            filterFormId: "employeeFilterForm",
+            tableContainerId: "employeesTableContainer",
+            paginationContainerId: "employeesPaginationContainer",
+            resetBtnId: "employeeFilterReset",
+            pageLinkClass: "employee-page-link",
+            viewMode: "modal",
+            createTitle: "Новый сотрудник",
+        },
+        "/inquiries/": {
+            title: "Обращения",
+            subtitle: "Письма с корпоративной почты",
+            icon: "envelope",
+            placeholder: "Тема или отправитель…",
+            loading: "Загрузка писем…",
+            baseUrl: "/inquiries",
+            filterFormId: "inquiryFilterForm",
+            tableContainerId: "inquiriesTableContainer",
+            paginationContainerId: "inquiriesPaginationContainer",
+            resetBtnId: "inquiryFilterReset",
+            pageLinkClass: "inquiry-page-link",
+            viewMode: "page",
+            createTitle: "",
+        },
+    };
 
     let navToken = 0;
     let overlayTimer = 0;
@@ -419,17 +541,113 @@ function initInstantNav(sidebar, closeSidebar) {
         return promise;
     }
 
+    function listShellFor(href) {
+        const url = new URL(href, window.location.href);
+        const path = url.pathname.endsWith("/") ? url.pathname : `${url.pathname}/`;
+        return LIST_SHELLS[path] || null;
+    }
+
+    function paintListShell(spec) {
+        const current = document.getElementById("appContent") || document.querySelector(".app-content");
+        if (!current) return false;
+        document.title = `${spec.title} — Опора`;
+        current.outerHTML = `<main class="app-content" id="appContent">
+            <div class="page-header">
+                <div class="page-header__content">
+                    <div class="page-header__icon"><i class="bi bi-${spec.icon}"></i></div>
+                    <div>
+                        <h1 class="page-header__title">${spec.title}</h1>
+                        <p class="page-header__subtitle">${spec.subtitle}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="card mb-4 list-filters">
+                <div class="card-header"><i class="bi bi-search"></i>Поиск</div>
+                <div class="card-body">
+                    <form id="${spec.filterFormId}" class="row g-3">
+                        <div class="col-lg-6">
+                            <label class="form-label">Поиск</label>
+                            <input type="search" name="q" class="form-control" placeholder="${spec.placeholder}" autocomplete="off">
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div id="${spec.tableContainerId}">
+                <div class="opora-loading" role="status">
+                    <div class="spinner-border text-primary"></div>
+                    <div class="opora-loading__text">${spec.loading}</div>
+                </div>
+            </div>
+            <div id="${spec.paginationContainerId}" class="mt-3"></div>
+            <div id="oporaListConfig" class="d-none"
+                 data-base-url="${spec.baseUrl}"
+                 data-filter-form-id="${spec.filterFormId}"
+                 data-table-container-id="${spec.tableContainerId}"
+                 data-pagination-container-id="${spec.paginationContainerId}"
+                 data-reset-btn-id="${spec.resetBtnId}"
+                 data-page-link-class="${spec.pageLinkClass}"
+                 data-create-title="${spec.createTitle}"
+                 data-view-mode="${spec.viewMode}"
+                 data-load-on-start="true"></div>
+        </main>`;
+        return true;
+    }
+
+    function mergeListChrome(html) {
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        const content = document.getElementById("appContent");
+        if (!content || !content.querySelector("#oporaListConfig")) return false;
+        document.title = doc.title || document.title;
+        const nextHeader = doc.querySelector(".page-header");
+        const curHeader = content.querySelector(".page-header");
+        if (nextHeader && curHeader) curHeader.replaceWith(nextHeader);
+        const nextFilters = doc.querySelector(".list-filters");
+        const curFilters = content.querySelector(".list-filters");
+        if (nextFilters && curFilters) curFilters.replaceWith(nextFilters);
+        else if (nextFilters && curHeader) curHeader.after(nextFilters);
+        const nextConfig = doc.querySelector("#oporaListConfig");
+        const curConfig = content.querySelector("#oporaListConfig");
+        if (nextConfig && curConfig) curConfig.replaceWith(nextConfig);
+        window.OporaList?.bindFilters?.();
+        return true;
+    }
+
     async function navigateTo(href, label, { push = true } = {}) {
         const token = ++navToken;
         markSidebar(href);
         closeSidebar();
 
+        const spec = listShellFor(href);
         const cached = cacheGet(href);
-        if (!cached) showSkeleton(label);
-        else hideLoading();
 
+        if (cached) {
+            hideLoading();
+            const ok = await applyHtml(cached);
+            if (token !== navToken) return;
+            if (!ok) {
+                window.location.href = href;
+                return;
+            }
+            if (push) history.pushState({ oporaNav: true }, "", href);
+            return;
+        }
+
+        if (spec) {
+            hideLoading();
+            window.OporaList?.reset?.();
+            paintListShell(spec);
+            window.OporaList?.bootPage?.();
+            if (push) history.pushState({ oporaNav: true }, "", href);
+            loadPageHtml(href).then((html) => {
+                if (token !== navToken || !html) return;
+                mergeListChrome(html);
+            });
+            return;
+        }
+
+        showSkeleton(label);
         try {
-            const html = cached || (await loadPageHtml(href));
+            const html = await loadPageHtml(href);
             if (token !== navToken) return;
             if (!html) {
                 window.location.href = href;

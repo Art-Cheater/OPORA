@@ -10,6 +10,8 @@ window.OporaList = (() => {
   let currentPage = 1;
   let debounceTimer = null;
   let tableAbort = null;
+  let tableInflight = new Map();
+  let tableToken = 0;
   let pendingDeleteId = null;
   let pendingDeleteUrl = null;
   let pendingDeleteMessage = null;
@@ -76,33 +78,44 @@ window.OporaList = (() => {
     return params;
   }
 
+  function fetchTable(url) {
+    const existing = tableInflight.get(url);
+    if (existing) return existing;
+    const promise = fetch(url, { headers: AJAX_HEADERS })
+      .then(async (response) => {
+        const data = await parseJsonResponse(response, "Не удалось обновить список");
+        if (!response.ok) throw new Error(data.message || "Не удалось обновить список");
+        return data;
+      })
+      .finally(() => {
+        if (tableInflight.get(url) === promise) tableInflight.delete(url);
+      });
+    tableInflight.set(url, promise);
+    return promise;
+  }
+
   async function loadTable() {
     const tableContainer = document.getElementById(config.tableContainerId);
     const paginationContainer = document.getElementById(config.paginationContainerId);
     if (!tableContainer) return;
 
-    // Отменяем предыдущий запрос фильтра — иначе при быстром вводе копятся медленные ответы
-    if (tableAbort) tableAbort.abort();
-    tableAbort = new AbortController();
+    const token = ++tableToken;
+    const url = `${config.baseUrl}/table?${queryParams().toString()}`;
     tableContainer.innerHTML = TABLE_LOADING_HTML;
     if (paginationContainer) paginationContainer.innerHTML = "";
 
-    const url = `${config.baseUrl}/table?${queryParams().toString()}`;
     try {
-      const response = await fetch(url, {
-        headers: AJAX_HEADERS,
-        signal: tableAbort.signal,
-      });
-      const data = await parseJsonResponse(response, "Не удалось обновить список");
-      if (!response.ok) throw new Error(data.message || "Не удалось обновить список");
-      tableContainer.innerHTML = data.table_html;
-      if (paginationContainer) {
-        paginationContainer.innerHTML = data.pagination_html;
-      }
+      const data = await fetchTable(url);
+      if (token !== tableToken) return;
+      const liveTable = document.getElementById(config.tableContainerId);
+      const livePager = document.getElementById(config.paginationContainerId);
+      if (!liveTable) return;
+      liveTable.innerHTML = data.table_html;
+      if (livePager) livePager.innerHTML = data.pagination_html;
       bindTableEvents();
       bindPagination();
     } catch (err) {
-      if (err?.name === "AbortError") return;
+      if (err?.name === "AbortError" || token !== tableToken) return;
       showToast(err?.message || "Не удалось обновить список", "danger");
     }
   }
@@ -588,6 +601,8 @@ window.OporaList = (() => {
     const form = document.getElementById(config.filterFormId);
     const resetBtn = document.getElementById(config.resetBtnId);
     if (!form) return;
+    if (form.dataset.oporaFilterBound === "1") return;
+    form.dataset.oporaFilterBound = "1";
 
     function debouncedReload() {
       clearTimeout(debounceTimer);
@@ -615,7 +630,13 @@ window.OporaList = (() => {
     });
   }
 
+  function bindFilters() {
+    initFilter();
+    initChoiceSearch(document);
+  }
+
   function reset() {
+    tableToken += 1;
     if (tableAbort) tableAbort.abort();
     tableAbort = null;
     config = {};
@@ -670,5 +691,5 @@ window.OporaList = (() => {
     bootPage();
   }
 
-  return { init, reset, bootPage, loadTable, showToast, openView, openEdit, openCreate, initFromConfigElement };
+  return { init, reset, bootPage, bindFilters, loadTable, showToast, openView, openEdit, openCreate, initFromConfigElement };
 })();

@@ -63,6 +63,7 @@ def test_spa_nav_returns_content_without_shell(admin_client):
     assert "vendor/bootstrap" not in html
     assert "js/opora-list.js" not in html
     assert page.headers.get("X-Opora-Partial") == "1"
+    assert "max-age=" in (page.headers.get("Cache-Control") or "")
 
     full = admin_client.get("/projects/")
     assert full.status_code == 200
