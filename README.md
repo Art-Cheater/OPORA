@@ -65,6 +65,9 @@ cp .env.example .env
 # Production (сервер)
 docker compose up --build -d
 
+# Чтобы контейнеры сами поднимались после перезагрузки Windows:
+# powershell -ExecutionPolicy Bypass -File .\scripts\install-autostart.ps1
+
 # Локальная разработка с hot-reload
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```

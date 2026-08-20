@@ -147,7 +147,36 @@ docker compose down
 
 ---
 
-## 7. Локальная разработка (другой ПК)
+## 7. Чтобы сайт сам поднимался после сбоя и перезагрузки
+
+Контейнеры уже разделены: **`opora_web`** (сайт) и **`opora_db`** (PostgreSQL).  
+У обоих стоит `restart: always` — Docker сам перезапустит процесс, если он упал.  
+Сервис `opora_autoheal` перезапускает контейнер, если процесс жив, но сайт не отвечает на `/health`.
+
+Дополнительно на Windows нужно, чтобы **сам Docker** стартовал после перезагрузки ПК.
+
+1. Docker Desktop → **Settings → General** → включите **Start Docker Desktop when you sign in**.  
+2. От администратора один раз:
+
+```powershell
+cd C:\OPORA
+powershell -ExecutionPolicy Bypass -File .\scripts\install-autostart.ps1
+```
+
+Появится задача `OPORA_Containers_Autostart`: при старте Windows, при входе в систему и каждые 5 минут поднимает `docker compose up -d`, если контейнеры стоят.
+
+Проверка:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\ensure-up.ps1
+docker compose ps
+```
+
+Лог: `C:\OPORA\instance\ensure-up.log`.
+
+---
+
+## 8. Локальная разработка (другой ПК)
 
 На машине разработчика, с hot-reload исходников:
 
