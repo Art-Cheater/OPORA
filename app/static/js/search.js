@@ -105,7 +105,9 @@
       highlightItem(Math.max(activeIndex - 1, 0));
     } else if (e.key === "Enter" && activeIndex >= 0) {
       e.preventDefault();
-      window.location.href = flatItems[activeIndex].url;
+      const url = flatItems[activeIndex].url;
+      if (window.OporaNav?.go) window.OporaNav.go(url);
+      else window.location.href = url;
     }
   });
 

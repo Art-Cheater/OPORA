@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
 from flask import current_app, request, url_for
 from werkzeug.datastructures import FileStorage
 
@@ -392,10 +393,7 @@ class RequestService:
     def create_request(cls, payload: RequestPayload, user_id: uuid.UUID) -> Request:
         cls.validate_payload(payload)
         exists = db.session.scalar(
-            db.select(Request).where(
-                Request.number == payload.number.strip(),
-                Request.active_filter(),
-            )
+            db.select(Request.id).where(Request.number == payload.number.strip()).limit(1)
         )
         if exists is not None:
             raise ValidationError("Заявка с таким номером уже существует.")
@@ -435,7 +433,11 @@ class RequestService:
             updated_by=user_id,
         )
         db.session.add(req)
-        db.session.flush()
+        try:
+            db.session.flush()
+        except IntegrityError as exc:
+            db.session.rollback()
+            raise ValidationError("Заявка с таким номером уже существует.") from exc
 
         snapshot = cls._snapshot(req)
         cls._log_audit(

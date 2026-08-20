@@ -171,7 +171,12 @@ window.OporaList = (() => {
   function openView(id) {
     if (!id) return;
     if (config.viewMode === "page") {
-      window.location.href = `${config.baseUrl}/${id}`;
+      const href = `${config.baseUrl}/${id}`;
+      if (window.OporaNav?.go) {
+        window.OporaNav.go(href);
+        return;
+      }
+      window.location.href = href;
       return;
     }
     return openViewModal(id);
@@ -357,21 +362,30 @@ window.OporaList = (() => {
       if (submitBtn) submitBtn.disabled = true;
 
       const doSubmit = async () => {
-        const response = await fetch(form.action, {
-          method: form.method || "POST",
+        const action = form.action;
+        const method = form.method || "POST";
+        const body = new FormData(form);
+        bootstrap.Modal.getInstance(formModal())?.hide();
+        showToast("Сохраняем…");
+        const response = await fetch(action, {
+          method,
           headers: AJAX_HEADERS,
-          body: new FormData(form),
+          body,
         });
         const data = await parseJsonResponse(response, "Ошибка сохранения");
         if (data.success) {
-          bootstrap.Modal.getInstance(formModal())?.hide();
           showToast(data.message || "Сохранено");
           if (data.redirect_url) {
+            if (window.OporaNav?.go) {
+              window.OporaNav.go(data.redirect_url);
+              return;
+            }
             window.location.href = data.redirect_url;
             return;
           }
           await refreshAfterMutation();
         } else {
+          bootstrap.Modal.getOrCreateInstance(formModal()).show();
           if (data.html) {
             formModalBody().innerHTML = data.html;
             const newForm = formModalBody().querySelector("form");
@@ -588,20 +602,39 @@ window.OporaList = (() => {
     });
   }
 
+  function reset() {
+    if (tableAbort) tableAbort.abort();
+    tableAbort = null;
+    config = {};
+    currentPage = 1;
+    clearTimeout(debounceTimer);
+  }
+
   function init(options) {
     config = options;
     initFilter();
     bindTableEvents();
     bindPagination();
-    bindGlobalActions();
+    if (!window.__oporaListGlobalBound) {
+      bindGlobalActions();
+      window.__oporaListGlobalBound = true;
+    }
     if (config.loadOnStart) {
       loadTable();
     }
   }
 
+  function bootPage() {
+    initFromConfigElement();
+    initChoiceSearch(document);
+  }
+
   function initFromConfigElement() {
     const cfg = document.getElementById("oporaListConfig");
-    if (!cfg) return;
+    if (!cfg) {
+      reset();
+      return;
+    }
     init({
       baseUrl: cfg.dataset.baseUrl,
       filterFormId: cfg.dataset.filterFormId,
@@ -619,14 +652,10 @@ window.OporaList = (() => {
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-      initFromConfigElement();
-      initChoiceSearch(document);
-    });
+    document.addEventListener("DOMContentLoaded", bootPage);
   } else {
-    initFromConfigElement();
-    initChoiceSearch(document);
+    bootPage();
   }
 
-  return { init, loadTable, showToast, openView, openEdit, openCreate, initFromConfigElement };
+  return { init, reset, bootPage, loadTable, showToast, openView, openEdit, openCreate, initFromConfigElement };
 })();

@@ -219,7 +219,6 @@ def _prepare_request_form(form: RequestForm) -> None:
     statuses = RequestRepository.get_statuses()
     masters = RequestRepository.get_masters()
     dispatchers = RequestRepository.get_dispatchers()
-    users = RequestRepository.get_users()
 
     form.status_id.choices = [(str(item.id), item.name) for item in statuses]
     form.responsible_id.choices = [("", "Не назначен")] + [
@@ -228,9 +227,7 @@ def _prepare_request_form(form: RequestForm) -> None:
     form.dispatcher_name.choices = [("", "Выберите диспетчера")] + [
         (d.name, d.name) for d in dispatchers
     ]
-    form.executor_id.choices = [("", "Не назначен")] + [
-        (str(item.id), item.full_name) for item in users
-    ]
+    form.executor_id.choices = [("", "Не назначен")]
     BuiltinFieldService.apply_to_form(form, "requests")
 
 
@@ -559,6 +556,20 @@ def create():
                 )
                 return ajax_error(str(exc), html=html)
             flash(str(exc), "danger")
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("Не удалось создать заявку")
+            message = "Не удалось сохранить заявку. Проверьте поля и повторите."
+            if is_ajax():
+                html = render_template(
+                    "requests/partials/form_modal.html",
+                    form=form,
+                    form_action=url_for("requests.create"),
+                    mode="create",
+                    **_cf_form(),
+                )
+                return ajax_error(message, html=html)
+            flash(message, "danger")
     elif is_ajax() and request.method == "POST":
         html = render_template(
             "requests/partials/form_modal.html",

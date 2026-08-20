@@ -297,7 +297,7 @@ class RequestRepository:
         prefix = f"REQ-{year}-"
         last = db.session.scalar(
             db.select(Request.number)
-            .where(Request.number.ilike(f"{prefix}%"), Request.active_filter())
+            .where(Request.number.ilike(f"{prefix}%"))
             .order_by(Request.number.desc())
             .limit(1)
         )

@@ -125,7 +125,7 @@ def search_streets(query: str, *, limit: int = 8) -> list[CatalogHit]:
     ranked: list[tuple[int, StreetRecord]] = []
     for street in all_streets():
         score = _name_score(name, street.name) + _kind_bonus(kind, street.kind)
-        if score < 58:
+        if score < 40:
             continue
         ranked.append((score, street))
 

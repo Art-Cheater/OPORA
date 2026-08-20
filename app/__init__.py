@@ -32,6 +32,7 @@ def create_app(config_name: str | None = None) -> Flask:
     register_blueprints(app)
     _register_audit_hooks(app)
     _register_security_hooks(app)
+    _register_spa_nav(app)
     _register_error_handlers(app)
     _register_context_processors(app)
     _register_template_filters(app)
@@ -231,6 +232,41 @@ def _register_security_hooks(app: Flask) -> None:
             logout_user()
             flash("Ваша учётная запись заблокирована или деактивирована.", "danger")
             return redirect(url_for("auth.login"))
+
+
+def _register_spa_nav(app: Flask) -> None:
+    """Клиентский кабинет: по заголовку отдаём только середину страницы, без сайдбара."""
+
+    @app.before_request
+    def detect_spa_nav():
+        from flask import g, request
+        from flask_login import current_user
+
+        g.spa_nav = False
+        if request.method != "GET":
+            return
+        if request.headers.get("X-Opora-Nav") != "1":
+            return
+        if _is_static_request(request) or request.path == "/health":
+            return
+        path = request.path or ""
+        if path.startswith("/messenger") or path.startswith("/auth"):
+            return
+        if "/download" in path or path.rstrip("/").endswith("/export"):
+            return
+        if not getattr(current_user, "is_authenticated", False):
+            return
+        g.spa_nav = True
+
+    @app.after_request
+    def spa_nav_headers(response):
+        from flask import g
+
+        if getattr(g, "spa_nav", False):
+            response.headers["X-Opora-Partial"] = "1"
+            response.headers["Vary"] = "X-Opora-Nav"
+            response.headers["Cache-Control"] = "private, no-store"
+        return response
 
 
 def _register_error_handlers(app: Flask) -> None:

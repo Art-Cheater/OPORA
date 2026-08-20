@@ -122,31 +122,20 @@ class AddressSuggestionService:
         if len(cleaned) < 3:
             return []
         safe_limit = min(max(int(limit or self.default_limit), 1), 20)
-        regional_query = cleaned
-        folded = cleaned.casefold()
-        if "кировск" not in folded and "кировская область" not in folded:
-            regional_query = f"{cleaned}, Кировская область"
-
-        found = self._search_provider(regional_query, safe_limit)
-        ranked = self._rank_region(found, cleaned)
         catalog = [
             replace(item.with_query(cleaned), other_settlement=False)
             for item in self.fallback.search(cleaned, limit=safe_limit)
         ]
-        merged: list[AddressSuggestion] = []
-        seen: set[tuple[str, str]] = set()
-        for item in catalog + ranked:
-            key = (
-                (item.street or item.normalized_address).casefold(),
-                (item.district or ""),
-            )
-            if key in seen:
-                continue
-            seen.add(key)
-            merged.append(item)
-            if len(merged) >= safe_limit:
-                break
-        return merged
+        if catalog:
+            return catalog[:safe_limit]
+
+        # Внешний геокодер только если улицы нет в справочнике Кирова.
+        regional_query = cleaned
+        folded = cleaned.casefold()
+        if "кировск" not in folded and "кировская область" not in folded:
+            regional_query = f"{cleaned}, Кировская область"
+        found = self._search_provider(regional_query, safe_limit)
+        return self._rank_region(found, cleaned)[:safe_limit]
 
     @classmethod
     def _rank_region(

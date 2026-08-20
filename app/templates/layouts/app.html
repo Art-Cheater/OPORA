@@ -1,8 +1,9 @@
-{% extends "layouts/base.html" %}
+{% extends "layouts/spa_shell.html" if g.spa_nav|default(false) else "layouts/base.html" %}
 
 {% block body_class %}app-body{% endblock %}
 
 {% block body %}
+{% if not g.spa_nav|default(false) %}
 <div class="app-shell" id="appShell">
     {% include "components/sidebar.html" %}
 
@@ -16,13 +17,13 @@
                 <p class="page-loading__hint">Раздел открыт, данные подгружаются</p>
             </div>
         </div>
-
-        <main class="app-content">
+{% endif %}
+        <main class="app-content" id="appContent">
             {% include "components/flash_messages.html" %}
             {% block page_header %}{% endblock %}
             {% block content %}{% endblock %}
         </main>
-
+{% if not g.spa_nav|default(false) %}
         <footer class="app-footer">
             <span>&copy; {{ app_name }} v{{ app_version }}</span>
             <span class="text-muted">Корпоративная информационная система</span>
@@ -33,15 +34,20 @@
 {% include "components/crud_modals.html" %}
 {% from "macros/files.html" import file_preview_modal %}
 {{ file_preview_modal() }}
+{% endif %}
 {% endblock %}
 
 {% block extra_css %}
+{% if not g.spa_nav|default(false) %}
 <link href="{{ url_for('static', filename='css/search.css') }}" rel="stylesheet">
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
+{% if not g.spa_nav|default(false) %}
 <script src="{{ url_for('static', filename='js/phone-mask.js') }}"></script>
 <script src="{{ url_for('static', filename='js/opora-list.js') }}"></script>
 <script src="{{ url_for('static', filename='js/requests-form.js') }}"></script>
 <script src="{{ url_for('static', filename='js/search.js') }}"></script>
+{% endif %}
 {% endblock %}

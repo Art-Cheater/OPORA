@@ -163,69 +163,321 @@ function initSidebar() {
 function initInstantNav(sidebar, closeSidebar) {
     const loading = document.getElementById("pageLoading");
     const loadingTitle = document.getElementById("pageLoadingTitle");
-    if (!loading) return;
+    const shell = document.getElementById("appShell");
+    if (!loading || !shell) return;
+
+    const CACHE_TTL = 45000;
+    const OVERLAY_MS = 400;
+    const pageCache = new Map();
+    const SHELL_ASSET = /bootstrap|main\.css|main\.js|opora-list|phone-mask|search\.js|search\.css|requests-form/;
+    const SKELETON =
+        '<div class="opora-loading" role="status"><div class="spinner-border text-primary"></div><div class="opora-loading__text">Загрузка…</div></div>';
+
+    let navAbort = null;
+    let navToken = 0;
+    let overlayTimer = 0;
+
+    function cacheKey(href) {
+        const url = new URL(href, window.location.href);
+        url.hash = "";
+        return url.pathname + url.search;
+    }
+
+    function cacheGet(href) {
+        const item = pageCache.get(cacheKey(href));
+        if (!item || Date.now() - item.t > CACHE_TTL) {
+            if (item) pageCache.delete(cacheKey(href));
+            return null;
+        }
+        return item.html;
+    }
+
+    function cacheSet(href, html) {
+        pageCache.set(cacheKey(href), { html, t: Date.now() });
+        if (pageCache.size > 24) {
+            pageCache.delete(pageCache.keys().next().value);
+        }
+    }
+
+    function mustFullReload(url) {
+        const path = url.pathname;
+        return (
+            path.startsWith("/messenger") ||
+            path.startsWith("/auth/") ||
+            path.includes("/download") ||
+            path.includes("/export") ||
+            path.includes("/file/")
+        );
+    }
+
+    function spaTarget(link, event) {
+        if (!link || link.classList.contains("sidebar__link--disabled")) return null;
+        if (event.defaultPrevented) return null;
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return null;
+        if (link.target && link.target !== "_self") return null;
+        if (link.hasAttribute("download")) return null;
+        if (link.dataset.bsToggle || link.getAttribute("data-bs-toggle")) return null;
+        const href = link.getAttribute("href");
+        if (!href || href === "#" || href.startsWith("javascript:") || href.startsWith("mailto:") || href.startsWith("tel:")) {
+            return null;
+        }
+        const next = new URL(href, window.location.href);
+        if (next.origin !== window.location.origin) return null;
+        if (mustFullReload(next)) return null;
+        return next;
+    }
 
     const hideLoading = () => {
+        window.clearTimeout(overlayTimer);
         document.body.classList.remove("is-page-loading");
         loading.hidden = true;
     };
 
-    window.addEventListener("pageshow", hideLoading);
-    window.addEventListener("pagehide", hideLoading);
+    const showSkeleton = (label) => {
+        const content = document.getElementById("appContent") || document.querySelector(".app-content");
+        if (content) content.innerHTML = SKELETON;
+        closeSidebar();
+        window.clearTimeout(overlayTimer);
+        overlayTimer = window.setTimeout(() => {
+            document.body.classList.add("is-page-loading");
+            if (loadingTitle) loadingTitle.textContent = label || "Загрузка";
+            loading.hidden = false;
+        }, OVERLAY_MS);
+    };
 
-    const prefetched = new Set();
-    function prefetch(href) {
-        if (!href || prefetched.has(href)) return;
-        prefetched.add(href);
-        const hint = document.createElement("link");
-        hint.rel = "prefetch";
-        hint.href = href;
-        hint.as = "document";
-        document.head.appendChild(hint);
+    const markSidebar = (href) => {
+        const next = new URL(href, window.location.href);
+        sidebar.querySelectorAll(".sidebar__link").forEach((item) => {
+            const itemHref = item.getAttribute("href");
+            if (!itemHref || itemHref === "#") {
+                item.classList.remove("active");
+                return;
+            }
+            const url = new URL(itemHref, window.location.href);
+            const base = url.pathname.replace(/\/$/, "") || "/";
+            const active =
+                base === "/"
+                    ? next.pathname === "/"
+                    : next.pathname === url.pathname ||
+                      next.pathname === base ||
+                      next.pathname.startsWith(`${base}/`);
+            item.classList.toggle("active", active);
+        });
+    };
+
+    function assetName(url) {
+        return (url || "").split("/").pop().split("?")[0];
     }
 
-    sidebar.addEventListener("pointerenter", (event) => {
-        const link = event.target.closest?.("a[href]");
-        if (!link || link.classList.contains("sidebar__link--disabled")) return;
-        const href = link.getAttribute("href");
-        if (!href || href === "#" || href.startsWith("javascript:")) return;
-        prefetch(new URL(href, window.location.href).href);
-        const page = new URL(href, window.location.href);
-        if (page.pathname.endsWith("/")) {
-            prefetch(new URL("table", page).href);
+    function hasScript(src) {
+        const name = assetName(src);
+        return [...document.scripts].some((item) => (item.src || "").includes(name));
+    }
+
+    function hasCss(href) {
+        const abs = new URL(href, window.location.href).href;
+        return [...document.querySelectorAll("link[rel='stylesheet']")].some((item) => item.href === abs);
+    }
+
+    function injectCss(href) {
+        return new Promise((resolve) => {
+            if (hasCss(href)) {
+                resolve();
+                return;
+            }
+            const link = document.createElement("link");
+            link.rel = "stylesheet";
+            link.href = href;
+            link.onload = () => resolve();
+            link.onerror = () => resolve();
+            document.head.appendChild(link);
+        });
+    }
+
+    function injectScript(src) {
+        return new Promise((resolve) => {
+            if (hasScript(src)) {
+                resolve();
+                return;
+            }
+            const script = document.createElement("script");
+            script.src = src;
+            script.onload = () => resolve();
+            script.onerror = () => resolve();
+            document.body.appendChild(script);
+        });
+    }
+
+    async function ensureAssets(doc) {
+        const css = [...doc.querySelectorAll("link[rel='stylesheet']")]
+            .map((el) => el.getAttribute("href"))
+            .filter((href) => href && !SHELL_ASSET.test(href));
+        const scripts = [...doc.querySelectorAll("script[src]")]
+            .map((el) => el.getAttribute("src"))
+            .filter((src) => src && !SHELL_ASSET.test(src));
+        await Promise.all(css.map(injectCss));
+        for (const src of scripts) {
+            await injectScript(src);
         }
-    }, true);
+    }
 
-    sidebar.addEventListener("click", (event) => {
-        const link = event.target.closest("a[href]");
-        if (!link || link.classList.contains("sidebar__link--disabled")) return;
-        if (event.defaultPrevented) return;
-        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    function bootPageModules() {
+        window.OporaList?.reset?.();
+        window.OporaList?.bootPage?.();
+        if (window.OporaRequestsForm?.init) {
+            document.querySelectorAll("[data-requests-form]").forEach((form) => {
+                delete form.dataset.requestsInited;
+                window.OporaRequestsForm.init(form);
+            });
+        }
+        if (document.getElementById("agreementMap")) {
+            window.OporaAgreementMap?.init?.();
+        }
+        if (document.getElementById("auditFilterForm")) {
+            window.OporaAudit?.init?.();
+        }
+        if (document.getElementById("requestMap")) {
+            window.OporaRequestDetail?.init?.();
+        }
+        initFlashMessages();
+    }
 
-        const href = link.getAttribute("href");
-        if (!href || href === "#" || href.startsWith("javascript:")) return;
+    async function applyHtml(html) {
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        const nextContent = doc.querySelector("#appContent, .app-content");
+        const currentContent = document.querySelector("#appContent, .app-content");
+        if (!nextContent || !currentContent) return false;
+        document.title = doc.title;
+        nextContent.querySelectorAll("script").forEach((node) => node.remove());
+        currentContent.replaceWith(nextContent);
+        await ensureAssets(doc);
+        bootPageModules();
+        return true;
+    }
 
-        const next = new URL(href, window.location.href);
-        if (next.origin !== window.location.origin) return;
-        if (
-            next.pathname === window.location.pathname &&
-            next.search === window.location.search
-        ) {
+    function isHtmlNavResponse(response) {
+        const ct = (response.headers.get("content-type") || "").toLowerCase();
+        if (!ct.includes("text/html")) return false;
+        const disp = (response.headers.get("content-disposition") || "").toLowerCase();
+        return !disp.includes("attachment");
+    }
+
+    function fetchPage(href, signal) {
+        return fetch(href, {
+            credentials: "same-origin",
+            headers: {
+                "X-Opora-Nav": "1",
+                "X-Requested-With": "OporaNav",
+                Accept: "text/html",
+            },
+            signal,
+        });
+    }
+
+    async function navigateTo(href, label, { push = true } = {}) {
+        const token = ++navToken;
+        navAbort?.abort();
+        navAbort = new AbortController();
+        markSidebar(href);
+        closeSidebar();
+
+        const cached = cacheGet(href);
+        if (cached) {
+            hideLoading();
+            const ok = await applyHtml(cached);
+            if (token !== navToken) return;
+            if (!ok) {
+                window.location.href = href;
+                return;
+            }
+            if (push) history.pushState({ oporaNav: true }, "", href);
             return;
         }
 
+        showSkeleton(label);
+        try {
+            const response = await fetchPage(href, navAbort.signal);
+            if (token !== navToken) return;
+            const finalUrl = response.url || href;
+            if (
+                !response.ok ||
+                (response.redirected && /\/auth\/login/.test(finalUrl)) ||
+                !isHtmlNavResponse(response)
+            ) {
+                window.location.href = href;
+                return;
+            }
+            const html = await response.text();
+            if (token !== navToken) return;
+            const ok = await applyHtml(html);
+            if (token !== navToken) return;
+            if (!ok) {
+                window.location.href = href;
+                return;
+            }
+            cacheSet(href, html);
+            if (push) history.pushState({ oporaNav: true }, "", href);
+            hideLoading();
+        } catch (err) {
+            if (err?.name === "AbortError" || token !== navToken) return;
+            window.location.href = href;
+        }
+    }
+
+    window.OporaNav = {
+        go(href, label) {
+            const next = new URL(href, window.location.href);
+            if (next.origin !== window.location.origin || mustFullReload(next)) {
+                window.location.href = next.href;
+                return;
+            }
+            navigateTo(next.href, label || "Загрузка");
+        },
+    };
+
+    function prefetch(href) {
+        if (cacheGet(href)) return;
+        const url = new URL(href, window.location.href);
+        if (url.origin !== window.location.origin || mustFullReload(url)) return;
+        fetchPage(href).then(async (response) => {
+            if (!response.ok || !isHtmlNavResponse(response)) return;
+            const html = await response.text();
+            if (html.includes("app-content")) cacheSet(href, html);
+        }).catch(() => {});
+    }
+
+    window.addEventListener("pageshow", hideLoading);
+    window.addEventListener("pagehide", () => {
+        navAbort?.abort();
+        hideLoading();
+    });
+    window.addEventListener("popstate", () => {
+        navigateTo(window.location.href, "Загрузка", { push: false });
+    });
+    history.replaceState({ oporaNav: true }, "", window.location.href);
+
+    shell.addEventListener("click", (event) => {
+        const link = event.target.closest("a[href]");
+        const next = spaTarget(link, event);
+        if (!next) return;
+        if (next.pathname === window.location.pathname && next.search === window.location.search) {
+            event.preventDefault();
+            return;
+        }
+        event.preventDefault();
         const label =
             link.querySelector("span:not(.sidebar__badge)")?.textContent?.trim() ||
+            link.textContent?.trim() ||
             "Загрузка";
-        document.body.classList.add("is-page-loading");
-        sidebar.querySelectorAll(".sidebar__link.active").forEach((item) => {
-            item.classList.remove("active");
-        });
-        link.classList.add("active");
-        if (loadingTitle) loadingTitle.textContent = label;
-        loading.hidden = false;
-        closeSidebar();
-        window.setTimeout(hideLoading, 8000);
+        navigateTo(next.href, label);
+    });
+
+    sidebar.addEventListener("pointerover", (event) => {
+        const link = event.target.closest("a[href]");
+        if (!link || !sidebar.contains(link)) return;
+        const href = link.getAttribute("href");
+        if (!href || href === "#") return;
+        prefetch(href);
     });
 }
 

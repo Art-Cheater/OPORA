@@ -1,6 +1,13 @@
-(() => {
+window.OporaAgreementMap = {
+  _map: null,
+  init() {
   const mapNode = document.getElementById("agreementMap");
   if (!mapNode || typeof L === "undefined") return;
+
+  if (this._map) {
+    this._map.remove();
+    this._map = null;
+  }
 
   const src = mapNode.getAttribute("data-src");
   if (!src) return;
@@ -10,6 +17,7 @@
   const COLORS = ["#c45c26", "#1d4ed8", "#0f766e", "#7c3aed", "#b45309", "#be123c", "#0369a1"];
 
   const map = L.map(mapNode, { zoomControl: true });
+  this._map = map;
   L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
     maxZoom: 19,
     subdomains: "abcd",
@@ -154,4 +162,10 @@
   }
 
   load();
-})();
+  },
+};
+document.addEventListener("DOMContentLoaded", () => {
+  if (document.getElementById("agreementMap")) {
+    window.OporaAgreementMap.init();
+  }
+});
