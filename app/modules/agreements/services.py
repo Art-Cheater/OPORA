@@ -22,7 +22,7 @@ from app.modules.agreements.geocode import geocode_address, geocode_query
 from app.modules.agreements.parse_docx import (
     WRONG_AGREEMENT_MESSAGE,
     ParsedAgreement,
-    parse_agreement_docx,
+    parse_agreement_file,
     normalize_agreement_number,
 )
 from app.modules.requests.address_format import normalize_address, split_address_query
@@ -173,7 +173,7 @@ class AgreementService:
         hidden = cls.collapse_duplicates(user_id)
         saved: SavedUpload = save_upload(file_storage, relative_dir="agreements")
         path = Path(current_app.config["UPLOAD_FOLDER"]) / saved.storage_key
-        parsed = parse_agreement_docx(path)
+        parsed = parse_agreement_file(path)
         if not parsed.sites or WRONG_AGREEMENT_MESSAGE in parsed.warnings:
             path.unlink(missing_ok=True)
             raise ValidationError(WRONG_AGREEMENT_MESSAGE)

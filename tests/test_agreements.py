@@ -329,3 +329,92 @@ def test_index_hides_duplicate_numbers(admin_client, app):
             )
             == 1
         )
+
+
+def make_sample_odt() -> bytes:
+    ns_office = "urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+    ns_text = "urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+    ns_table = "urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+
+    def p(text: str) -> str:
+        return f'<text:p xmlns:text="{ns_text}">{text}</text:p>'
+
+    def cell(text: str) -> str:
+        return f'<table:table-cell xmlns:table="{ns_table}" xmlns:text="{ns_text}"><text:p>{text}</text:p></table:table-cell>'
+
+    def row(cells: list[str]) -> str:
+        return f'<table:table-row xmlns:table="{ns_table}">{"".join(cell(item) for item in cells)}</table:table-row>'
+
+    table = (
+        f'<table:table xmlns:table="{ns_table}">'
+        + row(["№ п/п", "Адрес", "Количество узлов крепления (шт.)", "Количество опор (шт.)", "Примечание"])
+        + row(["1.", "ул. Карла Либкнехта", "1", "3", ""])
+        + "</table:table>"
+    )
+    content = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        f'<office:document-content xmlns:office="{ns_office}" xmlns:text="{ns_text}" xmlns:table="{ns_table}">'
+        "<office:body><office:text>"
+        f"{p('ДОГОВОР № 10 / 24')}"
+        f"{p('на обслуживание узлов крепления')}"
+        f"{p('для подвески волоконно-оптического кабеля на опорах наружного освещения')}"
+        f"{p('Муниципальное казенное учреждение «Дирекция благоустройства города Кирова» (далее – «Исполнитель»), и ООО «ТТК-Связь», (далее – «Заказчик»), заключили настоящий договор.')}"
+        f"{p('Срок оказания услуг: с 01.01.2024 г. по 31.12.2024 г.')}"
+        f"{table}"
+        "</office:text></office:body></office:document-content>"
+    )
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("mimetype", "application/vnd.oasis.opendocument.text")
+        archive.writestr("content.xml", content)
+    return buffer.getvalue()
+
+
+def test_parse_odt_and_file_dispatcher():
+    from app.modules.agreements.parse_docx import parse_agreement_file, parse_agreement_odt
+
+    parsed = parse_agreement_odt(make_sample_odt())
+    assert parsed.number == "10/24"
+    assert len(parsed.sites) == 1
+    assert "Либкнехта" in parsed.sites[0].address
+    again = parse_agreement_file(make_sample_odt())
+    assert len(again.sites) == 1
+
+
+def test_doc_upload_converts_via_stub(admin_client, app, monkeypatch, tmp_path):
+    from app.modules.agreements import convert as convert_mod
+
+    def fake_to_docx(path):
+        out = tmp_path / "from-doc.docx"
+        out.write_bytes(make_sample_docx())
+        return out
+
+    monkeypatch.setattr(convert_mod, "to_docx_path", fake_to_docx)
+    uploaded = admin_client.post(
+        "/agreements/upload",
+        data={
+            "file": (io.BytesIO(b"\xd0\xcf\x11\xe0" + b"\x00" * 80), "ttk.doc"),
+            "submit": "Загрузить",
+        },
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    assert uploaded.status_code == 200
+    assert "Загружен".encode("utf-8") in uploaded.data
+    with app.app_context():
+        item = db.session.scalar(db.select(PoleAgreement).where(PoleAgreement.active_filter()))
+        assert item is not None
+        assert item.sites
+
+
+def test_doc_without_converter_explains(monkeypatch):
+    from app.core.exceptions import ValidationError
+    from app.modules.agreements.parse_docx import parse_agreement_file
+
+    monkeypatch.setattr("app.modules.agreements.convert.soffice_binary", lambda: None)
+    monkeypatch.setattr("app.modules.agreements.convert._convert_with_word", lambda path: None)
+    try:
+        parse_agreement_file(b"\xd0\xcf\x11\xe0" + b"\x00" * 80)
+        raise AssertionError("expected ValidationError")
+    except ValidationError as exc:
+        assert "docx" in str(exc).casefold() or "LibreOffice" in str(exc)

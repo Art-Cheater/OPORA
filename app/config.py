@@ -183,6 +183,15 @@ class Config:
     EIS_YEAR_FROM = int(os.getenv("EIS_YEAR_FROM", "2024"))
     EIS_YEAR_TO = int(os.getenv("EIS_YEAR_TO", "2100"))
 
+    INQUIRY_MAILBOX = os.getenv("INQUIRY_MAILBOX", "kirovsvet@mail.ru").strip() or "kirovsvet@mail.ru"
+    INQUIRY_IMAP_HOST = os.getenv("INQUIRY_IMAP_HOST", "imap.mail.ru").strip() or "imap.mail.ru"
+    INQUIRY_IMAP_PORT = int(os.getenv("INQUIRY_IMAP_PORT", "993"))
+    INQUIRY_IMAP_USER = os.getenv("INQUIRY_IMAP_USER", "").strip() or INQUIRY_MAILBOX
+    INQUIRY_IMAP_PASSWORD = os.getenv("INQUIRY_IMAP_PASSWORD", "").strip().strip('"').strip("'")
+    INQUIRY_IMAP_FOLDER = os.getenv("INQUIRY_IMAP_FOLDER", "INBOX").strip() or "INBOX"
+    INQUIRY_FETCH_LIMIT = int(os.getenv("INQUIRY_FETCH_LIMIT", "40"))
+    INQUIRY_SYNC_INTERVAL_SECONDS = int(os.getenv("INQUIRY_SYNC_INTERVAL_SECONDS", "120"))
+
     # Профилировщик полностью выключен по умолчанию и никогда не пишет SQL-параметры.
     PERFORMANCE_PROFILER_ENABLED = _env_bool("PERFORMANCE_PROFILER_ENABLED")
     PERFORMANCE_PROFILER_LOG_ALL = _env_bool("PERFORMANCE_PROFILER_LOG_ALL")

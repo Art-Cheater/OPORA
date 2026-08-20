@@ -184,21 +184,26 @@ def _read_document_xml(source: Path | bytes) -> ET.Element:
     return ET.fromstring(xml)
 
 
-def _sites_from_tables(tables: list[ET.Element]) -> list[ParsedSite]:
+TableGrid = list[list[str]]
+
+_ODT_OFFICE = "{urn:oasis:names:tc:opendocument:xmlns:office:1.0}"
+_ODT_TEXT = "{urn:oasis:names:tc:opendocument:xmlns:text:1.0}"
+_ODT_TABLE = "{urn:oasis:names:tc:opendocument:xmlns:table:1.0}"
+
+
+def _sites_from_grids(tables: list[TableGrid]) -> list[ParsedSite]:
     sites: list[ParsedSite] = []
-    for table in tables:
-        rows = table.findall(f"{_W}tr")
+    for rows in tables:
         if not rows:
             continue
-        header = [_texts(cell) for cell in rows[0].findall(f"{_W}tc")]
+        header = rows[0]
         if not _is_address_header(header):
             continue
         mapping = _cell_map(header)
         addr_idx = mapping.get("address")
         if addr_idx is None:
             continue
-        for row in rows[1:]:
-            cells = [_texts(cell) for cell in row.findall(f"{_W}tc")]
+        for cells in rows[1:]:
             address = cells[addr_idx].strip() if addr_idx < len(cells) else ""
             if not address or address.casefold().startswith("итого"):
                 continue
@@ -235,18 +240,58 @@ def _sites_from_tables(tables: list[ET.Element]) -> list[ParsedSite]:
     return sites
 
 
-def _looks_like_pole_document(paras: list[str], sites: list[ParsedSite]) -> bool:
-    if sites:
-        return True
-    blob = " ".join(paras[:40]).casefold()
-    return sum(1 for hint in _POLE_HINTS if hint in blob) >= 2
+def _docx_grids(root: ET.Element) -> list[TableGrid]:
+    grids: list[TableGrid] = []
+    for table in root.iter(f"{_W}tbl"):
+        rows: TableGrid = []
+        for row in table.findall(f"{_W}tr"):
+            rows.append([_texts(cell) for cell in row.findall(f"{_W}tc")])
+        if rows:
+            grids.append(rows)
+    return grids
 
 
-def parse_agreement_docx(source: Path | bytes) -> ParsedAgreement:
-    root = _read_document_xml(source)
-    paras = [_texts(para) for para in root.iter(f"{_W}p")]
-    paras = [item for item in paras if item]
+def _odt_cell_text(cell: ET.Element) -> str:
+    return _SPACE_RE.sub(" ", "".join(cell.itertext())).strip()
 
+
+def _odt_repeat(el: ET.Element, attr: str) -> int:
+    raw = el.attrib.get(attr) or el.attrib.get(attr.split("}")[-1]) or "1"
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 1
+
+
+def _odt_grids(root: ET.Element) -> list[TableGrid]:
+    grids: list[TableGrid] = []
+    for table in root.iter(f"{_ODT_TABLE}table"):
+        rows: TableGrid = []
+        for row in table.findall(f"{_ODT_TABLE}table-row"):
+            cells: list[str] = []
+            for cell in row.findall(f"{_ODT_TABLE}table-cell"):
+                text = _odt_cell_text(cell)
+                for _ in range(_odt_repeat(cell, f"{_ODT_TABLE}number-columns-repeated")):
+                    cells.append(text)
+            for _ in range(_odt_repeat(row, f"{_ODT_TABLE}number-rows-repeated")):
+                rows.append(list(cells))
+        if rows:
+            grids.append(rows)
+    return grids
+
+
+def _odt_paras(root: ET.Element) -> list[str]:
+    paras: list[str] = []
+    for el in root.iter():
+        if el.tag not in {f"{_ODT_TEXT}p", f"{_ODT_TEXT}h"}:
+            continue
+        text = _SPACE_RE.sub(" ", "".join(el.itertext())).strip()
+        if text:
+            paras.append(text)
+    return paras
+
+
+def assemble_agreement(paras: list[str], tables: list[TableGrid]) -> ParsedAgreement:
     number = _extract_number(paras)
     subject_parts: list[str] = []
     for para in paras[:12]:
@@ -272,18 +317,14 @@ def parse_agreement_docx(source: Path | bytes) -> ParsedAgreement:
         customer_name = _preferred_customer(cust_match.group(1))
 
     customer_inn = None
-    tables = list(root.iter(f"{_W}tbl"))
-    for table in tables:
-        rows = table.findall(f"{_W}tr")
-        if not rows:
-            continue
-        cells = [_texts(cell) for cell in rows[0].findall(f"{_W}tc")]
-        for cell in cells:
-            name, inn = _customer_from_cell(cell)
-            if inn:
-                customer_inn = customer_inn or inn
-            if name and not customer_name:
-                customer_name = name
+    for rows in tables:
+        for row in rows[:2]:
+            for cell in row:
+                name, inn = _customer_from_cell(cell)
+                if inn:
+                    customer_inn = customer_inn or inn
+                if name and not customer_name:
+                    customer_name = name
 
     period_from = period_to = None
     for para in paras:
@@ -293,7 +334,7 @@ def parse_agreement_docx(source: Path | bytes) -> ParsedAgreement:
             period_to = _parse_date(period_match.group(2))
             break
 
-    sites = _sites_from_tables(tables)
+    sites = _sites_from_grids(tables)
     warnings: list[str] = []
     if not _looks_like_pole_document(paras, sites) or not sites:
         warnings.append(WRONG_AGREEMENT_MESSAGE)
@@ -318,3 +359,70 @@ def parse_agreement_docx(source: Path | bytes) -> ParsedAgreement:
         sites=sites,
         warnings=warnings,
     )
+
+
+def _looks_like_pole_document(paras: list[str], sites: list[ParsedSite]) -> bool:
+    if sites:
+        return True
+    blob = " ".join(paras[:40]).casefold()
+    return sum(1 for hint in _POLE_HINTS if hint in blob) >= 2
+
+
+def parse_agreement_docx(source: Path | bytes) -> ParsedAgreement:
+    root = _read_document_xml(source)
+    paras = [_texts(para) for para in root.iter(f"{_W}p")]
+    paras = [item for item in paras if item]
+    return assemble_agreement(paras, _docx_grids(root))
+
+
+def parse_agreement_odt(source: Path | bytes) -> ParsedAgreement:
+    data = source if isinstance(source, bytes) else Path(source).read_bytes()
+    with zipfile.ZipFile(BytesIO(data)) as archive:
+        xml = archive.read("content.xml")
+    root = ET.fromstring(xml)
+    return assemble_agreement(_odt_paras(root), _odt_grids(root))
+
+
+def parse_agreement_file(source: Path | bytes) -> ParsedAgreement:
+    """Docx сразу, odt из XML, остальное (.doc, .rtf, PDF) — через конвертер в docx."""
+
+    import os
+    import shutil
+    import tempfile
+
+    from app.core.exceptions import ValidationError
+    from app.modules.agreements.convert import office_kind, to_docx_path
+
+    own_tmp: Path | None = None
+    converted: Path | None = None
+    if isinstance(source, (bytes, bytearray)):
+        handle, name = tempfile.mkstemp(suffix=".bin")
+        os.close(handle)
+        own_tmp = Path(name)
+        own_tmp.write_bytes(bytes(source))
+        path = own_tmp
+    else:
+        path = Path(source)
+
+    try:
+        kind = office_kind(path)
+        if kind in {"docx", "docm"}:
+            return parse_agreement_docx(path)
+        if kind == "odt":
+            parsed = parse_agreement_odt(path)
+            if parsed.sites:
+                return parsed
+        converted = to_docx_path(path)
+        return parse_agreement_docx(converted)
+    except ValidationError:
+        raise
+    except (KeyError, zipfile.BadZipFile, ET.ParseError) as exc:
+        raise ValidationError("Не удалось прочитать файл договора.") from exc
+    finally:
+        if converted is not None and converted != path:
+            parent = converted.parent
+            converted.unlink(missing_ok=True)
+            if parent.name.startswith("opora-office-") or parent.name.startswith("opora-word-"):
+                shutil.rmtree(parent, ignore_errors=True)
+        if own_tmp is not None:
+            own_tmp.unlink(missing_ok=True)

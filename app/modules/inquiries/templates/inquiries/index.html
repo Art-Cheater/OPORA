@@ -1,0 +1,119 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}Обращения — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Обращения", "Письма с " ~ mailbox, "envelope") %}
+{% if current_user.has_permission('inquiries.sync') %}
+<form method="post" action="{{ url_for('inquiries.sync_now') }}" class="d-inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-primary" type="submit" {% if running %}disabled{% endif %}>
+        <i class="bi bi-cloud-download"></i> Забрать письма
+    </button>
+</form>
+{% endif %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+{% if not configured %}
+<div class="alert alert-warning">
+    Ящик {{ mailbox }} ещё не подключён: в <code>.env</code> на сервере укажите
+    <code>INQUIRY_IMAP_PASSWORD</code> — пароль для внешних приложений mail.ru
+    (приложение Система «Опора»), не основной пароль ящика. IMAP уже должен быть включён.
+</div>
+{% elif mailbox_state and mailbox_state.last_error %}
+<div class="alert alert-danger">Последняя ошибка забора: {{ mailbox_state.last_error }}</div>
+{% endif %}
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between">
+        <span><i class="bi bi-search"></i> Поиск</span>
+        <span class="text-muted small">
+            Новых: {{ unread }}
+            {% if mailbox_state and mailbox_state.last_sync_at %}
+            · забирали {{ mailbox_state.last_sync_at|local_dt }} МСК
+            {% endif %}
+        </span>
+    </div>
+    <div class="card-body">
+        <form class="row g-3" method="get">
+            <div class="col-lg-6">
+                <label class="form-label">{{ filter_form.q.label.text }}</label>
+                {{ filter_form.q(class="form-control", value=q, placeholder="тема, отправитель, текст...") }}
+            </div>
+            <div class="col-lg-3">
+                <label class="form-label">{{ filter_form.status.label.text }}</label>
+                {{ filter_form.status(class="form-select") }}
+            </div>
+            <div class="col-lg-2 d-flex align-items-end">
+                <button class="btn btn-primary w-100" type="submit">Найти</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="table-card">
+    <table class="table table-opora">
+        <thead>
+            <tr>
+                <th>Когда</th>
+                <th>От кого</th>
+                <th>Тема</th>
+                <th>Статус</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in pagination.items %}
+            <tr class="{% if item.status == 'new' %}fw-semibold{% endif %}">
+                <td class="text-muted">{{ item.received_at|local_dt if item.received_at else '—' }}</td>
+                <td>
+                    {{ item.from_name or item.from_email or '—' }}
+                    {% if item.from_name and item.from_email %}
+                    <div class="small text-muted">{{ item.from_email }}</div>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="{{ url_for('inquiries.detail', inquiry_id=item.id) }}">{{ item.subject }}</a>
+                    {% if item.attachment_count %}
+                    <span class="text-muted small ms-1"><i class="bi bi-paperclip"></i> {{ item.attachment_count }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if item.status == 'new' %}
+                    <span class="badge text-bg-warning">{{ item.status_label }}</span>
+                    {% elif item.status == 'done' %}
+                    <span class="badge text-bg-success">{{ item.status_label }}</span>
+                    {% else %}
+                    <span class="badge text-bg-secondary">{{ item.status_label }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4" class="table-empty">
+                    <i class="bi bi-inbox"></i> Писем ещё нет — нажмите «Забрать письма»
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if pagination.pages > 1 %}
+<nav class="mt-3">
+    <ul class="pagination pagination-sm mb-0">
+        {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+            {% if p %}
+            <li class="page-item {% if p == pagination.page %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('inquiries.index', page=p, q=q, status=status) }}">{{ p }}</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">…</span></li>
+            {% endif %}
+        {% endfor %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

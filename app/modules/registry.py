@@ -9,6 +9,7 @@ from app.modules.contractors import contractors_bp
 from app.modules.eis import eis_bp
 from app.modules.employees import employees_bp
 from app.modules.field_builder import field_builder_bp
+from app.modules.inquiries import inquiries_bp
 from app.modules.main import main_bp
 from app.modules.objects import objects_bp
 from app.modules.positions import positions_bp
@@ -32,6 +33,7 @@ ALL_BLUEPRINTS = [
     contracts_bp,
     contractors_bp,
     agreements_bp,
+    inquiries_bp,
     eis_bp,
     employees_bp,
     positions_bp,

@@ -27,6 +27,8 @@ from app.models.agreements.pole_agreement import PoleAgreement
 from app.models.agreements.pole_agreement_site import PoleAgreementSite
 from app.models.eis.eis_import_event import EisImportEvent
 from app.models.eis.eis_import_run import EisImportRun
+from app.models.inquiries.inquiry import Inquiry
+from app.models.inquiries.mailbox_state import InquiryMailboxState
 from app.models.files.attachment import Attachment
 from app.models.projects.project import Project
 from app.models.projects.project_document import ProjectDocument
@@ -82,6 +84,8 @@ __all__ = [
     "PoleAgreementSite",
     "EisImportRun",
     "EisImportEvent",
+    "Inquiry",
+    "InquiryMailboxState",
     "Message",
     "MessengerConversation",
     "MessengerMessage",

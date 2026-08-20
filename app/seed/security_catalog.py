@@ -11,6 +11,7 @@ SYSTEM_MODULES = [
     ("contracts", "Договоры", "file-earmark-text", 30, "Управление договорами"),
     ("contractors", "Подрядчики", "building", 32, "Справочник подрядчиков"),
     ("agreements", "Договора", "broadcast", 33, "Договора на размещение оборудования на опорах"),
+    ("inquiries", "Обращения", "envelope", 35, "Письма с корпоративного ящика"),
     ("eis", "Импорт ЕИС", "cloud-download", 34, "Парсер zakupki.gov.ru"),
     ("users", "Сотрудники", "people", 40, "Управление сотрудниками"),
     ("materials", "Материалы", "box-seam", 50, "Склад и материалы"),
@@ -167,6 +168,7 @@ FULL_ACTION_MODULES = (
     "contracts",
     "contractors",
     "agreements",
+    "inquiries",
     "users",
     "materials",
     "reports",
@@ -188,6 +190,7 @@ SPECIAL_PERMISSIONS = [
     ("requests", "dispatch", "Диспетчеризация заявок"),
     ("eis", "view", "Просмотр импорта ЕИС"),
     ("eis", "run", "Запуск импорта ЕИС"),
+    ("inquiries", "sync", "Забор писем с почты"),
 ]
 
 ACTION_LABELS = {
@@ -206,6 +209,7 @@ ACTION_LABELS = {
     "approve": "Одобрение",
     "dispatch": "Диспетчеризация",
     "login_logs.view": "Просмотр журнала входов",
+    "sync": "Забор писем",
 }
 
 STANDARD_ACTIONS = (

@@ -445,6 +445,28 @@ def _register_cli_commands(app: Flask) -> None:
             raise
         click.echo("Импорт ЕИС завершён.")
 
+    @app.cli.command("inquiry-sync")
+    @click.option("--loop", "as_loop", is_flag=True, help="Забирать письма по кругу")
+    def inquiry_sync(as_loop: bool):
+        """Забор писем с корпоративного ящика в раздел «Обращения»."""
+        from app.modules.inquiries.scheduler import run_loop, run_once
+
+        if as_loop:
+            run_loop()
+            return
+        run_once()
+        click.echo("Забор писем завершён.")
+
+    @app.cli.command("inquiry-test")
+    def inquiry_test():
+        """Проверить вход в mail.ru по IMAP, письма не забирать."""
+        from app.modules.inquiries.services import InquiryService
+
+        ok, message = InquiryService.test_connection()
+        click.echo(message)
+        if not ok:
+            raise SystemExit(1)
+
     @app.cli.command("dedupe-agreements")
     def dedupe_agreements():
         """Скрыть повторные договора с одним номером, оставить экземпляр с большей адресной программой."""

@@ -12,10 +12,13 @@ class AgreementFilterForm(FlaskForm):
 
 class AgreementUploadForm(FlaskForm):
     file = FileField(
-        "Файл Word",
+        "Файл договора",
         validators=[
-            FileRequired("Выберите файл .docx"),
-            FileAllowed(["docx"], "Нужен файл Word (.docx)"),
+            FileRequired("Выберите файл договора"),
+            FileAllowed(
+                ["docx", "doc", "docm", "odt", "rtf", "pdf"],
+                "Нужен Word (.doc/.docx), OpenDocument, RTF или PDF",
+            ),
         ],
     )
     submit = SubmitField("Загрузить")

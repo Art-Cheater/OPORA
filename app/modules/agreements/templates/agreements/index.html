@@ -81,19 +81,19 @@
 
 {% if current_user.has_permission('agreements.create') %}
 <div class="card mb-4">
-    <div class="card-header"><i class="bi bi-upload"></i> Загрузить договор (.docx)</div>
+    <div class="card-header"><i class="bi bi-upload"></i> Загрузить договор</div>
     <div class="card-body">
         <form method="post" action="{{ url_for('agreements.upload') }}" enctype="multipart/form-data">
             {{ upload_form.csrf_token }}
             <div class="row g-3">
                 <div class="col-lg-8">
-                    {{ upload_form.file(class="form-control", accept=".docx") }}
+                    {{ upload_form.file(class="form-control", accept=".doc,.docx,.docm,.odt,.rtf,.pdf") }}
                 </div>
                 <div class="col-lg-2">
                     <button class="btn btn-primary w-100" type="submit">{{ upload_form.submit.label.text }}</button>
                 </div>
             </div>
-            <div class="form-text mt-2">Файл как «Договор_24.docx»: наименование, заказчик и таблица адресной программы подтянутся сами.</div>
+            <div class="form-text mt-2">Word (.doc и .docx), OpenDocument, RTF или PDF: наименование, заказчик и таблица адресов подтянутся сами.</div>
         </form>
     </div>
 </div>

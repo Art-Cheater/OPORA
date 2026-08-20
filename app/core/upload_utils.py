@@ -20,6 +20,10 @@ _MIME_EXT: dict[str, str] = {
     "application/pdf": ".pdf",
     "application/msword": ".doc",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.ms-word.document.macroEnabled.12": ".docm",
+    "application/vnd.oasis.opendocument.text": ".odt",
+    "application/rtf": ".rtf",
+    "text/rtf": ".rtf",
     "application/vnd.ms-excel": ".xls",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
     "application/zip": ".zip",
@@ -45,6 +49,9 @@ ALLOWED_UPLOAD_EXTENSIONS = frozenset(
         ".pdf",
         ".doc",
         ".docx",
+        ".docm",
+        ".odt",
+        ".rtf",
         ".xls",
         ".xlsx",
         ".zip",
@@ -60,7 +67,9 @@ _MAGIC_PREFIXES: list[tuple[bytes, str]] = [
     (b"GIF87a", "image/gif"),
     (b"GIF89a", "image/gif"),
     (b"%PDF", "application/pdf"),
-    (b"PK\x03\x04", "application/zip"),  # also docx/xlsx
+    (b"PK\x03\x04", "application/zip"),  # also docx/xlsx/odt
+    (b"\xd0\xcf\x11\xe0", "application/msword"),
+    (b"{\\rtf", "application/rtf"),
 ]
 
 PREVIEWABLE_MIME_TYPES = frozenset(
@@ -217,13 +226,14 @@ def validate_upload(file_storage: FileStorage) -> tuple[str, str]:
     sniffed = _sniff_mime(header) if header else None
     mime = sniffed or claimed
 
-    # Office Open XML also starts with PK — allow by extension
-    if mime == "application/zip" and ext in {".docx", ".xlsx"}:
-        mime = (
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            if ext == ".docx"
-            else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+    # Office Open XML / ODT also start with PK — allow by extension
+    if mime == "application/zip" and ext in {".docx", ".docm", ".xlsx", ".odt"}:
+        mime = {
+            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".docm": "application/vnd.ms-word.document.macroEnabled.12",
+            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".odt": "application/vnd.oasis.opendocument.text",
+        }[ext]
 
     if mime not in ALLOWED_UPLOAD_MIME_TYPES and claimed not in ALLOWED_UPLOAD_MIME_TYPES:
         # text/plain / csv may not have strong magic
