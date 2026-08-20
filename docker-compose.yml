@@ -29,6 +29,7 @@ services:
       DB_HOST: db
       DB_PORT: "5432"
       FLASK_ENV: ${FLASK_ENV:-production}
+      OPORA_RUN_MIGRATE: "1"
     ports:
       - "5000:5000"
     volumes:
@@ -60,6 +61,7 @@ services:
       DB_HOST: db
       DB_PORT: "5432"
       FLASK_ENV: ${FLASK_ENV:-production}
+      OPORA_RUN_MIGRATE: "0"
     command: ["flask", "eis-sync", "--loop"]
     depends_on:
       db:
@@ -77,6 +79,7 @@ services:
       DB_HOST: db
       DB_PORT: "5432"
       FLASK_ENV: ${FLASK_ENV:-production}
+      OPORA_RUN_MIGRATE: "0"
     command: ["flask", "inquiry-sync", "--loop"]
     depends_on:
       db:

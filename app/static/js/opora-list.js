@@ -4,6 +4,7 @@
 window.OporaList = (() => {
   const TABLE_LOADING_HTML =
     '<div class="opora-loading" role="status"><div class="spinner-border text-primary"></div><div class="opora-loading__text">Загрузка списка…</div></div>';
+  const AJAX_HEADERS = { "X-Requested-With": "XMLHttpRequest" };
 
   let config = {};
   let currentPage = 1;

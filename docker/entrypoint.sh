@@ -20,14 +20,18 @@ done
 
 echo "$(date -u +%H:%M:%S) PostgreSQL доступен."
 
-echo "$(date -u +%H:%M:%S) Миграции..."
-if ! flask db upgrade; then
-    echo "ERROR: flask db upgrade failed"
+if [ "${OPORA_RUN_MIGRATE:-1}" = "1" ]; then
+    echo "$(date -u +%H:%M:%S) Миграции..."
+    if ! flask db upgrade; then
+        echo "ERROR: flask db upgrade failed"
+        flask db current || true
+        flask db heads || true
+        exit 1
+    fi
     flask db current || true
-    flask db heads || true
-    exit 1
+else
+    echo "$(date -u +%H:%M:%S) Миграции пропускаем (их делает web)."
 fi
-flask db current || true
 
 if [ "${OPORA_SEED_ON_START:-0}" = "1" ]; then
     echo "$(date -u +%H:%M:%S) Справочники (OPORA_SEED_ON_START=1)..."

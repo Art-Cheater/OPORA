@@ -252,6 +252,7 @@ def test_static_assets_are_public_cached_and_not_cdn_fallback(client, admin_clie
     for path in (
         "/static/css/main.css",
         "/static/js/main.js",
+        "/static/js/opora-list.js",
         "/static/vendor/bootstrap.min.css",
         "/static/vendor/bootstrap.bundle.min.js",
         "/static/vendor/bootstrap-icons.min.css",
@@ -272,7 +273,10 @@ def test_static_assets_are_public_cached_and_not_cdn_fallback(client, admin_clie
     assert "unpkg.com" not in html
     assert "static/css/main.css?v=" in html
     assert "static/vendor/bootstrap.min.css?v=" in html
-    assert "static/js/requests-form.js?v=" in html
+    assert "static/js/opora-list.js?v=" in html
+    list_js = client.get("/static/js/opora-list.js")
+    assert list_js.status_code == 200
+    assert b"const AJAX_HEADERS" in list_js.data
 
     first = client.get("/static/css/main.css")
     etag = first.headers.get("ETag")
