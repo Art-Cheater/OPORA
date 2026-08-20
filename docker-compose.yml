@@ -37,11 +37,20 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=3)"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
+      # start_period считает от старта контейнера, а gunicorn поднимается
+      # только после flask db upgrade и seed. 60 с на это не хватает —
+      # compose помечает web unhealthy, хотя процесс уже слушает :5000.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=8)",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 240s
 
   eis-sync:
     build: .

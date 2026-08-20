@@ -19,7 +19,7 @@ def index():
 @main_bp.route("/health")
 def health():
     """Лёгкая проверка живости (без логина и тяжёлых запросов)."""
-    return {"status": "ok"}, 200
+    return {"status": "ok"}, 200, {"Cache-Control": "no-store"}
 
 
 @main_bp.route("/about")

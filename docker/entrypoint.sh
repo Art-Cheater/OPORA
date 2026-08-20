@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "Ожидание PostgreSQL..."
+echo "$(date -u +%H:%M:%S) Ожидание PostgreSQL..."
 while ! python -c "
 import socket, os, sys
 host = os.environ.get('DB_HOST', 'db')
@@ -18,9 +18,9 @@ except Exception:
     sleep 1
 done
 
-echo "PostgreSQL доступен."
+echo "$(date -u +%H:%M:%S) PostgreSQL доступен."
 
-echo "Миграции..."
+echo "$(date -u +%H:%M:%S) Миграции..."
 if ! flask db upgrade; then
     echo "ERROR: flask db upgrade failed"
     flask db current || true
@@ -29,9 +29,9 @@ if ! flask db upgrade; then
 fi
 flask db current || true
 
-echo "Справочники..."
+echo "$(date -u +%H:%M:%S) Справочники..."
 flask seed-reference-data || echo "WARN: seed-reference-data failed (продолжаем)"
 flask seed-admin || echo "WARN: seed-admin failed (продолжаем)"
 
-echo "Запуск: $*"
+echo "$(date -u +%H:%M:%S) Запуск: $*"
 exec "$@"

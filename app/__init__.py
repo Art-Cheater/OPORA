@@ -221,7 +221,7 @@ def _register_security_hooks(app: Flask) -> None:
         from flask_login import current_user, logout_user
 
         # CSS/JS не должны ходить в БД за current_user — иначе статика встаёт в очередь за HTML.
-        if _is_static_request(request):
+        if _is_static_request(request) or request.path == "/health":
             return
 
         if not current_user.is_authenticated:
