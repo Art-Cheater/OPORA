@@ -129,3 +129,55 @@ def test_upload_and_address_lookup(admin_client, app):
     missing = admin_client.get("/agreements/?q=улица Небылица")
     assert missing.status_code == 200
     assert "не видно".encode("utf-8") in missing.data
+
+
+def test_geocode_query_strips_range_and_parens():
+    from app.modules.agreements.geocode import geocode_query
+
+    assert geocode_query("ул. Труда от ул. Ленина до ул. Владимирская") == "Киров, улица Труда"
+    query = geocode_query("г. Киров, ул. Орловская (от ул. Орловская, 23 до ул. Орловская, 19)")
+    assert "Орловская" in query
+    assert "23" not in query
+    assert geocode_query("по ул. Карла Либкнехта").endswith("Карла Либкнехта")
+
+
+def test_map_markers_include_agreement(admin_client, app, monkeypatch):
+    monkeypatch.setattr(
+        "app.modules.agreements.services.geocode_address",
+        lambda address: (58.6035, 49.668),
+    )
+    uploaded = admin_client.post(
+        "/agreements/upload",
+        data={
+            "file": (io.BytesIO(make_sample_docx()), "ttk.docx"),
+            "submit": "Загрузить",
+        },
+        content_type="multipart/form-data",
+        follow_redirects=False,
+    )
+    assert uploaded.status_code in {302, 303}
+
+    page = admin_client.get("/agreements/")
+    assert page.status_code == 200
+    assert b"agreementMap" in page.data
+    assert "Оборудование на карте".encode("utf-8") in page.data
+
+    payload = admin_client.get("/agreements/map.json")
+    assert payload.status_code == 200
+    data = payload.get_json()
+    assert data["remaining"] == 0
+    assert len(data["points"]) == 1
+    point = data["points"][0]
+    assert "Либкнехта" in point["address"]
+    assert "ТТК" in point["customer"]
+    assert point["number"]
+    assert point["url"].startswith("/agreements/")
+    assert point["file_url"].endswith("/file")
+    assert point["period"] != "—"
+    assert point["poles"] == 3
+
+    with app.app_context():
+        item = db.session.scalar(db.select(PoleAgreement))
+        detail = admin_client.get(f"/agreements/{item.id}")
+    assert detail.status_code == 200
+    assert b"agreementMap" in detail.data

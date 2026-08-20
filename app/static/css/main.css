@@ -497,6 +497,20 @@ a { text-decoration: none; }
 .roles-admin__item.active { border-color: var(--opora-primary); background: rgba(245, 124, 0, 0.08); }
 .roles-admin__editor-card .card-body { max-height: calc(100vh - 220px); overflow-y: auto; }
 
+.agreement-map {
+  height: 480px;
+  border-radius: 12px;
+  background: #e8eef2;
+}
+.agreement-map--detail {
+  height: 360px;
+}
+.agreement-map-popup {
+  min-width: 220px;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
 /* ??????: ????????? ????? */
 .request-address--repeat,
 input.request-address--repeat,

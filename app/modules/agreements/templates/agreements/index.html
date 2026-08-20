@@ -3,6 +3,11 @@
 
 {% block title %}Договора — {{ app_name }}{% endblock %}
 
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+{% endblock %}
+
 {% block page_header %}
 {% call page_header("Договора", "Оборудование на опорах НО: Ростелеком, ТТК и другие", "broadcast") %}
 {% endcall %}
@@ -63,6 +68,17 @@
     </div>
 </div>
 
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-geo-alt-fill"></i> Оборудование на карте</span>
+        <span class="text-muted small" id="agreementMapStatus">Загрузка…</span>
+    </div>
+    <div class="card-body">
+        <div id="agreementMap" class="agreement-map" data-src="{{ url_for('agreements.map_data') }}"></div>
+        <p class="form-text mb-0 mt-2">Точка — улица из адресной программы. Нажмите, чтобы открыть договор, срок и файл.</p>
+    </div>
+</div>
+
 {% if current_user.has_permission('agreements.create') %}
 <div class="card mb-4">
     <div class="card-header"><i class="bi bi-upload"></i> Загрузить договор (.docx)</div>
@@ -120,4 +136,10 @@
         </tbody>
     </table>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="{{ url_for('static', filename='js/agreements-map.js') }}"></script>
 {% endblock %}

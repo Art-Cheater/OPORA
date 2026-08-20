@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 
-from flask import abort, current_app, flash, redirect, render_template, request, send_file, url_for
+from flask import abort, current_app, flash, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
 from app.core.decorators import permission_required
@@ -60,10 +61,51 @@ def upload():
         flash(str(exc), "danger")
         return redirect(url_for("agreements.index"))
     extra = f", адресов: {len(agreement.sites)}"
+    on_map = sum(1 for site in agreement.sites if site.latitude is not None)
+    extra += f", на карте: {on_map}"
     if agreement.parse_warning:
         extra += f". {agreement.parse_warning}"
     flash(f"Загружен {agreement.title}{extra}.", "success")
     return redirect(url_for("agreements.detail", agreement_id=agreement.id))
+
+
+@agreements_bp.route("/map.json")
+@login_required
+@permission_required(PERM_AGREEMENTS_VIEW)
+def map_data():
+    agreement_id = request.args.get("agreement_id", type=uuid.UUID)
+    if request.args.get("backfill") == "1":
+        AgreementService.geocode_missing(agreement_id=agreement_id, limit=5)
+    points, remaining = AgreementService.map_points(agreement_id=agreement_id)
+    return jsonify(
+        {
+            "center": [58.6035, 49.668],
+            "remaining": remaining,
+            "points": [
+                {
+                    "id": str(item.site_id),
+                    "lat": item.lat,
+                    "lng": item.lng,
+                    "address": item.address,
+                    "customer": item.customer_name or "—",
+                    "title": item.title,
+                    "number": item.number or "",
+                    "subject": item.subject or "",
+                    "period": item.period,
+                    "mounts": item.mounts_count,
+                    "poles": item.poles_count,
+                    "note": item.note or "",
+                    "url": url_for("agreements.detail", agreement_id=item.agreement_id),
+                    "file_url": (
+                        url_for("agreements.download", agreement_id=item.agreement_id)
+                        if item.has_file
+                        else ""
+                    ),
+                }
+                for item in points
+            ],
+        }
+    )
 
 
 @agreements_bp.route("/<uuid:agreement_id>")
