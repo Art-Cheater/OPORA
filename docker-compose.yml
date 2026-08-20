@@ -9,8 +9,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-opora}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "127.0.0.1:5432:5432"
+    # Порт 5432 наружу не открываем: Windows часто блокирует 127.0.0.1:5432
+    # (Hyper-V excluded ports). Сайт ходит в БД по сети Docker: db:5432.
+    # Бэкап — docker exec / scripts/backup-db.ps1, не localhost:5432.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-opora_user} -d ${POSTGRES_DB:-opora}"]
       interval: 5s
