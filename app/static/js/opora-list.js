@@ -359,21 +359,33 @@ window.OporaList = (() => {
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const submitBtn = form.querySelector('[type="submit"]');
-      if (submitBtn) submitBtn.disabled = true;
+      const originalHtml = submitBtn?.innerHTML;
+      const modal = formModal();
+      let saving = true;
+      const blockHide = (ev) => {
+        if (saving) ev.preventDefault();
+      };
+      modal?.addEventListener("hide.bs.modal", blockHide);
+
+      const setBusy = (busy) => {
+        form.setAttribute("aria-busy", busy ? "true" : "false");
+        if (!submitBtn) return;
+        submitBtn.disabled = busy;
+        if (originalHtml) submitBtn.innerHTML = busy ? "Сохранение…" : originalHtml;
+      };
+      setBusy(true);
 
       const doSubmit = async () => {
-        const action = form.action;
-        const method = form.method || "POST";
-        const body = new FormData(form);
-        bootstrap.Modal.getInstance(formModal())?.hide();
-        showToast("Сохраняем…");
-        const response = await fetch(action, {
-          method,
+        const response = await fetch(form.action, {
+          method: form.method || "POST",
           headers: AJAX_HEADERS,
-          body,
+          body: new FormData(form),
         });
         const data = await parseJsonResponse(response, "Ошибка сохранения");
         if (data.success) {
+          saving = false;
+          modal?.removeEventListener("hide.bs.modal", blockHide);
+          bootstrap.Modal.getInstance(modal)?.hide();
           showToast(data.message || "Сохранено");
           if (data.redirect_url) {
             if (window.OporaNav?.go) {
@@ -385,7 +397,6 @@ window.OporaList = (() => {
           }
           await refreshAfterMutation();
         } else {
-          bootstrap.Modal.getOrCreateInstance(formModal()).show();
           if (data.html) {
             formModalBody().innerHTML = data.html;
             const newForm = formModalBody().querySelector("form");
@@ -405,7 +416,9 @@ window.OporaList = (() => {
       } catch (err) {
         showToast(err?.message || "Ошибка сохранения", "danger");
       } finally {
-        if (submitBtn) submitBtn.disabled = false;
+        saving = false;
+        modal?.removeEventListener("hide.bs.modal", blockHide);
+        setBusy(false);
       }
     });
   }

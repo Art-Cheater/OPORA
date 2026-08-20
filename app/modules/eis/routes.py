@@ -49,7 +49,7 @@ def index():
                     EisImportEvent.kind.in_(("unmatched", "error")),
                 )
                 .order_by(EisImportEvent.created_at.desc())
-                .limit(100)
+                .limit(20)
             )
         )
     running = EisImportService().is_running()

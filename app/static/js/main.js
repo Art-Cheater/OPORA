@@ -173,7 +173,6 @@ function initInstantNav(sidebar, closeSidebar) {
     const SKELETON =
         '<div class="opora-loading" role="status"><div class="spinner-border text-primary"></div><div class="opora-loading__text">Загрузка…</div></div>';
 
-    let navAbort = null;
     let navToken = 0;
     let overlayTimer = 0;
 
@@ -362,7 +361,7 @@ function initInstantNav(sidebar, closeSidebar) {
         return !disp.includes("attachment");
     }
 
-    function fetchPage(href, signal) {
+    function fetchPage(href) {
         return fetch(href, {
             credentials: "same-origin",
             headers: {
@@ -370,56 +369,82 @@ function initInstantNav(sidebar, closeSidebar) {
                 "X-Requested-With": "OporaNav",
                 Accept: "text/html",
             },
-            signal,
         });
+    }
+
+    const inflightPages = new Map();
+
+    function canPrefetch(url) {
+        const path = url.pathname;
+        if (mustFullReload(url)) return false;
+        if (
+            path.startsWith("/eis") ||
+            path.startsWith("/agreements") ||
+            path.startsWith("/reports") ||
+            path.startsWith("/audit")
+        ) {
+            return false;
+        }
+        return true;
+    }
+
+    function loadPageHtml(href) {
+        const key = cacheKey(href);
+        const cached = cacheGet(href);
+        if (cached) return Promise.resolve(cached);
+        const pending = inflightPages.get(key);
+        if (pending) return pending;
+
+        const promise = fetchPage(href)
+            .then(async (response) => {
+                const finalUrl = response.url || href;
+                if (
+                    !response.ok ||
+                    (response.redirected && /\/auth\/login/.test(finalUrl)) ||
+                    !isHtmlNavResponse(response)
+                ) {
+                    return null;
+                }
+                const html = await response.text();
+                if (!html.includes("app-content")) return null;
+                cacheSet(href, html);
+                return html;
+            })
+            .catch(() => null)
+            .finally(() => {
+                if (inflightPages.get(key) === promise) inflightPages.delete(key);
+            });
+
+        inflightPages.set(key, promise);
+        return promise;
     }
 
     async function navigateTo(href, label, { push = true } = {}) {
         const token = ++navToken;
-        navAbort?.abort();
-        navAbort = new AbortController();
         markSidebar(href);
         closeSidebar();
 
         const cached = cacheGet(href);
-        if (cached) {
-            hideLoading();
-            const ok = await applyHtml(cached);
-            if (token !== navToken) return;
-            if (!ok) {
-                window.location.href = href;
-                return;
-            }
-            if (push) history.pushState({ oporaNav: true }, "", href);
-            return;
-        }
+        if (!cached) showSkeleton(label);
+        else hideLoading();
 
-        showSkeleton(label);
         try {
-            const response = await fetchPage(href, navAbort.signal);
+            const html = cached || (await loadPageHtml(href));
             if (token !== navToken) return;
-            const finalUrl = response.url || href;
-            if (
-                !response.ok ||
-                (response.redirected && /\/auth\/login/.test(finalUrl)) ||
-                !isHtmlNavResponse(response)
-            ) {
+            if (!html) {
                 window.location.href = href;
                 return;
             }
-            const html = await response.text();
-            if (token !== navToken) return;
             const ok = await applyHtml(html);
             if (token !== navToken) return;
             if (!ok) {
                 window.location.href = href;
                 return;
             }
-            cacheSet(href, html);
             if (push) history.pushState({ oporaNav: true }, "", href);
             hideLoading();
         } catch (err) {
-            if (err?.name === "AbortError" || token !== navToken) return;
+            if (token !== navToken) return;
             window.location.href = href;
         }
     }
@@ -435,22 +460,24 @@ function initInstantNav(sidebar, closeSidebar) {
         },
     };
 
-    function prefetch(href) {
-        if (cacheGet(href)) return;
+    let hoverTimer = 0;
+    let pendingHoverKey = "";
+
+    function schedulePrefetch(href) {
         const url = new URL(href, window.location.href);
-        if (url.origin !== window.location.origin || mustFullReload(url)) return;
-        fetchPage(href).then(async (response) => {
-            if (!response.ok || !isHtmlNavResponse(response)) return;
-            const html = await response.text();
-            if (html.includes("app-content")) cacheSet(href, html);
-        }).catch(() => {});
+        if (url.origin !== window.location.origin || !canPrefetch(url)) return;
+        const key = cacheKey(href);
+        if (cacheGet(href) || inflightPages.has(key) || key === pendingHoverKey) return;
+        pendingHoverKey = key;
+        window.clearTimeout(hoverTimer);
+        hoverTimer = window.setTimeout(() => {
+            pendingHoverKey = "";
+            loadPageHtml(href);
+        }, 220);
     }
 
     window.addEventListener("pageshow", hideLoading);
-    window.addEventListener("pagehide", () => {
-        navAbort?.abort();
-        hideLoading();
-    });
+    window.addEventListener("pagehide", hideLoading);
     window.addEventListener("popstate", () => {
         navigateTo(window.location.href, "Загрузка", { push: false });
     });
@@ -465,6 +492,8 @@ function initInstantNav(sidebar, closeSidebar) {
             return;
         }
         event.preventDefault();
+        window.clearTimeout(hoverTimer);
+        pendingHoverKey = "";
         const label =
             link.querySelector("span:not(.sidebar__badge)")?.textContent?.trim() ||
             link.textContent?.trim() ||
@@ -477,7 +506,7 @@ function initInstantNav(sidebar, closeSidebar) {
         if (!link || !sidebar.contains(link)) return;
         const href = link.getAttribute("href");
         if (!href || href === "#") return;
-        prefetch(href);
+        schedulePrefetch(href);
     });
 }
 
