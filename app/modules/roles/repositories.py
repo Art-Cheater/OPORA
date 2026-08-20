@@ -57,15 +57,26 @@ class RoleRepository:
 
     @staticmethod
     def get_permission_ids(role: Role) -> list[uuid.UUID]:
-        return [
-            rp.permission_id
-            for rp in role.role_permissions
-            if rp.deleted_at is None and rp.permission_id is not None
-        ]
+        return list(
+            db.session.scalars(
+                db.select(RolePermission.permission_id).where(
+                    RolePermission.role_id == role.id,
+                    RolePermission.deleted_at.is_(None),
+                    RolePermission.permission_id.is_not(None),
+                )
+            )
+        )
 
     @staticmethod
     def get_field_rules(role: Role) -> list[RoleFieldPermission]:
-        return [fp for fp in role.field_permissions if fp.deleted_at is None]
+        return list(
+            db.session.scalars(
+                db.select(RoleFieldPermission).where(
+                    RoleFieldPermission.role_id == role.id,
+                    RoleFieldPermission.deleted_at.is_(None),
+                )
+            )
+        )
 
     @staticmethod
     def users_count(role: Role) -> int:

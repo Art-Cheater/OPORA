@@ -69,6 +69,7 @@ class User(UserMixin, BaseModel):
         back_populates="user",
         foreign_keys="UserRole.user_id",
         lazy="selectin",
+        primaryjoin="and_(User.id == UserRole.user_id, UserRole.deleted_at.is_(None))",
     )
     login_logs: Mapped[list[LoginLog]] = relationship(
         "LoginLog",

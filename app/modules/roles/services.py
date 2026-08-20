@@ -5,6 +5,8 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
+from sqlalchemy import update
+
 from app.core.audit_service import AuditService
 from app.core.exceptions import ValidationError
 from app.extensions import db
@@ -14,6 +16,7 @@ from app.models.auth.role_field_permission import (
     FIELD_ACCESS_NONE,
     RoleFieldPermission,
 )
+from app.models.base import utcnow
 from app.models.enums import AuditAction, EntityType
 from app.modules.roles.repositories import RoleRepository
 
@@ -38,33 +41,74 @@ class RoleService:
     @staticmethod
     def _sync_permissions(role: Role, permission_ids: list[uuid.UUID]) -> None:
         desired = set(permission_ids)
-        active = {
-            rp.permission_id: rp
-            for rp in role.role_permissions
-            if rp.deleted_at is None and rp.permission_id is not None
-        }
-        for perm_id, rp in list(active.items()):
-            if perm_id not in desired:
-                rp.soft_delete()
-        for perm_id in desired:
-            if perm_id not in active:
-                db.session.add(RolePermission(role_id=role.id, permission_id=perm_id))
+        rows = db.session.execute(
+            db.select(RolePermission.id, RolePermission.permission_id).where(
+                RolePermission.role_id == role.id,
+                RolePermission.deleted_at.is_(None),
+            )
+        ).all()
+        active = {perm_id: row_id for row_id, perm_id in rows if perm_id is not None}
+
+        now = utcnow()
+        remove_ids = [row_id for perm_id, row_id in active.items() if perm_id not in desired]
+        if remove_ids:
+            db.session.execute(
+                update(RolePermission)
+                .where(RolePermission.id.in_(remove_ids))
+                .values(deleted_at=now, updated_at=now)
+            )
+
+        to_add = [
+            RolePermission(role_id=role.id, permission_id=perm_id)
+            for perm_id in desired
+            if perm_id not in active
+        ]
+        if to_add:
+            db.session.add_all(to_add)
 
     @staticmethod
     def _sync_field_rules(role: Role, rules: list[FieldRulePayload]) -> None:
-        for fp in list(role.field_permissions):
-            if fp.deleted_at is None:
-                fp.soft_delete()
-        for rule in rules:
-            if rule.access_level <= FIELD_ACCESS_NONE:
-                continue
-            rfp = RoleFieldPermission(
-                role_id=role.id,
-                module=rule.module,
-                field_name=rule.field_name,
+        desired = {
+            (rule.module, rule.field_name): rule.access_level
+            for rule in rules
+            if rule.access_level > FIELD_ACCESS_NONE
+        }
+        rows = list(
+            db.session.scalars(
+                db.select(RoleFieldPermission).where(
+                    RoleFieldPermission.role_id == role.id,
+                    RoleFieldPermission.deleted_at.is_(None),
+                )
             )
-            rfp.apply_level(rule.access_level)
-            db.session.add(rfp)
+        )
+        active = {(row.module, row.field_name): row for row in rows}
+
+        now = utcnow()
+        remove_ids = [row.id for key, row in active.items() if key not in desired]
+        if remove_ids:
+            db.session.execute(
+                update(RoleFieldPermission)
+                .where(RoleFieldPermission.id.in_(remove_ids))
+                .values(deleted_at=now, updated_at=now)
+            )
+
+        to_add: list[RoleFieldPermission] = []
+        for key, level in desired.items():
+            current = active.get(key)
+            if current is not None:
+                if current.access_level != level:
+                    current.apply_level(level)
+                    current.updated_at = now
+                continue
+            item = RoleFieldPermission(
+                role_id=role.id,
+                module=key[0],
+                field_name=key[1],
+            )
+            item.apply_level(level)
+            to_add.append(item)
+        if to_add:
+            db.session.add_all(to_add)
 
     @classmethod
     def create_role(cls, payload: RolePayload, actor_id: uuid.UUID) -> Role:
@@ -113,6 +157,7 @@ class RoleService:
             description=f"Обновлена роль {role.name}",
         )
         db.session.commit()
+        db.session.expire(role, ["role_permissions", "field_permissions"])
         cls._clear_cache()
         return role
 

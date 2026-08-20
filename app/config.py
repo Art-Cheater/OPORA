@@ -189,8 +189,9 @@ class Config:
     INQUIRY_IMAP_USER = os.getenv("INQUIRY_IMAP_USER", "").strip() or INQUIRY_MAILBOX
     INQUIRY_IMAP_PASSWORD = os.getenv("INQUIRY_IMAP_PASSWORD", "").strip().strip('"').strip("'")
     INQUIRY_IMAP_FOLDER = os.getenv("INQUIRY_IMAP_FOLDER", "INBOX").strip() or "INBOX"
-    INQUIRY_FETCH_LIMIT = int(os.getenv("INQUIRY_FETCH_LIMIT", "40"))
+    INQUIRY_FETCH_LIMIT = int(os.getenv("INQUIRY_FETCH_LIMIT", "15"))
     INQUIRY_SYNC_INTERVAL_SECONDS = int(os.getenv("INQUIRY_SYNC_INTERVAL_SECONDS", "120"))
+    INQUIRY_YEAR_FROM = int(os.getenv("INQUIRY_YEAR_FROM", "2026"))
 
     # Профилировщик полностью выключен по умолчанию и никогда не пишет SQL-параметры.
     PERFORMANCE_PROFILER_ENABLED = _env_bool("PERFORMANCE_PROFILER_ENABLED")

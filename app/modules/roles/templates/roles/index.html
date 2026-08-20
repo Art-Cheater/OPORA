@@ -67,11 +67,10 @@
                     {% endif %}
                 </div>
                 <div class="card-body" id="roleEditorPanel">
-                    {% if selected_role or can_manage %}
-                        {% include "roles/partials/role_editor.html" %}
-                    {% else %}
-                        <div class="text-muted text-center py-5">Выберите роль для просмотра</div>
-                    {% endif %}
+                    <div class="opora-loading" role="status">
+                        <div class="spinner-border text-primary"></div>
+                        <div class="opora-loading__text">Загрузка прав роли…</div>
+                    </div>
                 </div>
             </div>
         </div>

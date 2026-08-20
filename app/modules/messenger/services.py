@@ -20,10 +20,12 @@ class MessengerService:
     """Бизнес-логика корпоративного мессенджера."""
 
     @staticmethod
-    def _preview(body: str | None, file_name: str | None) -> str:
+    def _preview(body: str | None, file_name: str | None, card_title: str | None = None) -> str:
         if body and body.strip():
             text = body.strip()
             return text[:200] + ("…" if len(text) > 200 else "")
+        if card_title:
+            return card_title[:200]
         if file_name:
             return f"📎 {file_name}"
         return "Сообщение"
@@ -114,6 +116,52 @@ class MessengerService:
         db.session.add(message)
         conversation.last_message_at = datetime.now(timezone.utc)
         conversation.last_message_preview = cls._preview(None, saved.file_name)
+        conversation.updated_by = sender_id
+        db.session.commit()
+        return MessengerRepository.get_message(message.id) or message
+
+    @classmethod
+    def send_card(
+        cls,
+        conversation: MessengerConversation,
+        *,
+        sender_id: uuid.UUID,
+        card: dict,
+        body: str | None = None,
+        reply_to_id: uuid.UUID | None = None,
+    ) -> MessengerMessage:
+        card_id = card.get("id")
+        try:
+            card_uuid = uuid.UUID(str(card_id))
+        except (ValueError, TypeError):
+            raise ValidationError("Карточка не найдена.") from None
+        title = (card.get("title") or "").strip()
+        if not title or not card.get("type") or not card.get("url"):
+            raise ValidationError("Карточка не найдена.")
+
+        reply_to = None
+        if reply_to_id is not None:
+            reply_to = MessengerRepository.get_message(reply_to_id)
+            if reply_to is None or reply_to.conversation_id != conversation.id:
+                raise ValidationError("Сообщение для ответа не найдено.")
+
+        comment = (body or "").strip() or None
+        message = MessengerMessage(
+            conversation_id=conversation.id,
+            sender_id=sender_id,
+            body=comment,
+            card_type=str(card["type"])[:20],
+            card_id=card_uuid,
+            card_title=title[:500],
+            card_subtitle=(card.get("subtitle") or "")[:500] or None,
+            card_url=str(card["url"])[:700],
+            reply_to_id=reply_to.id if reply_to else None,
+            created_by=sender_id,
+            updated_by=sender_id,
+        )
+        db.session.add(message)
+        conversation.last_message_at = datetime.now(timezone.utc)
+        conversation.last_message_preview = cls._preview(comment, None, title)
         conversation.updated_by = sender_id
         db.session.commit()
         return MessengerRepository.get_message(message.id) or message

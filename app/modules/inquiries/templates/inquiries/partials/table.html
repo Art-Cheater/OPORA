@@ -6,6 +6,7 @@
                 <th>От кого</th>
                 <th>Тема</th>
                 <th>Статус</th>
+                <th>Кому</th>
             </tr>
         </thead>
         <tbody>
@@ -33,11 +34,17 @@
                     <span class="badge text-bg-secondary">{{ item.status_label }}</span>
                     {% endif %}
                 </td>
+                <td class="text-muted">{{ item.assignee.full_name if item.assignee else '—' }}</td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="4" class="table-empty">
-                    <i class="bi bi-inbox"></i> Писем ещё нет — нажмите «Забрать письма»
+                <td colspan="5" class="table-empty">
+                    <i class="bi bi-inbox"></i>
+                    {% if sees_all %}
+                    Писем ещё нет — нажмите «Забрать письма»
+                    {% else %}
+                    Вам пока ничего не переслали
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}

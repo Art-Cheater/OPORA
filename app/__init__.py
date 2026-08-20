@@ -457,6 +457,15 @@ def _register_cli_commands(app: Flask) -> None:
         run_once()
         click.echo("Забор писем завершён.")
 
+    @app.cli.command("inquiry-purge")
+    def inquiry_purge():
+        """Удалить обращения старше INQUIRY_YEAR_FROM (по умолчанию 2026)."""
+        from app.modules.inquiries.services import InquiryService
+
+        removed = InquiryService.purge_older_than_year()
+        year = InquiryService.mailbox_config()["year_from"]
+        click.echo(f"Удалены письма старше {year}: {removed}.")
+
     @app.cli.command("inquiry-test")
     def inquiry_test():
         """Проверить вход в mail.ru по IMAP, письма не забирать."""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 
 from app.core.builtin_field_service import BuiltinFieldService
 from app.core.custom_field_service import CustomFieldService
@@ -25,6 +26,7 @@ class FieldCatalogRow:
     is_editable: bool = False
 
 
+@lru_cache(maxsize=1)
 def catalog_fields_dict() -> dict[str, dict[str, str]]:
     """Полный словарь полей по модулям для RBAC (каталог + БД + custom)."""
     merged: dict[str, dict[str, str]] = {}
@@ -44,6 +46,10 @@ def catalog_fields_dict() -> dict[str, dict[str, str]]:
                 merged[mod.code] = fields
 
     return {mod: fields for mod, fields in merged.items() if fields}
+
+
+def clear_catalog_cache() -> None:
+    catalog_fields_dict.cache_clear()
 
 
 def list_field_builder_rows(module_code: str) -> list[FieldCatalogRow]:

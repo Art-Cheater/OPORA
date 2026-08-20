@@ -28,11 +28,15 @@ class UserRepository:
             .options(
                 selectinload(User.user_roles)
                 .joinedload(UserRole.role)
-                .selectinload(Role.role_permissions)
-                .joinedload(RolePermission.permission)
                 .options(
-                    noload(Permission.role_permissions),
-                    noload(Permission.system_module),
+                    selectinload(Role.role_permissions)
+                    .joinedload(RolePermission.permission)
+                    .options(
+                        noload(Permission.role_permissions),
+                        noload(Permission.system_module),
+                    ),
+                    noload(Role.field_permissions),
+                    noload(Role.user_roles),
                 ),
                 joinedload(User.position_ref).options(noload(Position.users)),
                 noload(User.login_logs),

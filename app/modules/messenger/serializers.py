@@ -43,8 +43,27 @@ def serialize_user(
     return data
 
 
+def _serialize_card(message: MessengerMessage) -> dict | None:
+    if not message.has_card:
+        return None
+    from app.modules.messenger.cards import card_meta
+
+    meta = card_meta(message.card_type or "")
+    return {
+        "type": message.card_type,
+        "id": str(message.card_id),
+        "title": message.card_title,
+        "subtitle": message.card_subtitle or "",
+        "url": message.card_url,
+        "label": meta["label"],
+        "icon": meta["icon"],
+    }
+
+
 def _serialize_reply_preview(message: MessengerMessage, current_user_id: uuid.UUID) -> dict:
     preview = (message.body or "").strip()
+    if not preview and message.card_title:
+        preview = message.card_title
     if not preview and message.file_name:
         preview = message.file_name
     if len(preview) > 120:
@@ -76,7 +95,11 @@ def serialize_message(message: MessengerMessage, current_user_id: uuid.UUID) -> 
         "created_at": _iso(message.created_at),
         "has_attachment": message.has_attachment,
         "reply_to_id": str(message.reply_to_id) if message.reply_to_id else None,
+        "has_card": message.has_card,
     }
+    card = _serialize_card(message)
+    if card:
+        data["card"] = card
     if message.has_attachment:
         data["file"] = {
             "name": message.file_name,

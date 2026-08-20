@@ -194,6 +194,8 @@ class MessengerRepository:
         conversation = message.conversation
         peer = conversation.other_user(user_id)
         body = (message.body or "").strip()
+        if not body and message.card_title:
+            body = message.card_title
         if not body and message.file_name:
             body = f"📎 {message.file_name}"
         if not body:
@@ -289,6 +291,7 @@ class MessengerRepository:
                 or_(
                     MessengerMessage.body.ilike(q),
                     MessengerMessage.file_name.ilike(q),
+                    MessengerMessage.card_title.ilike(q),
                 ),
             )
             .order_by(MessengerMessage.created_at.desc())

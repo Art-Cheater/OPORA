@@ -38,16 +38,19 @@ class Role(ActiveRecordMixin, BaseModel):
         "UserRole",
         back_populates="role",
         lazy="select",
+        primaryjoin="and_(Role.id == UserRole.role_id, UserRole.deleted_at.is_(None))",
     )
     role_permissions: Mapped[list[RolePermission]] = relationship(
         "RolePermission",
         back_populates="role",
         lazy="selectin",
+        primaryjoin="and_(Role.id == RolePermission.role_id, RolePermission.deleted_at.is_(None))",
     )
     field_permissions: Mapped[list[RoleFieldPermission]] = relationship(
         "RoleFieldPermission",
         back_populates="role",
         lazy="select",
+        primaryjoin="and_(Role.id == RoleFieldPermission.role_id, RoleFieldPermission.deleted_at.is_(None))",
     )
 
     def __repr__(self) -> str:

@@ -12,7 +12,7 @@ def is_ajax() -> bool:
 
 def ajax_ok(message: str = "", **extra):
     """Успешный JSON-ответ."""
-    payload = {"success": True, "message": message}
+    payload = {"success": True, "ok": True, "message": message}
     payload.update(extra)
     return jsonify(payload)
 

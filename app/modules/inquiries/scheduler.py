@@ -16,9 +16,20 @@ logger = logging.getLogger(__name__)
 def run_once() -> None:
     result = InquiryService.sync()
     if result.error:
-        logger.warning("Обращения: %s", result.error)
+        logger.warning(
+            "Обращения: %s (новых %s, удалено старых %s)",
+            result.error,
+            result.fetched,
+            result.purged,
+        )
         return
-    logger.info("Обращения: новых %s, пропущено %s", result.fetched, result.skipped)
+    logger.info(
+        "Обращения: новых %s, пропущено %s, старше года %s, удалено старых %s",
+        result.fetched,
+        result.skipped,
+        result.skipped_old,
+        result.purged,
+    )
 
 
 def run_loop() -> None:

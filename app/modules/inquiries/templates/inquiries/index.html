@@ -4,7 +4,11 @@
 {% block title %}Обращения — {{ app_name }}{% endblock %}
 
 {% block page_header %}
-{% call page_header("Обращения", "Письма с " ~ mailbox, "envelope") %}
+{% call page_header(
+    "Обращения",
+    ("Письма с " ~ mailbox ~ " за 2026 год") if manages_mailbox else "Письма, которые вам переслали",
+    "envelope"
+) %}
 {% if current_user.has_permission('inquiries.sync') %}
 <form method="post" action="{{ url_for('inquiries.sync_now') }}" class="d-inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -17,13 +21,13 @@
 {% endblock %}
 
 {% block content %}
-{% if not configured %}
+{% if manages_mailbox and not configured %}
 <div class="alert alert-warning">
     Ящик {{ mailbox }} ещё не подключён: в <code>.env</code> на сервере укажите
     <code>INQUIRY_IMAP_PASSWORD</code> — пароль для внешних приложений mail.ru
     (приложение Система «Опора»), не основной пароль ящика. IMAP уже должен быть включён.
 </div>
-{% elif mailbox_state and mailbox_state.last_error %}
+{% elif manages_mailbox and mailbox_state and mailbox_state.last_error %}
 <div class="alert alert-danger">Последняя ошибка забора: {{ mailbox_state.last_error }}</div>
 {% endif %}
 

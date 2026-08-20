@@ -27,6 +27,12 @@
   const replyBarText = document.getElementById("replyBarText");
   const replyBarClose = document.getElementById("replyBarClose");
   const attachPreview = document.getElementById("attachPreview");
+  const cardPicker = document.getElementById("cardPicker");
+  const cardPickerTabs = document.getElementById("cardPickerTabs");
+  const cardPickerSearch = document.getElementById("cardPickerSearch");
+  const cardPickerResults = document.getElementById("cardPickerResults");
+  const cardPickerClose = document.getElementById("cardPickerClose");
+  const cardAttachBtn = document.getElementById("cardAttachBtn");
   const imageLightbox = document.getElementById("imageLightbox");
   const lightboxImage = document.getElementById("lightboxImage");
   const lightboxClose = document.getElementById("lightboxClose");
@@ -40,6 +46,9 @@
   let unreadEtag = null;
   let replyTarget = null;
   let pendingFiles = [];
+  let cardTypes = [];
+  let activeCardType = null;
+  let cardSearchTimer = null;
   let knownUnreadTotal = null;
   let unreadPollTimer = null;
   let conversationsRequest = null;
@@ -149,6 +158,7 @@
     messageInput.style.height = "auto";
     clearReplyTarget();
     clearPendingFiles();
+    closeCardPicker();
   }
 
   function setReplyTarget(msg) {
@@ -174,6 +184,7 @@
 
   function messagePreviewText(msg) {
     if (msg.body && msg.body.trim()) return msg.body.trim();
+    if (msg.card?.title) return msg.card.title;
     if (msg.file?.name) return msg.file.name;
     if (msg.has_attachment) return "Вложение";
     return "Сообщение";
@@ -288,6 +299,10 @@
     }
     if (replyTarget) {
       clearReplyTarget();
+      return;
+    }
+    if (!cardPicker.classList.contains("d-none")) {
+      closeCardPicker();
       return;
     }
     if (pendingFiles.length) {
@@ -430,6 +445,16 @@
     await openConversation(conv.id, conv.peer);
   }
 
+  async function openConversationFromQuery() {
+    const conversationId = new URLSearchParams(location.search).get("c");
+    if (!conversationId) return;
+    const res = await api("/messenger/api/conversations");
+    if (!res.ok) return;
+    const data = await res.json();
+    const conv = (data.conversations || []).find((item) => item.id === conversationId);
+    if (conv) await openConversation(conv.id, conv.peer);
+  }
+
   async function openConversation(conversationId, peer) {
     if (activeConversationId && activeConversationId !== conversationId) {
       saveDraft();
@@ -509,6 +534,20 @@
       bubble.appendChild(replyBlock);
     }
 
+    if (msg.card) {
+      const card = document.createElement("a");
+      card.className = "tg-msg-card";
+      card.href = msg.card.url;
+      card.target = "_blank";
+      card.rel = "noopener";
+      card.innerHTML = `
+        <div class="tg-msg-card__label"><i class="bi bi-${escapeHtml(msg.card.icon || "link-45deg")}"></i> ${escapeHtml(msg.card.label || "Карточка")}</div>
+        <div class="tg-msg-card__title">${escapeHtml(msg.card.title || "")}</div>
+        ${msg.card.subtitle ? `<div class="tg-msg-card__sub">${escapeHtml(msg.card.subtitle)}</div>` : ""}
+      `;
+      bubble.appendChild(card);
+    }
+
     if (msg.has_attachment && msg.file) {
       if (msg.file.is_image) {
         const img = document.createElement("img");
@@ -528,13 +567,14 @@
       }
       if (msg.body) {
         const text = document.createElement("div");
-        text.className = "mt-2";
+        text.className = msg.card || msg.has_attachment ? "mt-2" : "";
         text.textContent = msg.body;
         bubble.appendChild(text);
       }
-    } else {
+    } else if (msg.body) {
       const text = document.createElement("div");
-      text.textContent = msg.body || "";
+      text.className = msg.card ? "mt-2" : "";
+      text.textContent = msg.body;
       bubble.appendChild(text);
     }
 
@@ -547,6 +587,93 @@
     bubble.appendChild(meta);
     wrap.appendChild(bubble);
     return wrap;
+  }
+
+  function closeCardPicker() {
+    cardPicker?.classList.add("d-none");
+    if (cardPickerSearch) cardPickerSearch.value = "";
+    if (cardPickerResults) cardPickerResults.innerHTML = "";
+  }
+
+  async function openCardPicker() {
+    if (!activeConversationId || !cardPicker) return;
+    if (!cardTypes.length) {
+      const res = await api("/messenger/api/card-types");
+      if (res.ok) {
+        const data = await res.json();
+        cardTypes = data.types || [];
+      }
+    }
+    if (!cardTypes.length) return;
+    if (!activeCardType || !cardTypes.some((item) => item.type === activeCardType)) {
+      activeCardType = cardTypes[0].type;
+    }
+    cardPickerTabs.innerHTML = "";
+    cardTypes.forEach((item) => {
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = `tg-card-picker__tab${item.type === activeCardType ? " is-active" : ""}`;
+      tab.textContent = item.label;
+      tab.addEventListener("click", () => {
+        activeCardType = item.type;
+        openCardPicker();
+      });
+      cardPickerTabs.appendChild(tab);
+    });
+    cardPicker.classList.remove("d-none");
+    cardPickerSearch.focus();
+    loadCardResults();
+  }
+
+  async function loadCardResults() {
+    if (!activeCardType) return;
+    const q = cardPickerSearch.value.trim();
+    const res = await api(
+      `/messenger/api/cards?type=${encodeURIComponent(activeCardType)}&q=${encodeURIComponent(q)}`
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+    cardPickerResults.innerHTML = "";
+    if (!data.cards?.length) {
+      cardPickerResults.innerHTML = '<div class="tg-list-empty">Ничего не найдено</div>';
+      return;
+    }
+    data.cards.forEach((card) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "tg-card-picker__item";
+      btn.innerHTML = `
+        <div class="tg-card-picker__item-title">${escapeHtml(card.title)}</div>
+        ${card.subtitle ? `<div class="tg-card-picker__item-sub">${escapeHtml(card.subtitle)}</div>` : ""}
+      `;
+      btn.addEventListener("click", () => sendEntityCard(card));
+      cardPickerResults.appendChild(btn);
+    });
+  }
+
+  async function sendEntityCard(card) {
+    if (!activeConversationId) return;
+    const payload = { type: card.type, id: card.id };
+    const body = messageInput.value.trim();
+    if (body) payload.body = body;
+    if (replyTarget?.id) payload.reply_to_id = replyTarget.id;
+    const res = await api(`/messenger/api/conversations/${activeConversationId}/cards`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!messagesContainer.querySelector(`.tg-msg[data-message-id="${data.message.id}"]`)) {
+      messagesContainer.appendChild(renderMessage(data.message));
+    }
+    lastMessageId = data.message.id;
+    messageInput.value = "";
+    messageInput.style.height = "auto";
+    clearReplyTarget();
+    closeCardPicker();
+    drafts.delete(activeConversationId);
+    scrollMessagesToBottom();
+    await loadConversations();
   }
 
   async function loadMessages(scrollBottom = false) {
@@ -685,7 +812,7 @@
       row.innerHTML = `
         <div class="tg-search-result__peer">${escapeHtml(item.peer.full_name)}</div>
         <div class="tg-search-result__text">${escapeHtml(
-          item.message.body || item.message.file?.name || ""
+          item.message.body || item.message.card?.title || item.message.file?.name || ""
         )}</div>
       `;
       row.addEventListener("click", () => openConversation(item.conversation_id, item.peer));
@@ -848,6 +975,12 @@
   });
 
   replyBarClose?.addEventListener("click", clearReplyTarget);
+  cardAttachBtn?.addEventListener("click", openCardPicker);
+  cardPickerClose?.addEventListener("click", closeCardPicker);
+  cardPickerSearch?.addEventListener("input", () => {
+    clearTimeout(cardSearchTimer);
+    cardSearchTimer = setTimeout(loadCardResults, 250);
+  });
   lightboxClose?.addEventListener("click", closeLightbox);
   imageLightbox?.addEventListener("click", (e) => {
     if (e.target === imageLightbox) closeLightbox();
@@ -869,7 +1002,7 @@
   heartbeatTimer = setInterval(() => {
     if (!document.hidden) heartbeat();
   }, 30000);
-  loadConversations();
+  loadConversations().then(openConversationFromQuery);
   startUnreadPolling();
 
   window.addEventListener("beforeunload", () => {

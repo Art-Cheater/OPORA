@@ -83,11 +83,25 @@
 
             <div class="tg-attach-preview d-none" id="attachPreview"></div>
 
+            <div class="tg-card-picker d-none" id="cardPicker">
+                <div class="tg-card-picker__head">
+                    <div class="tg-card-picker__tabs" id="cardPickerTabs"></div>
+                    <button type="button" class="tg-card-picker__close" id="cardPickerClose" title="Закрыть">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <input type="search" id="cardPickerSearch" class="tg-card-picker__search" placeholder="Найти в Опоре…" autocomplete="off">
+                <div id="cardPickerResults" class="tg-card-picker__results"></div>
+            </div>
+
             <footer class="tg-composer">
                 <label class="tg-composer__attach" title="Прикрепить файл">
                     <i class="bi bi-paperclip"></i>
                     <input type="file" id="fileInput" class="d-none" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar">
                 </label>
+                <button type="button" class="tg-composer__attach" id="cardAttachBtn" title="Прикрепить из Опоры">
+                    <i class="bi bi-link-45deg"></i>
+                </button>
                 <textarea id="messageInput" class="tg-composer__input" rows="1" placeholder="Написать сообщение…"></textarea>
                 <button type="button" class="tg-composer__send" id="sendBtn" title="Отправить">
                     <i class="bi bi-send-fill"></i>

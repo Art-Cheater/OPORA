@@ -49,6 +49,11 @@ class MessengerMessage(BaseModel):
         ForeignKey("messenger_messages.id", ondelete="SET NULL"),
         nullable=True,
     )
+    card_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    card_id: Mapped[uuid.UUID | None] = mapped_column(GUID(), nullable=True)
+    card_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    card_subtitle: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    card_url: Mapped[str | None] = mapped_column(String(700), nullable=True)
 
     conversation: Mapped[MessengerConversation] = relationship(
         "MessengerConversation",
@@ -65,6 +70,10 @@ class MessengerMessage(BaseModel):
     @property
     def has_attachment(self) -> bool:
         return bool(self.storage_key)
+
+    @property
+    def has_card(self) -> bool:
+        return bool(self.card_type and self.card_id and self.card_url)
 
     @property
     def is_image(self) -> bool:

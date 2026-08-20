@@ -88,10 +88,10 @@ def get_module_fields() -> dict[str, dict[str, str]]:
     try:
         fields = catalog_fields_dict()
         if fields:
-            return fields
+            return {mod: dict(items) for mod, items in fields.items()}
     except Exception:
         pass
-    return dict(_FALLBACK_MODULE_FIELDS)
+    return {mod: dict(items) for mod, items in _FALLBACK_MODULE_FIELDS.items()}
 
 
 def module_labels() -> dict[str, str]:
@@ -102,6 +102,6 @@ def module_fields() -> dict[str, dict[str, str]]:
     return get_module_fields()
 
 
-# Обратная совместимость для существующих импортов
-MODULE_LABELS = get_module_labels()
-MODULE_FIELDS = get_module_fields()
+# Не дергаем БД на импорте модуля — каталог читается при первом запросе.
+MODULE_LABELS = dict(_FALLBACK_MODULE_LABELS)
+MODULE_FIELDS = {mod: dict(items) for mod, items in _FALLBACK_MODULE_FIELDS.items()}

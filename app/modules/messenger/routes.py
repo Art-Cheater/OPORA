@@ -24,6 +24,7 @@ from app.modules.messenger.serializers import (
     serialize_search_result,
     serialize_user,
 )
+from app.modules.messenger.cards import available_types, resolve_card, search_cards
 from app.modules.messenger.services import MessengerService
 
 
@@ -238,6 +239,55 @@ def send_attachment(conversation_id: uuid.UUID):
         )
     except (ValueError, TypeError):
         return jsonify({"error": "Некорректный идентификатор ответа."}), 400
+    except NotFoundError as exc:
+        return jsonify({"error": exc.message}), 404
+    except ValidationError as exc:
+        return jsonify({"error": exc.message}), 400
+
+    return jsonify({"message": serialize_message(message, current_user.id)}), 201
+
+
+@messenger_bp.route("/api/card-types")
+@login_required
+@permission_required(PERM_MESSENGER_USE)
+def card_types():
+    return jsonify({"types": available_types(current_user)})
+
+
+@messenger_bp.route("/api/cards")
+@login_required
+@permission_required(PERM_MESSENGER_USE)
+def cards():
+    entity_type = (request.args.get("type") or "").strip()
+    query = request.args.get("q", "")
+    return jsonify({"cards": search_cards(current_user, entity_type, query)})
+
+
+@messenger_bp.route("/api/conversations/<uuid:conversation_id>/cards", methods=["POST"])
+@login_required
+@permission_required(PERM_MESSENGER_USE)
+def send_card(conversation_id: uuid.UUID):
+    try:
+        conversation = MessengerService.ensure_access(conversation_id, current_user.id)
+        payload = request.json if request.is_json else request.form
+        entity_type = (payload or {}).get("type")
+        raw_id = (payload or {}).get("id")
+        card_id = uuid.UUID(str(raw_id))
+        card = resolve_card(current_user, str(entity_type or ""), card_id)
+        if card is None:
+            return jsonify({"error": "Карточка не найдена или нет доступа."}), 404
+        reply_raw = (payload or {}).get("reply_to_id")
+        reply_to_id = uuid.UUID(str(reply_raw)) if reply_raw else None
+        body = (payload or {}).get("body")
+        message = MessengerService.send_card(
+            conversation,
+            sender_id=current_user.id,
+            card=card,
+            body=body,
+            reply_to_id=reply_to_id,
+        )
+    except (ValueError, TypeError):
+        return jsonify({"error": "Некорректная карточка."}), 400
     except NotFoundError as exc:
         return jsonify({"error": exc.message}), 404
     except ValidationError as exc:

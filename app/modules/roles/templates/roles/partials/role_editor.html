@@ -38,7 +38,7 @@
                 {% if role %}
                 <div class="col-md-4">
                     <small class="text-muted">Сотрудников с ролью</small>
-                    <div class="fw-semibold">{{ role.user_roles|selectattr('deleted_at', 'none')|list|length }}</div>
+                    <div class="fw-semibold">{{ users_count }}</div>
                 </div>
                 {% endif %}
             </div>

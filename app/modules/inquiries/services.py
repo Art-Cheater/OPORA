@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import threading
 import uuid
 from dataclasses import dataclass
+from datetime import date, datetime, timezone
 from pathlib import Path
 
+from sqlalchemy import delete, text
 from sqlalchemy.exc import IntegrityError
 
 from app.core.exceptions import ValidationError
@@ -18,7 +21,7 @@ from app.models.files.attachment import Attachment
 from app.models.inquiries.inquiry import STATUS_DONE, STATUS_NEW, STATUS_SEEN, Inquiry
 from app.models.inquiries.mailbox_state import InquiryMailboxState
 from app.modules.inquiries.imap_client import ImapError, ImapMailbox, connect_mailbox
-from app.modules.inquiries.parse_email import parse_rfc822
+from app.modules.inquiries.parse_email import parse_headers_only, parse_rfc822
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +29,31 @@ _sync_lock = threading.Lock()
 _sync_running = False
 
 ENTITY_TYPE = "inquiry"
-MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
+MAX_MESSAGE_BYTES = 8 * 1024 * 1024
+ADVISORY_LOCK_KEY = 82917701
 
 
 @dataclass
 class SyncResult:
     fetched: int = 0
     skipped: int = 0
+    skipped_old: int = 0
+    purged: int = 0
     error: str | None = None
     configured: bool = True
+
+
+def _year_cutoff(year: int) -> datetime:
+    return datetime(int(year), 1, 1, tzinfo=timezone.utc)
+
+
+def _is_recent(value: datetime | None, year_from: int) -> bool:
+    if value is None:
+        return False
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value >= _year_cutoff(year_from)
 
 
 class InquiryService:
@@ -52,7 +71,8 @@ class InquiryService:
             "user": user,
             "password": password,
             "folder": str(cfg.get("INQUIRY_IMAP_FOLDER") or "INBOX").strip() or "INBOX",
-            "limit": int(cfg.get("INQUIRY_FETCH_LIMIT") or 40),
+            "limit": int(cfg.get("INQUIRY_FETCH_LIMIT") or 15),
+            "year_from": int(cfg.get("INQUIRY_YEAR_FROM") or 2026),
         }
 
     @classmethod
@@ -73,10 +93,11 @@ class InquiryService:
                 user=str(cfg["user"]),
                 password=str(cfg["password"]),
             )
-            snapshot = mailbox_client.snapshot(str(cfg["folder"]), after_uid=0, limit=1)
+            since = date(int(cfg["year_from"]), 1, 1)
+            snapshot = mailbox_client.snapshot(str(cfg["folder"]), after_uid=0, limit=1, since=since)
             return True, (
                 f"Вход в {cfg['user']} успешен. Папка {cfg['folder']}, "
-                f"UIDVALIDITY {snapshot.uidvalidity}."
+                f"с {cfg['year_from']} года, UIDVALIDITY {snapshot.uidvalidity}."
             )
         except ImapError as exc:
             return False, str(exc)
@@ -102,9 +123,56 @@ class InquiryService:
         return _sync_running
 
     @classmethod
+    def purge_older_than_year(cls, year_from: int | None = None) -> int:
+        cfg = cls.mailbox_config()
+        year = int(year_from or cfg["year_from"])
+        cutoff = _year_cutoff(year)
+        ids = list(
+            db.session.scalars(
+                db.select(Inquiry.id).where(
+                    Inquiry.received_at.is_not(None),
+                    Inquiry.received_at < cutoff,
+                )
+            )
+        )
+        if not ids:
+            return 0
+        from flask import current_app
+
+        upload_root: Path = current_app.config["UPLOAD_FOLDER"]
+        files = list(
+            db.session.scalars(
+                db.select(Attachment).where(
+                    Attachment.entity_type == ENTITY_TYPE,
+                    Attachment.entity_id.in_(ids),
+                )
+            )
+        )
+        for item in files:
+            path = upload_root / item.storage_key
+            try:
+                if path.is_file():
+                    path.unlink()
+            except OSError:
+                pass
+            folder = upload_root / "inquiries" / str(item.entity_id)
+            if folder.is_dir():
+                shutil.rmtree(folder, ignore_errors=True)
+        db.session.execute(
+            delete(Attachment).where(
+                Attachment.entity_type == ENTITY_TYPE,
+                Attachment.entity_id.in_(ids),
+            )
+        )
+        db.session.execute(delete(Inquiry).where(Inquiry.id.in_(ids)))
+        db.session.commit()
+        logger.info("Обращения: удалены письма старше %s, %s шт.", year, len(ids))
+        return len(ids)
+
+    @classmethod
     def sync(cls, *, client: ImapMailbox | None = None, user_id: uuid.UUID | None = None) -> SyncResult:
         global _sync_running
-        if not _sync_lock.acquire(blocking=False):
+        if not cls._acquire_lock():
             return SyncResult(error="Забор писем уже идёт.")
         _sync_running = True
         own_client = client is None
@@ -112,6 +180,28 @@ class InquiryService:
             return cls._sync_locked(client=client, own_client=own_client, user_id=user_id)
         finally:
             _sync_running = False
+            cls._release_lock()
+
+    @staticmethod
+    def _acquire_lock() -> bool:
+        bind = db.session.get_bind()
+        if bind is not None and bind.dialect.name == "postgresql":
+            got = db.session.execute(
+                text("SELECT pg_try_advisory_lock(:k)"), {"k": ADVISORY_LOCK_KEY}
+            ).scalar()
+            return bool(got)
+        return _sync_lock.acquire(blocking=False)
+
+    @staticmethod
+    def _release_lock() -> None:
+        bind = db.session.get_bind()
+        if bind is not None and bind.dialect.name == "postgresql":
+            try:
+                db.session.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": ADVISORY_LOCK_KEY})
+            except Exception:
+                pass
+            return
+        if _sync_lock.locked():
             _sync_lock.release()
 
     @classmethod
@@ -125,9 +215,12 @@ class InquiryService:
         from flask import current_app
 
         cfg = cls.mailbox_config()
+        year_from = int(cfg["year_from"])
+        purged = cls.purge_older_than_year(year_from)
         if client is None and (not cfg["user"] or not cfg["password"]):
             return SyncResult(
                 configured=False,
+                purged=purged,
                 error="В .env нет пароля ящика (INQUIRY_IMAP_PASSWORD).",
             )
         state = cls._get_or_create_state(str(cfg["mailbox"]), str(cfg["folder"]))
@@ -140,26 +233,69 @@ class InquiryService:
                     user=str(cfg["user"]),
                     password=str(cfg["password"]),
                 )
+            since = date(year_from, 1, 1)
             snapshot = mailbox_client.snapshot(
                 str(cfg["folder"]),
-                after_uid=state.last_uid if state.uidvalidity else 0,
+                after_uid=0,
                 limit=int(cfg["limit"]),
+                since=since,
             )
             if state.uidvalidity and snapshot.uidvalidity and state.uidvalidity != snapshot.uidvalidity:
-                state.last_uid = 0
-                snapshot = mailbox_client.snapshot(str(cfg["folder"]), after_uid=0, limit=int(cfg["limit"]))
+                state.uidvalidity = snapshot.uidvalidity
             state.uidvalidity = snapshot.uidvalidity
+            imported = set(
+                db.session.scalars(
+                    db.select(Inquiry.imap_uid).where(
+                        Inquiry.mailbox == str(cfg["mailbox"]),
+                        Inquiry.imap_uidvalidity == snapshot.uidvalidity,
+                    )
+                )
+            )
+            batch = [uid for uid in reversed(snapshot.uids) if uid not in imported][: int(cfg["limit"])]
             fetched = 0
             skipped = 0
+            skipped_old = 0
             max_uid = state.last_uid
             upload_root: Path = current_app.config["UPLOAD_FOLDER"]
-            for uid in snapshot.uids:
-                if cls._exists(str(cfg["mailbox"]), snapshot.uidvalidity, uid):
+            for uid in batch:
+                header_raw = mailbox_client.peek_headers(uid)
+                header_date, header_subject, header_from, header_mid = (
+                    parse_headers_only(header_raw) if header_raw else (None, "(без темы)", None, None)
+                )
+                if header_date is not None and not _is_recent(header_date, year_from):
+                    skipped_old += 1
+                    max_uid = max(max_uid, uid)
+                    continue
+                size = mailbox_client.message_size(uid)
+                if size > MAX_MESSAGE_BYTES:
+                    inquiry = Inquiry(
+                        mailbox=str(cfg["mailbox"]),
+                        imap_uid=uid,
+                        imap_uidvalidity=snapshot.uidvalidity,
+                        message_id=header_mid,
+                        from_email=(header_from or "")[:255] or None,
+                        subject=(header_subject or "(без темы)")[:1000],
+                        received_at=header_date or utcnow(),
+                        status=STATUS_NEW,
+                        parse_warning="Письмо больше 8 МБ — не скачивали, чтобы не класть сервер.",
+                        created_by=user_id,
+                        updated_by=user_id,
+                    )
+                    db.session.add(inquiry)
+                    try:
+                        db.session.commit()
+                    except IntegrityError:
+                        db.session.rollback()
                     skipped += 1
                     max_uid = max(max_uid, uid)
                     continue
                 raw = mailbox_client.fetch_rfc822(uid)
                 parsed = parse_rfc822(raw)
+                received_at = parsed.received_at or header_date
+                if not _is_recent(received_at, year_from):
+                    skipped_old += 1
+                    max_uid = max(max_uid, uid)
+                    continue
                 inquiry = Inquiry(
                     mailbox=str(cfg["mailbox"]),
                     imap_uid=uid,
@@ -170,8 +306,8 @@ class InquiryService:
                     to_email=parsed.to_email,
                     subject=parsed.subject[:1000],
                     body_text=parsed.body_text,
-                    body_html=parsed.body_html,
-                    received_at=parsed.received_at or utcnow(),
+                    body_html=None,
+                    received_at=received_at or utcnow(),
                     status=STATUS_NEW,
                     parse_warning=parsed.warning,
                     created_by=user_id,
@@ -182,7 +318,6 @@ class InquiryService:
                     db.session.flush()
                 except IntegrityError:
                     db.session.rollback()
-                    state = cls._get_or_create_state(str(cfg["mailbox"]), str(cfg["folder"]))
                     skipped += 1
                     max_uid = max(max_uid, uid)
                     continue
@@ -216,18 +351,23 @@ class InquiryService:
             state.uidvalidity = snapshot.uidvalidity
             state.touch_ok()
             db.session.commit()
-            return SyncResult(fetched=fetched, skipped=skipped)
+            return SyncResult(
+                fetched=fetched,
+                skipped=skipped,
+                skipped_old=skipped_old,
+                purged=purged,
+            )
         except ImapError as exc:
             db.session.rollback()
             state = cls._get_or_create_state(str(cfg["mailbox"]), str(cfg["folder"]))
             state.last_error = str(exc)[:1000]
             db.session.commit()
             logger.warning("IMAP обращений: %s", exc)
-            return SyncResult(error=str(exc))
+            return SyncResult(error=str(exc), purged=purged)
         except Exception as exc:
             db.session.rollback()
             logger.exception("Синхронизация обращений")
-            return SyncResult(error=str(exc))
+            return SyncResult(error=str(exc), purged=purged)
         finally:
             if own_client and mailbox_client is not None:
                 mailbox_client.close()
@@ -289,3 +429,46 @@ class InquiryService:
             inquiry.status = STATUS_SEEN
             inquiry.updated_by = user_id
             db.session.commit()
+
+    @classmethod
+    def forward(cls, inquiry: Inquiry, *, to_user_id: uuid.UUID, actor) -> dict:
+        from flask import url_for
+
+        from app.modules.auth.repositories import UserRepository
+        from app.modules.inquiries.access import can_access_inquiry
+        from app.modules.messenger.cards import snapshot_inquiry
+        from app.modules.messenger.repositories import MessengerRepository
+        from app.modules.messenger.services import MessengerService
+
+        if not can_access_inquiry(actor, inquiry):
+            raise ValidationError("Нет доступа к письму.")
+        if to_user_id == actor.id:
+            raise ValidationError("Нельзя переслать письмо себе.")
+        peer = UserRepository.get_by_id(to_user_id)
+        if peer is None or peer.deleted_at is not None or not peer.is_active or peer.is_blocked:
+            raise ValidationError("Сотрудник не найден.")
+
+        card = snapshot_inquiry(inquiry)
+        inquiry.assigned_to = peer.id
+        inquiry.forwarded_by = actor.id
+        inquiry.forwarded_at = utcnow()
+        inquiry.updated_by = actor.id
+        db.session.flush()
+
+        conversation = MessengerRepository.get_or_create_conversation(
+            actor.id,
+            peer.id,
+            created_by=actor.id,
+        )
+        message = MessengerService.send_card(
+            conversation,
+            sender_id=actor.id,
+            card=card,
+            body=f"Переслал письмо: {inquiry.subject}",
+        )
+        return {
+            "conversation_id": str(conversation.id),
+            "message_id": str(message.id),
+            "url": url_for("messenger.index", c=conversation.id),
+            "assignee_name": peer.full_name,
+        }

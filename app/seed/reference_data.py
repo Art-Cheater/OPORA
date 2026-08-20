@@ -162,6 +162,7 @@ class ReferenceDataService:
             PERM_REQUESTS_VIEW, PERM_REQUESTS_CREATE, PERM_REQUESTS_EDIT,
             PERM_REQUESTS_DISPATCH,
             PERM_OBJECTS_VIEW, PERM_PROJECTS_VIEW, PERM_MESSENGER_USE, PERM_SEARCH_USE,
+            "inquiries.view",
         ],
     }
 

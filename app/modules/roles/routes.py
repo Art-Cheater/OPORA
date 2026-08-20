@@ -131,6 +131,7 @@ def _editor_context(role=None, form=None, form_action=None, is_edit=False):
         can_manage=current_user.has_permission(PERM_ROLES_MANAGE),
         is_admin_role=bool(role and role.code == ROLE_ADMIN),
         standard_actions=standard_actions,
+        users_count=RoleRepository.users_count(role) if role else 0,
     )
 
 
@@ -148,31 +149,12 @@ def index():
     )
     selected_id = request.args.get("role_id")
     selected = RoleRepository.get_by_id(selected_id) if selected_id else (roles[0] if roles else None)
-
-    if selected:
-        form = RoleForm(obj=selected)
-        form.is_edit = True
-        form.is_system = selected.is_system
-        form_action = url_for("roles.edit", role_id=selected.id)
-        is_edit = True
-    else:
-        form = RoleForm()
-        form.is_edit = False
-        form_action = url_for("roles.create")
-        is_edit = False
-
-    ctx = _editor_context(
-        role=selected,
-        form=form,
-        form_action=form_action,
-        is_edit=is_edit,
-    )
     return render_template(
         "roles/index.html",
         filter_form=filter_form,
         roles=roles,
         selected_role=selected,
-        **ctx,
+        can_manage=current_user.has_permission(PERM_ROLES_MANAGE),
     )
 
 

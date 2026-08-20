@@ -57,7 +57,23 @@ class Inquiry(BaseModel):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
+    assigned_to: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    forwarded_by: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    forwarded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     processor: Mapped[User | None] = relationship("User", foreign_keys=[processed_by])
+    assignee: Mapped[User | None] = relationship("User", foreign_keys=[assigned_to])
+    forwarder: Mapped[User | None] = relationship("User", foreign_keys=[forwarded_by])
 
     @property
     def status_label(self) -> str:

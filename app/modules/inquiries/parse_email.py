@@ -111,6 +111,28 @@ def _safe_filename(name: str | None, index: int) -> str:
     return text[:200]
 
 
+def parse_header_datetime(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        received_at = parsedate_to_datetime(raw)
+        if received_at.tzinfo is None:
+            received_at = received_at.replace(tzinfo=timezone.utc)
+        return received_at
+    except (TypeError, ValueError, OverflowError, IndexError):
+        return None
+
+
+def parse_headers_only(raw: bytes) -> tuple[datetime | None, str, str | None, str | None]:
+    """Дата, тема, from, Message-ID из заголовков без тела."""
+    message: EmailMessage | Message = BytesParser(policy=policy.default).parsebytes(raw)
+    received_at = parse_header_datetime(str(message.get("Date") or "") or None)
+    subject = decode_header_value(message.get("Subject")) or "(без темы)"
+    _name, from_email = _split_address(str(message.get("From") or ""))
+    message_id = (message.get("Message-ID") or message.get("Message-Id") or "").strip() or None
+    return received_at, subject[:1000], from_email, (message_id[:500] if message_id else None)
+
+
 def parse_rfc822(raw: bytes) -> ParsedMail:
     message: EmailMessage | Message = BytesParser(policy=policy.default).parsebytes(raw)
     from_name, from_email = _split_address(str(message.get("From") or ""))
@@ -118,15 +140,7 @@ def parse_rfc822(raw: bytes) -> ParsedMail:
     subject = decode_header_value(message.get("Subject")) or "(без темы)"
     message_id = (message.get("Message-ID") or message.get("Message-Id") or "").strip() or None
 
-    received_at = None
-    date_raw = message.get("Date")
-    if date_raw:
-        try:
-            received_at = parsedate_to_datetime(date_raw)
-            if received_at.tzinfo is None:
-                received_at = received_at.replace(tzinfo=timezone.utc)
-        except (TypeError, ValueError, OverflowError):
-            received_at = None
+    received_at = parse_header_datetime(str(message.get("Date") or "") or None)
 
     body_text = None
     body_html = None
@@ -172,8 +186,8 @@ def parse_rfc822(raw: bytes) -> ParsedMail:
         from_email=(from_email or None),
         to_email=(to_raw or None)[:1000] if to_raw else None,
         subject=subject[:1000],
-        body_text=body_text,
-        body_html=body_html,
+        body_text=body_text[:100_000] if body_text else None,
+        body_html=None,
         received_at=received_at,
         attachments=attachments,
         warning=warning,

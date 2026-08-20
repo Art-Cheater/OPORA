@@ -192,6 +192,12 @@ class PermissionService:
             BuiltinFieldService.clear_cache()
         except Exception:
             pass
+        try:
+            from app.core.field_catalog import clear_catalog_cache
+
+            clear_catalog_cache()
+        except Exception:
+            pass
 
     @staticmethod
     def get_modules() -> list[CachedModule]:

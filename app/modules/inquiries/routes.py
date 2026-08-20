@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import uuid
 from pathlib import Path
 
 from flask import abort, current_app, flash, jsonify, redirect, render_template, request, send_file, url_for
@@ -16,8 +17,10 @@ from app.models.auth.constants import (
     PERM_INQUIRIES_EDIT,
     PERM_INQUIRIES_SYNC,
     PERM_INQUIRIES_VIEW,
+    PERM_MESSENGER_USE,
 )
 from app.models.base import utcnow
+from app.modules.inquiries.access import can_access_inquiry, manages_mailbox
 from app.modules.inquiries.blueprint import inquiries_bp
 from app.modules.inquiries.forms import InquiryFilterForm
 from app.modules.inquiries.repositories import InquiryFilter, InquiryRepository
@@ -28,21 +31,36 @@ def _inquiry_filters() -> InquiryFilter:
     return InquiryFilter(q=request.args.get("q", ""), status=request.args.get("status", ""))
 
 
+def _assigned_scope():
+    if manages_mailbox(current_user):
+        return None
+    return current_user.id
+
+
+def _get_visible_inquiry(inquiry_id):
+    inquiry = InquiryRepository.get_by_id(inquiry_id)
+    if inquiry is None or not can_access_inquiry(current_user, inquiry):
+        abort(404)
+    return inquiry
+
+
 @inquiries_bp.route("/")
 @login_required
 @permission_required(PERM_INQUIRIES_VIEW)
 def index():
     form = InquiryFilterForm(request.args)
+    mailbox = manages_mailbox(current_user)
     return render_template(
         "inquiries/index.html",
         filter_form=form,
         q=request.args.get("q", ""),
         status=request.args.get("status", ""),
-        mailbox_state=InquiryService.mailbox_state(),
-        configured=InquiryService.is_configured(),
-        running=InquiryService.is_running(),
+        mailbox_state=InquiryService.mailbox_state() if mailbox else None,
+        configured=InquiryService.is_configured() if mailbox else True,
+        running=InquiryService.is_running() if mailbox else False,
         mailbox=InquiryService.mailbox_config()["mailbox"],
-        unread=InquiryRepository.unread_count(),
+        unread=InquiryRepository.unread_count(assigned_to=_assigned_scope()),
+        manages_mailbox=mailbox,
     )
 
 
@@ -50,14 +68,20 @@ def index():
 @login_required
 @permission_required(PERM_INQUIRIES_VIEW)
 def table():
+    sees_all = manages_mailbox(current_user)
     pagination = InquiryRepository.paginated_list(
         _inquiry_filters(),
         page=request.args.get("page", 1, type=int),
         per_page=request.args.get("per_page", 30, type=int),
+        assigned_to=None if sees_all else current_user.id,
     )
     return jsonify(
         {
-            "table_html": render_template("inquiries/partials/table.html", pagination=pagination),
+            "table_html": render_template(
+                "inquiries/partials/table.html",
+                pagination=pagination,
+                sees_all=sees_all,
+            ),
             "pagination_html": render_template("inquiries/partials/pagination.html", pagination=pagination),
         }
     )
@@ -81,7 +105,7 @@ def sync_now():
             InquiryService.sync(user_id=user_id)
 
     threading.Thread(target=worker, daemon=True, name="inquiry-sync").start()
-    flash("Забираем письма с kirovsvet@mail.ru. Обновите страницу через минуту.", "success")
+    flash("Забираем письма за 2026 год порциями. Старые не трогаем и с сайта уберём.", "success")
     return redirect(url_for("inquiries.index"))
 
 
@@ -89,22 +113,44 @@ def sync_now():
 @login_required
 @permission_required(PERM_INQUIRIES_VIEW)
 def detail(inquiry_id):
-    inquiry = InquiryRepository.get_by_id(inquiry_id)
-    if inquiry is None:
-        abort(404)
-    if current_user.has_permission(PERM_INQUIRIES_EDIT):
+    inquiry = _get_visible_inquiry(inquiry_id)
+    if inquiry.assigned_to == current_user.id:
+        InquiryService.mark_seen(inquiry, current_user.id)
+    elif inquiry.assigned_to is None and current_user.has_permission(PERM_INQUIRIES_EDIT):
         InquiryService.mark_seen(inquiry, current_user.id)
     files = InquiryService.attachments(inquiry.id)
-    return render_template("inquiries/detail.html", inquiry=inquiry, files=files)
+    return render_template(
+        "inquiries/detail.html",
+        inquiry=inquiry,
+        files=files,
+        can_forward=current_user.has_permission(PERM_MESSENGER_USE),
+    )
+
+
+@inquiries_bp.route("/<uuid:inquiry_id>/forward", methods=["POST"])
+@login_required
+@permission_required(PERM_INQUIRIES_VIEW)
+@permission_required(PERM_MESSENGER_USE)
+def forward(inquiry_id):
+    inquiry = _get_visible_inquiry(inquiry_id)
+    payload = request.json if request.is_json else request.form
+    raw_id = (payload or {}).get("user_id")
+    try:
+        to_user_id = uuid.UUID(str(raw_id))
+    except (ValueError, TypeError, AttributeError):
+        return jsonify({"error": "Выберите сотрудника."}), 400
+    try:
+        result = InquiryService.forward(inquiry, to_user_id=to_user_id, actor=current_user)
+    except ValidationError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"ok": True, **result})
 
 
 @inquiries_bp.route("/<uuid:inquiry_id>/status", methods=["POST"])
 @login_required
 @permission_required(PERM_INQUIRIES_EDIT)
 def set_status(inquiry_id):
-    inquiry = InquiryRepository.get_by_id(inquiry_id)
-    if inquiry is None:
-        abort(404)
+    inquiry = _get_visible_inquiry(inquiry_id)
     status = (request.form.get("status") or "").strip()
     try:
         InquiryService.set_status(inquiry, status, current_user.id)
@@ -119,9 +165,7 @@ def set_status(inquiry_id):
 @login_required
 @permission_required(PERM_INQUIRIES_VIEW)
 def download(inquiry_id, file_id):
-    inquiry = InquiryRepository.get_by_id(inquiry_id)
-    if inquiry is None:
-        abort(404)
+    inquiry = _get_visible_inquiry(inquiry_id)
     item = next((file for file in InquiryService.attachments(inquiry.id) if file.id == file_id), None)
     if item is None:
         abort(404)
@@ -135,9 +179,7 @@ def download(inquiry_id, file_id):
 @login_required
 @permission_required(PERM_INQUIRIES_DELETE)
 def delete(inquiry_id):
-    inquiry = InquiryRepository.get_by_id(inquiry_id)
-    if inquiry is None:
-        abort(404)
+    inquiry = _get_visible_inquiry(inquiry_id)
     inquiry.deleted_at = utcnow()
     inquiry.updated_by = current_user.id
     db.session.commit()
