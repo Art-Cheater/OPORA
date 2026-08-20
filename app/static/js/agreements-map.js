@@ -10,11 +10,16 @@
   const COLORS = ["#c45c26", "#1d4ed8", "#0f766e", "#7c3aed", "#b45309", "#be123c", "#0369a1"];
 
   const map = L.map(mapNode, { zoomControl: true });
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
     maxZoom: 19,
-    attribution: "&copy; OpenStreetMap contributors",
+    subdomains: "abcd",
+    attribution: "&copy; OpenStreetMap &copy; CARTO",
   }).addTo(map);
   map.setView(KIROV, 12);
+  const refreshSize = () => map.invalidateSize();
+  map.whenReady(refreshSize);
+  window.addEventListener("resize", refreshSize);
+  setTimeout(refreshSize, 250);
 
   const layer = L.layerGroup().addTo(map);
   const placed = new Map();
@@ -130,6 +135,7 @@
     } else {
       map.setView(KIROV, 12);
     }
+    map.invalidateSize();
   }
 
   load(false);

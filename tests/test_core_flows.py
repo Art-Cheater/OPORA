@@ -219,9 +219,21 @@ def test_messenger_send_text_file_and_unread(admin_client, app):
 
     listed = admin_client.get(f"/messenger/api/conversations/{conversation_id}/messages")
     assert listed.status_code == 200
-    bodies = [row.get("body") for row in listed.get_json()["messages"]]
-    assert "Привет из проверки" in bodies
-    assert any(row.get("has_attachment") for row in listed.get_json()["messages"])
+    rows = listed.get_json()["messages"]
+    bodies = [row.get("body") for row in rows]
+    assert bodies.count("Привет из проверки") == 1
+    assert len({row["id"] for row in rows}) == len(rows)
+    assert any(row.get("has_attachment") for row in rows)
+
+    replied = admin_client.post(
+        f"/messenger/api/conversations/{conversation_id}/messages",
+        json={"body": "Ответ на проверку", "reply_to_id": message["id"]},
+    )
+    assert replied.status_code == 201, replied.get_data(as_text=True)[:2000]
+    with_reply = admin_client.get(f"/messenger/api/conversations/{conversation_id}/messages")
+    reply_rows = with_reply.get_json()["messages"]
+    assert len({row["id"] for row in reply_rows}) == len(reply_rows)
+    assert any(row.get("reply_to_id") == message["id"] for row in reply_rows)
 
     found = admin_client.get("/messenger/api/search?q=проверки")
     assert found.status_code == 200
@@ -262,3 +274,10 @@ def test_reports_eis_search_and_roles_still_open(admin_client):
     ):
         resp = admin_client.get(path)
         assert resp.status_code == 200, path
+
+    agreements = admin_client.get("/agreements/")
+    html = agreements.get_data(as_text=True)
+    assert "vendor/leaflet/leaflet.js" in html
+    assert "unpkg.com" not in html
+    assert admin_client.get("/agreements/map.json").status_code == 200
+    assert admin_client.get("/static/vendor/leaflet/images/marker-icon.png").status_code == 200

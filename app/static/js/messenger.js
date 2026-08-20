@@ -53,7 +53,8 @@
   let unreadPollTimer = null;
   let conversationsRequest = null;
   let unreadRequest = null;
-  let messagePollRunning = false;
+  let sending = false;
+  let messagesAbort = null;
   const drafts = new Map();
   const pollIntervalMs = Number(app.dataset.pollInterval || 8000);
   const unreadIntervalMs = Number(app.dataset.unreadInterval || 15000);
@@ -663,10 +664,7 @@
     });
     if (!res.ok) return;
     const data = await res.json();
-    if (!messagesContainer.querySelector(`.tg-msg[data-message-id="${data.message.id}"]`)) {
-      messagesContainer.appendChild(renderMessage(data.message));
-    }
-    lastMessageId = data.message.id;
+    appendMessage(data.message);
     messageInput.value = "";
     messageInput.style.height = "auto";
     clearReplyTarget();
@@ -676,10 +674,30 @@
     await loadConversations();
   }
 
+  function appendMessage(msg) {
+    if (!msg?.id) return false;
+    if (messagesContainer.querySelector(`.tg-msg[data-message-id="${msg.id}"]`)) {
+      return false;
+    }
+    messagesContainer.appendChild(renderMessage(msg));
+    lastMessageId = msg.id;
+    return true;
+  }
+
   async function loadMessages(scrollBottom = false) {
     if (!activeConversationId) return;
     const conversationId = activeConversationId;
-    const res = await api(`/messenger/api/conversations/${conversationId}/messages`);
+    if (messagesAbort) messagesAbort.abort();
+    messagesAbort = new AbortController();
+    let res;
+    try {
+      res = await api(`/messenger/api/conversations/${conversationId}/messages`, {
+        signal: messagesAbort.signal,
+      });
+    } catch (err) {
+      if (err?.name === "AbortError") return;
+      throw err;
+    }
     if (!res.ok) return;
     const data = await res.json();
     if (conversationId !== activeConversationId) return;
@@ -690,26 +708,19 @@
     }
 
     const stickToBottom = scrollBottom || isNearBottom(messagesContainer);
-    const existingIds = new Set(
-      [...messagesContainer.querySelectorAll(".tg-msg")].map((el) => el.dataset.messageId)
-    );
     const isInitial = scrollBottom;
     let appended = 0;
 
     data.messages.forEach((msg) => {
-      if (!existingIds.has(msg.id)) {
-        messagesContainer.appendChild(renderMessage(msg));
-        lastMessageId = msg.id;
+      if (appendMessage(msg)) {
         appended += 1;
         if (!isInitial) {
           notifyIncomingMessage(msg, conversationId);
         }
-      } else {
+      } else if (msg.is_mine) {
         const el = messagesContainer.querySelector(`.tg-msg[data-message-id="${msg.id}"]`);
-        if (el && msg.is_mine) {
-          const readEl = el.querySelector(".tg-bubble__read");
-          if (readEl) readEl.textContent = msg.is_read ? "✓✓" : "✓";
-        }
+        const readEl = el?.querySelector(".tg-bubble__read");
+        if (readEl) readEl.textContent = msg.is_read ? "✓✓" : "✓";
       }
     });
 
@@ -725,8 +736,9 @@
   async function sendMessage() {
     const body = messageInput.value.trim();
     const hasFiles = pendingFiles.length > 0;
-    if ((!body && !hasFiles) || !activeConversationId) return;
+    if (sending || (!body && !hasFiles) || !activeConversationId) return;
 
+    sending = true;
     sendBtn.disabled = true;
     const conversationId = activeConversationId;
     const replyId = replyTarget?.id || null;
@@ -756,6 +768,7 @@
         scrollMessagesToBottom();
       }
     } finally {
+      sending = false;
       sendBtn.disabled = false;
     }
   }
@@ -769,10 +782,7 @@
     });
     if (!res.ok) return;
     const data = await res.json();
-    if (!messagesContainer.querySelector(`.tg-msg[data-message-id="${data.message.id}"]`)) {
-      messagesContainer.appendChild(renderMessage(data.message));
-    }
-    lastMessageId = data.message.id;
+    appendMessage(data.message);
   }
 
   async function sendFile(file, replyId = null) {
@@ -786,10 +796,7 @@
     });
     if (!res.ok) return;
     const data = await res.json();
-    if (!messagesContainer.querySelector(`.tg-msg[data-message-id="${data.message.id}"]`)) {
-      messagesContainer.appendChild(renderMessage(data.message));
-    }
-    lastMessageId = data.message.id;
+    appendMessage(data.message);
   }
 
   async function searchMessages(query) {
@@ -874,14 +881,9 @@
 
   function startPolling() {
     clearInterval(pollTimer);
-    const tick = async () => {
-      if (messagePollRunning || document.hidden) return;
-      messagePollRunning = true;
-      try {
-        await loadMessages(false);
-      } finally {
-        messagePollRunning = false;
-      }
+    const tick = () => {
+      if (document.hidden) return;
+      loadMessages(false);
     };
     pollTimer = setInterval(tick, pollIntervalMs);
   }
@@ -929,10 +931,10 @@
 
   sendBtn.addEventListener("click", sendMessage);
   messageInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+    if (e.key !== "Enter" || e.shiftKey) return;
+    if (e.repeat || e.isComposing || e.keyCode === 229) return;
+    e.preventDefault();
+    sendMessage();
   });
   messageInput.addEventListener("paste", handlePaste);
   app.addEventListener("paste", (e) => {

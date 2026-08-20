@@ -252,7 +252,7 @@ class MessengerRepository:
             if before_msg is not None:
                 stmt = stmt.where(MessengerMessage.created_at < before_msg.created_at)
 
-        messages = list(db.session.scalars(stmt))
+        messages = list(db.session.scalars(stmt).unique())
         messages.reverse()
         return messages
 
@@ -297,7 +297,7 @@ class MessengerRepository:
             .order_by(MessengerMessage.created_at.desc())
             .limit(limit)
         )
-        return list(db.session.scalars(stmt))
+        return list(db.session.scalars(stmt).unique())
 
     @staticmethod
     def list_users(
