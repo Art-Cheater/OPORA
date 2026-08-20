@@ -1,6 +1,7 @@
 """Репозиторий пользователей — слой доступа к данным."""
 
 import uuid
+from dataclasses import dataclass
 
 from sqlalchemy.orm import joinedload, noload, selectinload
 
@@ -10,6 +11,14 @@ from app.models.auth.permission import Permission
 from app.models.auth.position import Position
 from app.models.auth.role import Role
 from app.models.auth.user import User
+
+
+@dataclass(frozen=True, slots=True)
+class UserName:
+    """Имя для селектов: без ORM-User, чтобы не затирать RBAC current_user."""
+
+    id: uuid.UUID
+    full_name: str
 
 
 class UserRepository:
@@ -43,6 +52,20 @@ class UserRepository:
             )
             .where(User.id == user_id, User.active_filter())
         )
+
+    @staticmethod
+    def list_active_names() -> list[UserName]:
+        """Только id+ФИО, без identity map — безопасно рядом с current_user."""
+        rows = db.session.execute(
+            db.select(User.id, User.full_name)
+            .where(
+                User.active_filter(),
+                User.is_active.is_(True),
+                User.is_blocked.is_(False),
+            )
+            .order_by(User.full_name.asc())
+        ).all()
+        return [UserName(id=row.id, full_name=row.full_name) for row in rows]
 
     @staticmethod
     def get_by_email(email: str) -> User | None:

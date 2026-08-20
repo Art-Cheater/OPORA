@@ -9,6 +9,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-opora}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    command: ["postgres", "-c", "max_connections=200"]
     ports:
       - "5432:5432"
     healthcheck:
@@ -62,6 +63,8 @@ services:
       DB_PORT: "5432"
       FLASK_ENV: ${FLASK_ENV:-production}
       OPORA_RUN_MIGRATE: "0"
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "0"
     command: ["flask", "eis-sync", "--loop"]
     depends_on:
       db:
@@ -80,6 +83,8 @@ services:
       DB_PORT: "5432"
       FLASK_ENV: ${FLASK_ENV:-production}
       OPORA_RUN_MIGRATE: "0"
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "0"
     command: ["flask", "inquiry-sync", "--loop"]
     depends_on:
       db:

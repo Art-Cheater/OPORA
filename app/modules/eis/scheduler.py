@@ -77,4 +77,6 @@ def run_loop() -> None:
         except Exception:
             logger.exception("Прогон ЕИС завершился с ошибкой")
             db.session.rollback()
+        finally:
+            db.session.remove()
         time.sleep(60)

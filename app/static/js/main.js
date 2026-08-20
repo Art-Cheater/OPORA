@@ -173,6 +173,29 @@ function initInstantNav(sidebar, closeSidebar) {
     window.addEventListener("pageshow", hideLoading);
     window.addEventListener("pagehide", hideLoading);
 
+    const prefetched = new Set();
+    function prefetch(href) {
+        if (!href || prefetched.has(href)) return;
+        prefetched.add(href);
+        const hint = document.createElement("link");
+        hint.rel = "prefetch";
+        hint.href = href;
+        hint.as = "document";
+        document.head.appendChild(hint);
+    }
+
+    sidebar.addEventListener("pointerenter", (event) => {
+        const link = event.target.closest?.("a[href]");
+        if (!link || link.classList.contains("sidebar__link--disabled")) return;
+        const href = link.getAttribute("href");
+        if (!href || href === "#" || href.startsWith("javascript:")) return;
+        prefetch(new URL(href, window.location.href).href);
+        const page = new URL(href, window.location.href);
+        if (page.pathname.endsWith("/")) {
+            prefetch(new URL("table", page).href);
+        }
+    }, true);
+
     sidebar.addEventListener("click", (event) => {
         const link = event.target.closest("a[href]");
         if (!link || link.classList.contains("sidebar__link--disabled")) return;
@@ -191,11 +214,6 @@ function initInstantNav(sidebar, closeSidebar) {
             return;
         }
 
-        if (document.body.classList.contains("is-page-loading")) {
-            event.preventDefault();
-            return;
-        }
-
         const label =
             link.querySelector("span:not(.sidebar__badge)")?.textContent?.trim() ||
             "Загрузка";
@@ -207,6 +225,7 @@ function initInstantNav(sidebar, closeSidebar) {
         if (loadingTitle) loadingTitle.textContent = label;
         loading.hidden = false;
         closeSidebar();
+        window.setTimeout(hideLoading, 8000);
     });
 }
 

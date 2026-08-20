@@ -29,6 +29,9 @@ from app.modules.requests.address_format import normalize_address, split_address
 
 _geo_lock = threading.Lock()
 _geo_started = False
+MAP_POINT_LIMIT = 500
+GEOCODE_BATCH = 8
+HYDRATE_LIMIT = 80
 
 
 @dataclass
@@ -273,7 +276,7 @@ class AgreementService:
         )
         if agreement_id is not None:
             stmt = stmt.where(PoleAgreementSite.agreement_id == agreement_id)
-        rows = list(db.session.scalars(stmt))
+        rows = list(db.session.scalars(stmt.limit(HYDRATE_LIMIT)))
         placed = _apply_known_coords(rows)
         if placed:
             db.session.commit()
@@ -294,7 +297,7 @@ class AgreementService:
         )
         if agreement_id is not None:
             stmt = stmt.where(PoleAgreementSite.agreement_id == agreement_id)
-        rows = list(db.session.scalars(stmt))
+        rows = list(db.session.scalars(stmt.limit(max(GEOCODE_BATCH * 3, 24))))
         groups: dict[str, list[PoleAgreementSite]] = defaultdict(list)
         for site in rows:
             groups[geocode_query(site.address)].append(site)
@@ -312,6 +315,7 @@ class AgreementService:
                     placed += 1
         if placed:
             db.session.commit()
+        db.session.remove()
         return placed
 
     @classmethod
@@ -369,6 +373,7 @@ class AgreementService:
                 PoleAgreementSite.longitude.isnot(None),
             )
             .order_by(PoleAgreement.customer_name, PoleAgreementSite.sort_order)
+            .limit(MAP_POINT_LIMIT)
         )
         rows = list(db.session.scalars(stmt).unique())
         points: list[MapPoint] = []
@@ -425,8 +430,19 @@ class AgreementService:
         extra = list(
             db.session.scalars(
                 db.select(PoleAgreementSite)
+                .options(joinedload(PoleAgreementSite.agreement))
                 .join(PoleAgreement, PoleAgreementSite.agreement_id == PoleAgreement.id)
-                .where(PoleAgreement.active_filter(), PoleAgreementSite.deleted_at.is_(None))
+                .where(
+                    PoleAgreement.active_filter(),
+                    PoleAgreementSite.deleted_at.is_(None),
+                    or_(
+                        *[
+                            PoleAgreementSite.address.ilike(f"%{token}%")
+                            for token in tokens
+                        ]
+                    ),
+                )
+                .limit(80)
             )
         )
         hits: list[AddressHit] = []

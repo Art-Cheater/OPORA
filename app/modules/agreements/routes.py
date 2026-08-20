@@ -88,11 +88,7 @@ def upload():
 @permission_required(PERM_AGREEMENTS_VIEW)
 def map_data():
     agreement_id = request.args.get("agreement_id", type=uuid.UUID)
-    if request.args.get("backfill") == "1":
-        AgreementService.hydrate_missing_coords(agreement_id=agreement_id)
-        AgreementService.ensure_background_geocode()
-    else:
-        AgreementService.ensure_background_geocode()
+    AgreementService.ensure_background_geocode()
     points, remaining = AgreementService.map_points(agreement_id=agreement_id)
     return jsonify(
         {

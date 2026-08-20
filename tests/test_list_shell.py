@@ -39,3 +39,14 @@ def test_agreements_map_json_is_available(admin_client):
     data = payload.get_json()
     assert "points" in data
     assert "remaining" in data
+    assert payload.headers.get("Server-Timing")
+
+
+def test_projects_index_keeps_create_after_user_choices(admin_client):
+    page = admin_client.get("/projects/")
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert "Создать" in html
+    table = admin_client.get("/projects/table")
+    assert table.status_code == 200
+    assert table.get_json()["table_html"]

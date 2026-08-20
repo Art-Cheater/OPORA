@@ -103,6 +103,10 @@ def test_saved_rows_appear_in_ajax_tables(admin_client, app):
     project_id = project_payload["id"]
     assert project_name in _table_html(admin_client, "/projects")
 
+    modal = admin_client.get(f"/projects/{project_id}", headers=AJAX)
+    assert modal.status_code == 200, modal.get_data(as_text=True)[:2000]
+    assert project_name in modal.get_data(as_text=True)
+
     upload = admin_client.post(
         f"/projects/{project_id}/attachment",
         data={"files": [(io.BytesIO(b"project file"), "smeta.txt")], "submit": "Загрузить"},

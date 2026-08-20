@@ -57,34 +57,43 @@ class ProjectRepository:
                     load_only(User.id, User.full_name),
                     noload(User.login_logs),
                 ),
-                selectinload(Project.history),
-                selectinload(Project.documents),
                 joinedload(Project.manager).options(
                     load_only(User.id, User.full_name),
                     noload(User.login_logs),
                 ),
                 joinedload(Project.work_object),
+                noload(Project.history),
+                noload(Project.documents),
                 noload(Project.requests),
                 noload(Project.contracts),
             )
         )
 
     @staticmethod
-    def get_users() -> list[User]:
-        from sqlalchemy.orm import load_only, noload
+    def list_recent_history(project_id: uuid.UUID, limit: int = 40):
+        from app.models.projects.project_history import ProjectHistory
 
         return list(
             db.session.scalars(
-                db.select(User)
+                db.select(ProjectHistory)
                 .options(
-                    load_only(User.id, User.full_name),
-                    noload(User.user_roles),
-                    noload(User.login_logs),
+                    joinedload(ProjectHistory.changed_by_user).options(
+                        load_only(User.id, User.full_name),
+                        noload(User.user_roles),
+                        noload(User.login_logs),
+                    )
                 )
-                .where(User.active_filter(), User.is_active.is_(True), User.is_blocked.is_(False))
-                .order_by(User.full_name.asc())
+                .where(ProjectHistory.project_id == project_id)
+                .order_by(ProjectHistory.created_at.desc())
+                .limit(limit)
             )
         )
+
+    @staticmethod
+    def get_users():
+        from app.modules.auth.repositories import UserRepository
+
+        return UserRepository.list_active_names()
 
     @staticmethod
     def next_code() -> str:

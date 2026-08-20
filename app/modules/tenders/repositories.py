@@ -75,15 +75,10 @@ class TenderRepository:
         )
 
     @staticmethod
-    def get_users() -> list[User]:
-        return list(
-            db.session.scalars(
-                db.select(User)
-                .options(*_user_name_only())
-                .where(User.active_filter(), User.is_active.is_(True), User.is_blocked.is_(False))
-                .order_by(User.full_name.asc())
-            )
-        )
+    def get_users():
+        from app.modules.auth.repositories import UserRepository
+
+        return UserRepository.list_active_names()
 
     @staticmethod
     def next_number() -> str:

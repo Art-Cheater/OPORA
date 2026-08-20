@@ -247,7 +247,7 @@
             <div class="card-header"><i class="bi bi-clock-history"></i>История изменений</div>
             <div class="card-body">
                 <div class="small">
-                    {% for h in project.history %}
+                    {% for h in history|default([]) %}
                         <div class="border-start border-2 ps-3 mb-3">
                             <div class="fw-medium">{{ h.comment or h.action }}</div>
                             <div class="text-muted">{{ h.created_at.strftime('%d.%m.%Y %H:%M') }}</div>

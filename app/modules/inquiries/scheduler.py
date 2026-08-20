@@ -41,4 +41,6 @@ def run_loop() -> None:
         except Exception:
             logger.exception("Сбой забора писем")
             db.session.rollback()
+        finally:
+            db.session.remove()
         time.sleep(max(30, interval))

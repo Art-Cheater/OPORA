@@ -90,16 +90,19 @@ def _engine_options(database_url: str) -> dict:
         return {"connect_args": _sqlite_connect_args()}
 
     schema = os.getenv("POSTGRES_SCHEMA", "opora").strip() or "public"
-    options: dict = {
-        "pool_pre_ping": True,
-        "pool_recycle": 300,
-        "pool_size": int(os.getenv("DB_POOL_SIZE", "8")),
-        "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "16")),
-    }
+    connect_args: dict = {"connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "5"))}
     if schema and schema != "public":
         # Таблицы создаются в схеме, которой владеет приложение
-        options["connect_args"] = {"options": f"-csearch_path={schema},public"}
-    return options
+        connect_args["options"] = f"-csearch_path={schema},public"
+    return {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT", "8")),
+        # 3 gunicorn × (5+5) + 2 синка × 2 ≈ 34, с запасом до max_connections Postgres
+        "pool_size": int(os.getenv("DB_POOL_SIZE", "5")),
+        "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "5")),
+        "connect_args": connect_args,
+    }
 
 
 _DATABASE_URL = _default_database_url()

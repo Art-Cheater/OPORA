@@ -69,22 +69,10 @@ class ContractRepository:
         )
 
     @staticmethod
-    def get_users() -> list[User]:
-        from sqlalchemy.orm import load_only, noload
+    def get_users():
+        from app.modules.auth.repositories import UserRepository
 
-        return list(
-            db.session.scalars(
-                db.select(User)
-                .options(
-                    load_only(User.id, User.full_name),
-                    # иначе lazy=selectin тянет user_roles на каждого сотрудника фильтра
-                    noload(User.user_roles),
-                    noload(User.login_logs),
-                )
-                .where(User.active_filter(), User.is_active.is_(True), User.is_blocked.is_(False))
-                .order_by(User.full_name.asc())
-            )
-        )
+        return UserRepository.list_active_names()
 
     @staticmethod
     def next_number() -> str:

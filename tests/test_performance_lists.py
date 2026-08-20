@@ -236,6 +236,16 @@ def test_user_loader_does_not_pull_position_colleagues_or_permission_graph(app):
         assert counter.count == 0
 
 
+def test_project_user_choices_do_not_strip_admin_roles(app):
+    with app.app_context():
+        admin = _admin(app)
+        assert admin.has_permission("projects.create")
+        names = ProjectRepository.get_users()
+        assert names
+        assert admin.has_permission("projects.create")
+        assert admin.has_permission("projects.view")
+
+
 def test_sqlite_uses_wal_and_busy_timeout(app):
     with app.app_context():
         with db.engine.connect() as conn:

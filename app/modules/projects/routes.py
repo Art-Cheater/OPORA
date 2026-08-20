@@ -6,6 +6,7 @@ import uuid
 
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from sqlalchemy.orm import joinedload, load_only, noload
 
 from app.core.custom_fields_integration import (
     custom_field_detail_context,
@@ -17,12 +18,14 @@ from app.core.field_permissions import FieldPermissionService
 from app.core.forms_utils import form_errors_message
 from app.core.http import ajax_error, ajax_ok, is_ajax
 from app.core.exceptions import ValidationError
+from app.extensions import db
 from app.models.auth.constants import (
     PERM_PROJECTS_CREATE,
     PERM_PROJECTS_DELETE,
     PERM_PROJECTS_EDIT,
     PERM_PROJECTS_VIEW,
 )
+from app.models.auth.user import User
 from app.models.communication.comment import Comment
 from app.models.enums import EntityType, ProjectStatus
 from app.models.files.attachment import Attachment
@@ -302,13 +305,25 @@ def detail(project_id: uuid.UUID):
         return redirect(url_for("projects.index"))
 
     comments = list(
-        Comment.query.filter_by(
-            entity_type=EntityType.PROJECT.value,
-            entity_id=project.id,
-            deleted_at=None,
+        db.session.scalars(
+            db.select(Comment)
+            .options(
+                joinedload(Comment.author).options(
+                    load_only(User.id, User.full_name),
+                    noload(User.user_roles),
+                    noload(User.login_logs),
+                ),
+                noload(Comment.replies),
+                noload(Comment.parent),
+            )
+            .where(
+                Comment.entity_type == EntityType.PROJECT.value,
+                Comment.entity_id == project.id,
+                Comment.deleted_at.is_(None),
+            )
+            .order_by(Comment.created_at.desc())
+            .limit(50)
         )
-        .order_by(Comment.created_at.desc())
-        .all()
     )
     attachments = list(
         Attachment.query.filter_by(
@@ -317,8 +332,10 @@ def detail(project_id: uuid.UUID):
             deleted_at=None,
         )
         .order_by(Attachment.created_at.desc())
+        .limit(50)
         .all()
     )
+    history = ProjectRepository.list_recent_history(project.id)
     comment_form = ProjectCommentForm()
     document_form = ProjectDocumentForm()
     attachment_form = ProjectAttachmentForm()
@@ -348,6 +365,7 @@ def detail(project_id: uuid.UUID):
             project=project,
             comments=comments,
             attachments=attachments,
+            history=history,
             file_items=file_items,
             comment_form=comment_form,
             **custom_field_detail_context(_CF, project.id, current_user),
@@ -358,6 +376,7 @@ def detail(project_id: uuid.UUID):
         project=project,
         comments=comments,
         attachments=attachments,
+        history=history,
         file_items=file_items,
         comment_form=comment_form,
         document_form=document_form,

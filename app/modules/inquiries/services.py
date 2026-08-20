@@ -243,14 +243,17 @@ class InquiryService:
             if state.uidvalidity and snapshot.uidvalidity and state.uidvalidity != snapshot.uidvalidity:
                 state.uidvalidity = snapshot.uidvalidity
             state.uidvalidity = snapshot.uidvalidity
-            imported = set(
-                db.session.scalars(
-                    db.select(Inquiry.imap_uid).where(
-                        Inquiry.mailbox == str(cfg["mailbox"]),
-                        Inquiry.imap_uidvalidity == snapshot.uidvalidity,
+            imported = set()
+            if snapshot.uids:
+                imported = set(
+                    db.session.scalars(
+                        db.select(Inquiry.imap_uid).where(
+                            Inquiry.mailbox == str(cfg["mailbox"]),
+                            Inquiry.imap_uidvalidity == snapshot.uidvalidity,
+                            Inquiry.imap_uid.in_(list(snapshot.uids)),
+                        )
                     )
                 )
-            )
             batch = [uid for uid in reversed(snapshot.uids) if uid not in imported][: int(cfg["limit"])]
             fetched = 0
             skipped = 0

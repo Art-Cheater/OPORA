@@ -26,35 +26,50 @@
   const colorByCustomer = new Map();
   let lastRemaining = null;
   let stalled = 0;
+  let mapAbort = null;
+  let pollTimer = 0;
 
-  async function load(backfill) {
-    const url = new URL(src, window.location.origin);
-    if (backfill) url.searchParams.set("backfill", "1");
-    const response = await fetch(url, { headers: { Accept: "application/json" } });
-    if (!response.ok) {
-      setStatus("Не удалось загрузить карту.");
-      return;
-    }
-    const data = await response.json();
-    paint(data);
-    const count = (data.points || []).length;
-    const remaining = Number(data.remaining || 0);
-    if (remaining > 0) {
-      if (remaining === lastRemaining) stalled += 1;
-      else stalled = 0;
-      lastRemaining = remaining;
-      setStatus(`На карте ${count}. Координаты догружаются: ещё ${remaining}.`);
-      if (stalled >= 20) {
-        setStatus(`На карте ${count}. Без точки: ${remaining}.`);
+  async function load() {
+    if (mapAbort) mapAbort.abort();
+    mapAbort = new AbortController();
+    try {
+      const response = await fetch(src, {
+        headers: { Accept: "application/json" },
+        signal: mapAbort.signal,
+      });
+      if (!response.ok) {
+        setStatus("Не удалось загрузить карту.");
         return;
       }
-      setTimeout(() => load(true), 1500);
-    } else if (count) {
-      setStatus(`Отметок: ${count}. Нажмите точку — откроется договор.`);
-    } else {
-      setStatus("Пока нет точек — загрузите договор с адресной программой.");
+      const data = await response.json();
+      paint(data);
+      const count = (data.points || []).length;
+      const remaining = Number(data.remaining || 0);
+      if (remaining > 0) {
+        if (remaining === lastRemaining) stalled += 1;
+        else stalled = 0;
+        lastRemaining = remaining;
+        setStatus(`На карте ${count}. Координаты догружаются: ещё ${remaining}.`);
+        if (stalled >= 8) {
+          setStatus(`На карте ${count}. Без точки: ${remaining}.`);
+          return;
+        }
+        pollTimer = window.setTimeout(load, 8000);
+      } else if (count) {
+        setStatus(`Отметок: ${count}. Нажмите точку — откроется договор.`);
+      } else {
+        setStatus("Пока нет точек — загрузите договор с адресной программой.");
+      }
+    } catch (err) {
+      if (err?.name === "AbortError") return;
+      setStatus("Не удалось загрузить карту.");
     }
   }
+
+  window.addEventListener("pagehide", () => {
+    mapAbort?.abort();
+    window.clearTimeout(pollTimer);
+  }, { once: true });
 
   function colorFor(customer) {
     const key = customer || "—";
@@ -138,5 +153,5 @@
     map.invalidateSize();
   }
 
-  load(false);
+  load();
 })();

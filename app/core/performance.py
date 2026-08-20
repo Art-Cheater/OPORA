@@ -63,8 +63,39 @@ def count_queries(engine: Engine, *, capture_statements: bool = False) -> Iterat
         event.remove(engine, "after_cursor_execute", after_cursor_execute)
 
 
+def _register_request_timing(app: Flask) -> None:
+    """Server-Timing и лог запросов дольше 400 мс — без SQL-профайлера."""
+    if app.extensions.get("opora_request_timing"):
+        return
+    app.extensions["opora_request_timing"] = True
+
+    @app.before_request
+    def _start_request_timer() -> None:
+        if request.path == "/health" or (request.path or "").startswith("/static/"):
+            return
+        g._opora_http_started = perf_counter()
+
+    @app.after_request
+    def _finish_request_timer(response):
+        started = getattr(g, "_opora_http_started", None)
+        if started is None:
+            return response
+        duration_ms = (perf_counter() - started) * 1000
+        response.headers["Server-Timing"] = f"app;dur={duration_ms:.0f}"
+        if duration_ms >= 400:
+            app.logger.warning(
+                "Slow HTTP method=%s path=%s status=%s duration_ms=%.0f",
+                request.method,
+                request.path,
+                response.status_code,
+                duration_ms,
+            )
+        return response
+
+
 def register_performance_profiler(app: Flask) -> None:
     """Register request-local SQL timings when explicitly enabled."""
+    _register_request_timing(app)
     if not app.config.get("PERFORMANCE_PROFILER_ENABLED", False):
         return
     if app.extensions.get("opora_performance_profiler"):
