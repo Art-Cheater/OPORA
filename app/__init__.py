@@ -445,6 +445,14 @@ def _register_cli_commands(app: Flask) -> None:
             raise
         click.echo("Импорт ЕИС завершён.")
 
+    @app.cli.command("dedupe-agreements")
+    def dedupe_agreements():
+        """Скрыть повторные договора с одним номером, оставить экземпляр с большей адресной программой."""
+        from app.modules.agreements.services import AgreementService
+
+        hidden = AgreementService.collapse_duplicates()
+        click.echo(f"Убраны повторы: {hidden}.")
+
     @app.cli.command("init-db")
     def init_db():
         """Создаёт схему (SQLite: create_all) и заполняет справочники + админа."""

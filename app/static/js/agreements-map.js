@@ -19,7 +19,37 @@
   const layer = L.layerGroup().addTo(map);
   const placed = new Map();
   const colorByCustomer = new Map();
-  let rounds = 0;
+  let lastRemaining = null;
+  let stalled = 0;
+
+  async function load(backfill) {
+    const url = new URL(src, window.location.origin);
+    if (backfill) url.searchParams.set("backfill", "1");
+    const response = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!response.ok) {
+      setStatus("Не удалось загрузить карту.");
+      return;
+    }
+    const data = await response.json();
+    paint(data);
+    const count = (data.points || []).length;
+    const remaining = Number(data.remaining || 0);
+    if (remaining > 0) {
+      if (remaining === lastRemaining) stalled += 1;
+      else stalled = 0;
+      lastRemaining = remaining;
+      setStatus(`На карте ${count}. Координаты догружаются: ещё ${remaining}.`);
+      if (stalled >= 20) {
+        setStatus(`На карте ${count}. Без точки: ${remaining}.`);
+        return;
+      }
+      setTimeout(() => load(true), 1500);
+    } else if (count) {
+      setStatus(`Отметок: ${count}. Нажмите точку — откроется договор.`);
+    } else {
+      setStatus("Пока нет точек — загрузите договор с адресной программой.");
+    }
+  }
 
   function colorFor(customer) {
     const key = customer || "—";
@@ -99,33 +129,6 @@
       map.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
     } else {
       map.setView(KIROV, 12);
-    }
-  }
-
-  async function load(backfill) {
-    const url = new URL(src, window.location.origin);
-    if (backfill) url.searchParams.set("backfill", "1");
-    const response = await fetch(url, { headers: { Accept: "application/json" } });
-    if (!response.ok) {
-      setStatus("Не удалось загрузить карту.");
-      return;
-    }
-    const data = await response.json();
-    paint(data);
-    const count = (data.points || []).length;
-    const remaining = Number(data.remaining || 0);
-    if (remaining > 0) {
-      setStatus(`На карте ${count}. Ищем координаты ещё для ${remaining}…`);
-      if (rounds < 12) {
-        rounds += 1;
-        load(true);
-      } else {
-        setStatus(`На карте ${count}. Без точки: ${remaining} (адрес не нашёлся).`);
-      }
-    } else if (count) {
-      setStatus(`Отметок: ${count}. Нажмите точку — откроется договор.`);
-    } else {
-      setStatus("Пока нет точек — загрузите договор с адресной программой.");
     }
   }
 

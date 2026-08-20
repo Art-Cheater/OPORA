@@ -37,6 +37,9 @@ def geocode_query(address: str) -> str:
     return text
 
 
+_MISS_QUERIES: set[str] = set()
+
+
 def geocode_address(address: str) -> tuple[float, float] | None:
     """Точка на карте или None. В тестах сеть не дергаем."""
 
@@ -46,7 +49,7 @@ def geocode_address(address: str) -> tuple[float, float] | None:
         return None
 
     query = geocode_query(address)
-    if not query:
+    if not query or query in _MISS_QUERIES:
         return None
 
     from app.core.address.service import get_address_suggestion_service
@@ -57,8 +60,10 @@ def geocode_address(address: str) -> tuple[float, float] | None:
         logger.warning("Геокод договора: %s (%s)", query, exc)
         return None
     if not hits:
+        _MISS_QUERIES.add(query)
         return None
     lat, lng = hits[0].latitude, hits[0].longitude
     if lat is None or lng is None:
+        _MISS_QUERIES.add(query)
         return None
     return float(lat), float(lng)

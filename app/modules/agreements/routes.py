@@ -31,6 +31,9 @@ from app.modules.agreements.services import AgreementService
 def index():
     filter_form = AgreementFilterForm(request.args)
     q = request.args.get("q", "")
+    hidden = AgreementService.collapse_duplicates(current_user.id)
+    if hidden:
+        flash(f"Убраны повторы договоров: {hidden}.", "info")
     hits = AgreementService.search_address(q) if q.strip() else []
     pagination = AgreementRepository.paginated_list(
         AgreementFilter(q=q),
@@ -56,16 +59,16 @@ def upload():
         flash(form_errors_message(form), "danger")
         return redirect(url_for("agreements.index"))
     try:
-        agreement = AgreementService.import_docx(form.file.data, current_user.id)
+        outcome = AgreementService.import_docx(form.file.data, current_user.id)
     except (ValidationError, UploadValidationError) as exc:
         flash(str(exc), "danger")
         return redirect(url_for("agreements.index"))
+    agreement = outcome.agreement
+    verb = "Загружен" if outcome.created else "Обновлён"
     extra = f", адресов: {len(agreement.sites)}"
-    on_map = sum(1 for site in agreement.sites if site.latitude is not None)
-    extra += f", на карте: {on_map}"
     if agreement.parse_warning:
         extra += f". {agreement.parse_warning}"
-    flash(f"Загружен {agreement.title}{extra}.", "success")
+    flash(f"{verb} {agreement.title}{extra}.", "success")
     return redirect(url_for("agreements.detail", agreement_id=agreement.id))
 
 
@@ -74,8 +77,9 @@ def upload():
 @permission_required(PERM_AGREEMENTS_VIEW)
 def map_data():
     agreement_id = request.args.get("agreement_id", type=uuid.UUID)
+    AgreementService.hydrate_missing_coords(agreement_id=agreement_id)
     if request.args.get("backfill") == "1":
-        AgreementService.geocode_missing(agreement_id=agreement_id, limit=5)
+        AgreementService.ensure_background_geocode()
     points, remaining = AgreementService.map_points(agreement_id=agreement_id)
     return jsonify(
         {
