@@ -156,6 +156,58 @@ function initSidebar() {
     toggle?.addEventListener("click", openSidebar);
     close?.addEventListener("click", closeSidebar);
     overlay?.addEventListener("click", closeSidebar);
+
+    initInstantNav(sidebar, closeSidebar);
+}
+
+function initInstantNav(sidebar, closeSidebar) {
+    const loading = document.getElementById("pageLoading");
+    const loadingTitle = document.getElementById("pageLoadingTitle");
+    if (!loading) return;
+
+    const hideLoading = () => {
+        document.body.classList.remove("is-page-loading");
+        loading.hidden = true;
+    };
+
+    window.addEventListener("pageshow", hideLoading);
+    window.addEventListener("pagehide", hideLoading);
+
+    sidebar.addEventListener("click", (event) => {
+        const link = event.target.closest("a[href]");
+        if (!link || link.classList.contains("sidebar__link--disabled")) return;
+        if (event.defaultPrevented) return;
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+        const href = link.getAttribute("href");
+        if (!href || href === "#" || href.startsWith("javascript:")) return;
+
+        const next = new URL(href, window.location.href);
+        if (next.origin !== window.location.origin) return;
+        if (
+            next.pathname === window.location.pathname &&
+            next.search === window.location.search
+        ) {
+            return;
+        }
+
+        if (document.body.classList.contains("is-page-loading")) {
+            event.preventDefault();
+            return;
+        }
+
+        const label =
+            link.querySelector("span:not(.sidebar__badge)")?.textContent?.trim() ||
+            "Загрузка";
+        document.body.classList.add("is-page-loading");
+        sidebar.querySelectorAll(".sidebar__link.active").forEach((item) => {
+            item.classList.remove("active");
+        });
+        link.classList.add("active");
+        if (loadingTitle) loadingTitle.textContent = label;
+        loading.hidden = false;
+        closeSidebar();
+    });
 }
 
 function initSearchShortcut() {

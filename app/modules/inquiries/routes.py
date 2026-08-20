@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-from flask import abort, current_app, flash, redirect, render_template, request, send_file, url_for
+from flask import abort, current_app, flash, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
 from app.core.decorators import permission_required
@@ -24,20 +24,18 @@ from app.modules.inquiries.repositories import InquiryFilter, InquiryRepository
 from app.modules.inquiries.services import InquiryService
 
 
+def _inquiry_filters() -> InquiryFilter:
+    return InquiryFilter(q=request.args.get("q", ""), status=request.args.get("status", ""))
+
+
 @inquiries_bp.route("/")
 @login_required
 @permission_required(PERM_INQUIRIES_VIEW)
 def index():
     form = InquiryFilterForm(request.args)
-    pagination = InquiryRepository.paginated_list(
-        InquiryFilter(q=request.args.get("q", ""), status=request.args.get("status", "")),
-        page=request.args.get("page", 1, type=int),
-        per_page=request.args.get("per_page", 30, type=int),
-    )
     return render_template(
         "inquiries/index.html",
         filter_form=form,
-        pagination=pagination,
         q=request.args.get("q", ""),
         status=request.args.get("status", ""),
         mailbox_state=InquiryService.mailbox_state(),
@@ -45,6 +43,23 @@ def index():
         running=InquiryService.is_running(),
         mailbox=InquiryService.mailbox_config()["mailbox"],
         unread=InquiryRepository.unread_count(),
+    )
+
+
+@inquiries_bp.route("/table")
+@login_required
+@permission_required(PERM_INQUIRIES_VIEW)
+def table():
+    pagination = InquiryRepository.paginated_list(
+        _inquiry_filters(),
+        page=request.args.get("page", 1, type=int),
+        per_page=request.args.get("per_page", 30, type=int),
+    )
+    return jsonify(
+        {
+            "table_html": render_template("inquiries/partials/table.html", pagination=pagination),
+            "pagination_html": render_template("inquiries/partials/pagination.html", pagination=pagination),
+        }
     )
 
 

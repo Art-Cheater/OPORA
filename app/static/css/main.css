@@ -63,6 +63,7 @@ a { text-decoration: none; }
 /* App Shell */
 .app-shell { display: flex; min-height: 100vh; }
 .app-main {
+    position: relative;
     flex: 1; display: flex; flex-direction: column; min-width: 0;
     margin-left: var(--opora-sidebar-width);
 }
@@ -123,6 +124,24 @@ a { text-decoration: none; }
 .sidebar__user-name { font-size: 0.8125rem; font-weight: 600; color: #fff; }
 .sidebar__user-role { font-size: 0.75rem; color: var(--opora-sidebar-text); }
 .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1035; }
+
+.page-loading {
+    position: absolute; inset: 0; z-index: 1030;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(248, 249, 250, 0.94);
+}
+.page-loading[hidden] { display: none !important; }
+.page-loading__panel { text-align: center; padding: 2rem; }
+.page-loading__title { margin-top: 1rem; font-size: 1.125rem; font-weight: 600; }
+.page-loading__hint { margin: 0.35rem 0 0; color: #6C757D; }
+body.is-page-loading { cursor: progress; }
+body.is-page-loading .sidebar a { pointer-events: none; }
+
+.opora-loading {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 220px; padding: 2rem; text-align: center;
+}
+.opora-loading__text { margin-top: 0.75rem; color: #6C757D; }
 
 /* Topbar */
 .topbar {

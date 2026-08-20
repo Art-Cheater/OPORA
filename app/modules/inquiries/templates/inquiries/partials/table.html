@@ -1,0 +1,46 @@
+<div class="table-card">
+    <table class="table table-opora">
+        <thead>
+            <tr>
+                <th>Когда</th>
+                <th>От кого</th>
+                <th>Тема</th>
+                <th>Статус</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in pagination.items %}
+            <tr class="{% if item.status == 'new' %}fw-semibold{% endif %}">
+                <td class="text-muted">{{ item.received_at|local_dt if item.received_at else '—' }}</td>
+                <td>
+                    {{ item.from_name or item.from_email or '—' }}
+                    {% if item.from_name and item.from_email %}
+                    <div class="small text-muted">{{ item.from_email }}</div>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="{{ url_for('inquiries.detail', inquiry_id=item.id) }}">{{ item.subject }}</a>
+                    {% if item.attachment_count %}
+                    <span class="text-muted small ms-1"><i class="bi bi-paperclip"></i> {{ item.attachment_count }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if item.status == 'new' %}
+                    <span class="badge text-bg-warning">{{ item.status_label }}</span>
+                    {% elif item.status == 'done' %}
+                    <span class="badge text-bg-success">{{ item.status_label }}</span>
+                    {% else %}
+                    <span class="badge text-bg-secondary">{{ item.status_label }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4" class="table-empty">
+                    <i class="bi bi-inbox"></i> Писем ещё нет — нажмите «Забрать письма»
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

@@ -9,6 +9,14 @@
     <div class="app-main">
         {% include "components/topbar.html" %}
 
+        <div class="page-loading" id="pageLoading" hidden aria-live="polite">
+            <div class="page-loading__panel">
+                <div class="spinner-border text-primary" role="status"></div>
+                <div class="page-loading__title" id="pageLoadingTitle">Загрузка…</div>
+                <p class="page-loading__hint">Раздел открыт, данные подгружаются</p>
+            </div>
+        </div>
+
         <main class="app-content">
             {% include "components/flash_messages.html" %}
             {% block page_header %}{% endblock %}

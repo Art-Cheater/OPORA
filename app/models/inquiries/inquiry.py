@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from app.models.base import BaseModel
 from app.models.types import GUID
@@ -45,8 +45,8 @@ class Inquiry(BaseModel):
     from_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     to_email: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     subject: Mapped[str] = mapped_column(String(1000), nullable=False, default="(без темы)")
-    body_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    body_html: Mapped[str | None] = mapped_column(Text, nullable=True)
+    body_text: Mapped[str | None] = deferred(mapped_column(Text, nullable=True))
+    body_html: Mapped[str | None] = deferred(mapped_column(Text, nullable=True))
     received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=STATUS_NEW)
     attachment_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

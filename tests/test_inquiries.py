@@ -66,6 +66,18 @@ def test_inquiries_page(admin_client):
     assert resp.status_code == 200
     assert "Обращения".encode("utf-8") in resp.data
     assert b"kirovsvet@mail.ru" in resp.data
+    assert "Загрузка писем".encode("utf-8") in resp.data
+
+
+def test_inquiries_table_json(admin_client, app):
+    with app.app_context():
+        InquiryService.sync(
+            client=FakeMailbox({11: _sample_message(subject="Первое")})
+        )
+    table = admin_client.get("/inquiries/table?q=Первое")
+    assert table.status_code == 200
+    payload = table.get_json()
+    assert "Первое" in payload["table_html"]
 
 
 def test_sync_fake_mailbox_creates_inquiry(admin_client, app):
@@ -87,9 +99,9 @@ def test_sync_fake_mailbox_creates_inquiry(admin_client, app):
         again = InquiryService.sync(client=FakeMailbox({11: _sample_message(), 12: _sample_message()}))
         assert again.fetched == 0
 
-    listing = admin_client.get("/inquiries/?q=Первое")
+    listing = admin_client.get("/inquiries/table?q=Первое")
     assert listing.status_code == 200
-    assert "Первое".encode("utf-8") in listing.data
+    assert "Первое" in listing.get_json()["table_html"]
 
     with app.app_context():
         item = db.session.scalar(db.select(Inquiry).where(Inquiry.subject == "Второе"))

@@ -38,82 +38,37 @@
         </span>
     </div>
     <div class="card-body">
-        <form class="row g-3" method="get">
+        <form id="inquiryFilterForm" class="row g-3">
             <div class="col-lg-6">
                 <label class="form-label">{{ filter_form.q.label.text }}</label>
-                {{ filter_form.q(class="form-control", value=q, placeholder="тема, отправитель, текст...") }}
+                {{ filter_form.q(class="form-control", value=q, placeholder="тема или отправитель") }}
             </div>
             <div class="col-lg-3">
                 <label class="form-label">{{ filter_form.status.label.text }}</label>
                 {{ filter_form.status(class="form-select") }}
             </div>
             <div class="col-lg-2 d-flex align-items-end">
-                <button class="btn btn-primary w-100" type="submit">Найти</button>
+                <button class="btn btn-outline-primary w-100" type="button" id="inquiryFilterReset">Сброс</button>
             </div>
         </form>
     </div>
 </div>
 
-<div class="table-card">
-    <table class="table table-opora">
-        <thead>
-            <tr>
-                <th>Когда</th>
-                <th>От кого</th>
-                <th>Тема</th>
-                <th>Статус</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in pagination.items %}
-            <tr class="{% if item.status == 'new' %}fw-semibold{% endif %}">
-                <td class="text-muted">{{ item.received_at|local_dt if item.received_at else '—' }}</td>
-                <td>
-                    {{ item.from_name or item.from_email or '—' }}
-                    {% if item.from_name and item.from_email %}
-                    <div class="small text-muted">{{ item.from_email }}</div>
-                    {% endif %}
-                </td>
-                <td>
-                    <a href="{{ url_for('inquiries.detail', inquiry_id=item.id) }}">{{ item.subject }}</a>
-                    {% if item.attachment_count %}
-                    <span class="text-muted small ms-1"><i class="bi bi-paperclip"></i> {{ item.attachment_count }}</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if item.status == 'new' %}
-                    <span class="badge text-bg-warning">{{ item.status_label }}</span>
-                    {% elif item.status == 'done' %}
-                    <span class="badge text-bg-success">{{ item.status_label }}</span>
-                    {% else %}
-                    <span class="badge text-bg-secondary">{{ item.status_label }}</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="4" class="table-empty">
-                    <i class="bi bi-inbox"></i> Писем ещё нет — нажмите «Забрать письма»
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<div id="inquiriesTableContainer">
+    <div class="opora-loading" role="status">
+        <div class="spinner-border text-primary"></div>
+        <div class="opora-loading__text">Загрузка писем…</div>
+    </div>
 </div>
+<div id="inquiriesPaginationContainer" class="mt-3"></div>
 
-{% if pagination.pages > 1 %}
-<nav class="mt-3">
-    <ul class="pagination pagination-sm mb-0">
-        {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
-            {% if p %}
-            <li class="page-item {% if p == pagination.page %}active{% endif %}">
-                <a class="page-link" href="{{ url_for('inquiries.index', page=p, q=q, status=status) }}">{{ p }}</a>
-            </li>
-            {% else %}
-            <li class="page-item disabled"><span class="page-link">…</span></li>
-            {% endif %}
-        {% endfor %}
-    </ul>
-</nav>
-{% endif %}
+<div id="oporaListConfig" class="d-none"
+     data-base-url="/inquiries"
+     data-filter-form-id="inquiryFilterForm"
+     data-table-container-id="inquiriesTableContainer"
+     data-pagination-container-id="inquiriesPaginationContainer"
+     data-reset-btn-id="inquiryFilterReset"
+     data-page-link-class="inquiry-page-link"
+     data-load-on-start="true"
+     data-view-mode="page"></div>
 {% endblock %}

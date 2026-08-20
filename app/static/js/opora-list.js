@@ -2,7 +2,8 @@
  * Опора — единый модуль списков с AJAX-фильтрацией и CRUD-модалками.
  */
 window.OporaList = (() => {
-  const AJAX_HEADERS = { "X-Requested-With": "XMLHttpRequest" };
+  const TABLE_LOADING_HTML =
+    '<div class="opora-loading" role="status"><div class="spinner-border text-primary"></div><div class="opora-loading__text">Загрузка списка…</div></div>';
 
   let config = {};
   let currentPage = 1;
@@ -82,6 +83,8 @@ window.OporaList = (() => {
     // Отменяем предыдущий запрос фильтра — иначе при быстром вводе копятся медленные ответы
     if (tableAbort) tableAbort.abort();
     tableAbort = new AbortController();
+    tableContainer.innerHTML = TABLE_LOADING_HTML;
+    if (paginationContainer) paginationContainer.innerHTML = "";
 
     const url = `${config.baseUrl}/table?${queryParams().toString()}`;
     try {
@@ -566,6 +569,12 @@ window.OporaList = (() => {
       }, 250);
     }
 
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      currentPage = 1;
+      loadTable();
+    });
+
     form.querySelectorAll("input, select").forEach((el) => {
       el.addEventListener("input", debouncedReload);
       el.addEventListener("change", debouncedReload);
@@ -584,6 +593,9 @@ window.OporaList = (() => {
     bindTableEvents();
     bindPagination();
     bindGlobalActions();
+    if (config.loadOnStart) {
+      loadTable();
+    }
   }
 
   function initFromConfigElement() {
@@ -601,6 +613,7 @@ window.OporaList = (() => {
       deleteMessage: cfg.dataset.deleteMessage,
       canEdit: cfg.dataset.canEdit === "true",
       viewMode: cfg.dataset.viewMode || "modal",
+      loadOnStart: cfg.dataset.loadOnStart === "true",
     });
   }
 
