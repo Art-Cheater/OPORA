@@ -61,7 +61,6 @@ class ContractRepository:
                 selectinload(Contract.documents),
                 joinedload(Contract.responsible).options(
                     load_only(User.id, User.full_name),
-                    noload(User.user_roles),
                     noload(User.login_logs),
                 ),
                 joinedload(Contract.project),

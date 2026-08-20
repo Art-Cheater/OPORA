@@ -300,7 +300,9 @@ def test_contractors_module_crud(admin_client, app):
     assert created.status_code in {302, 303}
     listing = admin_client.get("/contractors/")
     assert listing.status_code == 200
-    assert "ТестСвет".encode("utf-8") in listing.data
+    table = admin_client.get("/contractors/table")
+    assert table.status_code == 200
+    assert "ТестСвет" in table.get_json()["table_html"]
     with app.app_context():
         contractor = db.session.scalar(
             db.select(Contractor).where(Contractor.inn == "4345000000")

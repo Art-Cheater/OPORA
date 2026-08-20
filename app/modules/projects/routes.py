@@ -199,26 +199,9 @@ def _apply_project_create_defaults(form: ProjectForm) -> None:
 def index():
     filter_form = ProjectFilterForm(request.args)
     _prepare_filter_form(filter_form)
-
-    filters = ProjectFilter(
-        q=request.args.get("q", ""),
-        status=request.args.get("status", ""),
-        responsible_id=request.args.get("responsible_id", ""),
-        executor_id=request.args.get("executor_id", ""),
-        date_from=request.args.get("date_from", ""),
-        date_to=request.args.get("date_to", ""),
-        sort_by=request.args.get("sort_by", "created_at"),
-        sort_dir=request.args.get("sort_dir", "desc"),
-    )
-    page = request.args.get("page", 1, type=int)
-    per_page = request.args.get("per_page", 20, type=int)
-    pagination = ProjectRepository.paginated_list(filters, page=page, per_page=per_page)
-
     return render_template(
         "projects/index.html",
         filter_form=filter_form,
-        projects_pagination=pagination,
-        filters=filters,
     )
 
 

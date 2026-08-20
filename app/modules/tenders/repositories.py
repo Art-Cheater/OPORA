@@ -65,7 +65,10 @@ class TenderRepository:
                     noload(Project.contracts),
                 ),
                 selectinload(TenderApplication.documents),
-                joinedload(TenderApplication.responsible).options(*_user_name_only()),
+                joinedload(TenderApplication.responsible).options(
+                    load_only(User.id, User.full_name),
+                    noload(User.login_logs),
+                ),
                 joinedload(TenderApplication.work_object),
                 noload(TenderApplication.contracts),
             )

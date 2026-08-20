@@ -300,7 +300,7 @@ def test_upload_updates_same_number_and_rejects_wrong(admin_client, app):
     assert "Договор не тот".encode("utf-8") in wrong.data
 
 
-def test_index_hides_duplicate_numbers(admin_client, app):
+def test_collapse_duplicates_keeps_richest(admin_client, app):
     admin_client.post(
         "/agreements/upload",
         data={"file": (io.BytesIO(make_sample_docx()), "ttk.docx"), "submit": "Загрузить"},
@@ -318,17 +318,22 @@ def test_index_hides_duplicate_numbers(admin_client, app):
         assert db.session.scalar(
             db.select(db.func.count()).select_from(PoleAgreement).where(PoleAgreement.active_filter())
         ) == 2
-
-    page = admin_client.get("/agreements/")
-    assert page.status_code == 200
-    assert "Убраны повторы".encode("utf-8") in page.data
-    with app.app_context():
+        hidden = AgreementService.collapse_duplicates()
+        assert hidden == 1
         assert (
             db.session.scalar(
                 db.select(db.func.count()).select_from(PoleAgreement).where(PoleAgreement.active_filter())
             )
             == 1
         )
+
+    page = admin_client.get("/agreements/")
+    assert page.status_code == 200
+    assert "Убраны повторы".encode("utf-8") not in page.data
+    table = admin_client.get("/agreements/table")
+    assert table.status_code == 200
+    html = table.get_json()["table_html"]
+    assert "Копия" not in html
 
 
 def make_sample_odt() -> bytes:

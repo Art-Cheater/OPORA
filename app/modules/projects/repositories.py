@@ -55,14 +55,12 @@ class ProjectRepository:
             .options(
                 selectinload(Project.members).joinedload(ProjectMember.user).options(
                     load_only(User.id, User.full_name),
-                    noload(User.user_roles),
                     noload(User.login_logs),
                 ),
                 selectinload(Project.history),
                 selectinload(Project.documents),
                 joinedload(Project.manager).options(
                     load_only(User.id, User.full_name),
-                    noload(User.user_roles),
                     noload(User.login_logs),
                 ),
                 joinedload(Project.work_object),

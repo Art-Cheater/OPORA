@@ -299,22 +299,10 @@ def _workflow_redirect(req, message: str, category: str = "success"):
 def index():
     filter_form = RequestFilterForm(request.args)
     _prepare_filter_form(filter_form)
-
-    filters = _build_filters()
-    page = request.args.get("page", 1, type=int)
-    per_page = request.args.get("per_page", 20, type=int)
-    pagination = RequestRepository.paginated_list(
-        filters,
-        page=page,
-        per_page=per_page,
-        current_user_id=current_user.id,
-    )
-
     return render_template(
         "requests/index.html",
         filter_form=filter_form,
-        requests_pagination=pagination,
-        filters=filters,
+        filters=_build_filters(),
     )
 
 

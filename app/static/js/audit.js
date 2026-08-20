@@ -62,5 +62,5 @@
     loadTable();
   });
 
-  bindPagination();
+  loadTable();
 })();

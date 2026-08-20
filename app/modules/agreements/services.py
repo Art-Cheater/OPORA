@@ -345,25 +345,34 @@ class AgreementService:
 
     @classmethod
     def map_points(cls, *, agreement_id: uuid.UUID | None = None) -> tuple[list[MapPoint], int]:
+        filters = [
+            PoleAgreement.active_filter(),
+            PoleAgreementSite.deleted_at.is_(None),
+        ]
+        if agreement_id is not None:
+            filters.append(PoleAgreementSite.agreement_id == agreement_id)
+
+        remaining = db.session.scalar(
+            db.select(db.func.count())
+            .select_from(PoleAgreementSite)
+            .join(PoleAgreement, PoleAgreementSite.agreement_id == PoleAgreement.id)
+            .where(*filters, PoleAgreementSite.latitude.is_(None))
+        ) or 0
+
         stmt = (
             db.select(PoleAgreementSite)
             .options(joinedload(PoleAgreementSite.agreement))
             .join(PoleAgreement, PoleAgreementSite.agreement_id == PoleAgreement.id)
             .where(
-                PoleAgreement.active_filter(),
-                PoleAgreementSite.deleted_at.is_(None),
+                *filters,
+                PoleAgreementSite.latitude.isnot(None),
+                PoleAgreementSite.longitude.isnot(None),
             )
             .order_by(PoleAgreement.customer_name, PoleAgreementSite.sort_order)
         )
-        if agreement_id is not None:
-            stmt = stmt.where(PoleAgreementSite.agreement_id == agreement_id)
         rows = list(db.session.scalars(stmt).unique())
         points: list[MapPoint] = []
-        remaining = 0
         for site in rows:
-            if site.latitude is None or site.longitude is None:
-                remaining += 1
-                continue
             agreement = site.agreement
             points.append(
                 MapPoint(

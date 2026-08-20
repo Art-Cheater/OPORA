@@ -37,20 +37,17 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      # start_period считает от старта контейнера, а gunicorn поднимается
-      # только после flask db upgrade и seed. 60 с на это не хватает —
-      # compose помечает web unhealthy, хотя процесс уже слушает :5000.
       test:
         [
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=8)",
+          "import socket; s=socket.create_connection(('127.0.0.1',5000),2); s.close()",
         ]
-      interval: 10s
-      timeout: 10s
-      retries: 12
-      start_period: 240s
+      interval: 5s
+      timeout: 3s
+      retries: 8
+      start_period: 45s
 
   eis-sync:
     build: .
@@ -66,8 +63,6 @@ services:
     command: ["flask", "eis-sync", "--loop"]
     depends_on:
       db:
-        condition: service_healthy
-      web:
         condition: service_healthy
 
   inquiry-sync:
@@ -85,8 +80,6 @@ services:
     command: ["flask", "inquiry-sync", "--loop"]
     depends_on:
       db:
-        condition: service_healthy
-      web:
         condition: service_healthy
 
 volumes:

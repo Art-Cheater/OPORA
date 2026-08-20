@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flask import abort, flash, redirect, render_template, request, url_for
+from flask import abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.core.decorators import permission_required
@@ -39,6 +39,13 @@ def _payload_from_form(form: ContractorForm) -> ContractorPayload:
 @permission_required(PERM_CONTRACTORS_VIEW)
 def index():
     filter_form = ContractorFilterForm(request.args)
+    return render_template("contractors/index.html", filter_form=filter_form)
+
+
+@contractors_bp.route("/table")
+@login_required
+@permission_required(PERM_CONTRACTORS_VIEW)
+def table():
     filters = ContractorFilter(
         q=request.args.get("q", ""),
         sort_by=request.args.get("sort_by", "name"),
@@ -47,11 +54,17 @@ def index():
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 20, type=int)
     pagination = ContractorRepository.paginated_list(filters, page=page, per_page=per_page)
-    return render_template(
-        "contractors/index.html",
-        filter_form=filter_form,
-        pagination=pagination,
-        filters=filters,
+    return jsonify(
+        {
+            "table_html": render_template(
+                "contractors/partials/table.html",
+                pagination=pagination,
+            ),
+            "pagination_html": render_template(
+                "contractors/partials/pagination.html",
+                pagination=pagination,
+            ),
+        }
     )
 
 

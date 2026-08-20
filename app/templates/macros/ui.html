@@ -22,6 +22,14 @@
 </div>
 {% endmacro %}
 
+{# Спиннер списка: страница открывается сразу, таблица догружается AJAX. #}
+{% macro list_loading(text="Загрузка списка…") %}
+<div class="opora-loading" role="status">
+    <div class="spinner-border text-primary"></div>
+    <div class="opora-loading__text">{{ text }}</div>
+</div>
+{% endmacro %}
+
 {# Кликабельный заголовок колонки: сортировка списка #}
 {% macro sortable_th(label, field, sort_by='', sort_dir='desc', th_class='') %}
 {% set is_active = sort_by == field %}

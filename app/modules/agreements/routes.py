@@ -31,22 +31,33 @@ from app.modules.agreements.services import AgreementService
 def index():
     filter_form = AgreementFilterForm(request.args)
     q = request.args.get("q", "")
-    hidden = AgreementService.collapse_duplicates(current_user.id)
-    if hidden:
-        flash(f"Убраны повторы договоров: {hidden}.", "info")
     hits = AgreementService.search_address(q) if q.strip() else []
+    return render_template(
+        "agreements/index.html",
+        filter_form=filter_form,
+        hits=hits,
+        q=q,
+        upload_form=AgreementUploadForm(),
+    )
+
+
+@agreements_bp.route("/table")
+@login_required
+@permission_required(PERM_AGREEMENTS_VIEW)
+def table():
+    q = request.args.get("q", "")
     pagination = AgreementRepository.paginated_list(
         AgreementFilter(q=q),
         page=request.args.get("page", 1, type=int),
         per_page=request.args.get("per_page", 20, type=int),
     )
-    return render_template(
-        "agreements/index.html",
-        filter_form=filter_form,
-        pagination=pagination,
-        hits=hits,
-        q=q,
-        upload_form=AgreementUploadForm(),
+    return jsonify(
+        {
+            "table_html": render_template("agreements/partials/table.html", pagination=pagination),
+            "pagination_html": render_template(
+                "agreements/partials/pagination.html", pagination=pagination
+            ),
+        }
     )
 
 
@@ -77,8 +88,10 @@ def upload():
 @permission_required(PERM_AGREEMENTS_VIEW)
 def map_data():
     agreement_id = request.args.get("agreement_id", type=uuid.UUID)
-    AgreementService.hydrate_missing_coords(agreement_id=agreement_id)
     if request.args.get("backfill") == "1":
+        AgreementService.hydrate_missing_coords(agreement_id=agreement_id)
+        AgreementService.ensure_background_geocode()
+    else:
         AgreementService.ensure_background_geocode()
     points, remaining = AgreementService.map_points(agreement_id=agreement_id)
     return jsonify(

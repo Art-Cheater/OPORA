@@ -1,5 +1,5 @@
 {% extends "layouts/app.html" %}
-{% from "macros/ui.html" import page_header %}
+{% from "macros/ui.html" import page_header, list_loading %}
 
 {% block title %}Журнал действий — {{ app_name }}{% endblock %}
 
@@ -55,11 +55,9 @@
 </div>
 
 <div id="auditTableContainer">
-    {% include "audit/partials/table.html" %}
+    {{ list_loading("Загрузка журнала…") }}
 </div>
-<div id="auditPaginationContainer" class="mt-3">
-    {% include "audit/partials/pagination.html" %}
-</div>
+<div id="auditPaginationContainer" class="mt-3"></div>
 {% endblock %}
 
 {% block extra_js %}

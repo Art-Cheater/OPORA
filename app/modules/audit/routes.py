@@ -41,14 +41,9 @@ def _prepare_filter_form(form: AuditFilterForm) -> None:
 def index():
     filter_form = AuditFilterForm(request.args)
     _prepare_filter_form(filter_form)
-    filters = _filters_from_request()
-    page = request.args.get("page", 1, type=int)
-    per_page = request.args.get("per_page", 30, type=int)
-    pagination = AuditRepository.paginated_list(filters, page=page, per_page=per_page)
     return render_template(
         "audit/index.html",
         filter_form=filter_form,
-        audit_pagination=pagination,
         can_export=current_user.has_permission(PERM_AUDIT_EXPORT),
     )
 

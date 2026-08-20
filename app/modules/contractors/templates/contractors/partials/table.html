@@ -1,0 +1,34 @@
+<div class="table-card">
+    <table class="table table-opora">
+        <thead>
+            <tr>
+                <th>Наименование</th>
+                <th>ИНН</th>
+                <th>КПП</th>
+                <th>Адрес</th>
+                <th class="text-end">Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in pagination.items %}
+            <tr>
+                <td class="fw-semibold">
+                    <a href="{{ url_for('contractors.detail', contractor_id=item.id) }}">{{ item.name }}</a>
+                </td>
+                <td>{{ item.inn or '—' }}</td>
+                <td>{{ item.kpp or '—' }}</td>
+                <td class="text-muted">{{ item.address or '—' }}</td>
+                <td class="text-end">
+                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('contractors.detail', contractor_id=item.id) }}">Карточка</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5" class="table-empty">
+                    <i class="bi bi-inbox"></i> Подрядчики не найдены
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

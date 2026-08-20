@@ -1,11 +1,11 @@
 {% extends "layouts/app.html" %}
-{% from "macros/ui.html" import page_header %}
+{% from "macros/ui.html" import page_header, list_loading %}
 
 {% block title %}Договора — {{ app_name }}{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
 {% endblock %}
 
 {% block page_header %}
@@ -99,47 +99,21 @@
 </div>
 {% endif %}
 
-<div class="table-card">
-    <table class="table table-opora">
-        <thead>
-            <tr>
-                <th>Договор</th>
-                <th>Заказчик</th>
-                <th>Срок</th>
-                <th>Адресов</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in pagination.items %}
-            <tr>
-                <td>
-                    <a class="fw-semibold" href="{{ url_for('agreements.detail', agreement_id=item.id) }}">{{ item.title }}</a>
-                    {% if item.number %}<div class="text-muted small">№ {{ item.number }}</div>{% endif %}
-                </td>
-                <td>{{ item.customer_name or '—' }}</td>
-                <td class="text-muted">
-                    {% if item.period_from or item.period_to %}
-                    {{ item.period_from.strftime('%d.%m.%Y') if item.period_from else '—' }}
-                    —
-                    {{ item.period_to.strftime('%d.%m.%Y') if item.period_to else '—' }}
-                    {% else %}—{% endif %}
-                </td>
-                <td>{{ item.sites|length }}</td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="4" class="table-empty">
-                    <i class="bi bi-inbox"></i> Договоров ещё нет — загрузите Word-файл
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<div id="agreementsTableContainer">
+    {{ list_loading("Загрузка договоров…") }}
 </div>
+<div id="agreementsPaginationContainer" class="mt-3"></div>
+<div id="oporaListConfig" class="d-none"
+     data-base-url="/agreements"
+     data-table-container-id="agreementsTableContainer"
+     data-pagination-container-id="agreementsPaginationContainer"
+     data-page-link-class="agreement-page-link"
+     data-view-mode="page"
+     data-load-on-start="true"></div>
 {% endblock %}
 
 {% block extra_js %}
 {{ super() }}
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
 <script src="{{ url_for('static', filename='js/agreements-map.js') }}"></script>
 {% endblock %}

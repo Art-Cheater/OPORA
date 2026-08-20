@@ -134,28 +134,9 @@ def _apply_contract_create_defaults(form: ContractForm) -> None:
 def index():
     filter_form = ContractFilterForm(request.args)
     _prepare_filter_form(filter_form)
-
-    filters = ContractFilter(
-        q=request.args.get("q", ""),
-        contract_type=request.args.get("contract_type", ""),
-        status=request.args.get("status", ""),
-        responsible_id=request.args.get("responsible_id", ""),
-        date_from=request.args.get("date_from", ""),
-        date_to=request.args.get("date_to", ""),
-        end_date_from=request.args.get("end_date_from", ""),
-        end_date_to=request.args.get("end_date_to", ""),
-        sort_by=request.args.get("sort_by", "created_at"),
-        sort_dir=request.args.get("sort_dir", "desc"),
-    )
-    page = request.args.get("page", 1, type=int)
-    per_page = request.args.get("per_page", 20, type=int)
-    pagination = ContractRepository.paginated_list(filters, page=page, per_page=per_page)
-
     return render_template(
         "contracts/index.html",
         filter_form=filter_form,
-        contracts_pagination=pagination,
-        filters=filters,
     )
 
 

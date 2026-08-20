@@ -1,5 +1,5 @@
 {% extends "layouts/app.html" %}
-{% from "macros/ui.html" import page_header %}
+{% from "macros/ui.html" import page_header, list_loading %}
 {% from "macros/crud.html" import create_button %}
 
 {% block title %}Контракты — {{ app_name }}{% endblock %}
@@ -73,11 +73,9 @@
 </div>
 
 <div id="contractsTableContainer">
-    {% include "contracts/partials/table.html" %}
+    {{ list_loading("Загрузка контрактов…") }}
 </div>
-<div id="contractsPaginationContainer" class="mt-3">
-    {% include "contracts/partials/pagination.html" %}
-</div>
+<div id="contractsPaginationContainer" class="mt-3"></div>
 
 <div id="oporaListConfig" class="d-none"
      data-base-url="/contracts"
@@ -89,6 +87,7 @@
      data-create-title="Новый контракт"
      data-edit-title="Редактирование контракта"
      data-delete-message="Вы уверены, что хотите удалить этот контракт?"
+     data-load-on-start="true"
      data-can-edit="{{ 'true' if current_user.has_permission('contracts.edit') else 'false' }}">
 </div>
 {% endblock %}

@@ -107,23 +107,9 @@ def _payload_from_form(form: EmployeeForm, employee=None) -> EmployeePayload:
 def index():
     filter_form = EmployeeFilterForm(request.args)
     _prepare_filter_form(filter_form)
-
-    filters = EmployeeFilter(
-        q=request.args.get("q", ""),
-        role_id=request.args.get("role_id", ""),
-        status=request.args.get("status", ""),
-        department=request.args.get("department", ""),
-        sort_by=request.args.get("sort_by", "full_name"),
-        sort_dir=request.args.get("sort_dir", "asc"),
-    )
-    page = request.args.get("page", 1, type=int)
-    per_page = request.args.get("per_page", 20, type=int)
-    pagination = EmployeeRepository.paginated_list(filters, page=page, per_page=per_page)
-
     return render_template(
         "employees/index.html",
         filter_form=filter_form,
-        employees_pagination=pagination,
     )
 
 

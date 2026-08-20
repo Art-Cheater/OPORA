@@ -160,6 +160,9 @@ def test_request_open_list_detail_and_forms(admin_client):
 
     list_resp = admin_client.get("/requests/")
     assert list_resp.status_code == 200, list_resp.get_data(as_text=True)[:2000]
+    table = admin_client.get("/requests/table")
+    assert table.status_code == 200
+    assert "Лепсе" in table.get_json()["table_html"]
 
     page = admin_client.get(f"/requests/{request_id}")
     assert page.status_code == 200, page.get_data(as_text=True)[:2000]
@@ -227,17 +230,22 @@ def test_employee_and_tender_shared_forms_open(admin_client):
 
 def test_list_rows_use_status_tones(admin_client):
     _create_request(admin_client)
-    requests_page = admin_client.get("/requests/")
+    requests_page = admin_client.get("/requests/table")
     assert requests_page.status_code == 200
-    assert "table-row-lifecycle" in requests_page.get_data(as_text=True)
+    assert "table-row-lifecycle" in requests_page.get_json()["table_html"]
 
-    employees_page = admin_client.get("/employees/")
+    employees_page = admin_client.get("/employees/table")
     assert employees_page.status_code == 200
-    assert "table-row-lifecycle" in employees_page.get_data(as_text=True)
+    assert "table-row-lifecycle" in employees_page.get_json()["table_html"]
 
     for path in ("/projects/", "/contracts/", "/objects/", "/tenders/"):
         response = admin_client.get(path)
         assert response.status_code == 200, path
+        html = response.get_data(as_text=True)
+        assert "opora-loading" in html, path
+        table = admin_client.get(f"{path}table")
+        assert table.status_code == 200, path
+        assert "table_html" in table.get_json()
 
 
 def test_static_assets_are_public_cached_and_not_cdn_fallback(client, admin_client):
@@ -248,6 +256,9 @@ def test_static_assets_are_public_cached_and_not_cdn_fallback(client, admin_clie
         "/static/vendor/bootstrap.bundle.min.js",
         "/static/vendor/bootstrap-icons.min.css",
         "/static/vendor/fonts/bootstrap-icons.woff2",
+        "/static/vendor/leaflet/leaflet.css",
+        "/static/vendor/leaflet/leaflet.js",
+        "/static/vendor/leaflet/images/marker-icon.png",
     ):
         response = client.get(path)
         assert response.status_code == 200, path
@@ -258,6 +269,7 @@ def test_static_assets_are_public_cached_and_not_cdn_fallback(client, admin_clie
     page = admin_client.get("/requests/")
     html = page.get_data(as_text=True)
     assert "cdn.jsdelivr.net" not in html
+    assert "unpkg.com" not in html
     assert "static/css/main.css?v=" in html
     assert "static/vendor/bootstrap.min.css?v=" in html
     assert "static/js/requests-form.js?v=" in html

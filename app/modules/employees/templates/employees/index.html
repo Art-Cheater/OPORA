@@ -1,5 +1,5 @@
 {% extends "layouts/app.html" %}
-{% from "macros/ui.html" import page_header %}
+{% from "macros/ui.html" import page_header, list_loading %}
 {% from "macros/crud.html" import create_button %}
 
 {% block title %}Сотрудники — {{ app_name }}{% endblock %}
@@ -57,11 +57,9 @@
 </div>
 
 <div id="employeesTableContainer">
-    {% include "employees/partials/table.html" %}
+    {{ list_loading("Загрузка сотрудников…") }}
 </div>
-<div id="employeesPaginationContainer" class="mt-3">
-    {% include "employees/partials/pagination.html" %}
-</div>
+<div id="employeesPaginationContainer" class="mt-3"></div>
 
 <div id="oporaListConfig" class="d-none"
      data-base-url="/employees"
@@ -73,6 +71,7 @@
      data-create-title="Новый сотрудник"
      data-edit-title="Редактирование сотрудника"
      data-delete-message="Вы уверены, что хотите удалить этого сотрудника?"
+     data-load-on-start="true"
      data-can-edit="{{ 'true' if current_user.has_permission('users.edit') else 'false' }}">
 </div>
 {% endblock %}

@@ -1,0 +1,37 @@
+<div class="table-card">
+    <table class="table table-opora">
+        <thead>
+            <tr>
+                <th>Договор</th>
+                <th>Заказчик</th>
+                <th>Срок</th>
+                <th>Адресов</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in pagination.items %}
+            <tr>
+                <td>
+                    <a class="fw-semibold" href="{{ url_for('agreements.detail', agreement_id=item.id) }}">{{ item.title }}</a>
+                    {% if item.number %}<div class="text-muted small">№ {{ item.number }}</div>{% endif %}
+                </td>
+                <td>{{ item.customer_name or '—' }}</td>
+                <td class="text-muted">
+                    {% if item.period_from or item.period_to %}
+                    {{ item.period_from.strftime('%d.%m.%Y') if item.period_from else '—' }}
+                    —
+                    {{ item.period_to.strftime('%d.%m.%Y') if item.period_to else '—' }}
+                    {% else %}—{% endif %}
+                </td>
+                <td>{{ item.sites_count }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4" class="table-empty">
+                    <i class="bi bi-inbox"></i> Договоров ещё нет — загрузите Word-файл
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

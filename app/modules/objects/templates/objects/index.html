@@ -1,5 +1,5 @@
 {% extends "layouts/app.html" %}
-{% from "macros/ui.html" import page_header %}
+{% from "macros/ui.html" import page_header, list_loading %}
 {% from "macros/crud.html" import create_button %}
 
 {% block title %}Объекты — {{ app_name }}{% endblock %}
@@ -97,11 +97,9 @@
 {% endif %}
 
 <div id="objectsTableContainer">
-    {% include "objects/partials/table.html" %}
+    {{ list_loading("Загрузка объектов…") }}
 </div>
-<div id="objectsPaginationContainer" class="mt-3">
-    {% include "objects/partials/pagination.html" %}
-</div>
+<div id="objectsPaginationContainer" class="mt-3"></div>
 
 <div id="oporaListConfig" class="d-none"
      data-base-url="/objects"
@@ -113,5 +111,6 @@
      data-view-mode="modal"
      data-create-title="Новый объект"
      data-edit-title="Редактирование объекта"
+     data-load-on-start="true"
      data-can-edit="{{ 'true' if current_user.has_permission('objects.edit') else 'false' }}"></div>
 {% endblock %}

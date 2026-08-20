@@ -143,16 +143,10 @@ def _render_form_modal(form: ObjectForm, form_action: str, modal_title: str):
 def index():
     filter_form = ObjectFilterForm(request.args)
     import_form = ObjectImportForm()
-    filters = _object_filters_from_request()
-    page = request.args.get("page", 1, type=int)
-    per_page = request.args.get("per_page", 20, type=int)
-    pagination = ObjectRepository.paginated_list(filters, page=page, per_page=per_page)
     return render_template(
         "objects/index.html",
         filter_form=filter_form,
         import_form=import_form,
-        pagination=pagination,
-        items=pagination.items,
         status_labels=OBJECT_STATUS_LABELS,
         kind_labels=OBJECT_KIND_LABELS,
     )

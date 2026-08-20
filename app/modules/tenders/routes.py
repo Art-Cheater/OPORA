@@ -122,20 +122,9 @@ def _render_form_modal(form: TenderForm, form_action: str, modal_title: str):
 @permission_required(PERM_TENDERS_VIEW)
 def index():
     filter_form = TenderFilterForm(request.args)
-    filters = TenderFilter(
-        q=request.args.get("q", ""),
-        status=request.args.get("status", ""),
-        sort_by=request.args.get("sort_by", "created_at"),
-        sort_dir=request.args.get("sort_dir", "desc"),
-    )
-    page = request.args.get("page", 1, type=int)
-    per_page = request.args.get("per_page", 20, type=int)
-    pagination = TenderRepository.paginated_list(filters, page=page, per_page=per_page)
     return render_template(
         "tenders/index.html",
         filter_form=filter_form,
-        pagination=pagination,
-        items=pagination.items,
         status_labels=TENDER_STATUS_LABELS,
     )
 

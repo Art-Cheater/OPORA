@@ -29,9 +29,13 @@ if ! flask db upgrade; then
 fi
 flask db current || true
 
-echo "$(date -u +%H:%M:%S) Справочники..."
-flask seed-reference-data || echo "WARN: seed-reference-data failed (продолжаем)"
-flask seed-admin || echo "WARN: seed-admin failed (продолжаем)"
+if [ "${OPORA_SEED_ON_START:-0}" = "1" ]; then
+    echo "$(date -u +%H:%M:%S) Справочники (OPORA_SEED_ON_START=1)..."
+    flask seed-reference-data || echo "WARN: seed-reference-data failed (продолжаем)"
+    flask seed-admin || echo "WARN: seed-admin failed (продолжаем)"
+else
+    echo "$(date -u +%H:%M:%S) Справочники пропускаем (уже в БД). Для сида: OPORA_SEED_ON_START=1"
+fi
 
 echo "$(date -u +%H:%M:%S) Запуск: $*"
 exec "$@"
