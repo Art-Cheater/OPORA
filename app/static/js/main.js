@@ -81,6 +81,8 @@ window.OporaMessengerNotify = (() => {
     let audioCtx = null;
     let lastNotifiedMessageId = null;
     let permissionAsked = false;
+    let toastHost = null;
+    let toastTimer = null;
 
     function ensureAudio() {
         if (audioCtx) return audioCtx;
@@ -90,27 +92,40 @@ window.OporaMessengerNotify = (() => {
         return audioCtx;
     }
 
-    function playSound() {
+    function unlockAudio() {
         try {
             const ctx = ensureAudio();
             if (!ctx) return;
             if (ctx.state === "suspended") ctx.resume();
+        } catch {
+            /* ignore */
+        }
+    }
+
+    /** Громкий трёхкратный сигнал (не тихий «пип»). */
+    function playSound() {
+        try {
+            unlockAudio();
+            const ctx = ensureAudio();
+            if (!ctx) return;
             const now = ctx.currentTime;
-            [
-                { freq: 880, start: 0, dur: 0.12 },
-                { freq: 1175, start: 0.1, dur: 0.16 },
-            ].forEach(({ freq, start, dur }) => {
+            const master = ctx.createGain();
+            master.gain.setValueAtTime(0.55, now);
+            master.connect(ctx.destination);
+
+            [0, 0.22, 0.44].forEach((offset, index) => {
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
-                osc.type = "sine";
-                osc.frequency.value = freq;
-                gain.gain.setValueAtTime(0.0001, now + start);
-                gain.gain.exponentialRampToValueAtTime(0.07, now + start + 0.02);
-                gain.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
+                osc.type = "square";
+                osc.frequency.value = index === 1 ? 1320 : 980;
+                const t0 = now + offset;
+                gain.gain.setValueAtTime(0.0001, t0);
+                gain.gain.exponentialRampToValueAtTime(0.45, t0 + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.16);
                 osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start(now + start);
-                osc.stop(now + start + dur + 0.02);
+                gain.connect(master);
+                osc.start(t0);
+                osc.stop(t0 + 0.18);
             });
         } catch {
             /* ignore */
@@ -118,10 +133,52 @@ window.OporaMessengerNotify = (() => {
     }
 
     function requestPermission() {
+        unlockAudio();
         if (!("Notification" in window)) return;
         if (Notification.permission !== "default" || permissionAsked) return;
         permissionAsked = true;
         Notification.requestPermission().catch(() => {});
+    }
+
+    function ensureToastHost() {
+        if (toastHost && document.body.contains(toastHost)) return toastHost;
+        toastHost = document.createElement("div");
+        toastHost.id = "oporaMsgToasts";
+        toastHost.className = "opora-msg-toasts";
+        toastHost.setAttribute("aria-live", "polite");
+        document.body.appendChild(toastHost);
+        return toastHost;
+    }
+
+    function showToast({ title, body, url }) {
+        const host = ensureToastHost();
+        const el = document.createElement("button");
+        el.type = "button";
+        el.className = "opora-msg-toast";
+        el.innerHTML = `
+            <div class="opora-msg-toast__icon"><i class="bi bi-chat-dots-fill"></i></div>
+            <div class="opora-msg-toast__body">
+                <div class="opora-msg-toast__title"></div>
+                <div class="opora-msg-toast__text"></div>
+            </div>
+            <span class="opora-msg-toast__close" aria-hidden="true">&times;</span>
+        `;
+        el.querySelector(".opora-msg-toast__title").textContent = title || "Новое сообщение";
+        el.querySelector(".opora-msg-toast__text").textContent = body || "";
+        const go = () => {
+            el.remove();
+            if (url) window.location.href = url;
+        };
+        el.addEventListener("click", (event) => {
+            if (event.target.closest(".opora-msg-toast__close")) {
+                el.remove();
+                return;
+            }
+            go();
+        });
+        host.appendChild(el);
+        window.clearTimeout(toastTimer);
+        toastTimer = window.setTimeout(() => el.remove(), 10000);
     }
 
     function showBrowserNotification({ title, body, url, tag }) {
@@ -132,6 +189,7 @@ window.OporaMessengerNotify = (() => {
                 body: body || "",
                 tag: tag || "opora-messenger",
                 renotify: true,
+                requireInteraction: true,
                 silent: true,
             });
             n.onclick = () => {
@@ -139,29 +197,39 @@ window.OporaMessengerNotify = (() => {
                 if (url) window.location.href = url;
                 n.close();
             };
-            setTimeout(() => n.close(), 8000);
+            setTimeout(() => n.close(), 15000);
         } catch {
             /* ignore */
         }
     }
 
     /**
-     * Звук + браузерное уведомление о входящем сообщении.
-     * skipUiNoise — если пользователь уже смотрит этот чат во вкладке.
+     * Звук + всплывающий тост + браузерное уведомление.
+     * skip* — если пользователь уже смотрит этот чат во вкладке.
      */
-    function notifyNewMessage({ title, body, url, messageId, conversationId, skipSound, skipBrowser }) {
+    function notifyNewMessage({
+        title,
+        body,
+        url,
+        messageId,
+        conversationId,
+        skipSound,
+        skipBrowser,
+        skipToast,
+    }) {
         if (messageId && messageId === lastNotifiedMessageId) return;
         if (messageId) lastNotifiedMessageId = messageId;
 
+        const payload = {
+            title: title || "Новое сообщение",
+            body: body || "",
+            url: url || "/messenger/",
+            tag: conversationId ? `msg-${conversationId}` : "opora-messenger",
+        };
+
         if (!skipSound) playSound();
-        if (!skipBrowser) {
-            showBrowserNotification({
-                title: title || "Новое сообщение",
-                body: body || "",
-                url: url || "/messenger/",
-                tag: conversationId ? `msg-${conversationId}` : "opora-messenger",
-            });
-        }
+        if (!skipToast) showToast(payload);
+        if (!skipBrowser) showBrowserNotification(payload);
     }
 
     function onUnreadIncrease(total, preview, options = {}) {
@@ -176,19 +244,35 @@ window.OporaMessengerNotify = (() => {
         notifyNewMessage({
             title: preview?.peer_name || "Мессенджер",
             body: preview?.body || `Непрочитанных: ${total}`,
-            url: "/messenger/",
+            url: preview?.conversation_id
+                ? `/messenger/?c=${encodeURIComponent(preview.conversation_id)}`
+                : "/messenger/",
             messageId: preview?.message_id || null,
             conversationId: preview?.conversation_id || null,
             skipSound: viewingChat,
             skipBrowser: viewingChat,
+            skipToast: viewingChat,
         });
     }
 
+    ["pointerdown", "keydown", "touchstart"].forEach((eventName) => {
+        document.addEventListener(
+            eventName,
+            () => {
+                unlockAudio();
+                requestPermission();
+            },
+            { once: true, capture: true }
+        );
+    });
+
     return {
         playSound,
+        unlockAudio,
         requestPermission,
         notifyNewMessage,
         onUnreadIncrease,
+        showToast,
     };
 })();
 
@@ -871,7 +955,6 @@ function initMessengerUnreadBadge() {
     }
 
     async function refresh() {
-        if (document.hidden) return;
         try {
             const headers = {};
             if (etag) headers["If-None-Match"] = etag;
@@ -890,19 +973,11 @@ function initMessengerUnreadBadge() {
         }
     }
 
-    document.addEventListener(
-        "click",
-        () => window.OporaMessengerNotify?.requestPermission(),
-        { once: true }
-    );
-
     document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) refresh();
+        refresh();
     });
 
     // Не конкурировать с CSS/JS на первом кадре страницы.
-    window.setTimeout(refresh, 2500);
-    window.setInterval(() => {
-        if (!document.hidden) refresh();
-    }, intervalMs);
+    window.setTimeout(refresh, 1500);
+    window.setInterval(refresh, intervalMs);
 }

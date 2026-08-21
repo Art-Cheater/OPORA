@@ -550,7 +550,72 @@ body.is-opora-busy { cursor: wait; }
   line-height: 1.35;
 }
 
-/* ??????: ????????? ????? */
+/* Всплывающее уведомление о сообщении в мессенджере */
+.opora-msg-toasts {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 2400;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  max-width: min(380px, calc(100vw - 2rem));
+  pointer-events: none;
+}
+.opora-msg-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-radius: 14px;
+  padding: 0.9rem 1rem;
+  background: #1c2430;
+  color: #fff;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+  animation: opora-msg-toast-in 0.22s ease-out;
+}
+.opora-msg-toast__icon {
+  flex: 0 0 auto;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--opora-primary, #f57c00);
+  color: #fff;
+  font-size: 1.1rem;
+}
+.opora-msg-toast__body { min-width: 0; flex: 1; }
+.opora-msg-toast__title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-bottom: 0.15rem;
+}
+.opora-msg-toast__text {
+  font-size: 0.85rem;
+  opacity: 0.9;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.opora-msg-toast__close {
+  flex: 0 0 auto;
+  font-size: 1.25rem;
+  line-height: 1;
+  opacity: 0.7;
+}
+@keyframes opora-msg-toast-in {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Адреса: повторный вызов */
 .request-address--repeat,
 input.request-address--repeat,
 .form-control.request-address--repeat {

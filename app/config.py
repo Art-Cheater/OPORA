@@ -144,7 +144,8 @@ class Config:
     MESSENGER_POLL_INTERVAL_MS = int(os.getenv("MESSENGER_POLL_INTERVAL_MS", "8000"))
     # Короткий poll вместо SSE: не держит воркеры gunicorn
     # Реже опрос непрочитанных — меньше нагрузка на воркеры при открытых вкладках
-    MESSENGER_UNREAD_INTERVAL_MS = int(os.getenv("MESSENGER_UNREAD_INTERVAL_MS", "45000"))
+    # Чаще опрос непрочитанных — звук и тосты приходят быстрее (можно поднять в .env).
+    MESSENGER_UNREAD_INTERVAL_MS = int(os.getenv("MESSENGER_UNREAD_INTERVAL_MS", "10000"))
 
     # Серверные адресные подсказки. Браузер к Nominatim напрямую не обращается.
     GEOCODING_PROVIDER = os.getenv("GEOCODING_PROVIDER", "nominatim").strip().lower()

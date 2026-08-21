@@ -933,7 +933,6 @@
   function startUnreadPolling() {
     clearInterval(unreadPollTimer);
     const tick = () => {
-      if (document.hidden) return;
       updateGlobalUnread();
     };
     unreadPollTimer = setInterval(tick, unreadIntervalMs);
@@ -1033,8 +1032,11 @@
   chatBackBtn?.addEventListener("click", closeChat);
 
   document.addEventListener(
-    "click",
-    () => notify?.requestPermission(),
+    "pointerdown",
+    () => {
+      notify?.unlockAudio?.();
+      notify?.requestPermission?.();
+    },
     { once: true }
   );
 
