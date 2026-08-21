@@ -29,6 +29,8 @@ if [ "${OPORA_RUN_MIGRATE:-1}" = "1" ]; then
         exit 1
     fi
     flask db current || true
+    echo "$(date -u +%H:%M:%S) Каталог прав..."
+    flask sync-security || echo "WARN: flask sync-security failed (продолжаем)"
 else
     echo "$(date -u +%H:%M:%S) Миграции пропускаем (их делает web)."
 fi

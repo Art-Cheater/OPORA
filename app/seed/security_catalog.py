@@ -17,6 +17,7 @@ SYSTEM_MODULES = [
     ("materials", "Материалы", "box-seam", 50, "Склад и материалы"),
     ("reports", "Отчёты", "bar-chart", 60, "Отчётность"),
     ("messenger", "Мессенджер", "chat-dots", 70, "Корпоративный мессенджер"),
+    ("documents", "Личные документы", "folder", 72, "Файлы сотрудника только для себя"),
     ("audit", "Журнал действий", "journal-text", 80, "Аудит системы"),
     ("roles", "Роли", "shield-lock", 90, "Управление ролями"),
     ("profile", "Профиль", "person", 100, "Личный профиль"),
@@ -179,6 +180,9 @@ MODULE_FIELDS: dict[str, list[tuple[str, str, int]]] = {
         ("conversations", "Чаты", 10),
         ("messages", "Сообщения", 20),
     ],
+    "documents": [
+        ("files", "Файлы", 10),
+    ],
     "audit": [
         ("created_at", "Дата", 10),
         ("user_id", "Пользователь", 20),
@@ -241,6 +245,7 @@ SPECIAL_PERMISSIONS = [
     ("profile", "edit", "Редактирование профиля"),
     ("auth", "login_logs.view", "Просмотр журнала входов"),
     ("messenger", "use", "Использование мессенджера"),
+    ("documents", "use", "Личные документы"),
     ("search", "use", "Глобальный поиск"),
     ("users", "block", "Блокировка пользователей"),
     ("requests", "approve", "Одобрение заявок"),

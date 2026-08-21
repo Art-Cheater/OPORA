@@ -12,6 +12,7 @@ from app.models.auth.constants import (
     PERM_CONTRACTS_EDIT,
     PERM_CONTRACTS_VIEW,
     PERM_MESSENGER_USE,
+    PERM_DOCUMENTS_USE,
     PERM_OBJECTS_CREATE,
     PERM_OBJECTS_EDIT,
     PERM_OBJECTS_VIEW,
@@ -132,7 +133,7 @@ class ReferenceDataService:
             PERM_TENDERS_VIEW, PERM_TENDERS_CREATE, PERM_TENDERS_EDIT,
             PERM_CONTRACTS_VIEW, PERM_CONTRACTS_CREATE, PERM_CONTRACTS_EDIT,
             PERM_AUDIT_VIEW, PERM_AUDIT_EXPORT,
-            PERM_MESSENGER_USE, PERM_SEARCH_USE,
+            PERM_MESSENGER_USE, PERM_DOCUMENTS_USE, PERM_SEARCH_USE,
             "materials.view", "reports.view",
             "contractors.view", "eis.view", "agreements.view", "agreements.create", "agreements.delete",
             "inquiries.view", "inquiries.edit", "inquiries.delete", "inquiries.sync",
@@ -142,7 +143,7 @@ class ReferenceDataService:
             PERM_REQUESTS_VIEW, PERM_REQUESTS_CREATE, PERM_REQUESTS_EDIT,
             PERM_REQUESTS_DISPATCH, PERM_OBJECTS_VIEW, PERM_PROJECTS_VIEW,
             PERM_TENDERS_VIEW,
-            PERM_MESSENGER_USE, PERM_SEARCH_USE,
+            PERM_MESSENGER_USE, PERM_DOCUMENTS_USE, PERM_SEARCH_USE,
             "contractors.view",
             "agreements.view", "agreements.create",
             "inquiries.view", "inquiries.edit", "inquiries.sync",
@@ -152,7 +153,7 @@ class ReferenceDataService:
             PERM_REQUESTS_VIEW, PERM_REQUESTS_CREATE, PERM_REQUESTS_EDIT,
             PERM_REQUESTS_APPROVE, PERM_OBJECTS_VIEW, PERM_PROJECTS_VIEW,
             PERM_TENDERS_VIEW,
-            PERM_MESSENGER_USE, PERM_SEARCH_USE,
+            PERM_MESSENGER_USE, PERM_DOCUMENTS_USE, PERM_SEARCH_USE,
             "contractors.view",
             "agreements.view",
             "inquiries.view",
@@ -161,7 +162,7 @@ class ReferenceDataService:
             PERM_PROFILE_VIEW, PERM_PROFILE_EDIT,
             PERM_REQUESTS_VIEW, PERM_REQUESTS_CREATE, PERM_REQUESTS_EDIT,
             PERM_REQUESTS_DISPATCH,
-            PERM_OBJECTS_VIEW, PERM_PROJECTS_VIEW, PERM_MESSENGER_USE, PERM_SEARCH_USE,
+            PERM_OBJECTS_VIEW, PERM_PROJECTS_VIEW, PERM_MESSENGER_USE, PERM_DOCUMENTS_USE, PERM_SEARCH_USE,
             "inquiries.view",
         ],
     }
@@ -180,6 +181,8 @@ class ReferenceDataService:
         """Добавляет недостающие модули и права. Назначения ролей не сбрасывает."""
         cls._seed_security_catalog()
         cls._ensure_admin_full_access()
+        cls._grant_missing_role_permissions()
+        cls._grant_personal_documents_to_all_roles()
         db.session.commit()
         cls._clear_permission_cache()
 
@@ -223,6 +226,55 @@ class ReferenceDataService:
             if perm.id in have:
                 continue
             db.session.add(RolePermission(role_id=admin.id, permission_id=perm.id))
+
+    @classmethod
+    def _grant_missing_role_permissions(cls) -> None:
+        """Добавляет права из ROLE_PERMISSIONS, ничего не снимает."""
+        roles = {
+            role.code: role
+            for role in db.session.scalars(db.select(Role).where(Role.active_filter()))
+        }
+        permissions = {
+            perm.code: perm
+            for perm in db.session.scalars(db.select(Permission).where(Permission.active_filter()))
+        }
+        have = {
+            (rp.role_id, rp.permission_id)
+            for rp in db.session.scalars(
+                db.select(RolePermission).where(RolePermission.active_filter())
+            )
+        }
+        for role_code, perm_codes in cls.ROLE_PERMISSIONS.items():
+            role = roles.get(role_code)
+            if role is None:
+                continue
+            for perm_code in perm_codes:
+                perm = permissions.get(perm_code)
+                if perm is None or (role.id, perm.id) in have:
+                    continue
+                db.session.add(RolePermission(role_id=role.id, permission_id=perm.id))
+                have.add((role.id, perm.id))
+
+    @classmethod
+    def _grant_personal_documents_to_all_roles(cls) -> None:
+        perm = db.session.scalar(
+            db.select(Permission).where(Permission.code == PERM_DOCUMENTS_USE, Permission.active_filter())
+        )
+        if perm is None:
+            return
+        have = {
+            rp.role_id
+            for rp in db.session.scalars(
+                db.select(RolePermission).where(
+                    RolePermission.permission_id == perm.id,
+                    RolePermission.active_filter(),
+                )
+            )
+        }
+        for role in db.session.scalars(db.select(Role).where(Role.active_filter())):
+            if role.id in have:
+                continue
+            db.session.add(RolePermission(role_id=role.id, permission_id=perm.id))
 
     @staticmethod
     def _clear_permission_cache() -> None:

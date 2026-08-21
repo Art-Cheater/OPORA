@@ -7,8 +7,10 @@ import uuid
 from flask import abort, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
+from app.core.decorators import permission_required
 from app.core.exceptions import NotFoundError, ValidationError
 from app.core.upload_utils import collect_upload_files, resolve_download_filename
+from app.models.auth.constants import PERM_DOCUMENTS_USE
 from app.modules.documents.blueprint import documents_bp
 from app.modules.documents.forms import PersonalDocumentForm
 from app.modules.documents.services import PersonalDocumentService
@@ -37,6 +39,7 @@ def _file_items(user_id: uuid.UUID) -> list[dict]:
 
 @documents_bp.route("/")
 @login_required
+@permission_required(PERM_DOCUMENTS_USE)
 def index():
     form = PersonalDocumentForm()
     return render_template(
@@ -48,6 +51,7 @@ def index():
 
 @documents_bp.route("/upload", methods=["POST"])
 @login_required
+@permission_required(PERM_DOCUMENTS_USE)
 def upload():
     form = PersonalDocumentForm()
     files = collect_upload_files(form.files.data, request.files.getlist("files"))
@@ -66,6 +70,7 @@ def upload():
 
 @documents_bp.route("/<uuid:file_id>")
 @login_required
+@permission_required(PERM_DOCUMENTS_USE)
 def download(file_id: uuid.UUID):
     item = PersonalDocumentService.get_own(current_user.id, file_id)
     if item is None:
@@ -89,6 +94,7 @@ def download(file_id: uuid.UUID):
 
 @documents_bp.route("/<uuid:file_id>/delete", methods=["POST"])
 @login_required
+@permission_required(PERM_DOCUMENTS_USE)
 def delete(file_id: uuid.UUID):
     try:
         PersonalDocumentService.delete(current_user.id, file_id)

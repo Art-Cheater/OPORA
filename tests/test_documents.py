@@ -23,9 +23,15 @@ def _login(client, email: str, password: str = "pass12345"):
 
 
 def test_personal_documents_own_files_only(admin_client, client, app):
+    health = admin_client.get("/health")
+    assert health.status_code == 200
+    assert health.get_json()["release"] == "20260821c"
+
     page = admin_client.get("/documents/")
     assert page.status_code == 200
     assert "Личные документы".encode("utf-8") in page.data
+    home = admin_client.get("/")
+    assert "Личные документы".encode("utf-8") in home.data
 
     uploaded = admin_client.post(
         "/documents/upload",
