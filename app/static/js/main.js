@@ -395,7 +395,8 @@ function initInstantNav(sidebar, closeSidebar) {
             path.startsWith("/auth/") ||
             path.includes("/download") ||
             path.includes("/export") ||
-            path.includes("/file/")
+            path.includes("/file/") ||
+            path.includes("/files/")
         );
     }
 

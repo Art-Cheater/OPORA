@@ -40,6 +40,7 @@ class SyncResult:
     skipped: int = 0
     skipped_old: int = 0
     purged: int = 0
+    restored: int = 0
     error: str | None = None
     configured: bool = True
 
@@ -240,6 +241,12 @@ class InquiryService:
                 limit=int(cfg["limit"]),
                 since=since,
             )
+            upload_root: Path = current_app.config["UPLOAD_FOLDER"]
+            restored = cls.restore_missing_attachments(
+                mailbox_client,
+                upload_root,
+                limit=int(cfg["limit"]),
+            )
             if state.uidvalidity and snapshot.uidvalidity and state.uidvalidity != snapshot.uidvalidity:
                 state.uidvalidity = snapshot.uidvalidity
             state.uidvalidity = snapshot.uidvalidity
@@ -259,7 +266,6 @@ class InquiryService:
             skipped = 0
             skipped_old = 0
             max_uid = state.last_uid
-            upload_root: Path = current_app.config["UPLOAD_FOLDER"]
             for uid in batch:
                 header_raw = mailbox_client.peek_headers(uid)
                 header_date, header_subject, header_from, header_mid = (
@@ -359,6 +365,7 @@ class InquiryService:
                 skipped=skipped,
                 skipped_old=skipped_old,
                 purged=purged,
+                restored=restored,
             )
         except ImapError as exc:
             db.session.rollback()
@@ -403,6 +410,81 @@ class InquiryService:
             )
             is not None
         )
+
+    @staticmethod
+    def attachment_disk_path(item: Attachment, upload_root: Path | None = None) -> Path:
+        from flask import current_app
+
+        root = Path(upload_root or current_app.config["UPLOAD_FOLDER"])
+        key = str(item.storage_key or "").replace("\\", "/").lstrip("/")
+        return root / key
+
+    @classmethod
+    def restore_missing_attachments(
+        cls,
+        mailbox_client: ImapMailbox,
+        upload_root: Path,
+        *,
+        limit: int = 15,
+    ) -> int:
+        """Перекачать с ящика файлы, которые есть в БД, но нет на диске.
+
+        inquiry-sync раньше писал вложения в свой контейнер без тома uploads.
+        """
+        files = list(
+            db.session.scalars(
+                db.select(Attachment).where(
+                    Attachment.entity_type == ENTITY_TYPE,
+                    Attachment.deleted_at.is_(None),
+                )
+            )
+        )
+        missing: dict[uuid.UUID, list[Attachment]] = {}
+        for item in files:
+            if not cls.attachment_disk_path(item, upload_root).is_file():
+                missing.setdefault(item.entity_id, []).append(item)
+        if not missing:
+            return 0
+
+        inquiry_ids = list(missing.keys())[: max(1, min(int(limit), 50))]
+        inquiries = list(
+            db.session.scalars(
+                db.select(Inquiry).where(
+                    Inquiry.id.in_(inquiry_ids),
+                    Inquiry.deleted_at.is_(None),
+                )
+            )
+        )
+        restored = 0
+        for inquiry in inquiries:
+            uid = inquiry.imap_uid
+            if not uid:
+                continue
+            try:
+                raw = mailbox_client.fetch_rfc822(uid)
+            except ImapError as exc:
+                logger.warning("Обращения: не скачали вложения UID %s: %s", uid, exc)
+                continue
+            parsed = parse_rfc822(raw)
+            unused = [part for part in parsed.attachments if len(part.payload) <= MAX_ATTACHMENT_BYTES]
+            for item in missing.get(inquiry.id, []):
+                wanted = (item.file_name or "").casefold()
+                match = next(
+                    (part for part in unused if (part.file_name or "").casefold() == wanted),
+                    None,
+                )
+                if match is None and unused:
+                    match = unused[0]
+                if match is None:
+                    continue
+                unused.remove(match)
+                path = cls.attachment_disk_path(item, upload_root)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(match.payload)
+                restored += 1
+        if restored:
+            logger.info("Обращения: восстановлено файлов с ящика: %s", restored)
+        return restored
 
     @staticmethod
     def attachments(inquiry_id: uuid.UUID) -> list[Attachment]:

@@ -57,6 +57,9 @@ class FakeMailbox:
     def fetch_rfc822(self, uid: int) -> bytes:
         return self.messages[uid]
 
+    def select_folder(self, folder: str) -> int:
+        return self.uidvalidity
+
     def close(self) -> None:
         return None
 
@@ -148,12 +151,46 @@ def test_sync_fake_mailbox_creates_inquiry(admin_client, app):
 
     with app.app_context():
         item = db.session.scalar(db.select(Inquiry).where(Inquiry.subject == "Второе"))
+        files = InquiryService.attachments(item.id)
+        assert files
+        file_id = files[0].id
         page = admin_client.get(f"/inquiries/{item.id}")
+        downloaded = admin_client.get(f"/inquiries/{item.id}/files/{file_id}")
+        inline = admin_client.get(f"/inquiries/{item.id}/files/{file_id}?inline=1")
     assert page.status_code == 200
     assert "Ленина".encode("utf-8") in page.data
     assert b"zametka.txt" in page.data
     assert b"file-gallery" in page.data
-    assert b"filePreviewModal" in page.data or "Просмотр".encode("utf-8") in page.data
+    assert downloaded.status_code == 200
+    assert downloaded.data
+    assert inline.status_code == 200
+
+
+def test_restore_missing_inquiry_files(admin_client, app):
+    mailbox = FakeMailbox({12: _sample_message(subject="Файл", with_file=True)})
+    with app.app_context():
+        InquiryService.sync(client=mailbox)
+        inquiry = db.session.scalar(db.select(Inquiry).where(Inquiry.subject == "Файл"))
+        attachment = InquiryService.attachments(inquiry.id)[0]
+        path = InquiryService.attachment_disk_path(attachment)
+        assert path.is_file()
+        path.unlink()
+        inquiry_id = inquiry.id
+        file_id = attachment.id
+
+    missing = admin_client.get(f"/inquiries/{inquiry_id}/files/{file_id}")
+    assert missing.status_code == 404
+
+    with app.app_context():
+        result = InquiryService.sync(client=mailbox)
+        assert result.restored == 1
+        assert InquiryService.attachment_disk_path(
+            InquiryService.attachments(inquiry_id)[0]
+        ).is_file()
+
+    restored = admin_client.get(f"/inquiries/{inquiry_id}/files/{file_id}")
+    assert restored.status_code == 200
+    assert restored.data
 
 
 def _login(client, email: str, password: str = "pass12345") -> None:

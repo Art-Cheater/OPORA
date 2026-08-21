@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import threading
 import uuid
-from pathlib import Path
 
 from flask import abort, current_app, flash, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
@@ -195,7 +194,7 @@ def download(inquiry_id, file_id):
     item = next((file for file in InquiryService.attachments(inquiry.id) if file.id == file_id), None)
     if item is None:
         abort(404)
-    path = Path(current_app.config["UPLOAD_FOLDER"]) / item.storage_key
+    path = InquiryService.attachment_disk_path(item)
     if not path.is_file():
         abort(404)
     download_name = resolve_download_filename(

@@ -35,7 +35,7 @@
         {% endif %}
     </div>
     <div class="file-card__meta">
-        <a href="{{ item.download_url }}" class="file-card__name text-truncate" title="{{ item.name }}">
+        <a href="{{ item.download_url }}" class="file-card__name text-truncate" title="{{ item.name }}" download>
             {{ item.name }}
         </a>
         {% if item.created_at %}
@@ -52,7 +52,7 @@
                 Просмотр
             </button>
             {% endif %}
-            <a href="{{ item.download_url }}" class="btn btn-sm btn-outline-primary">Скачать</a>
+            <a href="{{ item.download_url }}" class="btn btn-sm btn-outline-primary" download>Скачать</a>
             {% if item.delete_url and item.can_delete %}
             <form method="POST" action="{{ item.delete_url }}" class="d-inline">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

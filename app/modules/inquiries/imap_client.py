@@ -61,6 +61,9 @@ class ImapMailbox:
     def fetch_rfc822(self, uid: int) -> bytes:
         raise NotImplementedError
 
+    def select_folder(self, folder: str) -> int:
+        return 0
+
     def close(self) -> None:
         return None
 
@@ -126,6 +129,20 @@ class StdlibImapMailbox(ImapMailbox):
         if len(uids) > _MAX_UIDS:
             uids = uids[-_MAX_UIDS:]
         return MailboxSnapshot(uidvalidity=uidvalidity, uids=uids)
+
+    def select_folder(self, folder: str) -> int:
+        code, _ = self._client.select(folder, readonly=True)
+        if code != "OK":
+            raise ImapError(f"Папка {folder} недоступна.")
+        self._folder = folder
+        uidvalidity = 0
+        typ, data = self._client.response("UIDVALIDITY")
+        if data and data[0] not in (None, b""):
+            try:
+                uidvalidity = int(data[0])
+            except (TypeError, ValueError):
+                uidvalidity = 0
+        return uidvalidity
 
     def peek_headers(self, uid: int) -> bytes:
         code, payload = self._client.uid(

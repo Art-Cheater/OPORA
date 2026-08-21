@@ -24,10 +24,11 @@ def run_once() -> None:
         )
         return
     logger.info(
-        "Обращения: новых %s, пропущено %s, старше года %s, удалено старых %s",
+        "Обращения: новых %s, пропущено %s, старше года %s, восстановлено файлов %s, удалено старых %s",
         result.fetched,
         result.skipped,
         result.skipped_old,
+        result.restored,
         result.purged,
     )
 
