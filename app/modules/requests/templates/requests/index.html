@@ -1,4 +1,4 @@
-{% extends "layouts/app.html" %}
+﻿{% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header, list_loading %}
 {% from "macros/crud.html" import create_button %}
 
@@ -18,7 +18,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="card mb-4 list-filters">
+<div class="card mb-4 list-filters" data-tour="filters">
     <div class="card-header"><i class="bi bi-search"></i>Поиск и фильтры</div>
     <div class="card-body">
         <form id="requestFilterForm" class="row g-3">
@@ -65,7 +65,7 @@
     </div>
 </div>
 
-<div id="requestsTableContainer">
+<div id="requestsTableContainer" data-tour="list-table">
     {{ list_loading("Загрузка заявок…") }}
 </div>
 <div id="requestsPaginationContainer" class="mt-3"></div>

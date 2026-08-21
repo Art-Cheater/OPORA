@@ -10,20 +10,20 @@
 {% endblock %}
 
 {% block content %}
-<div class="card mb-4">
+<div class="card mb-4" data-tour="docs-upload">
     <div class="card-header"><i class="bi bi-upload"></i>Загрузить</div>
     <div class="card-body">
         <form method="POST" action="{{ url_for('documents.upload') }}" enctype="multipart/form-data">
             {{ form.hidden_tag() }}
             <div class="row g-2 align-items-end">
-                <div class="col-md-8">
+                <div class="col-md-8" data-tour="docs-file">
                     {{ form.files(class="form-control", multiple=true) }}
                     <div class="form-text">
                         Можно несколько файлов сразу (суммарно до {{ max_upload_mb }} МБ).
                         Допустимы PDF, Word, Excel, изображения, ZIP, TXT.
                     </div>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-4" data-tour="docs-save">
                     {{ form.submit(class="btn btn-primary w-100") }}
                 </div>
             </div>
@@ -31,7 +31,7 @@
     </div>
 </div>
 
-<div class="card">
+<div class="card" data-tour="docs-list">
     <div class="card-header"><i class="bi bi-files"></i>Мои файлы</div>
     <div class="card-body">
         {{ file_gallery(file_items, "Пока нет файлов. Загрузите документ выше — его увидите только вы.") }}

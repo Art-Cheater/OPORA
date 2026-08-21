@@ -1,13 +1,13 @@
 {# Макросы CRUD: действия в таблице, кнопка создания #}
 
 {% macro create_button(text="Создать", icon="plus-lg") %}
-<button type="button" class="btn btn-primary" data-opora-create>
+<button type="button" class="btn btn-primary" data-opora-create data-tour="create">
     <i class="bi bi-{{ icon }}"></i> {{ text }}
 </button>
 {% endmacro %}
 
 {% macro table_actions(view_url, edit_url, delete_id, can_edit=true, can_delete=false, entity_id="") %}
-<div class="table-actions">
+<div class="table-actions" data-tour="row-actions">
     <button type="button" class="table-actions__btn" title="Просмотр"
             data-opora-action="view" data-id="{{ entity_id }}" data-url="{{ view_url }}">
         <i class="bi bi-eye"></i>
@@ -28,7 +28,7 @@
 {% endmacro %}
 
 {% macro list_filters_card(form_id, reset_id, icon="funnel") %}
-<div class="card mb-4 list-filters">
+<div class="card mb-4 list-filters" data-tour="filters">
     <div class="card-header"><i class="bi bi-{{ icon }}"></i>Поиск и фильтры</div>
     <div class="card-body">
         {{ caller() }}

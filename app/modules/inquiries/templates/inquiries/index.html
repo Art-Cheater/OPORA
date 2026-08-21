@@ -1,4 +1,4 @@
-{% extends "layouts/app.html" %}
+﻿{% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header %}
 
 {% block title %}Обращения — {{ app_name }}{% endblock %}
@@ -12,7 +12,7 @@
 {% if current_user.has_permission('inquiries.sync') %}
 <form method="post" action="{{ url_for('inquiries.sync_now') }}" class="d-inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="btn btn-primary" type="submit" {% if running %}disabled{% endif %}>
+    <button class="btn btn-primary" type="submit" data-tour="inquiries-sync" {% if running %}disabled{% endif %}>
         <i class="bi bi-cloud-download"></i> Забрать письма
     </button>
 </form>
@@ -31,7 +31,7 @@
 <div class="alert alert-danger">Последняя ошибка забора: {{ mailbox_state.last_error }}</div>
 {% endif %}
 
-<div class="card mb-4">
+<div class="card mb-4" data-tour="filters">
     <div class="card-header d-flex justify-content-between">
         <span><i class="bi bi-search"></i> Поиск</span>
         <span class="text-muted small">
@@ -58,7 +58,7 @@
     </div>
 </div>
 
-<div id="inquiriesTableContainer">
+<div id="inquiriesTableContainer" data-tour="list-table">
     <div class="opora-loading" role="status">
         <div class="spinner-border text-primary"></div>
         <div class="opora-loading__text">Загрузка писем…</div>

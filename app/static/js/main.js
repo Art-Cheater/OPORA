@@ -321,7 +321,7 @@ function initInstantNav(sidebar, closeSidebar) {
     const CACHE_TTL = 45000;
     const OVERLAY_MS = 400;
     const pageCache = new Map();
-    const SHELL_ASSET = /bootstrap|main\.css|main\.js|opora-list|phone-mask|search\.js|search\.css|requests-form/;
+    const SHELL_ASSET = /bootstrap|main\.css|main\.js|opora-list|phone-mask|search\.js|search\.css|requests-form|tour\.js|tour\.css/;
     const SKELETON =
         '<div class="opora-loading" role="status"><div class="spinner-border text-primary"></div><div class="opora-loading__text">Загрузка…</div></div>';
     const LIST_SHELLS = {
@@ -711,7 +711,7 @@ function initInstantNav(sidebar, closeSidebar) {
         if (!current) return false;
         document.title = `${spec.title} — Опора`;
         current.outerHTML = `<main class="app-content" id="appContent">
-            <div class="page-header">
+            <div class="page-header" data-tour="page-header">
                 <div class="page-header__content">
                     <div class="page-header__icon"><i class="bi bi-${spec.icon}"></i></div>
                     <div>
@@ -720,7 +720,7 @@ function initInstantNav(sidebar, closeSidebar) {
                     </div>
                 </div>
             </div>
-            <div class="card mb-4 list-filters">
+            <div class="card mb-4 list-filters" data-tour="filters">
                 <div class="card-header"><i class="bi bi-search"></i>Поиск</div>
                 <div class="card-body">
                     <form id="${spec.filterFormId}" class="row g-3">
@@ -731,7 +731,7 @@ function initInstantNav(sidebar, closeSidebar) {
                     </form>
                 </div>
             </div>
-            <div id="${spec.tableContainerId}">
+            <div id="${spec.tableContainerId}" data-tour="list-table">
                 <div class="opora-loading" role="status">
                     <div class="spinner-border text-primary"></div>
                     <div class="opora-loading__text">${spec.loading}</div>
@@ -780,6 +780,18 @@ function initInstantNav(sidebar, closeSidebar) {
         return true;
     }
 
+    function emitNavigated(href) {
+        try {
+            window.dispatchEvent(
+                new CustomEvent("opora:navigated", {
+                    detail: { href: href || window.location.href },
+                })
+            );
+        } catch {
+            /* ignore */
+        }
+    }
+
     async function navigateTo(href, label, { push = true } = {}) {
         const token = ++navToken;
         markSidebar(href);
@@ -797,6 +809,7 @@ function initInstantNav(sidebar, closeSidebar) {
                 return;
             }
             if (push) history.pushState({ oporaNav: true }, "", href);
+            emitNavigated(href);
             return;
         }
 
@@ -806,9 +819,11 @@ function initInstantNav(sidebar, closeSidebar) {
             paintListShell(spec);
             window.OporaList?.bootPage?.();
             if (push) history.pushState({ oporaNav: true }, "", href);
+            emitNavigated(href);
             loadPageHtml(href).then((html) => {
                 if (token !== navToken || !html) return;
                 mergeListChrome(html);
+                emitNavigated(href);
             });
             return;
         }
@@ -829,6 +844,7 @@ function initInstantNav(sidebar, closeSidebar) {
             }
             if (push) history.pushState({ oporaNav: true }, "", href);
             hideLoading();
+            emitNavigated(href);
         } catch (err) {
             if (token !== navToken) return;
             window.location.href = href;

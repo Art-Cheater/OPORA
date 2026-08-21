@@ -1,4 +1,4 @@
-{% extends "layouts/app.html" %}
+﻿{% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header, list_loading %}
 
 {% block title %}Журнал действий — {{ app_name }}{% endblock %}
@@ -54,7 +54,7 @@
     </div>
 </div>
 
-<div id="auditTableContainer">
+<div id="auditTableContainer" data-tour="list-table">
     {{ list_loading("Загрузка журнала…") }}
 </div>
 <div id="auditPaginationContainer" class="mt-3"></div>

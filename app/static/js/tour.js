@@ -1,36 +1,86 @@
 /**
- * Интерактивное обучение «Опора» — шаги зависят от прав и роли.
+ * Интерактивное обучение «Опора» — по ролям и с разбором экрана раздела.
  */
 (() => {
-  const STORAGE_KEY = "opora_tour_seen_v1";
   const PAD = 10;
+
+  const LIST_STEPS = (noun, createLabel) => [
+    {
+      target: "page-header",
+      title: "Заголовок раздела",
+      text: `Вы в разделе «${noun}». Справа сверху — действия (создать, обновить и т.п.), если они доступны вашей роли.`,
+    },
+    {
+      target: "filters",
+      title: "Поиск и фильтры",
+      text: "Введите номер, адрес или имя — список обновится. Фильтры по статусу и датам сужают выдачу. «Сброс» возвращает полный список.",
+      optional: true,
+    },
+    {
+      target: "create",
+      title: createLabel || "Кнопка «Создать»",
+      text: "Нажмите «Создать», чтобы открыть форму. Если кнопки нет — у вашей роли нет права создавать записи (можно только смотреть).",
+      optional: true,
+    },
+    {
+      target: "list-table",
+      title: "Список записей",
+      text: "Здесь все найденные строки. Клик по строке открывает карточку. В колонке действий: просмотр, карандаш (правка), корзина (удаление — если разрешено).",
+      wait: 1200,
+    },
+    {
+      target: "create",
+      title: "Откроем форму",
+      text: "Сейчас откроется окно создания — покажем, куда заполнять поля и где сохранять. Ничего сохранять не обязательно: в конце просто закроем окно.",
+      action: "openCreate",
+      optional: true,
+    },
+    {
+      target: "form-body",
+      title: "Поля формы",
+      text: "Заполните обязательные поля (часто отмечены звёздочкой). Адрес подсказывается при вводе. Прокрутите форму вниз, если полей много.",
+      optional: true,
+    },
+    {
+      target: "form-save",
+      title: "Сохранение",
+      text: "Кнопка «Сохранить» (или «Создать») записывает данные. «Отмена» или крестик закрывают окно без сохранения. Сейчас закроем форму и продолжим.",
+      action: "closeModals",
+      optional: true,
+    },
+  ];
 
   const SECTIONS = [
     {
       id: "welcome",
-      title: "Добро пожаловать",
-      icon: "mortarboard",
+      title: "Интерфейс",
+      icon: "layout-sidebar",
       permission: null,
       steps: [
         {
           target: "sidebar",
           title: "Меню слева",
-          text: "Здесь собраны все разделы, к которым у вас есть доступ. Набор пунктов зависит от вашей роли — чужие разделы просто не показываются.",
+          text: "Все доступные вам разделы. Чужие модули скрыты — так устроены роли.",
         },
         {
           target: "search",
           title: "Глобальный поиск",
-          text: "Быстрый поиск по заявкам, адресам, проектам и сотрудникам. На компьютере удобно открывать сочетанием Ctrl+K.",
+          text: "Быстрый поиск по системе. На компьютере: Ctrl+K.",
         },
         {
           target: "tour-button",
-          title: "Кнопка «Обучение»",
-          text: "В любой момент можно снова пройти обзор или открыть помощь только по нужному разделу. Обучение можно прервать кнопкой «Закрыть».",
+          title: "Обучение",
+          text: "Эту кнопку можно нажать снова в любой момент. Автоматически обучение предлагается только при первом входе.",
+        },
+        {
+          target: "messenger-top",
+          title: "Сообщения и уведомления",
+          text: "Чаты с коллегами и колокольчик уведомлений. Красная точка — есть непрочитанное.",
         },
         {
           target: "profile",
-          title: "Ваш профиль",
-          text: "Здесь видно ваше имя и роль. Через меню можно открыть профиль, снова запустить обучение или выйти из системы.",
+          title: "Профиль",
+          text: "Ваше имя и роль. Здесь же можно снова открыть обучение или выйти.",
         },
       ],
     },
@@ -39,77 +89,61 @@
       title: "Заявки",
       icon: "clipboard-check",
       permission: "requests.view",
+      route: "/requests/",
       roleTips: {
-        dispatcher:
-          "Диспетчер создаёт заявки, назначает выезд бригады и следит за статусами.",
-        master:
-          "Мастер принимает заявки в работу, отмечает выполнение и закрывает их.",
-        executor:
-          "Исполнитель видит свои заявки, отмечает ход работ и добавляет материалы.",
-        director: "Руководство контролирует поток заявок и результаты.",
+        dispatcher: "Создаёте заявки, назначаете мастера/бригаду, следите за статусами.",
+        master: "Берёте заявки в работу, отмечаете выполнение, закрываете.",
+        executor: "Видите свои заявки, ход работ и материалы.",
       },
-      steps: [
-        {
-          target: "requests",
-          title: "Раздел «Заявки»",
-          text: "Основная работа по обращениям жителей и аварийным выездам: список, фильтры, статусы, фото и история.",
-        },
-        {
-          target: "requests",
-          title: "Как пользоваться",
-          text: "Откройте заявку из списка. В карточке меняют статус, добавляют файлы, материалы и комментарии. Повторные звонки по адресу подсвечиваются.",
-        },
-      ],
+      steps: LIST_STEPS("Заявки", "Создать заявку"),
     },
     {
       id: "objects",
       title: "Объекты",
       icon: "geo-alt",
       permission: "objects.view",
-      steps: [
-        {
-          target: "objects",
-          title: "Адресные объекты",
-          text: "Справочник улиц и мест работ: дворы, МКД, планы освещения. По объектам строятся проекты и торги.",
-        },
-      ],
+      route: "/objects/",
+      steps: LIST_STEPS("Объекты", "Создать объект"),
     },
     {
       id: "projects",
       title: "Проекты",
       icon: "folder2-open",
       permission: "projects.view",
-      steps: [
-        {
-          target: "projects",
-          title: "Проекты",
-          text: "Карточки работ по объектам: состав, документы, связь с торгами и контрактами.",
-        },
-      ],
+      route: "/projects/",
+      steps: LIST_STEPS("Проекты", "Создать проект"),
     },
     {
       id: "tenders",
       title: "Заявки на торги",
       icon: "hammer",
       permission: "tenders.view",
-      steps: [
-        {
-          target: "tenders",
-          title: "Торги",
-          text: "Подготовка заявок на закупки по объектам и проектам: сроки, состав, документы.",
-        },
-      ],
+      route: "/tenders/",
+      steps: LIST_STEPS("Заявки на торги", "Создать заявку на торги"),
     },
     {
       id: "contracts",
       title: "Контракты",
       icon: "file-earmark-text",
       permission: "contracts.view",
+      route: "/contracts/",
       steps: [
         {
-          target: "contracts",
-          title: "Контракты (ЕИС)",
-          text: "Контракты из закупок и ЕИС: суммы, подрядчики, документы. Не путать с «Договорами на опоры».",
+          target: "page-header",
+          title: "Контракты",
+          text: "Контракты из закупок и ЕИС. Обычно создаются импортом, реже вручную.",
+        },
+        {
+          target: "filters",
+          title: "Фильтры",
+          text: "Ищите по номеру, подрядчику, году. Откройте строку — увидите суммы и документы.",
+          optional: true,
+        },
+        {
+          target: "list-table",
+          title: "Список контрактов",
+          text: "Клик по строке открывает карточку. Не путать с разделом «Договора на опоры».",
+          wait: 1000,
         },
       ],
     },
@@ -118,24 +152,43 @@
       title: "Подрядчики",
       icon: "building",
       permission: "contractors.view",
-      steps: [
-        {
-          target: "contractors",
-          title: "Подрядчики",
-          text: "Справочник организаций-исполнителей, связанных с контрактами.",
-        },
-      ],
+      route: "/contractors/",
+      steps: LIST_STEPS("Подрядчики", "Добавить подрядчика"),
     },
     {
       id: "agreements",
       title: "Договора на опоры",
       icon: "broadcast",
       permission: "agreements.view",
+      route: "/agreements/",
       steps: [
         {
-          target: "agreements",
+          target: "page-header",
           title: "Договора на опоры",
-          text: "Договоры на размещение оборудования на опорах наружного освещения, карта точек и файлы договоров.",
+          text: "Договоры на размещение оборудования на опорах наружного освещения.",
+        },
+        {
+          target: "filters",
+          title: "Проверка адреса",
+          text: "Введите улицу и нажмите «Проверить» — увидите, есть ли уже оборудование по адресу.",
+        },
+        {
+          target: "agreements-map",
+          title: "Карта",
+          text: "Точки на карте — адреса из договоров. Нажмите точку, чтобы открыть договор и файл.",
+          optional: true,
+        },
+        {
+          target: "create",
+          title: "Загрузить договор",
+          text: "Выберите файл Word/PDF — система сама подтянет название, заказчика и таблицу адресов. Затем нажмите кнопку загрузки.",
+          optional: true,
+        },
+        {
+          target: "list-table",
+          title: "Список договоров",
+          text: "Откройте строку, чтобы править точки, сроки и файлы.",
+          wait: 1000,
         },
       ],
     },
@@ -144,15 +197,33 @@
       title: "Обращения",
       icon: "envelope",
       permission: "inquiries.view",
+      route: "/inquiries/",
       roleTips: {
-        dispatcher:
-          "Письма с корпоративной почты можно переслать сотруднику в чат и в его список обращений.",
+        dispatcher: "Письмо можно переслать сотруднику — оно появится у него в обращениях и в чате.",
       },
       steps: [
         {
-          target: "inquiries",
+          target: "page-header",
           title: "Обращения с почты",
-          text: "Входящие письма с kirovsvet@mail.ru. Откройте письмо, посмотрите вложения, при необходимости перешлите коллеге.",
+          text: "Письма с корпоративного ящика. Если вам только пересылают — видите свою папку входящих.",
+        },
+        {
+          target: "inquiries-sync",
+          title: "Забрать письма",
+          text: "Кнопка вручную забирает новые письма с почты. Обычно забор идёт сам по расписанию.",
+          optional: true,
+        },
+        {
+          target: "filters",
+          title: "Поиск писем",
+          text: "Поиск по теме и отправителю. Непрочитанные отмечены отдельно.",
+          optional: true,
+        },
+        {
+          target: "list-table",
+          title: "Список писем",
+          text: "Откройте письмо: текст, вложения (можно листать галереей), пересылка коллеге.",
+          wait: 1000,
         },
       ],
     },
@@ -161,11 +232,23 @@
       title: "Импорт ЕИС",
       icon: "cloud-download",
       permission: "eis.view",
+      route: "/eis/",
       steps: [
         {
-          target: "eis",
-          title: "Импорт с zakupki.gov.ru",
-          text: "Автозагрузка закупок и контрактов Дирекции благоустройства. Запускается по расписанию или вручную.",
+          target: "page-header",
+          title: "Импорт ЕИС",
+          text: "Подтягивает закупки и контракты с zakupki.gov.ru (Дирекция благоустройства, освещение).",
+        },
+        {
+          target: "eis-run",
+          title: "Запустить сейчас",
+          text: "Ручной прогон. Идёт несколько минут — не нажимайте повторно. По расписанию тоже запускается сам.",
+          optional: true,
+        },
+        {
+          target: "page-header",
+          title: "Результат",
+          text: "Ниже — последний прогон: сколько создано проектов, торгов, контрактов и что не сопоставилось с объектами.",
         },
       ],
     },
@@ -174,11 +257,12 @@
       title: "Отчёты",
       icon: "bar-chart",
       permission: "reports.view",
+      route: "/reports/",
       steps: [
         {
-          target: "reports",
+          target: "page-header",
           title: "Отчёты",
-          text: "Сводки по объектам и работе подразделений для контроля и руководства.",
+          text: "Сводки для контроля. Выберите нужный отчёт на странице и при необходимости задайте период.",
         },
       ],
     },
@@ -190,13 +274,13 @@
       steps: [
         {
           target: "messenger",
-          title: "Корпоративный чат",
-          text: "Переписка с коллегами, файлы и карточки заявок/обращений. При новом сообщении — звук и всплывающее уведомление.",
+          title: "Чаты",
+          text: "Откройте «Мессенджер» в меню: слева чаты и контакты, справа переписка. Можно прикреплять файлы и карточки заявок.",
         },
         {
           target: "messenger-top",
           title: "Значок в шапке",
-          text: "Красная точка на значке чата показывает непрочитанные сообщения. Откройте мессенджер и ответьте коллеге.",
+          text: "Быстрый вход в чат. При новом сообщении — звук и всплывающее уведомление, даже если вкладка свёрнута.",
         },
       ],
     },
@@ -205,11 +289,27 @@
       title: "Личные документы",
       icon: "folder",
       permission: "documents.use",
+      route: "/documents/",
       steps: [
         {
-          target: "documents",
-          title: "Ваши файлы",
-          text: "Личный архив: загружайте PDF, Word, Excel и фото. Их видите только вы.",
+          target: "page-header",
+          title: "Личные документы",
+          text: "Ваш личный архив — файлы видите только вы.",
+        },
+        {
+          target: "docs-file",
+          title: "Выбор файлов",
+          text: "Нажмите поле выбора и укажите один или несколько файлов (PDF, Word, Excel, фото).",
+        },
+        {
+          target: "docs-save",
+          title: "Загрузить",
+          text: "Кнопка отправляет файлы на сервер. После загрузки они появятся в списке ниже.",
+        },
+        {
+          target: "docs-list",
+          title: "Мои файлы",
+          text: "Открыть, скачать или удалить документ. Чужие сюда не заглянут.",
         },
       ],
     },
@@ -218,24 +318,33 @@
       title: "Сотрудники",
       icon: "people",
       permission: "users.view",
-      steps: [
+      route: "/employees/",
+      steps: LIST_STEPS("Сотрудники", "Добавить сотрудника").concat([
         {
-          target: "employees",
-          title: "Сотрудники",
-          text: "Учётные записи: ФИО, роль, отдел, блокировка. Новому человеку назначают роль — от неё зависит меню.",
+          target: "page-header",
+          title: "Роль сотрудника",
+          text: "Важно: новому человеку назначают роль — от неё зависит, что он увидит в меню.",
         },
-      ],
+      ]),
     },
     {
       id: "roles",
       title: "Роли и права",
       icon: "shield-lock",
       permission: "roles.view",
+      route: "/roles/",
       steps: [
         {
-          target: "roles",
+          target: "page-header",
           title: "Роли",
-          text: "Матрица прав: какие разделы и поля видит диспетчер, мастер, исполнитель. Администратор настраивает доступ без программиста.",
+          text: "Матрица прав: какие разделы и поля доступны диспетчеру, мастеру, исполнителю.",
+        },
+        {
+          target: "list-table",
+          title: "Список ролей",
+          text: "Откройте роль и отметьте галочки прав. Сохраните — у сотрудников с этой ролью меню обновится.",
+          wait: 800,
+          optional: true,
         },
       ],
     },
@@ -244,21 +353,61 @@
       title: "Журнал действий",
       icon: "journal-text",
       permission: "audit.view",
+      route: "/audit/",
       steps: [
         {
-          target: "audit",
+          target: "page-header",
           title: "Аудит",
-          text: "Кто что изменил в системе — для разбора спорных ситуаций и контроля.",
+          text: "Кто что изменил — для разбора спорных ситуаций.",
+        },
+        {
+          target: "filters",
+          title: "Фильтры журнала",
+          text: "Отфильтруйте по пользователю, модулю или дате.",
+          optional: true,
+        },
+        {
+          target: "list-table",
+          title: "Записи",
+          text: "Каждая строка — действие в системе с временем и автором.",
+          wait: 800,
         },
       ],
     },
   ];
 
-  let config = { userName: "", roles: [], roleNames: [], permissions: [] };
+  let config = { userId: "", userName: "", roles: [], roleNames: [], permissions: [] };
   let root = null;
   let steps = [];
   let index = 0;
   let mode = "menu";
+  let running = false;
+
+  function storageKey() {
+    return `opora_tour_seen_v1_${config.userId || "anon"}`;
+  }
+
+  function hasSeen() {
+    try {
+      if (localStorage.getItem(storageKey()) === "1") return true;
+      // старый ключ без userId — чтобы после обновления снова не всплывало
+      if (localStorage.getItem("opora_tour_seen_v1") === "1") {
+        localStorage.setItem(storageKey(), "1");
+        return true;
+      }
+      return false;
+    } catch {
+      return true;
+    }
+  }
+
+  function markSeen() {
+    try {
+      localStorage.setItem(storageKey(), "1");
+    } catch {
+      /* ignore */
+    }
+  }
 
   function can(permission) {
     if (!permission) return true;
@@ -278,47 +427,92 @@
     return SECTIONS.filter((section) => can(section.permission));
   }
 
-  function buildFullSteps() {
-    const role = primaryRole();
-    const out = [];
-    availableSections().forEach((section) => {
-      section.steps.forEach((step, stepIndex) => {
-        let text = step.text;
-        if (stepIndex === 0 && section.roleTips && section.roleTips[role]) {
-          text = `${text}\n\nДля вашей роли: ${section.roleTips[role]}`;
-        }
-        out.push({
-          ...step,
-          text,
-          sectionId: section.id,
-          sectionTitle: section.title,
-        });
-      });
-    });
-    return out;
-  }
-
-  function buildSectionSteps(sectionId) {
-    const section = SECTIONS.find((item) => item.id === sectionId);
-    if (!section || !can(section.permission)) return [];
-    const role = primaryRole();
-    return section.steps.map((step, stepIndex) => {
-      let text = step.text;
-      if (stepIndex === 0 && section.roleTips && section.roleTips[role]) {
-        text = `${text}\n\nДля вашей роли: ${section.roleTips[role]}`;
-      }
-      return {
-        ...step,
-        text,
-        sectionId: section.id,
-        sectionTitle: section.title,
-      };
-    });
+  function sleep(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
   }
 
   function targetEl(name) {
     if (!name) return null;
-    return document.querySelector(`[data-tour="${name}"]`);
+    return (
+      document.querySelector(`[data-tour="${name}"]`) ||
+      (name === "list-table" ? document.querySelector('[id$="TableContainer"]') : null) ||
+      (name === "form-save"
+        ? document.querySelector(
+            "#oporaFormModal.show [type=submit], #oporaFormModal.show .btn-primary, #oporaFormModal .modal-form-footer .btn-primary"
+          )
+        : null) ||
+      (name === "form-body"
+        ? document.querySelector("#oporaFormModal.show .opora-modal-form, #oporaFormModal.show .modal-body, #oporaFormModalBody")
+        : null)
+    );
+  }
+
+  function closeModals() {
+    document.querySelectorAll(".modal.show").forEach((modal) => {
+      try {
+        bootstrap.Modal.getInstance(modal)?.hide();
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
+  async function openCreate() {
+    const btn = document.querySelector('[data-opora-create], [data-tour="create"]');
+    if (!btn) return false;
+    btn.click();
+    const deadline = Date.now() + 4000;
+    while (Date.now() < deadline) {
+      const form =
+        document.querySelector("#oporaFormModal.show form") ||
+        document.querySelector("#oporaFormModal .opora-modal-form") ||
+        document.querySelector("#oporaFormModalBody form");
+      if (form) {
+        form.setAttribute("data-tour", "form-body");
+        const save =
+          form.querySelector('[type="submit"]') ||
+          form.querySelector(".btn-primary") ||
+          document.querySelector("#oporaFormModal .modal-form-footer .btn-primary");
+        if (save) save.setAttribute("data-tour", "form-save");
+        await sleep(200);
+        return true;
+      }
+      await sleep(120);
+    }
+    return false;
+  }
+
+  function pathMatches(route) {
+    if (!route) return true;
+    const now = window.location.pathname.replace(/\/+$/, "") || "/";
+    const want = route.replace(/\/+$/, "") || "/";
+    return now === want || now.startsWith(`${want}/`);
+  }
+
+  async function goRoute(route) {
+    if (!route || pathMatches(route)) {
+      await sleep(200);
+      return;
+    }
+    const waitNav = new Promise((resolve) => {
+      const onNav = () => {
+        window.removeEventListener("opora:navigated", onNav);
+        resolve();
+      };
+      window.addEventListener("opora:navigated", onNav);
+      window.setTimeout(() => {
+        window.removeEventListener("opora:navigated", onNav);
+        resolve();
+      }, 5000);
+    });
+    if (window.OporaNav?.go) {
+      window.OporaNav.go(route, "Обучение");
+    } else {
+      window.location.href = route;
+      return;
+    }
+    await waitNav;
+    await sleep(350);
   }
 
   function ensureRoot() {
@@ -350,9 +544,8 @@
     `;
     document.body.appendChild(root);
     root.querySelector("[data-tour-close]").addEventListener("click", stop);
-    root.querySelector("[data-tour-scrim]").addEventListener("click", (event) => {
+    root.querySelector("[data-tour-scrim]").addEventListener("click", () => {
       if (mode === "menu") stop();
-      else event.stopPropagation();
     });
     document.addEventListener("keydown", (event) => {
       if (root.hidden) return;
@@ -364,11 +557,33 @@
     return root;
   }
 
-  function openSidebarIfNeeded() {
-    const sidebar = document.getElementById("sidebar");
-    if (!sidebar || window.innerWidth >= 992) return;
-    sidebar.classList.add("is-open");
-    document.getElementById("sidebarOverlay")?.classList.add("is-open");
+  function openSidebarIfNeeded(targetName) {
+    const sidebarTargets = new Set([
+      "sidebar",
+      "logo",
+      "dashboard",
+      "requests",
+      "objects",
+      "projects",
+      "tenders",
+      "contracts",
+      "contractors",
+      "agreements",
+      "inquiries",
+      "eis",
+      "reports",
+      "messenger",
+      "documents",
+      "employees",
+      "roles",
+      "audit",
+      "about",
+      "user-card",
+    ]);
+    if (!sidebarTargets.has(targetName)) return;
+    if (window.innerWidth >= 992) return;
+    document.getElementById("sidebar")?.classList.add("open");
+    document.getElementById("sidebarOverlay")?.classList.add("show");
   }
 
   function placeCardNear(rect) {
@@ -380,26 +595,18 @@
     card.style.width = `${cardW}px`;
     card.style.maxWidth = `${cardW}px`;
 
-    let top = 80;
+    let top = 72;
     let left = Math.max(12, (vw - cardW) / 2);
 
     if (rect) {
       const below = rect.bottom + 16;
-      const above = rect.top - 16;
       const spaceBelow = vh - below;
-      if (spaceBelow > 220) {
-        top = below;
-      } else if (above > 220) {
-        top = Math.max(12, above - 200);
-      } else {
-        top = Math.max(12, Math.min(below, vh - 240));
-      }
+      if (spaceBelow > 240) top = below;
+      else top = Math.max(12, rect.top - 16 - 180);
       left = Math.min(Math.max(12, rect.left), vw - cardW - 12);
-      if (rect.left > vw * 0.55) {
-        left = Math.max(12, rect.right - cardW);
-      }
+      if (rect.left > vw * 0.55) left = Math.max(12, rect.right - cardW);
     }
-    card.style.top = `${Math.min(top, vh - 80)}px`;
+    card.style.top = `${Math.min(Math.max(12, top), vh - 100)}px`;
     card.style.left = `${left}px`;
   }
 
@@ -414,9 +621,9 @@
       spot.hidden = true;
       scrim.style.opacity = "1";
       placeCardNear(null);
-      return;
+      return false;
     }
-    openSidebarIfNeeded();
+    openSidebarIfNeeded(targetName);
     el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
     const rect = el.getBoundingClientRect();
     el.classList.add("opora-tour-target");
@@ -427,6 +634,7 @@
     spot.style.width = `${rect.width + PAD * 2}px`;
     spot.style.height = `${rect.height + PAD * 2}px`;
     placeCardNear(rect);
+    return true;
   }
 
   function setActions(buttons) {
@@ -442,10 +650,82 @@
     });
   }
 
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function buildSteps(sections) {
+    const role = primaryRole();
+    const out = [];
+    sections.forEach((section) => {
+      section.steps.forEach((step, stepIndex) => {
+        let text = step.text;
+        if (stepIndex === 0 && section.roleTips && section.roleTips[role]) {
+          text = `${text}\n\nДля вашей роли: ${section.roleTips[role]}`;
+        }
+        out.push({
+          ...step,
+          text,
+          sectionId: section.id,
+          sectionTitle: section.title,
+          route: section.route || null,
+        });
+      });
+    });
+    return out;
+  }
+
+  function show() {
+    ensureRoot();
+    root.hidden = false;
+    document.body.classList.add("is-opora-tour");
+  }
+
+  function stop() {
+    markSeen();
+    running = false;
+    closeModals();
+    if (!root) return;
+    root.hidden = true;
+    document.body.classList.remove("is-opora-tour");
+    document.querySelectorAll(".opora-tour-target").forEach((el) => {
+      el.classList.remove("opora-tour-target");
+    });
+    mode = "menu";
+  }
+
+  function finish() {
+    markSeen();
+    running = false;
+    closeModals();
+    mode = "menu";
+    root.querySelector("[data-tour-spot]").hidden = true;
+    root.querySelector("[data-tour-scrim]").style.opacity = "1";
+    document.querySelectorAll(".opora-tour-target").forEach((el) => {
+      el.classList.remove("opora-tour-target");
+    });
+    root.querySelector("[data-tour-progress]").hidden = true;
+    root.querySelector("[data-tour-eyebrow]").textContent = "Готово";
+    root.querySelector("[data-tour-title]").textContent = "Можно работать";
+    root.querySelector("[data-tour-body]").innerHTML =
+      "<p class=\"opora-tour__text\">Снова открыть обучение — кнопка «Обучение» вверху или пункт в меню профиля. Автоматически больше не спросим.</p>";
+    placeCardNear(null);
+    setActions([
+      { label: "К разделам", className: "btn btn-outline-primary", onClick: openMenu },
+      { label: "Закрыть", className: "btn btn-primary", onClick: stop },
+    ]);
+  }
+
   function renderMenu() {
     mode = "menu";
     steps = [];
     index = 0;
+    running = false;
+    closeModals();
     const spot = root.querySelector("[data-tour-spot]");
     const scrim = root.querySelector("[data-tour-scrim]");
     spot.hidden = true;
@@ -468,8 +748,8 @@
       .join("");
     root.querySelector("[data-tour-body]").innerHTML = `
       <p class="opora-tour__lead">
-        Краткий обзор системы «Опора» для роли: <strong>${rolesLabel}</strong>.
-        Покажем только те разделы, которые доступны именно вам.
+        Покажем интерфейс и как работать в разделах (кнопки, фильтры, формы, сохранение).
+        Роль: <strong>${rolesLabel}</strong> — только ваши доступные модули.
       </p>
       <div class="opora-tour__topics">${list || "<p class=\"text-muted\">Нет доступных разделов.</p>"}</div>
     `;
@@ -478,26 +758,50 @@
     });
     placeCardNear(null);
     setActions([
-      {
-        label: "Закрыть",
-        className: "btn btn-outline-secondary",
-        onClick: stop,
-      },
-      {
-        label: "Полный обзор",
-        className: "btn btn-primary",
-        onClick: () => startFull(),
-      },
+      { label: "Закрыть", className: "btn btn-outline-secondary", onClick: stop },
+      { label: "Полный обзор", className: "btn btn-primary", onClick: () => startFull() },
     ]);
   }
 
-  function renderStep() {
+  async function prepareStep(step) {
+    if (step.route) await goRoute(step.route);
+    if (step.wait) await sleep(step.wait);
+    if (step.action === "openCreate") {
+      const ok = await openCreate();
+      if (!ok && step.optional) return "skip";
+    }
+    if (step.action === "closeModals") {
+      /* close after highlight via next/finish — keep form visible for this step */
+    }
+    if (step.optional && step.target && !targetEl(step.target)) return "skip";
+    if (step.target === "list-table") {
+      const deadline = Date.now() + 2500;
+      while (Date.now() < deadline && !targetEl("list-table")?.querySelector("table, .alert, tr")) {
+        await sleep(150);
+      }
+    }
+    return "ok";
+  }
+
+  async function renderStep() {
+    if (!running) return;
     mode = "step";
-    const step = steps[index];
-    if (!step) {
+    while (index < steps.length) {
+      const step = steps[index];
+      const prepared = await prepareStep(step);
+      if (!running) return;
+      if (prepared === "skip") {
+        index += 1;
+        continue;
+      }
+      break;
+    }
+    if (index >= steps.length) {
       finish();
       return;
     }
+
+    const step = steps[index];
     root.querySelector("[data-tour-progress]").hidden = false;
     root.querySelector("[data-tour-eyebrow]").textContent = step.sectionTitle || "Обучение";
     root.querySelector("[data-tour-title]").textContent = step.title;
@@ -511,109 +815,61 @@
     highlight(step.target);
 
     const actions = [
-      {
-        label: "Закрыть",
-        className: "btn btn-outline-secondary",
-        onClick: stop,
-      },
+      { label: "Закрыть", className: "btn btn-outline-secondary", onClick: stop },
     ];
     if (index > 0) {
       actions.push({
         label: "Назад",
         className: "btn btn-outline-primary",
-        onClick: () => {
+        onClick: async () => {
+          closeModals();
           index -= 1;
-          renderStep();
+          await renderStep();
         },
       });
     }
     actions.push({
       label: index === steps.length - 1 ? "Готово" : "Далее",
       className: "btn btn-primary",
-      onClick: () => {
+      onClick: async () => {
+        if (step.action === "closeModals") closeModals();
         if (index >= steps.length - 1) finish();
         else {
           index += 1;
-          renderStep();
+          await renderStep();
         }
       },
     });
     setActions(actions);
   }
 
-  function escapeHtml(value) {
-    return String(value || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
-
-  function show() {
-    ensureRoot();
-    root.hidden = false;
-    document.body.classList.add("is-opora-tour");
-  }
-
-  function stop() {
-    if (!root) return;
-    root.hidden = true;
-    document.body.classList.remove("is-opora-tour");
-    document.querySelectorAll(".opora-tour-target").forEach((el) => {
-      el.classList.remove("opora-tour-target");
-    });
-    mode = "menu";
-  }
-
-  function finish() {
-    try {
-      localStorage.setItem(STORAGE_KEY, "1");
-    } catch {
-      /* ignore */
-    }
-    mode = "menu";
-    root.querySelector("[data-tour-spot]").hidden = true;
-    document.querySelectorAll(".opora-tour-target").forEach((el) => {
-      el.classList.remove("opora-tour-target");
-    });
-    root.querySelector("[data-tour-progress]").hidden = true;
-    root.querySelector("[data-tour-eyebrow]").textContent = "Готово";
-    root.querySelector("[data-tour-title]").textContent = "Отлично, можно работать";
-    root.querySelector("[data-tour-body]").innerHTML =
-      "<p class=\"opora-tour__text\">Обучение можно снова открыть кнопкой «Обучение» вверху или из меню профиля.</p>";
-    placeCardNear(null);
-    setActions([
-      {
-        label: "К разделам",
-        className: "btn btn-outline-primary",
-        onClick: openMenu,
-      },
-      {
-        label: "Закрыть",
-        className: "btn btn-primary",
-        onClick: stop,
-      },
-    ]);
-  }
-
-  function startFull() {
-    steps = buildFullSteps();
+  async function startFull() {
+    steps = buildSteps(availableSections());
     if (!steps.length) {
       openMenu();
       return;
     }
     index = 0;
-    renderStep();
+    running = true;
+    show();
+    await renderStep();
   }
 
-  function startSection(sectionId) {
-    steps = buildSectionSteps(sectionId);
+  async function startSection(sectionId) {
+    const section = SECTIONS.find((item) => item.id === sectionId);
+    if (!section || !can(section.permission)) {
+      openMenu();
+      return;
+    }
+    steps = buildSteps([section]);
     if (!steps.length) {
       openMenu();
       return;
     }
     index = 0;
-    renderStep();
+    running = true;
+    show();
+    await renderStep();
   }
 
   function openMenu() {
@@ -643,18 +899,13 @@
   }
 
   function maybeAutoOffer() {
-    let seen = false;
-    try {
-      seen = localStorage.getItem(STORAGE_KEY) === "1";
-    } catch {
-      seen = true;
-    }
-    if (seen) return;
+    if (hasSeen()) return;
     if (!document.getElementById("appShell")) return;
+    markSeen();
     window.setTimeout(() => {
       if (document.getElementById("messengerApp")) return;
       openMenu();
-    }, 900);
+    }, 700);
   }
 
   function init() {

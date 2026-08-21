@@ -8,7 +8,7 @@
 {% if current_user.has_permission('eis.run') %}
 <form method="post" action="{{ url_for('eis.run_now') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="btn btn-primary" type="submit" {% if running %}disabled{% endif %}>
+    <button class="btn btn-primary" type="submit" data-tour="eis-run" {% if running %}disabled{% endif %}>
         <i class="bi bi-play-fill"></i>
         {% if running %}Идёт прогон…{% else %}Запустить сейчас{% endif %}
     </button>

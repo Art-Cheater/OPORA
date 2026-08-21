@@ -96,6 +96,7 @@
 {% if current_user.is_authenticated %}
 <script type="application/json" id="oporaTourConfig">
 {
+  "userId": {{ current_user.id|string|tojson }},
   "userName": {{ current_user.full_name|tojson }},
   "roles": {{ current_user.role_codes|tojson }},
   "roleNames": {{ current_user.role_names|tojson }},
