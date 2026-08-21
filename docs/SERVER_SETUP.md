@@ -62,11 +62,18 @@ docker compose ps
 
 Откройте в браузере: http://localhost:5000  
 
+Снаружи слушает **nginx** (порт 5000 → контейнер :80). Gunicorn и PostgreSQL наружу не публикуются.
+
 Логин — из `ADMIN_EMAIL` / `ADMIN_PASSWORD` в `.env`.
+
+`SECRET_KEY` в production не должен оставаться значением из примера, иначе контейнер `web` не стартует.
+
+Конвертация договоров `.doc`/`.rtf`/`.pdf` в `.docx` требует LibreOffice. В образ web он больше не ставится по умолчанию (тяжёлый apt). Если это нужно: `docker compose build --build-arg WITH_LIBREOFFICE=1`.
 
 Логи при проблемах:
 
 ```powershell
+docker compose logs -f nginx
 docker compose logs -f web
 docker compose logs -f db
 ```
@@ -93,6 +100,9 @@ Workflow: [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml)
 - **без** удаления томов
 
 Проверка: с ПК разработки сделайте push в `main` → в GitHub Actions должен пройти job **Deploy** → на сервере обновится сайт, данные в БД останутся.
+
+Как мерить скорость после выкладки: [PERFORMANCE.md](PERFORMANCE.md).  
+Ветки и коммиты: [DEV_PROCESS.md](DEV_PROCESS.md).
 
 ---
 
@@ -149,7 +159,7 @@ docker compose down
 
 ## 7. Локальная разработка (другой ПК)
 
-На машине разработчика, с hot-reload исходников:
+На машине разработчика, с hot-reload исходников (**не на сервере** — bind-mount `.` на Windows сильно тормозит Python):
 
 ```powershell
 copy .env.example .env

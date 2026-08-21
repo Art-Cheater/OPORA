@@ -2,11 +2,17 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+ARG WITH_LIBREOFFICE=0
+
+# LibreOffice нужен только для конвертации .doc/.rtf/.pdf договоров в .docx.
+# В web-образе по умолчанию не ставим (сотни МБ и долгий деплой).
+# Если конвертация нужна: docker compose build --build-arg WITH_LIBREOFFICE=1
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev \
-    gcc \
-    libreoffice-writer \
-    fonts-liberation \
+        libpq-dev \
+    && if [ "$WITH_LIBREOFFICE" = "1" ]; then \
+        apt-get install -y --no-install-recommends libreoffice-writer fonts-liberation; \
+    fi \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -24,7 +30,4 @@ COPY docker/entrypoint.sh /entrypoint.sh
 RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
-# WEB_CONCURRENCY / GUNICORN_THREADS можно задать в .env без пересборки образа
 CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:5000 --worker-class gthread --workers ${WEB_CONCURRENCY:-3} --threads ${GUNICORN_THREADS:-8} --timeout ${GUNICORN_TIMEOUT:-120} --graceful-timeout 30 --keep-alive 5 wsgi:app"]
-
-

@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  test-sqlite:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,8 +18,54 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Unit + HTTP tests
+      - name: Unit + HTTP tests (SQLite)
         env:
           FLASK_ENV: testing
           USE_SQLITE: "1"
         run: pytest -q
+
+  test-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: opora_ci
+          POSTGRES_PASSWORD: opora_ci
+          POSTGRES_DB: opora_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U opora_ci -d opora_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Unit + HTTP tests (PostgreSQL 16)
+        env:
+          FLASK_ENV: testing
+          USE_SQLITE: "0"
+          POSTGRES_SCHEMA: public
+          TEST_DATABASE_URL: postgresql://opora_ci:opora_ci@localhost:5432/opora_test
+        run: pytest -q
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Ruff (syntax / undefined names)
+        run: |
+          python -m pip install ruff
+          ruff check app tests --select E9,F63,F7,F82

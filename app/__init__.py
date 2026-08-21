@@ -24,6 +24,7 @@ def create_app(config_name: str | None = None) -> Flask:
     )
 
     app.config.from_object(get_config(config_name))
+    _reject_insecure_production_secrets(app)
     _configure_email_validator()
 
     _init_extensions(app)
@@ -40,6 +41,21 @@ def create_app(config_name: str | None = None) -> Flask:
     _ensure_upload_folder(app)
 
     return app
+
+
+_INSECURE_SECRET_KEYS = {
+    "dev-secret-key-change-in-production",
+    "change-me-to-a-random-secret-key",
+}
+
+
+def _reject_insecure_production_secrets(app: Flask) -> None:
+    if app.testing or app.debug:
+        return
+    if (app.config.get("SECRET_KEY") or "") in _INSECURE_SECRET_KEYS:
+        raise RuntimeError(
+            "В production нельзя оставлять SECRET_KEY по умолчанию. Задайте свой ключ в .env."
+        )
 
 
 def _configure_email_validator() -> None:

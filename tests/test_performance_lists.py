@@ -5,6 +5,8 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
+import pytest
+
 from app.core.performance import count_queries
 from app.extensions import db
 from app.models.auth.position import Position
@@ -248,6 +250,8 @@ def test_project_user_choices_do_not_strip_admin_roles(app):
 
 def test_sqlite_uses_wal_and_busy_timeout(app):
     with app.app_context():
+        if not str(db.engine.url).startswith("sqlite"):
+            pytest.skip("WAL только для SQLite")
         with db.engine.connect() as conn:
             journal = conn.exec_driver_sql("PRAGMA journal_mode").scalar()
             timeout = conn.exec_driver_sql("PRAGMA busy_timeout").scalar()

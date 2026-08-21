@@ -1,5 +1,6 @@
-# Локальная разработка (с bind-mount исходников).
-# Запуск: docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# Только для локальной разработки. На сервере НЕ запускать:
+# docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# Bind-mount .:/app на Windows/Docker Desktop сильно замедляет Python и Jinja.
 services:
   web:
     environment:
@@ -8,3 +9,7 @@ services:
     volumes:
       - .:/app
       - uploads_data:/app/instance/uploads
+
+  nginx:
+    volumes:
+      - ./app/static:/usr/share/nginx/html/static:ro
