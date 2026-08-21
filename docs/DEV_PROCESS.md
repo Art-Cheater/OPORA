@@ -6,4 +6,4 @@
 2. В `main` — только merge через pull request, не прямой push с ноутбука.
 3. Сообщения коммитов: зачем, не «вап» / «ы». Пример: `fix: nginx отдаёт статику gzip, без gunicorn`.
 4. CI гоняет тесты на SQLite и на PostgreSQL 16. Красный CI не мержить.
-5. Деплой по-прежнему с `main` на self-hosted runner. Когда появится привычка к PR — включить защиту ветки в GitHub (Settings → Branches).
+5. Деплой с `main` на self-hosted runner (**Debian 13**, каталог `/opt/opora`). Windows-runner после переезда выключить.

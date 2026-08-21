@@ -1,170 +1,229 @@
-# Запуск OPORA на Windows-сервере (автодеплой + бэкапы)
+# Запуск OPORA на Debian 13 (Docker Engine, не Docker Desktop)
 
-Инструкция для **отдельного Windows-ПК**, на котором крутятся сайт и PostgreSQL в Docker.  
-ПК разработки пушит в GitHub (`main`) — сервер сам подтягивает изменения и пересобирает контейнеры.
+Прод крутится на **отдельном Debian 13 stable**. Разработка — на другом ПК.  
+Пуш в `main` → self-hosted runner на этом же сервере → `scripts/deploy.sh`.
 
-Данные БД хранятся в Docker-томе `postgres_data` и **не пропадают** при обычном деплое.  
-**Никогда не выполняйте** `docker compose down -v` — флаг `-v` удалит базу.
+Данные БД — Docker-том `postgres_data`. **Никогда не выполняйте** `docker compose down -v`.
+
+Рекомендуемый путь репозитория: `/opt/opora`.
 
 ---
 
-## 1. Что установить
+## 0. Перенос с текущего Windows (один раз)
 
-1. [Git for Windows](https://git-scm.com/download/win)  
-2. [Docker Desktop](https://www.docker.com/products/docker-desktop/)  
-   - Режим: **Linux containers**  
-   - После установки перезагрузите ПК и дождитесь зелёного статуса Docker  
+Пока Windows-сервер ещё жив.
 
-Проверка в PowerShell:
+### На Windows (сейчас `C:\OPORA`)
 
 ```powershell
+cd C:\OPORA
+docker compose stop eis-sync inquiry-sync
+.\scripts\backup-db.ps1
+docker volume ls
+# обычно opora_uploads_data — подставьте точное имя:
+docker run --rm -v opora_uploads_data:/data -v ${PWD}:/backup alpine tar czf /backup/uploads-migrate.tar.gz -C /data .
+```
+
+Если том загрузок называется иначе: `docker volume ls` и подставьте имя в `-v ИМЯ:/data`.
+
+Скопируйте на Debian (флешка, scp, общая папка):
+
+- `Desktop\OPORA_backups\opora_ГГГГ-ММ-ДД.dump`
+- `C:\OPORA\.env`
+- `C:\OPORA\uploads-migrate.tar.gz`
+
+Сайт на Windows можно оставить работать, пока Debian не проверен. Потом выключить Windows-контейнеры, чтобы не было двух заборов почты.
+
+### На Debian — после шагов 1–3 ниже
+
+```bash
+cd /opt/opora
+# .env уже должен лежать здесь (тот же, что на Windows)
+docker compose up -d db
+# дождитесь healthy:
+docker compose ps
+
+docker cp /путь/к/opora_ГГГГ-ММ-ДД.dump opora_db:/tmp/restore.dump
+docker exec -it opora_db pg_restore -U opora_user -d opora --clean --if-exists /tmp/restore.dump
+# код выхода 1 у pg_restore с предупреждениями часто нормален; проверьте, что таблицы на месте
+
+docker run --rm -v opora_uploads_data:/data -v /путь/к/каталогу/с/архивом:/backup alpine \
+  tar xzf /backup/uploads-migrate.tar.gz -C /data
+
+docker compose up --build -d
+docker compose ps
+```
+
+Откройте сайт по IP Debian. Если списки и файлы на месте — переключите пользователей на новый адрес и **остановите** Windows: `docker compose down` (без `-v`) плюс выключите старый GitHub runner.
+
+---
+
+## 1. Что установить на Debian 13
+
+```bash
+sudo apt update
+sudo apt install -y ca-certificates curl git ufw
+
+# Docker Engine (официальный репозиторий Docker)
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+sudo usermod -aG docker "$USER"
+# перелогиньтесь, затем:
 git --version
 docker version
 docker compose version
+```
+
+Если `apt update` не находит `trixie` у Docker — в `docker.list` временно поставьте `bookworm` вместо `$VERSION_CODENAME` или поставьте пакеты Debian: `apt install docker.io docker-compose-v2`.
+
+Часовой пояс (бэкап в 03:00 и ЕИС 12:00/18:00):
+
+```bash
+sudo timedatectl set-timezone Europe/Moscow
+```
+
+Файрвол: наружу только сайт (сейчас порт 5000). Postgres и gunicorn в файрвол не публикуются.
+
+```bash
+sudo ufw allow OpenSSH
+sudo ufw allow 5000/tcp
+sudo ufw enable
 ```
 
 ---
 
 ## 2. Клонирование и `.env`
 
-Рекомендуемый путь: `C:\OPORA` (его же использует workflow деплоя).
-
-```powershell
-cd C:\
-git clone <URL_ВАШЕГО_РЕПОЗИТОРИЯ> OPORA
-cd C:\OPORA
-copy .env.example .env
-notepad .env
+```bash
+sudo mkdir -p /opt/opora
+sudo chown "$USER:$USER" /opt/opora
+git clone <URL_ВАШЕГО_РЕПОЗИТОРИЯ> /opt/opora
+cd /opt/opora
+cp .env.example .env
+nano .env
 ```
 
-В `.env` обязательно задайте:
+При переносе с Windows — положите **тот же** `.env`, не генерируйте новый `SECRET_KEY` (иначе все сессии слетят; пароли пользователей в БД не затронет, но cookie станут невалидны).
+
+В `.env` обязательно:
 
 | Переменная | Значение |
 |------------|----------|
-| `SECRET_KEY` | длинная случайная строка |
-| `POSTGRES_PASSWORD` | надёжный пароль |
-| `POSTGRES_HOST` | `db` (имя сервиса в Docker) |
-| `DATABASE_URL` | `postgresql://USER:PASSWORD@db:5432/opora` (спецсимволы в пароле URL-кодируйте, `!` → `%21`) |
+| `SECRET_KEY` | тот же, что на Windows, либо новая длинная случайная строка |
+| `POSTGRES_PASSWORD` | тот же, что в дампе / старом `.env` |
+| `POSTGRES_HOST` | `db` |
 | `FLASK_ENV` | `production` |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | учётка первого администратора |
 
-Файл `.env` **не коммитить** в git.
+`.env` **не коммитить**.
+
+Сделайте скрипты исполняемыми:
+
+```bash
+chmod +x scripts/*.sh
+```
 
 ---
 
-## 3. Первый запуск
+## 3. Первый запуск (чистый сервер без переноса)
 
-```powershell
-cd C:\OPORA
+Если базу переносите — сначала раздел 0, не этот.
+
+```bash
+cd /opt/opora
 docker compose up --build -d
 docker compose ps
 ```
 
-Откройте в браузере: http://localhost:5000  
+Сайт: http://IP-СЕРВЕРА:5000  
 
-Снаружи слушает **nginx** (порт 5000 → контейнер :80). Gunicorn и PostgreSQL наружу не публикуются.
+Снаружи слушает **nginx** (`5000:80`). Gunicorn и PostgreSQL на хост не публикуются.
 
-Логин — из `ADMIN_EMAIL` / `ADMIN_PASSWORD` в `.env`.
+`SECRET_KEY` из примера в production контейнер `web` не поднимет.
 
-`SECRET_KEY` в production не должен оставаться значением из примера, иначе контейнер `web` не стартует.
+Конвертация `.doc`/`.rtf`/`.pdf` → `.docx`: в образ web LibreOffice по умолчанию не ставится. Нужно — `docker compose build --build-arg WITH_LIBREOFFICE=1`.
 
-Конвертация договоров `.doc`/`.rtf`/`.pdf` в `.docx` требует LibreOffice. В образ web он больше не ставится по умолчанию (тяжёлый apt). Если это нужно: `docker compose build --build-arg WITH_LIBREOFFICE=1`.
+Логи:
 
-Логи при проблемах:
-
-```powershell
+```bash
 docker compose logs -f nginx
 docker compose logs -f web
 docker compose logs -f db
 ```
 
----
-
-## 4. Self-hosted runner (автодеплой из GitHub)
-
-Чтобы после `git push` в `main` сервер сам обновлялся:
-
-1. В GitHub: **Settings → Actions → Runners → New self-hosted runner**  
-2. Выберите **Windows** и выполните команды, которые покажет GitHub (скачать, `config.cmd`, `run.cmd`).  
-3. При `config` укажите имя runner’а, например `opora-server`.  
-4. Установите runner **как службу Windows** (`install.cmd` / `run.cmd` от администратора — по подсказкам установщика Actions), чтобы он работал без открытого окна.  
-5. В репозитории runner должен быть **Online**.
-
-Workflow: [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml)  
-Он запускает `C:\OPORA\scripts\deploy.ps1` (путь можно сменить через переменную репозитория `OPORA_ROOT`).
-
-Скрипт деплоя:
-
-- `git fetch` + `git reset --hard origin/main`
-- `docker compose up --build -d`  
-- **без** удаления томов
-
-Проверка: с ПК разработки сделайте push в `main` → в GitHub Actions должен пройти job **Deploy** → на сервере обновится сайт, данные в БД останутся.
-
-Как мерить скорость после выкладки: [PERFORMANCE.md](PERFORMANCE.md).  
-Ветки и коммиты: [DEV_PROCESS.md](DEV_PROCESS.md).
+На сервере **не** запускайте `docker-compose.dev.yml` (bind-mount `.` убивает скорость).
 
 ---
 
-## 5. Ежедневный бэкап БД на рабочий стол
+## 4. Self-hosted runner (Linux)
 
-Бэкапы пишутся в: `%USERPROFILE%\Desktop\OPORA_backups\`  
-Формат: `opora_YYYY-MM-DD.dump`, хранение **14 дней**.
+1. GitHub: **Settings → Actions → Runners → New self-hosted runner** → **Linux x64**.  
+2. Команды, которые покажет GitHub (`mkdir`, `tar`, `./config.sh`). Каталог, например `/opt/actions-runner`.  
+3. При `config` имя вроде `opora-debian`.  
+4. Как служба:
 
-Один раз от **администратора**:
-
-```powershell
-cd C:\OPORA
-powershell -ExecutionPolicy Bypass -File .\scripts\install-backup-task.ps1
+```bash
+sudo ./svc.sh install
+sudo ./svc.sh start
 ```
 
-Проверка вручную:
+5. Старый **Windows**-runner в GitHub удалите или остановите — иначе деплой может уехать не туда.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\backup-db.ps1
+Workflow [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) берёт только runner с меткой `Linux` и запускает `/opt/opora/scripts/deploy.sh` (путь: переменная репозитория `OPORA_ROOT`).
+
+Скрипт: `git fetch` + `reset --hard origin/main` + `docker compose up --build -d`, **без** `-v`.
+
+---
+
+## 5. Ежедневный бэкап БД
+
+Каталог: `/var/backups/opora/`  
+Файлы: `opora_YYYY-MM-DD.dump`, хранение **14 дней**.
+
+От root:
+
+```bash
+cd /opt/opora
+sudo ./scripts/install-backup-cron.sh
 ```
 
-В Планировщике заданий появится задача `OPORA_DB_Backup_Daily` (ежедневно в 03:00).
+Проверка:
 
-### Восстановление из бэкапа
+```bash
+sudo ./scripts/backup-db.sh
+```
 
-```powershell
-docker cp "$env:USERPROFILE\Desktop\OPORA_backups\opora_YYYY-MM-DD.dump" opora_db:/tmp/restore.dump
+### Восстановление
+
+```bash
+docker cp /var/backups/opora/opora_YYYY-MM-DD.dump opora_db:/tmp/restore.dump
 docker exec -it opora_db pg_restore -U opora_user -d opora --clean --if-exists /tmp/restore.dump
 ```
 
-(подставьте своего пользователя из `.env`, если отличается)
-
 ---
 
-## 6. Полезные команды на сервере
+## 6. Команды на сервере
 
-```powershell
-cd C:\OPORA
-
-# Статус
+```bash
+cd /opt/opora
 docker compose ps
-
-# Пересобрать вручную (как при деплое)
-.\scripts\deploy.ps1
-
-# Остановить контейнеры (данные БД сохраняются)
-docker compose down
-
-# ЗАПРЕЩЕНО — удалит том с базой:
-# docker compose down -v
+./scripts/deploy.sh
+docker compose down          # тома БД сохраняются
+# docker compose down -v    # ЗАПРЕЩЕНО — сотрёт базу
 ```
 
 ---
 
-## 7. Локальная разработка (другой ПК)
+## 7. Локальная разработка (не сервер)
 
-На машине разработчика, с hot-reload исходников (**не на сервере** — bind-mount `.` на Windows сильно тормозит Python):
-
-```powershell
-copy .env.example .env
-# в .env: POSTGRES_HOST=db, DATABASE_URL=...@db:5432/...
+```bash
+cp .env.example .env
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
-Либо Python без Docker — тогда `POSTGRES_HOST=localhost` и локальный Postgres.
+Либо Python без Docker: `POSTGRES_HOST=localhost`.

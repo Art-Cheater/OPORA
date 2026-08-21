@@ -4,14 +4,29 @@ on:
   push:
     branches: [main]
 
+# Пока живы оба сервера: выключите Windows-runner, когда Debian станет основным.
+# Иначе GitHub может отдать деплой случайному из двух self-hosted.
 jobs:
   deploy:
     runs-on: self-hosted
     steps:
-      - name: Deploy OPORA
+      - name: Deploy on Linux
+        if: runner.os == 'Linux'
+        env:
+          OPORA_ROOT: ${{ vars.OPORA_ROOT }}
+        run: |
+          root="${OPORA_ROOT:-/opt/opora}"
+          script="$root/scripts/deploy.sh"
+          if [ ! -x "$script" ]; then
+            echo "Не найден $script. Клонируйте репозиторий в $root (см. docs/SERVER_SETUP.md)."
+            exit 1
+          fi
+          exec "$script"
+
+      - name: Deploy on Windows
+        if: runner.os == 'Windows'
         shell: pwsh
         env:
-          # При необходимости задайте repository variable OPORA_ROOT
           OPORA_ROOT: ${{ vars.OPORA_ROOT }}
         run: |
           $root = $env:OPORA_ROOT
