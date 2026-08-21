@@ -1,150 +1,146 @@
-# Опора — Корпоративная информационная система
+# Опора
 
-Корпоративная информационная система для муниципального предприятия.
+Корпоративная информационная система для диспетчеризации, объектов освещения, закупок и внутренней работы сотрудников.
 
-## Стек технологий
+Репозиторий: [Art-Cheater/OPORA](https://github.com/Art-Cheater/OPORA)
+
+## Что умеет система
+
+| Раздел | Назначение |
+|--------|------------|
+| **Заявки** | Диспетчеризация: создание, назначение, статусы, материалы, файлы |
+| **Объекты / проекты / торги** | Адресные лоты, проекты работ, заявки на закупки |
+| **Контракты и подрядчики** | Контракты ЕИС и справочник организаций |
+| **Договора на опоры** | Договоры на оборудование на опорах, карта точек, загрузка файлов |
+| **Обращения** | Письма с корпоративной почты, вложения, пересылка сотруднику |
+| **Импорт ЕИС** | Автозагрузка с zakupki.gov.ru (закупки с 2025 года) |
+| **Мессенджер** | Чаты, файлы, карточки заявок, звук и уведомления |
+| **Личные документы** | Приватный архив файлов сотрудника |
+| **Отчёты** | Сводки по объектам и работе |
+| **Роли и права** | Матрица доступа к разделам и полям |
+| **Обучение** | Встроенный тур по интерфейсу и разделам (по роли) |
+
+## Стек
 
 | Слой | Технологии |
-|------|-----------|
+|------|------------|
 | Backend | Python 3.12, Flask, SQLAlchemy, Flask-Migrate, Flask-Login |
-| Frontend | Bootstrap 5, Jinja2, JavaScript, Bootstrap Icons |
-| БД | PostgreSQL 16 |
-| Инфраструктура | Docker, Docker Compose, Gunicorn |
+| Frontend | Bootstrap 5, Jinja2, JavaScript (SPA-навигация) |
+| БД | PostgreSQL 17 (Docker) |
+| Инфра | Docker Compose, Gunicorn, Nginx |
 
 ## Архитектура
 
-Проект построен на **модульной архитектуре** с использованием Flask Blueprint. Каждый модуль — независимый функциональный блок со своей бизнес-логикой, моделями, маршрутами и шаблонами.
-
-### Принципы
-
-- **SOLID** — разделение ответственности между слоями
-- **Application Factory** — создание приложения через `create_app()`
-- **Repository Pattern** — абстракция доступа к данным
-- **Service Layer** — бизнес-логика отделена от контроллеров
-- **Модульность** — каждый Blueprint независим и подключается через реестр
-
-### Структура модуля
+Модульные Flask Blueprint: каждый модуль — свои маршруты, сервисы, репозитории и шаблоны.
 
 ```
-app/modules/<module_name>/
-├── __init__.py          # Экспорт Blueprint
-├── blueprint.py         # Определение Blueprint
-├── models.py            # SQLAlchemy-модели
-├── repositories.py      # Слой доступа к данным
-├── services.py          # Бизнес-логика
-├── forms.py             # WTForms (при необходимости)
-├── routes.py            # Контроллеры (маршруты)
-└── templates/<module>/    # Шаблоны модуля
+app/modules/<имя>/
+├── blueprint.py
+├── routes.py
+├── services.py
+├── repositories.py
+├── forms.py
+└── templates/<имя>/
 ```
 
-### Добавление нового модуля
-
-1. Создайте директорию `app/modules/<name>/` по шаблону выше
-2. Определите Blueprint в `blueprint.py`
-3. Импортируйте Blueprint в `app/modules/registry.py` и добавьте в `ALL_BLUEPRINTS`
-4. Создайте миграцию: `flask db migrate -m "Add <name> module"`
-5. Примените миграцию: `flask db upgrade`
+Новый модуль: каталог по шаблону → запись в `app/modules/registry.py` → миграция → `flask db upgrade`.
 
 ## Быстрый старт
 
-### Windows-сервер (сайт + БД + автодеплой)
+### Production (Debian + Docker)
 
-Пошаговая установка на отдельный ПК, self-hosted runner и ежедневный бэкап БД:  
-**[docs/SERVER_SETUP.md](docs/SERVER_SETUP.md)**
-
-### Docker (рекомендуется)
+Подробно: **[docs/SERVER_SETUP.md](docs/SERVER_SETUP.md)**
 
 ```bash
-# Клонировать и перейти в директорию проекта
-cd OPORA
-
-# Скопировать конфигурацию
-cp .env.example .env
-# В .env: POSTGRES_HOST=db, DATABASE_URL=...@db:5432/...
-
-# Production (сервер)
+cd /opt/opora
+cp .env.example .env   # один раз, заполнить секреты
 docker compose up --build -d
+# обновление с GitHub:
+git fetch origin && git reset --hard origin/main
+docker compose up --build --force-recreate -d
+curl -s http://127.0.0.1:5000/health
+```
 
-# Локальная разработка с hot-reload
+Том `postgres_data` не удалять (`docker compose down -v` — нельзя).
+
+### Локально (Docker)
+
+```bash
+cp .env.example .env
+# POSTGRES_HOST=db, DATABASE_URL=...@db:5432/...
+docker compose up --build -d
+# разработка с hot-reload:
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
-Приложение доступно по адресу: http://localhost:5000
+Сайт: http://localhost:5000
 
-> Данные PostgreSQL хранятся в томе `postgres_data`. Не используйте `docker compose down -v`.
-
-### Локальная разработка (PostgreSQL)
+### Без Docker
 
 ```bash
-# Создать виртуальное окружение
 python -m venv .venv
-
-# Активировать (Windows)
-.venv\Scripts\activate
-
-# Активировать (Linux/macOS)
-source .venv/bin/activate
-
-# Установить зависимости
+# Windows: .venv\Scripts\activate
+# Linux:   source .venv/bin/activate
 pip install -r requirements.txt
-
-# Скопировать и заполнить .env (DATABASE_URL / POSTGRES_*)
 cp .env.example .env
-
-# Применить миграции, справочники и администратора
 python -m flask db upgrade
 python -m flask seed-reference-data
 python -m flask sync-security
 python -m flask seed-admin
-
-# Запустить сервер разработки
 python run.py
 ```
 
-Либо одной командой после `db upgrade`: `python -m flask init-db`.
+Или после `db upgrade`: `python -m flask init-db`.
 
-## Учётные данные по умолчанию
+## Учётка по умолчанию
 
-| Поле | Значение |
-|------|----------|
-| Email | admin@opora.ru |
-| Пароль | admin123 |
+| | |
+|--|--|
+| Email | `admin@opora.ru` |
+| Пароль | `admin123` |
 
-> Измените пароль администратора в `.env` перед развёртыванием в production.
+В production сразу смените пароль (`ADMIN_*` в `.env`).
 
-## CLI-команды
+## Роли (типовые)
+
+Права настраиваются в разделе «Роли». Базовые коды:
+
+| Код | Кто |
+|-----|-----|
+| `admin` | Полный доступ |
+| `dispatcher` | Диспетчер заявок |
+| `master` | Мастер |
+| `executor` | Исполнитель |
+| `director` | Руководство |
+
+## CLI
 
 ```bash
-python -m flask db upgrade           # Применить миграции (создать/обновить таблицы)
-python -m flask db migrate -m "..."  # Создать новую миграцию
-python -m flask seed-admin           # Создать администратора по умолчанию
-python -m flask seed-reference-data  # Справочники
-python -m flask sync-security        # Роли и разрешения
-python -m flask init-db              # Сиды после db upgrade
+python -m flask db upgrade
+python -m flask db migrate -m "..."
+python -m flask seed-admin
+python -m flask seed-reference-data
+python -m flask sync-security
+python -m flask init-db
 ```
 
 ## Переменные окружения
 
-См. `.env.example` для полного списка переменных.
+Полный список — в `.env.example`. Основные:
 
-| Переменная | Описание | По умолчанию |
-|-----------|----------|-------------|
-| `SECRET_KEY` | Секретный ключ Flask | — |
-| `DATABASE_URL` | URL PostgreSQL | — |
-| `POSTGRES_HOST` | Хост БД (`db` в Docker, `localhost` без Docker) | db |
-| `POSTGRES_SCHEMA` | Схема PostgreSQL (по умолчанию `opora`) | opora |
-| `FLASK_ENV` | Окружение (development/production) | production |
-| `ADMIN_EMAIL` | Email администратора | admin@opora.ru |
-| `ADMIN_PASSWORD` | Пароль администратора | admin123 |
+| Переменная | Назначение |
+|------------|------------|
+| `SECRET_KEY` | Секрет Flask |
+| `DATABASE_URL` / `POSTGRES_*` | Подключение к БД |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Первый администратор |
+| `INQUIRY_IMAP_*` | Почта обращений |
+| `EIS_YEAR_FROM` / `EIS_YEAR_TO` | Окно лет для импорта ЕИС |
 
-## Роли пользователей
+## Документация
 
-| Роль | Описание |
-|------|----------|
-| `admin` | Полный доступ к системе |
-| `manager` | Управление подразделением |
-| `employee` | Стандартный сотрудник |
-| `viewer` | Только просмотр |
+- [Установка на сервер](docs/SERVER_SETUP.md)
+- [Процесс разработки](docs/DEV_PROCESS.md)
+- [Производительность](docs/PERFORMANCE.md)
 
 ## Лицензия
 
