@@ -17,6 +17,13 @@
                 <p class="page-loading__hint">Раздел открыт, данные подгружаются</p>
             </div>
         </div>
+        <div class="page-loading page-busy" id="oporaBusy" hidden aria-live="assertive">
+            <div class="page-loading__panel">
+                <div class="spinner-border text-primary" role="status"></div>
+                <div class="page-loading__title" id="oporaBusyTitle">Сохранение…</div>
+                <p class="page-loading__hint" id="oporaBusyHint">Дождитесь окончания — сервер обрабатывает тяжёлую операцию</p>
+            </div>
+        </div>
 {% endif %}
         <main class="app-content" id="appContent">
             {% include "components/flash_messages.html" %}

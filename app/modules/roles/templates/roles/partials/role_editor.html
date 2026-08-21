@@ -5,7 +5,8 @@
 
     {% if is_admin_role %}
     <div class="alert alert-info py-2 small mb-3">
-        Роль «Администратор» имеет полный доступ ко всем модулям и полям системы.
+        Роль «Администратор» всегда имеет полный доступ ко всем модулям и полям.
+        Права этой роли менять нельзя — только название и описание.
     </div>
     {% endif %}
 
@@ -45,7 +46,7 @@
         </div>
 
         <div class="tab-pane fade" id="roleTabModules">
-            <p class="text-muted small">Стандартные действия — по колонкам. Специальные права (мессенджер, поиск, одобрение заявок и т.д.) — в колонке «Дополнительно».</p>
+            <p class="text-muted small">Стандартные действия — по колонкам. Специальные права (мессенджер, поиск, одобрение заявок, ЕИС, письма) — в колонке «Дополнительно».</p>
             <div class="table-responsive">
                 <table class="table table-sm table-bordered align-middle">
                     <thead class="table-light">
@@ -60,14 +61,19 @@
                     <tbody>
                         {% for row in permission_rows %}
                         <tr>
-                            <td class="fw-semibold">{{ row.module.name }}</td>
+                            <td>
+                                <div class="fw-semibold">{{ row.module.name }}</div>
+                                {% if module_descriptions.get(row.module.code) %}
+                                <div class="small text-muted">{{ module_descriptions.get(row.module.code) }}</div>
+                                {% endif %}
+                            </td>
                             {% for action in module_actions %}
                             {% set perm = row.standard.get(action) %}
                             <td class="text-center">
                                 {% if perm %}
                                 <input type="checkbox" class="form-check-input m-0" name="permission_ids" value="{{ perm.id }}"
                                        {% if perm.id|string in selected_permission_ids %}checked{% endif %}
-                                       {% if not can_manage %}disabled{% endif %}
+                                       {% if not can_manage or is_admin_role %}disabled{% endif %}
                                        title="{{ perm.name }}">
                                 {% else %}<span class="text-muted">—</span>{% endif %}
                             </td>
@@ -79,7 +85,7 @@
                                         <input class="form-check-input" type="checkbox" name="permission_ids" value="{{ perm.id }}"
                                                id="perm_extra_{{ perm.id }}"
                                                {% if perm.id|string in selected_permission_ids %}checked{% endif %}
-                                               {% if not can_manage %}disabled{% endif %}>
+                                               {% if not can_manage or is_admin_role %}disabled{% endif %}>
                                         <label class="form-check-label" for="perm_extra_{{ perm.id }}">{{ perm.name }}</label>
                                     </div>
                                     {% endfor %}
@@ -96,13 +102,13 @@
 
         <div class="tab-pane fade" id="roleTabFields">
             <p class="text-muted small">Если правила не заданы — при наличии права «Редактирование» доступны все поля раздела. Пользовательские поля из конструктора включены в список.</p>
-            <div class="mb-3">
-                <label class="form-label">Модуль</label>
-                <select class="form-select form-select-sm" id="fieldModuleSelect" style="max-width:280px">
-                    {% for mod in modules if mod.code in module_fields %}
-                    <option value="{{ mod.code }}">{{ mod.name }}</option>
-                    {% endfor %}
-                </select>
+            <div class="mb-3 d-flex flex-wrap gap-1" id="fieldModuleSelect">
+                {% for mod_code, fields in module_fields.items() %}
+                <button type="button" class="btn btn-sm {% if loop.first %}btn-primary{% else %}btn-outline-secondary{% endif %}"
+                        data-field-module="{{ mod_code }}">
+                    {{ module_labels.get(mod_code, mod_code) }}
+                </button>
+                {% endfor %}
             </div>
             {% for mod_code, fields in module_fields.items() %}
             <div class="field-module-panel {% if not loop.first %}d-none{% endif %}" data-module="{{ mod_code }}">
@@ -117,7 +123,7 @@
                             <td>{{ field_label }} <code class="small text-muted">{{ field_name }}</code></td>
                             <td>
                                 <select class="form-select form-select-sm" name="field_level_{{ mod_code }}_{{ field_name }}"
-                                        {% if not can_manage %}disabled{% endif %}>
+                                        {% if not can_manage or is_admin_role %}disabled{% endif %}>
                                     {% for lvl, lbl in field_access_labels.items() %}
                                     <option value="{{ lvl }}" {% if level == lvl %}selected{% endif %}>{{ lbl }}</option>
                                     {% endfor %}

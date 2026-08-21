@@ -11,6 +11,7 @@ from app.core.audit_service import AuditService
 from app.core.exceptions import ValidationError
 from app.extensions import db
 from app.models.auth.associations import RolePermission
+from app.models.auth.constants import ROLE_ADMIN
 from app.models.auth.role import Role
 from app.models.auth.role_field_permission import (
     FIELD_ACCESS_NONE,
@@ -147,8 +148,9 @@ class RoleService:
         role.name = payload.name.strip()
         role.description = (payload.description or "").strip() or None
         role.updated_by = actor_id
-        cls._sync_permissions(role, payload.permission_ids)
-        cls._sync_field_rules(role, payload.field_rules)
+        if role.code != ROLE_ADMIN:
+            cls._sync_permissions(role, payload.permission_ids)
+            cls._sync_field_rules(role, payload.field_rules)
         AuditService.log(
             user_id=actor_id,
             action=AuditAction.UPDATE.value,

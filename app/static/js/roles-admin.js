@@ -30,6 +30,14 @@
 
   function setSaveBusy(form, busy) {
     saveBusy = busy;
+    if (busy) {
+      window.OporaBusy?.begin(
+        "Сохранение роли…",
+        "Другие разделы сейчас недоступны: сервер занят этой операцией"
+      );
+    } else {
+      window.OporaBusy?.end();
+    }
     const btn = form?.querySelector("#roleSaveBtn");
     if (!btn) return;
     btn.disabled = busy;
@@ -42,9 +50,17 @@
     const form = document.getElementById("roleEditorForm");
     const moduleSelect = document.getElementById("fieldModuleSelect");
     if (moduleSelect) {
-      moduleSelect.addEventListener("change", () => {
-        document.querySelectorAll(".field-module-panel").forEach((el) => {
-          el.classList.toggle("d-none", el.dataset.module !== moduleSelect.value);
+      moduleSelect.querySelectorAll("[data-field-module]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const code = btn.dataset.fieldModule;
+          moduleSelect.querySelectorAll("[data-field-module]").forEach((item) => {
+            const on = item === btn;
+            item.classList.toggle("btn-primary", on);
+            item.classList.toggle("btn-outline-secondary", !on);
+          });
+          document.querySelectorAll(".field-module-panel").forEach((el) => {
+            el.classList.toggle("d-none", el.dataset.module !== code);
+          });
         });
       });
     }
@@ -105,7 +121,7 @@
 
   list?.addEventListener("click", (e) => {
     const item = e.target.closest(".roles-admin__item");
-    if (!item) return;
+    if (!item || saveBusy || window.OporaBusy?.isBusy()) return;
     e.preventDefault();
     loadEditor(item.dataset.roleId);
     const name = item.querySelector(".fw-semibold")?.textContent;
@@ -113,24 +129,32 @@
   });
 
   document.getElementById("roleCreateBtn")?.addEventListener("click", () => {
+    if (saveBusy || window.OporaBusy?.isBusy()) return;
     if (editorTitle) editorTitle.textContent = "Новая роль";
     loadEditor(null);
   });
 
   document.getElementById("roleDuplicateBtn")?.addEventListener("click", async (e) => {
     const id = e.currentTarget.dataset.roleId;
-    if (!id || !confirm("Создать копию этой роли?")) return;
-    const res = await api(`/roles/${id}/duplicate`, { method: "POST" });
-    const data = await res.json();
-    if (isOk(data)) {
-      toast(data.message);
-      window.location.href = `/roles?role_id=${data.id}`;
-    } else toast(data.message, "danger");
+    if (!id || saveBusy || window.OporaBusy?.isBusy()) return;
+    if (!confirm("Создать копию этой роли?")) return;
+    window.OporaBusy?.begin("Копирование роли…", "Дождитесь окончания — затем можно продолжить работу");
+    try {
+      const res = await api(`/roles/${id}/duplicate`, { method: "POST" });
+      const data = await res.json();
+      if (isOk(data)) {
+        toast(data.message);
+        window.location.href = `/roles?role_id=${data.id}`;
+      } else toast(data.message, "danger");
+    } finally {
+      window.OporaBusy?.end();
+    }
   });
 
   document.getElementById("roleDeleteBtn")?.addEventListener("click", async (e) => {
     const id = e.currentTarget.dataset.roleId;
-    if (!id || !confirm("Удалить эту роль?")) return;
+    if (!id || saveBusy || window.OporaBusy?.isBusy()) return;
+    if (!confirm("Удалить эту роль?")) return;
     const fd = new FormData();
     fd.append("csrf_token", csrf);
     const res = await api(`/roles/${id}/delete`, { method: "POST", body: fd });

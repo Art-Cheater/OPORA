@@ -425,11 +425,11 @@ def _register_cli_commands(app: Flask) -> None:
 
     @app.cli.command("sync-security")
     def sync_security():
-        """Синхронизирует роли и разрешения безопасности."""
+        """Синхронизирует каталог модулей и разрешений (без сброса ролей)."""
         from app.seed.reference_data import ReferenceDataService
 
         ReferenceDataService.sync_security_roles()
-        print("Роли и разрешения синхронизированы.")
+        print("Каталог модулей и прав обновлён (назначения ролей не сброшены).")
 
     @app.cli.command("import-lighting-plan")
     @click.option(

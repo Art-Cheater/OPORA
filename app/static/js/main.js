@@ -9,6 +9,74 @@ document.addEventListener("DOMContentLoaded", () => {
     initMessengerUnreadBadge();
 });
 
+window.OporaBusy = (() => {
+    let depth = 0;
+
+    function overlay() {
+        return document.getElementById("oporaBusy");
+    }
+
+    function begin(title, hint) {
+        depth += 1;
+        const el = overlay();
+        const titleEl = document.getElementById("oporaBusyTitle");
+        const hintEl = document.getElementById("oporaBusyHint");
+        if (titleEl && title) titleEl.textContent = title;
+        if (hintEl && hint) hintEl.textContent = hint;
+        document.body.classList.add("is-opora-busy");
+        if (el) el.hidden = false;
+    }
+
+    function end() {
+        depth = Math.max(0, depth - 1);
+        if (depth > 0) return;
+        document.body.classList.remove("is-opora-busy");
+        const el = overlay();
+        if (el) el.hidden = true;
+    }
+
+    function isBusy() {
+        return depth > 0;
+    }
+
+    window.addEventListener(
+        "click",
+        (event) => {
+            if (!isBusy()) return;
+            if (event.target.closest("#oporaBusy")) return;
+            event.preventDefault();
+            event.stopPropagation();
+        },
+        true
+    );
+    window.addEventListener(
+        "submit",
+        (event) => {
+            const form = event.target instanceof HTMLFormElement ? event.target : null;
+            if (isBusy()) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+            if (form?.hasAttribute("data-opora-heavy")) {
+                begin(
+                    form.dataset.oporaHeavyTitle || "Обработка…",
+                    form.dataset.oporaHeavyHint || "Дождитесь окончания операции"
+                );
+            }
+        },
+        true
+    );
+    window.addEventListener("keydown", (event) => {
+        if (!isBusy()) return;
+        if (event.key === "F5" || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "r")) {
+            event.preventDefault();
+        }
+    });
+
+    return { begin, end, isBusy };
+})();
+
 window.OporaMessengerNotify = (() => {
     let audioCtx = null;
     let lastNotifiedMessageId = null;
@@ -497,6 +565,7 @@ function initInstantNav(sidebar, closeSidebar) {
     const inflightPages = new Map();
 
     function canPrefetch(url) {
+        if (window.OporaBusy?.isBusy()) return false;
         const path = url.pathname;
         if (mustFullReload(url)) return false;
         if (
@@ -605,6 +674,15 @@ function initInstantNav(sidebar, closeSidebar) {
         const curFilters = content.querySelector(".list-filters");
         if (nextFilters && curFilters) curFilters.replaceWith(nextFilters);
         else if (nextFilters && curHeader) curHeader.after(nextFilters);
+        const nextExtra = doc.querySelector("[data-list-extra]");
+        const curExtra = content.querySelector("[data-list-extra]");
+        if (nextExtra && curExtra) curExtra.replaceWith(nextExtra);
+        else if (nextExtra && !curExtra) {
+            const after = content.querySelector(".list-filters") || content.querySelector(".page-header");
+            if (after) after.after(nextExtra);
+        } else if (!nextExtra && curExtra) {
+            curExtra.remove();
+        }
         const nextConfig = doc.querySelector("#oporaListConfig");
         const curConfig = content.querySelector("#oporaListConfig");
         if (nextConfig && curConfig) curConfig.replaceWith(nextConfig);
@@ -669,6 +747,7 @@ function initInstantNav(sidebar, closeSidebar) {
 
     window.OporaNav = {
         go(href, label) {
+            if (window.OporaBusy?.isBusy()) return;
             const next = new URL(href, window.location.href);
             if (next.origin !== window.location.origin || mustFullReload(next)) {
                 window.location.href = next.href;
@@ -705,6 +784,10 @@ function initInstantNav(sidebar, closeSidebar) {
         const link = event.target.closest("a[href]");
         const next = spaTarget(link, event);
         if (!next) return;
+        if (window.OporaBusy?.isBusy()) {
+            event.preventDefault();
+            return;
+        }
         if (next.pathname === window.location.pathname && next.search === window.location.search) {
             event.preventDefault();
             return;

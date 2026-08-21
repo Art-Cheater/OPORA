@@ -61,6 +61,53 @@ def test_roles_editor_and_save(admin_client, app):
         assert {str(pid) for pid in perms} <= ids
 
 
+def test_roles_editor_shows_all_modules(admin_client, app):
+    with app.app_context():
+        role = db.session.scalar(db.select(Role).where(Role.code == "dispatcher"))
+        assert role is not None
+        role_id = role.id
+
+    payload = admin_client.get(f"/roles/editor/{role_id}").get_json()
+    html = payload["html"]
+    for label in (
+        "Обращения",
+        "Договора на опоры",
+        "Контракты",
+        "Заявки на торги",
+        "Объекты",
+        "Импорт ЕИС",
+        "Мессенджер",
+        "Отчёты",
+        "Роли",
+    ):
+        assert label in html
+    for field_code in ("assigned_to", "customer_inn", "sites"):
+        assert field_code in html
+
+
+def test_admin_role_save_does_not_strip_permissions(admin_client, app):
+    ajax = {"X-Requested-With": "XMLHttpRequest"}
+    with app.app_context():
+        admin_role = db.session.scalar(db.select(Role).where(Role.code == "admin"))
+        assert admin_role is not None
+        before = set(RoleRepository.get_permission_ids(admin_role))
+        assert before
+        saved = admin_client.post(
+            f"/roles/{admin_role.id}/edit",
+            data={
+                "code": "admin",
+                "name": "Администратор",
+                "description": "полный доступ",
+            },
+            headers=ajax,
+        )
+        assert saved.status_code == 200, saved.get_data(as_text=True)[:1000]
+        body = saved.get_json()
+        assert body and body.get("success") is True
+        after = set(RoleRepository.get_permission_ids(admin_role))
+        assert before <= after
+
+
 def test_role_field_rules_diff_does_not_rewrite_unchanged(app):
     with app.app_context():
         actor = db.session.scalar(db.select(User.id).where(User.email == "admin@opora.ru"))

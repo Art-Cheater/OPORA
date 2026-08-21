@@ -67,12 +67,10 @@ def _permissions_matrix():
 
 
 def _permission_rows(permissions_matrix, modules, standard_actions):
-    """Строки матрицы прав: стандартные колонки + дополнительные права модуля."""
+    """Строки матрицы прав: все модули каталога, даже без стандартных действий."""
     rows: list[dict] = []
     for mod in modules:
-        mod_perms = permissions_matrix.get(mod.code)
-        if not mod_perms:
-            continue
+        mod_perms = permissions_matrix.get(mod.code) or {}
         rows.append(
             {
                 "module": mod,
@@ -96,10 +94,24 @@ def _field_rules_map(role=None) -> dict[str, dict[str, int]]:
 
 
 def _editor_context(role=None, form=None, form_action=None, is_edit=False):
+    from app.seed.reference_data import ReferenceDataService
+
+    from app.seed.security_catalog import SYSTEM_MODULES
+
+    ReferenceDataService.ensure_security_catalog()
     permissions_matrix = _permissions_matrix()
     standard_actions = frozenset(MODULE_ACTION_LABELS.keys())
     modules = PermissionService.get_modules()
     module_fields = get_module_fields()
+    ordered_fields: dict[str, dict[str, str]] = {}
+    for mod in modules:
+        if mod.code in module_fields:
+            ordered_fields[mod.code] = module_fields[mod.code]
+    for code, fields in module_fields.items():
+        if code not in ordered_fields:
+            ordered_fields[code] = fields
+    module_fields = ordered_fields
+    module_descriptions = {code: desc for code, _name, _icon, _sort, desc in SYSTEM_MODULES}
     selected_permission_ids = {
         str(pid) for pid in (RoleRepository.get_permission_ids(role) if role else [])
     }
@@ -128,6 +140,7 @@ def _editor_context(role=None, form=None, form_action=None, is_edit=False):
         selected_permission_ids=selected_permission_ids,
         field_rules_map=field_rules_map,
         field_access_labels=FIELD_ACCESS_LABELS,
+        module_descriptions=module_descriptions,
         can_manage=current_user.has_permission(PERM_ROLES_MANAGE),
         is_admin_role=bool(role and role.code == ROLE_ADMIN),
         standard_actions=standard_actions,

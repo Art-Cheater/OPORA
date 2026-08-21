@@ -177,10 +177,52 @@ class ReferenceDataService:
 
     @classmethod
     def sync_security_roles(cls) -> None:
+        """Добавляет недостающие модули и права. Назначения ролей не сбрасывает."""
         cls._seed_security_catalog()
-        cls._seed_roles_and_permissions(force_sync=True)
+        cls._ensure_admin_full_access()
         db.session.commit()
         cls._clear_permission_cache()
+
+    @classmethod
+    def ensure_security_catalog(cls) -> None:
+        """Досеивает каталог, если не хватает модулей/прав или устарели названия."""
+        existing_names = {
+            row[0]: row[1]
+            for row in db.session.execute(
+                db.select(SystemModule.code, SystemModule.name).where(SystemModule.active_filter())
+            )
+        }
+        expected_names = {code: name for code, name, _icon, _sort, _desc in SYSTEM_MODULES}
+        missing_modules = any(code not in existing_names for code in expected_names)
+        renamed = any(existing_names.get(code) != name for code, name in expected_names.items())
+        perm_count = db.session.scalar(
+            db.select(db.func.count()).select_from(Permission).where(Permission.active_filter())
+        ) or 0
+        if not missing_modules and not renamed and perm_count >= len(build_permission_catalog()):
+            return
+        cls.sync_security_roles()
+
+    @classmethod
+    def _ensure_admin_full_access(cls) -> None:
+        admin = db.session.scalar(db.select(Role).where(Role.code == ROLE_ADMIN, Role.active_filter()))
+        if admin is None:
+            return
+        permissions = list(
+            db.session.scalars(db.select(Permission).where(Permission.active_filter()))
+        )
+        have = {
+            rp.permission_id
+            for rp in db.session.scalars(
+                db.select(RolePermission).where(
+                    RolePermission.role_id == admin.id,
+                    RolePermission.active_filter(),
+                )
+            )
+        }
+        for perm in permissions:
+            if perm.id in have:
+                continue
+            db.session.add(RolePermission(role_id=admin.id, permission_id=perm.id))
 
     @staticmethod
     def _clear_permission_cache() -> None:
@@ -188,8 +230,10 @@ class ReferenceDataService:
             from app.core.permission_service import PermissionService
 
             PermissionService.clear_cache()
+            from app.core.field_catalog import clear_catalog_cache
             from app.models.auth import field_registry
 
+            clear_catalog_cache()
             field_registry.MODULE_LABELS = field_registry.get_module_labels()
             field_registry.MODULE_FIELDS = field_registry.get_module_fields()
         except Exception:

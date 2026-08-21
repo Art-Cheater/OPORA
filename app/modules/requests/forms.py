@@ -5,6 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from flask_wtf import FlaskForm
+from flask_wtf.file import FileAllowed, FileField, FileRequired
 from wtforms import (
     BooleanField,
     DateTimeLocalField,
@@ -130,6 +131,17 @@ class RequestForm(FlaskForm):
     )
     executor_id = SelectField("Исполнитель", choices=[], validators=[Optional()])
     submit = SubmitField("Сохранить")
+
+
+class RequestEnergoserviceImportForm(FlaskForm):
+    file = FileField(
+        "Файл заявок (.xlsx)",
+        validators=[
+            FileRequired(message="Выберите файл Excel"),
+            FileAllowed(["xlsx"], message="Только .xlsx"),
+        ],
+    )
+    submit = SubmitField("Создать заявки из файла")
 
 
 class AssignMasterForm(FlaskForm):
