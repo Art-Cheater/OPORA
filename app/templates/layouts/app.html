@@ -47,6 +47,7 @@
 {% block extra_css %}
 {% if not g.spa_nav|default(false) %}
 <link href="{{ url_for('static', filename='css/search.css') }}" rel="stylesheet">
+<link href="{{ url_for('static', filename='css/tour.css') }}" rel="stylesheet">
 {% endif %}
 {% endblock %}
 
@@ -56,5 +57,6 @@
 <script src="{{ url_for('static', filename='js/opora-list.js') }}"></script>
 <script src="{{ url_for('static', filename='js/requests-form.js') }}"></script>
 <script src="{{ url_for('static', filename='js/search.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tour.js') }}"></script>
 {% endif %}
 {% endblock %}

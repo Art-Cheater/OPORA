@@ -1,6 +1,6 @@
-<aside class="sidebar" id="sidebar">
+<aside class="sidebar" id="sidebar" data-tour="sidebar">
     <div class="sidebar__header">
-        <a href="{{ url_for('main.index') }}" class="logo logo--sidebar">
+        <a href="{{ url_for('main.index') }}" class="logo logo--sidebar" data-tour="logo">
             {% include "components/logo.html" %}
         </a>
         <button class="sidebar__close d-lg-none" id="sidebarClose" aria-label="Закрыть меню">
@@ -12,7 +12,8 @@
         <div class="sidebar__section">
             <span class="sidebar__label">Основное</span>
             <a href="{{ url_for('main.index') }}"
-               class="sidebar__link {% if request.endpoint == 'main.index' %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint == 'main.index' %}active{% endif %}"
+               data-tour="dashboard">
                 <i class="bi bi-grid-1x2"></i>
                 <span>Панель управления</span>
             </a>
@@ -22,77 +23,88 @@
             <span class="sidebar__label">Модули</span>
             {% if current_user.has_permission('requests.view') %}
             <a href="{{ url_for('requests.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('requests.') %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('requests.') %}active{% endif %}"
+               data-tour="requests">
                 <i class="bi bi-clipboard-check"></i>
                 <span>Заявки</span>
             </a>
             {% endif %}
             {% if current_user.has_permission('objects.view') %}
             <a href="{{ url_for('objects.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('objects.') %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('objects.') %}active{% endif %}"
+               data-tour="objects">
                 <i class="bi bi-geo-alt"></i>
                 <span>Объекты</span>
             </a>
             {% endif %}
             {% if current_user.has_permission('projects.view') %}
             <a href="{{ url_for('projects.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('projects.') %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('projects.') %}active{% endif %}"
+               data-tour="projects">
                 <i class="bi bi-folder2-open"></i>
                 <span>Проекты</span>
             </a>
             {% endif %}
             {% if current_user.has_permission('tenders.view') %}
             <a href="{{ url_for('tenders.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('tenders.') %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('tenders.') %}active{% endif %}"
+               data-tour="tenders">
                 <i class="bi bi-hammer"></i>
                 <span>Заявки на торги</span>
             </a>
             {% endif %}
             {% if current_user.has_permission('contracts.view') %}
             <a href="{{ url_for('contracts.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('contracts.') %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('contracts.') %}active{% endif %}"
+               data-tour="contracts">
                 <i class="bi bi-file-earmark-text"></i>
                 <span>Контракты</span>
             </a>
             {% endif %}
             {% if current_user.has_permission('contractors.view') %}
             <a href="{{ url_for('contractors.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('contractors.') %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('contractors.') %}active{% endif %}"
+               data-tour="contractors">
                 <i class="bi bi-building"></i>
                 <span>Подрядчики</span>
             </a>
             {% endif %}
             {% if current_user.has_permission('agreements.view') %}
             <a href="{{ url_for('agreements.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('agreements.') %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('agreements.') %}active{% endif %}"
+               data-tour="agreements">
                 <i class="bi bi-broadcast"></i>
                 <span>Договора на опоры</span>
             </a>
             {% endif %}
             {% if current_user.has_permission('inquiries.view') %}
             <a href="{{ url_for('inquiries.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('inquiries.') %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('inquiries.') %}active{% endif %}"
+               data-tour="inquiries">
                 <i class="bi bi-envelope"></i>
                 <span>Обращения</span>
             </a>
             {% endif %}
             {% if current_user.has_permission('eis.view') %}
             <a href="{{ url_for('eis.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('eis.') %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('eis.') %}active{% endif %}"
+               data-tour="eis">
                 <i class="bi bi-cloud-download"></i>
                 <span>Импорт ЕИС</span>
             </a>
             {% endif %}
             {% if current_user.has_permission('reports.view') %}
             <a href="{{ url_for('reports.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('reports.') %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('reports.') %}active{% endif %}"
+               data-tour="reports">
                 <i class="bi bi-bar-chart"></i>
                 <span>Отчёты</span>
             </a>
             {% endif %}
             {% if current_user.has_permission('messenger.use') %}
             <a href="{{ url_for('messenger.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('messenger.') %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('messenger.') %}active{% endif %}"
+               data-tour="messenger">
                 <i class="bi bi-chat-dots"></i>
                 <span>Мессенджер</span>
                 <span class="sidebar__badge sidebar__badge--accent d-none" id="messengerUnreadBadge">0</span>
@@ -100,22 +112,18 @@
             {% endif %}
             {% if current_user.has_permission('documents.use') %}
             <a href="{{ url_for('documents.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('documents.') %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('documents.') %}active{% endif %}"
+               data-tour="documents">
                 <i class="bi bi-folder"></i>
                 <span>Личные документы</span>
             </a>
             {% endif %}
             {% if current_user.has_permission('users.view') %}
             <a href="{{ url_for('employees.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('employees.') %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('employees.') %}active{% endif %}"
+               data-tour="employees">
                 <i class="bi bi-people"></i>
                 <span>Сотрудники</span>
-            </a>
-            {% else %}
-            <a href="#" class="sidebar__link sidebar__link--disabled">
-                <i class="bi bi-people"></i>
-                <span>Сотрудники</span>
-                <span class="sidebar__badge">Скоро</span>
             </a>
             {% endif %}
         </div>
@@ -124,19 +132,22 @@
             <span class="sidebar__label">Администрирование</span>
             {% if current_user.has_permission('roles.view') %}
             <a href="{{ url_for('roles.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('roles.') %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('roles.') %}active{% endif %}"
+               data-tour="roles">
                 <i class="bi bi-shield-lock"></i>
                 <span>Роли</span>
             </a>
             {% endif %}
             {% if current_user.has_permission('roles.manage') %}
             <a href="{{ url_for('field_builder.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('field_builder.') %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('field_builder.') %}active{% endif %}"
+               data-tour="fields">
                 <i class="bi bi-ui-radios"></i>
                 <span>Конструктор полей</span>
             </a>
             <a href="{{ url_for('positions.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('positions.') %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('positions.') %}active{% endif %}"
+               data-tour="positions">
                 <i class="bi bi-briefcase"></i>
                 <span>Должности</span>
             </a>
@@ -146,20 +157,23 @@
         <div class="sidebar__section">
             <span class="sidebar__label">Система</span>
             <a href="{{ url_for('main.about') }}"
-               class="sidebar__link {% if request.endpoint == 'main.about' %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint == 'main.about' %}active{% endif %}"
+               data-tour="about">
                 <i class="bi bi-info-circle"></i>
                 <span>О системе</span>
             </a>
             {% if current_user.has_permission('audit.view') %}
             <a href="{{ url_for('audit.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('audit.') %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('audit.') %}active{% endif %}"
+               data-tour="audit">
                 <i class="bi bi-journal-text"></i>
                 <span>Журнал действий</span>
             </a>
             {% endif %}
             {% if current_user.has_permission('auth.login_logs.view') %}
             <a href="{{ url_for('auth.login_logs') }}"
-               class="sidebar__link {% if request.endpoint == 'auth.login_logs' %}active{% endif %}">
+               class="sidebar__link {% if request.endpoint == 'auth.login_logs' %}active{% endif %}"
+               data-tour="login-logs">
                 <i class="bi bi-shield-check"></i>
                 <span>Журнал входов</span>
             </a>
@@ -167,7 +181,7 @@
         </div>
     </nav>
 
-    <div class="sidebar__footer">
+    <div class="sidebar__footer" data-tour="user-card">
         <div class="sidebar__user">
             <div class="sidebar__user-avatar">
                 {{ current_user.full_name[0] | upper }}

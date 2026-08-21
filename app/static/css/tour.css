@@ -1,0 +1,229 @@
+/* Интерактивное обучение */
+
+.topbar__tour {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 40px;
+  padding: 0 0.85rem;
+  border: 1px solid rgba(245, 124, 0, 0.35);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #fff8f0 0%, #fff 100%);
+  color: var(--opora-primary-hover);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.topbar__tour:hover {
+  background: #fff3e0;
+  border-color: var(--opora-primary);
+  box-shadow: 0 2px 10px rgba(245, 124, 0, 0.18);
+  color: var(--opora-primary-hover);
+}
+
+.topbar__tour i {
+  font-size: 1.05rem;
+}
+
+body.is-opora-tour {
+  overflow: hidden;
+}
+
+.opora-tour {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+  pointer-events: none;
+}
+
+.opora-tour[hidden] {
+  display: none !important;
+}
+
+.opora-tour__scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(18, 22, 28, 0.55);
+  pointer-events: auto;
+  transition: opacity 0.15s ease;
+}
+
+.opora-tour__spot {
+  position: fixed;
+  z-index: 1;
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 9999px rgba(18, 22, 28, 0.55),
+    0 0 0 3px #fff,
+    0 0 0 6px rgba(245, 124, 0, 0.85);
+  background: transparent;
+  pointer-events: none;
+  transition: top 0.2s ease, left 0.2s ease, width 0.2s ease, height 0.2s ease;
+}
+
+.opora-tour__card {
+  position: fixed;
+  z-index: 2;
+  width: min(400px, calc(100vw - 24px));
+  max-height: min(80vh, 640px);
+  overflow: auto;
+  padding: 1.15rem 1.2rem 1rem;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28);
+  pointer-events: auto;
+  animation: opora-tour-in 0.22s ease;
+}
+
+@keyframes opora-tour-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.opora-tour__card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.opora-tour__eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--opora-primary);
+  margin-bottom: 0.2rem;
+}
+
+.opora-tour__title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #1a1d23;
+  line-height: 1.25;
+}
+
+.opora-tour__x {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  background: #f1f3f5;
+  color: #495057;
+  cursor: pointer;
+}
+
+.opora-tour__x:hover {
+  background: #e9ecef;
+  color: #212529;
+}
+
+.opora-tour__lead,
+.opora-tour__text {
+  margin: 0 0 0.85rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #495057;
+}
+
+.opora-tour__topics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.opora-tour__topic {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--opora-border);
+  border-radius: 10px;
+  background: #fafbfc;
+  color: #212529;
+  font-size: 0.82rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.opora-tour__topic:hover {
+  border-color: var(--opora-primary);
+  background: #fff8f0;
+}
+
+.opora-tour__topic i {
+  color: var(--opora-primary);
+  font-size: 1rem;
+}
+
+.opora-tour__progress {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0 0.85rem;
+}
+
+.opora-tour__bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: #eceff3;
+  overflow: hidden;
+}
+
+.opora-tour__bar span {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--opora-primary), var(--opora-secondary));
+  transition: width 0.2s ease;
+}
+
+.opora-tour__count {
+  font-size: 0.75rem;
+  color: #868e96;
+  white-space: nowrap;
+}
+
+.opora-tour__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.opora-tour-target {
+  position: relative;
+  z-index: 1081 !important;
+}
+
+@media (max-width: 575.98px) {
+  .opora-tour__topics {
+    grid-template-columns: 1fr;
+  }
+
+  .opora-tour__card {
+    left: 12px !important;
+    right: 12px;
+    width: auto !important;
+    max-width: none !important;
+  }
+}

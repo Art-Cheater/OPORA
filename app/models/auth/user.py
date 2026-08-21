@@ -144,6 +144,12 @@ class User(UserMixin, BaseModel):
 
         return PermissionService.has_permission(self, permission_code)
 
+    @property
+    def permission_codes_list(self) -> list[str]:
+        from app.core.permission_service import PermissionService
+
+        return sorted(PermissionService.permission_codes(self))
+
     def has_any_permission(self, *permission_codes: str) -> bool:
         return any(self.has_permission(code) for code in permission_codes)
 

@@ -1,156 +1,105 @@
 <header class="topbar">
-
     <div class="topbar__left">
-
         <button class="topbar__menu-btn d-lg-none" id="sidebarToggle" aria-label="Открыть меню">
-
             <i class="bi bi-list"></i>
-
         </button>
 
-
-
         {% if current_user.is_authenticated and current_user.has_permission('search.use') %}
-
         <div class="global-search-wrap topbar__search" id="globalSearchWrap">
-
             <i class="bi bi-search topbar__search-icon"></i>
-
             <input type="search"
-
                    id="globalSearchInput"
-
                    class="topbar__search-input"
-
                    placeholder="Поиск: заявки, проекты, адреса, номера…"
-
                    aria-label="Глобальный поиск"
-
-                   autocomplete="off">
-
+                   autocomplete="off"
+                   data-tour="search">
             <kbd class="topbar__search-kbd d-none d-md-inline">Ctrl K</kbd>
-
             <div class="global-search-dropdown" id="globalSearchDropdown"></div>
-
         </div>
-
         {% else %}
-
-        <form class="topbar__search" action="{{ url_for('search.index') }}" method="GET" role="search">
-
+        <form class="topbar__search" action="{{ url_for('search.index') }}" method="GET" role="search" data-tour="search">
             <i class="bi bi-search topbar__search-icon"></i>
-
             <input type="search"
-
                    name="q"
-
                    class="topbar__search-input"
-
                    placeholder="Поиск…"
-
                    aria-label="Поиск">
-
         </form>
-
         {% endif %}
-
     </div>
-
-
 
     <div class="topbar__right">
+        {% if current_user.is_authenticated %}
+        <button type="button"
+                class="topbar__tour"
+                id="oporaTourBtn"
+                title="Обучение по системе"
+                data-tour="tour-button">
+            <i class="bi bi-mortarboard"></i>
+            <span class="d-none d-sm-inline">Обучение</span>
+        </button>
+        {% endif %}
 
-        <a href="{{ url_for('messenger.index') }}" class="topbar__action" title="Мессенджер">
-
+        <a href="{{ url_for('messenger.index') }}" class="topbar__action" title="Мессенджер" data-tour="messenger-top">
             <i class="bi bi-chat-dots"></i>
-
             <span class="topbar__action-dot d-none" id="topbarMessengerDot"></span>
-
         </a>
 
-
-
-        <a href="#" class="topbar__action" title="Уведомления">
-
+        <a href="#" class="topbar__action" title="Уведомления" data-tour="notifications">
             <i class="bi bi-bell"></i>
-
             <span class="topbar__action-dot"></span>
-
         </a>
 
-
-
-        <div class="dropdown">
-
+        <div class="dropdown" data-tour="profile">
             <button class="topbar__profile dropdown-toggle"
-
                     type="button"
-
                     data-bs-toggle="dropdown"
-
                     aria-expanded="false">
-
                 <div class="topbar__profile-avatar">
-
                     {{ current_user.full_name[0] | upper }}
-
                 </div>
-
                 <span class="topbar__profile-name d-none d-md-inline">{{ current_user.full_name }}</span>
-
             </button>
-
             <ul class="dropdown-menu dropdown-menu-end topbar__dropdown">
-
                 <li class="dropdown-header">
-
                     <strong>{{ current_user.full_name }}</strong>
-
                     <small class="d-block text-muted">{{ current_user.email }}</small>
-
                 </li>
-
                 {% for role_name in current_user.role_names %}
-
                 <li>
-
                     <span class="dropdown-item-text text-muted small">
-
                         <i class="bi bi-person-badge"></i> {{ role_name }}
-
                     </span>
-
                 </li>
-
                 {% endfor %}
-
                 <li><hr class="dropdown-divider"></li>
-
                 <li>
-
                     <a class="dropdown-item" href="{{ url_for('auth.profile') }}">
-
                         <i class="bi bi-person"></i> Профиль
-
                     </a>
-
                 </li>
-
                 <li>
-
-                    <a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}">
-
-                        <i class="bi bi-box-arrow-right"></i> Выйти
-
+                    <a class="dropdown-item" href="#" id="oporaTourMenuStart">
+                        <i class="bi bi-mortarboard"></i> Обучение
                     </a>
-
                 </li>
-
+                <li>
+                    <a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}">
+                        <i class="bi bi-box-arrow-right"></i> Выйти
+                    </a>
+                </li>
             </ul>
-
         </div>
-
     </div>
-
 </header>
-
+{% if current_user.is_authenticated %}
+<script type="application/json" id="oporaTourConfig">
+{
+  "userName": {{ current_user.full_name|tojson }},
+  "roles": {{ current_user.role_codes|tojson }},
+  "roleNames": {{ current_user.role_names|tojson }},
+  "permissions": {{ current_user.permission_codes_list|tojson }}
+}
+</script>
+{% endif %}
