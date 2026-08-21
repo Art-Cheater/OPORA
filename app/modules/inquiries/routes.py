@@ -11,6 +11,7 @@ from flask_login import current_user, login_required
 
 from app.core.decorators import permission_required
 from app.core.exceptions import ValidationError
+from app.core.upload_utils import resolve_download_filename
 from app.extensions import db
 from app.models.auth.constants import (
     PERM_INQUIRIES_DELETE,
@@ -42,6 +43,30 @@ def _get_visible_inquiry(inquiry_id):
     if inquiry is None or not can_access_inquiry(current_user, inquiry):
         abort(404)
     return inquiry
+
+
+def _file_items(inquiry) -> list[dict]:
+    items = []
+    for file in InquiryService.attachments(inquiry.id):
+        items.append(
+            {
+                "name": file.file_name,
+                "mime": file.mime_type,
+                "preview_url": url_for(
+                    "inquiries.download",
+                    inquiry_id=inquiry.id,
+                    file_id=file.id,
+                    inline=1,
+                ),
+                "download_url": url_for(
+                    "inquiries.download",
+                    inquiry_id=inquiry.id,
+                    file_id=file.id,
+                ),
+                "created_at": file.created_at.strftime("%d.%m.%Y %H:%M") if file.created_at else "",
+            }
+        )
+    return items
 
 
 @inquiries_bp.route("/")
@@ -123,6 +148,7 @@ def detail(inquiry_id):
         "inquiries/detail.html",
         inquiry=inquiry,
         files=files,
+        file_items=_file_items(inquiry),
         can_forward=current_user.has_permission(PERM_MESSENGER_USE),
     )
 
@@ -172,7 +198,18 @@ def download(inquiry_id, file_id):
     path = Path(current_app.config["UPLOAD_FOLDER"]) / item.storage_key
     if not path.is_file():
         abort(404)
-    return send_file(path, as_attachment=True, download_name=item.file_name)
+    download_name = resolve_download_filename(
+        item.file_name,
+        storage_key=item.storage_key,
+        mime_type=item.mime_type,
+    )
+    inline = request.args.get("inline") == "1"
+    return send_file(
+        path,
+        mimetype=item.mime_type or "application/octet-stream",
+        as_attachment=not inline,
+        download_name=download_name,
+    )
 
 
 @inquiries_bp.route("/<uuid:inquiry_id>/delete", methods=["POST"])

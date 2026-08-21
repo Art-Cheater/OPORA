@@ -152,6 +152,8 @@ def test_sync_fake_mailbox_creates_inquiry(admin_client, app):
     assert page.status_code == 200
     assert "Ленина".encode("utf-8") in page.data
     assert b"zametka.txt" in page.data
+    assert b"file-gallery" in page.data
+    assert b"filePreviewModal" in page.data or "Просмотр".encode("utf-8") in page.data
 
 
 def _login(client, email: str, password: str = "pass12345") -> None:

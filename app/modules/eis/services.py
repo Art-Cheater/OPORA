@@ -157,7 +157,7 @@ class EisImportService:
                     limit=None,
                     per_page=per_page or cfg.get("EIS_SYNC_PER_PAGE", "_50"),
                     with_contracts=True,
-                    year_from=int(cfg.get("EIS_YEAR_FROM", 2024)),
+                    year_from=int(cfg.get("EIS_YEAR_FROM", 2025)),
                     year_to=int(cfg.get("EIS_YEAR_TO", 2100)),
                 )
             objects = list(
@@ -257,7 +257,7 @@ class EisImportService:
 
     def _year_bounds(self) -> tuple[int, int]:
         cfg = current_app.config
-        return int(cfg.get("EIS_YEAR_FROM", 2024)), int(cfg.get("EIS_YEAR_TO", 2100))
+        return int(cfg.get("EIS_YEAR_FROM", 2025)), int(cfg.get("EIS_YEAR_TO", 2100))
 
     def _out_of_year_range(self, number: str | None, listed_date=None) -> bool:
         year_from, year_to = self._year_bounds()

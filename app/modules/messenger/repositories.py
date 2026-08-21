@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import contains_eager, joinedload, selectinload
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import aliased, contains_eager, joinedload, selectinload
 
 from app.extensions import db
 from app.models.auth.associations import UserRole
@@ -100,6 +100,48 @@ class MessengerRepository:
             )
         )
         return list(db.session.scalars(stmt))
+
+    @staticmethod
+    def search_conversations(user_id: uuid.UUID, query: str, limit: int = 20) -> list[MessengerConversation]:
+        """Чаты текущего пользователя по имени собеседника или тексту последнего сообщения."""
+        needle = query.strip()
+        if len(needle) < 2:
+            return []
+        q = f"%{needle}%"
+        peer = aliased(User)
+        stmt = (
+            select(MessengerConversation)
+            .options(*MessengerRepository._conversation_options())
+            .join(
+                peer,
+                or_(
+                    and_(
+                        MessengerConversation.participant_a_id == user_id,
+                        MessengerConversation.participant_b_id == peer.id,
+                    ),
+                    and_(
+                        MessengerConversation.participant_b_id == user_id,
+                        MessengerConversation.participant_a_id == peer.id,
+                    ),
+                ),
+            )
+            .where(
+                MessengerConversation.active_filter(),
+                or_(
+                    peer.full_name.ilike(q),
+                    peer.email.ilike(q),
+                    peer.department.ilike(q),
+                    peer.position.ilike(q),
+                    MessengerConversation.last_message_preview.ilike(q),
+                ),
+            )
+            .order_by(
+                MessengerConversation.last_message_at.desc().nullslast(),
+                MessengerConversation.updated_at.desc(),
+            )
+            .limit(max(1, min(int(limit), 50)))
+        )
+        return list(db.session.scalars(stmt).unique())
 
     @staticmethod
     def unread_counts_for_conversations(

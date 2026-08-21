@@ -1,5 +1,6 @@
 {% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header %}
+{% from "macros/files.html" import file_gallery %}
 
 {% block title %}{{ inquiry.subject }} — {{ app_name }}{% endblock %}
 
@@ -87,18 +88,7 @@
 <div class="card">
     <div class="card-header">Вложения</div>
     <div class="card-body">
-        {% if files %}
-        <ul class="mb-0">
-            {% for file in files %}
-            <li>
-                <a href="{{ url_for('inquiries.download', inquiry_id=inquiry.id, file_id=file.id) }}">{{ file.file_name }}</a>
-                <span class="text-muted small">{{ (file.file_size / 1024)|round(0) }} КБ</span>
-            </li>
-            {% endfor %}
-        </ul>
-        {% else %}
-        <p class="text-muted mb-0">Без файлов</p>
-        {% endif %}
+        {{ file_gallery(file_items, "Без файлов") }}
     </div>
 </div>
 {% endblock %}

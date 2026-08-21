@@ -183,7 +183,7 @@ class Config:
     EIS_SYNC_PER_PAGE = os.getenv("EIS_SYNC_PER_PAGE", "_50").strip() or "_50"
     EIS_SYNC_DELAY = float(os.getenv("EIS_SYNC_DELAY", "1.2"))
     EIS_SYNC_STALE_MINUTES = int(os.getenv("EIS_SYNC_STALE_MINUTES", "120"))
-    EIS_YEAR_FROM = int(os.getenv("EIS_YEAR_FROM", "2024"))
+    EIS_YEAR_FROM = int(os.getenv("EIS_YEAR_FROM", "2025"))
     EIS_YEAR_TO = int(os.getenv("EIS_YEAR_TO", "2100"))
 
     INQUIRY_MAILBOX = os.getenv("INQUIRY_MAILBOX", "kirovsvet@mail.ru").strip() or "kirovsvet@mail.ru"

@@ -17,7 +17,7 @@ CUSTOMER_ID_ORG = (
 )
 
 STATUS_SUPPLIER_DEFINED = "Определение поставщика завершено"
-EIS_YEAR_FROM = 2024
+EIS_YEAR_FROM = 2025
 EIS_YEAR_TO = 2100
 
 USER_AGENT = (

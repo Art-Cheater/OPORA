@@ -39,7 +39,7 @@
             <div class="col-md-3">Контракты обновлены: {{ latest.summary.get('updated_contracts', 0) }}</div>
             <div class="col-md-3">Подрядчики: {{ latest.summary.get('created_contractors', 0) }}</div>
             <div class="col-md-3">Без объекта: {{ latest.summary.get('unmatched', 0) }}</div>
-            <div class="col-md-3">Старше 2024: {{ latest.summary.get('skipped_old', 0) }}</div>
+            <div class="col-md-3">Вне {{ config.EIS_YEAR_FROM }}–{{ config.EIS_YEAR_TO }}: {{ latest.summary.get('skipped_old', 0) }}</div>
             <div class="col-md-3">Ошибки: {{ latest.summary.get('errors', 0) }}</div>
         </div>
         {% endif %}

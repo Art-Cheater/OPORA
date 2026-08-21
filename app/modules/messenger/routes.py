@@ -318,9 +318,41 @@ def search():
         return jsonify({"results": [], "error": "Минимум 2 символа для поиска."})
 
     items = MessengerRepository.search_messages(current_user.id, query)
+    conversations = MessengerRepository.search_conversations(current_user.id, query)
+    users_list = MessengerRepository.list_users(current_user.id, query, limit=20)
+    unread_counts = MessengerRepository.unread_counts_for_conversations(
+        [conv.id for conv in conversations],
+        current_user.id,
+    )
+    user_ids = [user.id for user in users_list]
+    user_ids.extend(conv.other_user_id(current_user.id) for conv in conversations)
+    presence_map = MessengerRepository.presence_map(user_ids, _online_timeout())
     results = [serialize_search_result(message, current_user.id) for message in items]
 
-    return jsonify({"results": results, "query": query})
+    return jsonify(
+        {
+            "query": query,
+            "results": results,
+            "messages": results,
+            "conversations": [
+                serialize_conversation(
+                    conv,
+                    current_user.id,
+                    presence_map=presence_map,
+                    unread_count=unread_counts.get(conv.id, 0),
+                )
+                for conv in conversations
+            ],
+            "users": [
+                serialize_user(
+                    user,
+                    online=presence_map.get(str(user.id), {}).get("is_online", False),
+                    last_seen_at=presence_map.get(str(user.id), {}).get("last_seen_at"),
+                )
+                for user in users_list
+            ],
+        }
+    )
 
 
 @messenger_bp.route("/api/messages/<uuid:message_id>/file")

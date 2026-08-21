@@ -6,6 +6,7 @@ from app.modules.agreements import agreements_bp
 from app.modules.auth import auth_bp
 from app.modules.contracts import contracts_bp
 from app.modules.contractors import contractors_bp
+from app.modules.documents import documents_bp
 from app.modules.eis import eis_bp
 from app.modules.employees import employees_bp
 from app.modules.field_builder import field_builder_bp
@@ -40,6 +41,7 @@ ALL_BLUEPRINTS = [
     roles_bp,
     field_builder_bp,
     messenger_bp,
+    documents_bp,
     search_bp,
     audit_bp,
     reports_bp,

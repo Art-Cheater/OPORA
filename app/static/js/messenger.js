@@ -72,12 +72,18 @@
   function formatTime(iso) {
     if (!iso) return "";
     const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
     const now = new Date();
-    const sameDay = d.toDateString() === now.toDateString();
-    if (sameDay) {
-      return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    const time = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    if (d.toDateString() === now.toDateString()) {
+      return time;
     }
-    return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+    const date = d.toLocaleDateString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+    return `${date} ${time}`;
   }
 
   function formatPresence(user) {
@@ -127,9 +133,11 @@
     chatsPanel.classList.toggle("d-none", name !== "chats");
     usersPanel.classList.toggle("d-none", name !== "users");
     searchPanel.classList.toggle("d-none", name !== "search");
-    document.querySelectorAll(".tg-tab").forEach((tab) => {
-      tab.classList.toggle("active", tab.dataset.tab === name);
-    });
+    if (name !== "search") {
+      document.querySelectorAll(".tg-tab").forEach((tab) => {
+        tab.classList.toggle("active", tab.dataset.tab === name);
+      });
+    }
   }
 
   function saveDraft() {
@@ -799,6 +807,13 @@
     appendMessage(data.message);
   }
 
+  function appendSearchSection(title) {
+    const heading = document.createElement("div");
+    heading.className = "tg-search-section";
+    heading.textContent = title;
+    searchResults.appendChild(heading);
+  }
+
   async function searchMessages(query) {
     if (query.length < 2) {
       showPanel(document.querySelector(".tg-tab.active")?.dataset.tab || "chats");
@@ -809,22 +824,44 @@
     if (!res.ok) return;
     const data = await res.json();
     searchResults.innerHTML = "";
-    if (!data.results.length) {
-      searchResults.innerHTML = '<div class="tg-list-empty">Сообщения не найдены</div>';
+
+    const conversations = data.conversations || [];
+    const users = data.users || [];
+    const messages = data.messages || data.results || [];
+
+    if (!conversations.length && !users.length && !messages.length) {
+      searchResults.innerHTML = '<div class="tg-list-empty">Ничего не найдено</div>';
       return;
     }
-    data.results.forEach((item) => {
-      const row = document.createElement("div");
-      row.className = "tg-search-result";
-      row.innerHTML = `
-        <div class="tg-search-result__peer">${escapeHtml(item.peer.full_name)}</div>
-        <div class="tg-search-result__text">${escapeHtml(
-          item.message.body || item.message.card?.title || item.message.file?.name || ""
-        )}</div>
-      `;
-      row.addEventListener("click", () => openConversation(item.conversation_id, item.peer));
-      searchResults.appendChild(row);
-    });
+
+    if (conversations.length) {
+      appendSearchSection("Чаты");
+      conversations.forEach((conv) => searchResults.appendChild(renderConversationItem(conv)));
+    }
+
+    if (messages.length) {
+      appendSearchSection("Сообщения");
+      messages.forEach((item) => {
+        const row = document.createElement("div");
+        row.className = "tg-search-result";
+        const preview =
+          item.message.body || item.message.card?.title || item.message.file?.name || "";
+        row.innerHTML = `
+          <div class="tg-search-result__top">
+            <div class="tg-search-result__peer">${escapeHtml(item.peer.full_name)}</div>
+            <div class="tg-search-result__time">${escapeHtml(formatTime(item.message.created_at))}</div>
+          </div>
+          <div class="tg-search-result__text">${escapeHtml(preview)}</div>
+        `;
+        row.addEventListener("click", () => openConversation(item.conversation_id, item.peer));
+        searchResults.appendChild(row);
+      });
+    }
+
+    if (users.length) {
+      appendSearchSection("Сотрудники");
+      users.forEach((user) => searchResults.appendChild(renderUserItem(user)));
+    }
   }
 
   async function heartbeat() {

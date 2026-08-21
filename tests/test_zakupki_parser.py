@@ -132,17 +132,21 @@ def test_split_purchase_object_names_streets():
     assert "проезд" in parts[2].casefold()
 
 
-def test_keep_eis_listing_from_2024_onward():
+def test_keep_eis_listing_from_2025_onward():
     assert eis_number_year("0740300000126000959") == 2026
     assert eis_number_year("3434528856325000226") == 2025
     assert eis_number_year("0740300000119000123") == 2019
-    assert in_eis_year_range(2024)
+    assert not in_eis_year_range(2024)
+    assert in_eis_year_range(2025)
     assert in_eis_year_range(2026)
     assert in_eis_year_range(2099)
+    assert in_eis_year_range(2100)
     assert not in_eis_year_range(2019)
     assert not in_eis_year_range(2023)
     assert keep_eis_listing("0740300000126000959")
+    assert keep_eis_listing("3434528856325000226")
     assert not keep_eis_listing("0740300000119000123")
+    assert not keep_eis_listing("3434528856324000226")
 
 
 def test_parse_money_nbsp_and_ruble():

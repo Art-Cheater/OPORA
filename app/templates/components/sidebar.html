@@ -98,6 +98,11 @@
                 <span class="sidebar__badge sidebar__badge--accent d-none" id="messengerUnreadBadge">0</span>
             </a>
             {% endif %}
+            <a href="{{ url_for('documents.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('documents.') %}active{% endif %}">
+                <i class="bi bi-folder"></i>
+                <span>Личные документы</span>
+            </a>
             {% if current_user.has_permission('users.view') %}
             <a href="{{ url_for('employees.index') }}"
                class="sidebar__link {% if request.endpoint and request.endpoint.startswith('employees.') %}active{% endif %}">

@@ -688,6 +688,33 @@
   font-size: 13px;
 }
 
+.tg-search-result__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tg-search-result__time {
+  font-size: 11px;
+  color: var(--tg-text-muted);
+  white-space: nowrap;
+}
+
+.tg-search-section {
+  padding: 10px 14px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tg-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tg-list-empty--compact {
+  padding: 8px 14px 12px;
+  text-align: left;
+}
+
 .tg-search-result__text {
   font-size: 13px;
   color: var(--tg-text-muted);

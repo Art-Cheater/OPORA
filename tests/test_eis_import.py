@@ -245,7 +245,7 @@ def test_import_matches_purchase_objects_not_header(app):
         assert any("Космонавтов" in event.message or "Васнецовых" in event.message for event in unmatched)
 
 
-def test_import_skips_years_before_2024(app):
+def test_import_skips_years_before_2025(app):
     with app.app_context():
         user_id = _admin_id()
         _object(user_id, "д. Студенец")
