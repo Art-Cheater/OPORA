@@ -363,16 +363,18 @@ class MessengerRepository:
             )
         )
         if query.strip():
-            q = f"%{query.strip()}%"
-            stmt = stmt.where(
-                or_(
-                    User.full_name.ilike(q),
-                    User.email.ilike(q),
-                    User.department.ilike(q),
-                    User.position.ilike(q),
-                    User.phone.ilike(q),
+            tokens = [part for part in query.strip().split() if part]
+            for token in tokens:
+                q = f"%{token}%"
+                stmt = stmt.where(
+                    or_(
+                        User.full_name.ilike(q),
+                        User.email.ilike(q),
+                        User.department.ilike(q),
+                        User.position.ilike(q),
+                        User.phone.ilike(q),
+                    )
                 )
-            )
         stmt = stmt.order_by(User.full_name.asc()).limit(limit)
         return list(db.session.scalars(stmt))
 

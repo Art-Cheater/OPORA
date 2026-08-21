@@ -248,6 +248,9 @@ def test_messenger_send_text_file_and_unread(admin_client, app):
     assert by_peer.status_code == 200
     peer_search = by_peer.get_json()
     assert peer_search["conversations"] or peer_search["users"]
+    users = admin_client.get("/messenger/api/users?q=Диспетчер QA")
+    assert users.status_code == 200
+    assert any(row["email"] == "dispatcher@test.local" for row in users.get_json()["users"])
 
     unread = admin_client.get("/messenger/api/unread-count")
     assert unread.status_code == 200

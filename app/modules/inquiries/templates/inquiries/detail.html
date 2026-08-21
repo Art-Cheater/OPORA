@@ -62,11 +62,24 @@
      data-forward-url="{{ url_for('inquiries.forward', inquiry_id=inquiry.id) }}">
     <div class="card-header">Переслать сотруднику</div>
     <div class="card-body">
-        <p class="text-muted small">Письмо появится у сотрудника в «Обращениях» и в чате с вами — там можно обсудить и ответить.</p>
-        <label class="form-label" for="forwardSearch">Фамилия из контактов</label>
-        <input id="forwardSearch" class="form-control" type="search" placeholder="Начните вводить фамилию, отдел или должность" autocomplete="off">
-        <div id="forwardError" class="text-danger small mt-2 d-none"></div>
+        <p class="text-muted small mb-3">Письмо появится у сотрудника в «Обращениях» и в чате с вами — там можно обсудить и ответить.</p>
+        <label class="form-label" for="forwardSearch">Сотрудник</label>
+        <input id="forwardSearch" class="form-control" type="search"
+               placeholder="Фамилия, имя, отдел или должность" autocomplete="off">
         <div id="forwardResults" class="list-group mt-2"></div>
+        <div id="forwardSelected" class="alert alert-light border mt-3 d-none mb-0">
+            <div class="fw-semibold" id="forwardSelectedName"></div>
+            <div class="small text-muted" id="forwardSelectedMeta"></div>
+        </div>
+        <div id="forwardError" class="text-danger small mt-2 d-none"></div>
+        <div class="d-flex gap-2 mt-3">
+            <button type="button" class="btn btn-primary" id="forwardSend" disabled>
+                Отправить
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="forwardClear">
+                Сбросить
+            </button>
+        </div>
     </div>
 </div>
 {% endif %}
@@ -96,6 +109,6 @@
 {% block extra_js %}
 {{ super() }}
 {% if can_forward %}
-<script src="{{ url_for('static', filename='js/inquiries-forward.js') }}"></script>
+<script src="{{ url_for('static', filename='js/inquiries-forward.js') }}?v=20260821e"></script>
 {% endif %}
 {% endblock %}

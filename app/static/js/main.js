@@ -529,6 +529,11 @@ function initInstantNav(sidebar, closeSidebar) {
         if (document.getElementById("requestMap")) {
             window.OporaRequestDetail?.init?.();
         }
+        if (document.getElementById("inquiryForwardCard")) {
+            const card = document.getElementById("inquiryForwardCard");
+            if (card) delete card.dataset.bound;
+            window.OporaInquiryForward?.init?.(card);
+        }
         initFlashMessages();
     }
 
