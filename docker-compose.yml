@@ -48,7 +48,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 8
-      start_period: 20s
+      start_period: 90s
 
   nginx:
     build:
@@ -86,6 +86,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      web:
+        condition: service_healthy
 
   inquiry-sync:
     build: .
@@ -105,6 +107,8 @@ services:
     command: ["flask", "inquiry-sync", "--loop"]
     depends_on:
       db:
+        condition: service_healthy
+      web:
         condition: service_healthy
 
 volumes:
