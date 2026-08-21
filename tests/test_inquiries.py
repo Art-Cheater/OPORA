@@ -193,6 +193,30 @@ def test_restore_missing_inquiry_files(admin_client, app):
     assert restored.data
 
 
+def test_download_refetches_file_from_mailbox(admin_client, app, monkeypatch):
+    mailbox = FakeMailbox({12: _sample_message(subject="Скан", with_file=True)})
+
+    def _connect(**_kwargs):
+        return mailbox
+
+    monkeypatch.setattr("app.modules.inquiries.services.connect_mailbox", _connect)
+    with app.app_context():
+        app.config["INQUIRY_IMAP_USER"] = "kirovsvet@mail.ru"
+        app.config["INQUIRY_IMAP_PASSWORD"] = "secret"
+        InquiryService.sync(client=mailbox)
+        inquiry = db.session.scalar(db.select(Inquiry).where(Inquiry.subject == "Скан"))
+        attachment = InquiryService.attachments(inquiry.id)[0]
+        InquiryService.attachment_disk_path(attachment).unlink()
+        inquiry_id = inquiry.id
+        file_id = attachment.id
+
+    downloaded = admin_client.get(f"/inquiries/{inquiry_id}/files/{file_id}")
+    assert downloaded.status_code == 200
+    assert downloaded.data
+    preview = admin_client.get(f"/inquiries/{inquiry_id}/files/{file_id}?inline=1")
+    assert preview.status_code == 200
+
+
 def _login(client, email: str, password: str = "pass12345") -> None:
     client.get("/auth/logout", follow_redirects=True)
     resp = client.post(

@@ -194,8 +194,8 @@ def download(inquiry_id, file_id):
     item = next((file for file in InquiryService.attachments(inquiry.id) if file.id == file_id), None)
     if item is None:
         abort(404)
-    path = InquiryService.attachment_disk_path(item)
-    if not path.is_file():
+    path = InquiryService.ensure_attachment_file(inquiry, item)
+    if path is None:
         abort(404)
     download_name = resolve_download_filename(
         item.file_name,

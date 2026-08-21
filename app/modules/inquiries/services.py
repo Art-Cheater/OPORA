@@ -245,7 +245,7 @@ class InquiryService:
             restored = cls.restore_missing_attachments(
                 mailbox_client,
                 upload_root,
-                limit=int(cfg["limit"]),
+                limit=50,
             )
             if state.uidvalidity and snapshot.uidvalidity and state.uidvalidity != snapshot.uidvalidity:
                 state.uidvalidity = snapshot.uidvalidity
@@ -419,18 +419,97 @@ class InquiryService:
         key = str(item.storage_key or "").replace("\\", "/").lstrip("/")
         return root / key
 
+    @staticmethod
+    def _match_parsed_part(stored: Attachment, unused: list) -> object | None:
+        wanted = (stored.file_name or "").casefold()
+        for part in unused:
+            names = {
+                (part.file_name or "").casefold(),
+                safe_upload_filename(part.file_name).casefold(),
+            }
+            if wanted and wanted in names:
+                return part
+        return unused[0] if unused else None
+
+    @classmethod
+    def _write_parsed_attachments(
+        cls,
+        inquiry: Inquiry,
+        parsed_parts: list,
+        upload_root: Path | None = None,
+    ) -> int:
+        unused = [part for part in parsed_parts if part.payload and len(part.payload) <= MAX_ATTACHMENT_BYTES]
+        written = 0
+        for item in cls.attachments(inquiry.id):
+            path = cls.attachment_disk_path(item, upload_root)
+            if path.is_file() and path.stat().st_size > 0:
+                continue
+            match = cls._match_parsed_part(item, unused)
+            if match is None:
+                continue
+            unused.remove(match)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(match.payload)
+            written += 1
+        return written
+
+    @classmethod
+    def _refetch_inquiry_attachments(
+        cls,
+        inquiry: Inquiry,
+        *,
+        client: ImapMailbox | None = None,
+        upload_root: Path | None = None,
+    ) -> int:
+        cfg = cls.mailbox_config()
+        own_client = client is None
+        if not inquiry.imap_uid:
+            return 0
+        if own_client and (not cfg["user"] or not cfg["password"]):
+            return 0
+        mailbox_client = client
+        try:
+            if mailbox_client is None:
+                mailbox_client = connect_mailbox(
+                    host=str(cfg["host"]),
+                    port=int(cfg["port"]),
+                    user=str(cfg["user"]),
+                    password=str(cfg["password"]),
+                )
+            mailbox_client.select_folder(str(cfg["folder"]))
+            raw = mailbox_client.fetch_rfc822(inquiry.imap_uid)
+            parsed = parse_rfc822(raw)
+            return cls._write_parsed_attachments(inquiry, parsed.attachments, upload_root)
+        except ImapError as exc:
+            logger.warning("Обращения: не скачали вложения UID %s: %s", inquiry.imap_uid, exc)
+            return 0
+        except Exception:
+            logger.exception("Обращения: сбой восстановления вложений UID %s", inquiry.imap_uid)
+            return 0
+        finally:
+            if own_client and mailbox_client is not None:
+                mailbox_client.close()
+
+    @classmethod
+    def ensure_attachment_file(cls, inquiry: Inquiry, item: Attachment) -> Path | None:
+        path = cls.attachment_disk_path(item)
+        if path.is_file() and path.stat().st_size > 0:
+            return path
+        cls._refetch_inquiry_attachments(inquiry)
+        path = cls.attachment_disk_path(item)
+        if path.is_file() and path.stat().st_size > 0:
+            return path
+        return None
+
     @classmethod
     def restore_missing_attachments(
         cls,
         mailbox_client: ImapMailbox,
         upload_root: Path,
         *,
-        limit: int = 15,
+        limit: int = 50,
     ) -> int:
-        """Перекачать с ящика файлы, которые есть в БД, но нет на диске.
-
-        inquiry-sync раньше писал вложения в свой контейнер без тома uploads.
-        """
+        """Перекачать с ящика файлы, которые есть в БД, но нет на диске."""
         files = list(
             db.session.scalars(
                 db.select(Attachment).where(
@@ -439,49 +518,28 @@ class InquiryService:
                 )
             )
         )
-        missing: dict[uuid.UUID, list[Attachment]] = {}
+        missing_ids: set[uuid.UUID] = set()
         for item in files:
-            if not cls.attachment_disk_path(item, upload_root).is_file():
-                missing.setdefault(item.entity_id, []).append(item)
-        if not missing:
+            path = cls.attachment_disk_path(item, upload_root)
+            if not path.is_file() or path.stat().st_size <= 0:
+                missing_ids.add(item.entity_id)
+        if not missing_ids:
             return 0
-
-        inquiry_ids = list(missing.keys())[: max(1, min(int(limit), 50))]
         inquiries = list(
             db.session.scalars(
-                db.select(Inquiry).where(
-                    Inquiry.id.in_(inquiry_ids),
-                    Inquiry.deleted_at.is_(None),
-                )
+                db.select(Inquiry)
+                .where(Inquiry.id.in_(list(missing_ids)), Inquiry.deleted_at.is_(None))
+                .order_by(Inquiry.received_at.desc())
+                .limit(max(1, min(int(limit), 80)))
             )
         )
         restored = 0
         for inquiry in inquiries:
-            uid = inquiry.imap_uid
-            if not uid:
-                continue
-            try:
-                raw = mailbox_client.fetch_rfc822(uid)
-            except ImapError as exc:
-                logger.warning("Обращения: не скачали вложения UID %s: %s", uid, exc)
-                continue
-            parsed = parse_rfc822(raw)
-            unused = [part for part in parsed.attachments if len(part.payload) <= MAX_ATTACHMENT_BYTES]
-            for item in missing.get(inquiry.id, []):
-                wanted = (item.file_name or "").casefold()
-                match = next(
-                    (part for part in unused if (part.file_name or "").casefold() == wanted),
-                    None,
-                )
-                if match is None and unused:
-                    match = unused[0]
-                if match is None:
-                    continue
-                unused.remove(match)
-                path = cls.attachment_disk_path(item, upload_root)
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(match.payload)
-                restored += 1
+            restored += cls._refetch_inquiry_attachments(
+                inquiry,
+                client=mailbox_client,
+                upload_root=upload_root,
+            )
         if restored:
             logger.info("Обращения: восстановлено файлов с ящика: %s", restored)
         return restored
