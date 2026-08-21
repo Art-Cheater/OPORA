@@ -1002,6 +1002,46 @@ class RequestService:
         )
         db.session.commit()
 
+    @classmethod
+    def wipe_all(cls, user_id: uuid.UUID) -> int:
+        """Полностью удалить все заявки и связанные строки (история, файлы, комментарии)."""
+        from sqlalchemy import delete
+
+        from app.models.custom_fields.custom_field_value import CustomFieldValue
+
+        ids = list(db.session.scalars(db.select(Request.id)))
+        if not ids:
+            return 0
+        kind = EntityType.REQUEST.value
+        db.session.execute(delete(RequestMaterial).where(RequestMaterial.request_id.in_(ids)))
+        db.session.execute(delete(RequestHistory).where(RequestHistory.request_id.in_(ids)))
+        db.session.execute(
+            delete(Comment).where(Comment.entity_type == kind, Comment.entity_id.in_(ids))
+        )
+        db.session.execute(
+            delete(Attachment).where(Attachment.entity_type == kind, Attachment.entity_id.in_(ids))
+        )
+        db.session.execute(
+            delete(Notification).where(
+                Notification.entity_type == kind, Notification.entity_id.in_(ids)
+            )
+        )
+        db.session.execute(
+            delete(CustomFieldValue).where(
+                CustomFieldValue.entity_type == kind, CustomFieldValue.entity_id.in_(ids)
+            )
+        )
+        db.session.execute(delete(Request).where(Request.id.in_(ids)))
+        AuditService.log(
+            user_id=user_id,
+            action=AuditAction.DELETE.value,
+            entity_type=kind,
+            description=f"Полная очистка заявок: {len(ids)}",
+            new_values={"count": len(ids)},
+        )
+        db.session.commit()
+        return len(ids)
+
     @staticmethod
     def ensure_request(request_id: str) -> Request:
         req = db.session.get(Request, uuid.UUID(request_id))

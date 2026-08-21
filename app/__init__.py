@@ -480,6 +480,21 @@ def _register_cli_commands(app: Flask) -> None:
         count = ObjectService.wipe_all(user.id)
         click.echo(f"Удалено объектов: {count}")
 
+    @app.cli.command("wipe-requests")
+    def wipe_requests():
+        """Полностью удалить все заявки из БД."""
+        from app.models.auth.user import User
+        from app.modules.requests.services import RequestService
+
+        user = db.session.scalar(
+            db.select(User).where(User.active_filter()).order_by(User.created_at.asc()).limit(1)
+        )
+        if user is None:
+            click.echo("Нет пользователей в БД.")
+            return
+        count = RequestService.wipe_all(user.id)
+        click.echo(f"Удалено заявок: {count}")
+
     @app.cli.command("eis-sync")
     @click.option("--loop", "as_loop", is_flag=True, help="Ждать 12:00 и 18:00 и запускать снова")
     @click.option("--user-email", default=None, help="Пользователь для аудита")

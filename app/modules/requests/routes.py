@@ -17,7 +17,6 @@ from flask import (
     url_for,
 )
 from flask_login import current_user, login_required
-from werkzeug.utils import secure_filename
 
 from app.core.custom_fields_integration import (
     custom_field_detail_context,
@@ -49,7 +48,6 @@ from app.modules.requests.forms import (
     DispatcherForm,
     RequestAttachmentForm,
     RequestCommentForm,
-    RequestEnergoserviceImportForm,
     RequestFilterForm,
     RequestForm,
     RequestMaterialForm,
@@ -302,49 +300,7 @@ def index():
         "requests/index.html",
         filter_form=filter_form,
         filters=_build_filters(),
-        import_form=RequestEnergoserviceImportForm(),
     )
-
-
-@requests_bp.route("/import-energoservice", methods=["POST"])
-@login_required
-@permission_required(PERM_REQUESTS_CREATE)
-def import_energoservice():
-    form = RequestEnergoserviceImportForm()
-    if not form.validate_on_submit():
-        flash(form_errors_message(form) or "Выберите файл Excel (.xlsx).", "danger")
-        return redirect(url_for("requests.index"))
-
-    upload = form.file.data
-    filename = secure_filename(upload.filename or "energoservice.xlsx")
-    if not filename.lower().endswith(".xlsx"):
-        flash("Нужен файл формата .xlsx.", "danger")
-        return redirect(url_for("requests.index"))
-
-    from app.modules.requests.energoservice_import import EnergoserviceImportService
-
-    upload_dir = Path(current_app.instance_path) / "imports"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    tmp_path = upload_dir / f"{uuid.uuid4().hex}_{filename}"
-    try:
-        upload.save(tmp_path)
-        result = EnergoserviceImportService.import_from_xlsx(tmp_path, current_user.id)
-        flash(
-            f"Импорт энергосервиса: создано {result.created}, пропущено {result.skipped} "
-            f"(строк с адресом: {result.total}). Карточки неполные — дозаполните вручную.",
-            "success",
-        )
-    except ValidationError as exc:
-        flash(str(exc), "danger")
-    except Exception as exc:  # noqa: BLE001
-        current_app.logger.exception("Ошибка импорта заявок энергосервиса")
-        flash(f"Не удалось импортировать файл: {exc}", "danger")
-    finally:
-        try:
-            tmp_path.unlink(missing_ok=True)
-        except OSError:
-            pass
-    return redirect(url_for("requests.index"))
 
 
 @requests_bp.route("/table")
