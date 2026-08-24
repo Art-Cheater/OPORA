@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initSidebar();
     initSearchShortcut();
     initMessengerUnreadBadge();
+    initOporaTourLazy();
 });
 
 window.OporaBusy = (() => {
@@ -472,6 +473,12 @@ function initInstantNav(sidebar, closeSidebar) {
         }
     }
 
+    function samePath(a, b) {
+        const pathA = (a.pathname || "/").replace(/\/+$/, "") || "/";
+        const pathB = (b.pathname || "/").replace(/\/+$/, "") || "/";
+        return pathA === pathB && (a.search || "") === (b.search || "");
+    }
+
     function mustFullReload(url) {
         const path = url.pathname;
         return (
@@ -598,7 +605,13 @@ function initInstantNav(sidebar, closeSidebar) {
     function bootPageModules() {
         window.OporaList?.reset?.();
         window.OporaList?.bootPage?.();
+        window.OporaRolesAdmin?.init?.();
         if (window.OporaRequestsForm?.init) {
+            document.querySelectorAll("[data-requests-form]").forEach((form) => {
+                delete form.dataset.requestsInited;
+                window.OporaRequestsForm.init(form);
+            });
+        }
             document.querySelectorAll("[data-requests-form]").forEach((form) => {
                 delete form.dataset.requestsInited;
                 window.OporaRequestsForm.init(form);
@@ -644,6 +657,7 @@ function initInstantNav(sidebar, closeSidebar) {
     function fetchPage(href) {
         return fetch(href, {
             credentials: "same-origin",
+            cache: "no-store",
             headers: {
                 "X-Opora-Nav": "1",
                 "X-Requested-With": "OporaNav",
@@ -776,7 +790,7 @@ function initInstantNav(sidebar, closeSidebar) {
         const nextConfig = doc.querySelector("#oporaListConfig");
         const curConfig = content.querySelector("#oporaListConfig");
         if (nextConfig && curConfig) curConfig.replaceWith(nextConfig);
-        window.OporaList?.bindFilters?.();
+        window.OporaList?.bootPage?.();
         return true;
     }
 
@@ -798,7 +812,7 @@ function initInstantNav(sidebar, closeSidebar) {
         closeSidebar();
 
         const spec = listShellFor(href);
-        const cached = cacheGet(href);
+        const cached = spec ? null : cacheGet(href);
 
         if (cached) {
             hideLoading();
@@ -894,8 +908,10 @@ function initInstantNav(sidebar, closeSidebar) {
             event.preventDefault();
             return;
         }
-        if (next.pathname === window.location.pathname && next.search === window.location.search) {
+        if (samePath(next, window.location)) {
             event.preventDefault();
+            window.OporaList?.bootPage?.();
+            window.OporaRolesAdmin?.init?.();
             return;
         }
         event.preventDefault();
@@ -996,4 +1012,73 @@ function initMessengerUnreadBadge() {
     // Не конкурировать с CSS/JS на первом кадре страницы.
     window.setTimeout(refresh, 1500);
     window.setInterval(refresh, intervalMs);
+}
+
+function initOporaTourLazy() {
+    const cfgNode = document.getElementById("oporaTourConfig");
+    if (!cfgNode) return;
+
+    let loadPromise = null;
+
+    function tourSeenKey() {
+        try {
+            const parsed = JSON.parse(cfgNode.textContent || "{}");
+            return `opora_tour_seen_v1_${parsed.userId || "anon"}`;
+        } catch {
+            return "opora_tour_seen_v1_anon";
+        }
+    }
+
+    function ensureTourLoaded() {
+        if (window.OporaTour?.open) {
+            return Promise.resolve(window.OporaTour);
+        }
+        if (loadPromise) return loadPromise;
+        const cssHref = cfgNode.dataset.tourCss;
+        const jsSrc = cfgNode.dataset.tourJs;
+        if (!jsSrc) return Promise.reject(new Error("tour.js missing"));
+
+        loadPromise = new Promise((resolve, reject) => {
+            if (cssHref && !document.querySelector('link[data-opora-tour="1"]')) {
+                const link = document.createElement("link");
+                link.rel = "stylesheet";
+                link.href = cssHref;
+                link.dataset.oporaTour = "1";
+                document.head.appendChild(link);
+            }
+            const script = document.createElement("script");
+            script.src = jsSrc;
+            script.async = true;
+            script.onload = () => {
+                window.OporaTour?.init?.();
+                resolve(window.OporaTour);
+            };
+            script.onerror = () => reject(new Error("tour.js load failed"));
+            document.body.appendChild(script);
+        });
+        return loadPromise;
+    }
+
+    function openTour(event) {
+        event?.preventDefault();
+        ensureTourLoaded()
+            .then((tour) => tour?.open?.())
+            .catch(() => {});
+    }
+
+    document.getElementById("oporaTourBtn")?.addEventListener("click", openTour);
+    document.getElementById("oporaTourMenuStart")?.addEventListener("click", openTour);
+
+    try {
+        if (localStorage.getItem(tourSeenKey()) === "1") return;
+        if (!document.getElementById("appShell") || document.getElementById("messengerApp")) return;
+        localStorage.setItem(tourSeenKey(), "1");
+        window.setTimeout(() => {
+            ensureTourLoaded()
+                .then((tour) => tour?.open?.())
+                .catch(() => {});
+        }, 700);
+    } catch {
+        /* ignore */
+    }
 }

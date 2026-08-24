@@ -78,34 +78,39 @@ window.OporaList = (() => {
     return params;
   }
 
-  function fetchTable(url) {
-    const existing = tableInflight.get(url);
-    if (existing) return existing;
-    const promise = fetch(url, { headers: AJAX_HEADERS })
-      .then(async (response) => {
-        const data = await parseJsonResponse(response, "Не удалось обновить список");
-        if (!response.ok) throw new Error(data.message || "Не удалось обновить список");
-        return data;
-      })
-      .finally(() => {
-        if (tableInflight.get(url) === promise) tableInflight.delete(url);
-      });
-    tableInflight.set(url, promise);
-    return promise;
+  function fetchTable(url, signal) {
+    return fetch(url, { headers: AJAX_HEADERS, cache: "no-store", signal }).then(async (response) => {
+      const data = await parseJsonResponse(response, "Не удалось обновить список");
+      if (!response.ok) throw new Error(data.message || "Не удалось обновить список");
+      return data;
+    });
+  }
+
+  function renderTableError(message) {
+    const liveTable = document.getElementById(config.tableContainerId);
+    if (!liveTable) return;
+    const safe = String(message || "Не удалось обновить список")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    liveTable.innerHTML = `<div class="alert alert-warning mb-0">${safe} <button type="button" class="btn btn-sm btn-outline-primary ms-2" data-opora-retry-list>Повторить</button></div>`;
+    liveTable.querySelector("[data-opora-retry-list]")?.addEventListener("click", () => loadTable());
   }
 
   async function loadTable() {
     const tableContainer = document.getElementById(config.tableContainerId);
     const paginationContainer = document.getElementById(config.paginationContainerId);
-    if (!tableContainer) return;
+    if (!tableContainer || !config.baseUrl) return;
 
+    tableAbort?.abort();
+    tableAbort = new AbortController();
     const token = ++tableToken;
     const url = `${config.baseUrl}/table?${queryParams().toString()}`;
     tableContainer.innerHTML = TABLE_LOADING_HTML;
     if (paginationContainer) paginationContainer.innerHTML = "";
 
     try {
-      const data = await fetchTable(url);
+      const data = await fetchTable(url, tableAbort.signal);
       if (token !== tableToken) return;
       const liveTable = document.getElementById(config.tableContainerId);
       const livePager = document.getElementById(config.paginationContainerId);
@@ -116,6 +121,7 @@ window.OporaList = (() => {
       bindPagination();
     } catch (err) {
       if (err?.name === "AbortError" || token !== tableToken) return;
+      renderTableError(err?.message || "Не удалось обновить список");
       showToast(err?.message || "Не удалось обновить список", "danger");
     }
   }
@@ -637,8 +643,9 @@ window.OporaList = (() => {
 
   function reset() {
     tableToken += 1;
-    if (tableAbort) tableAbort.abort();
+    tableAbort?.abort();
     tableAbort = null;
+    tableInflight.clear();
     config = {};
     currentPage = 1;
     clearTimeout(debounceTimer);
