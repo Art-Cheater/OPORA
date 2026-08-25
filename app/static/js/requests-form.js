@@ -123,6 +123,8 @@
     "latitude",
     "longitude",
   ];
+  // Район не сбрасываем при каждом символе в адресе — иначе теряется ручной/выбранный район.
+  const CLEAR_ADDRESS_FIELDS = ADDRESS_FIELDS.filter((name) => name !== "district");
 
   const REQUEST_DISTRICTS = ["Ленинский", "Октябрьский", "Первомайский", "Нововятский"];
 
@@ -143,7 +145,7 @@
   }
 
   function clearAddressSelection(form) {
-    ADDRESS_FIELDS.forEach((name) => setField(form, name, ""));
+    CLEAR_ADDRESS_FIELDS.forEach((name) => setField(form, name, ""));
     const input = addressInput(form);
     if (input) delete input.dataset.selectedAddress;
   }
@@ -201,7 +203,11 @@
       meta.className = suggestion.other_settlement ? "text-warning-emphasis" : "text-muted";
       meta.textContent = suggestion.other_settlement
         ? `Другой населённый пункт: ${suggestion.settlement || "Кировская область"}`
-        : [suggestion.district, suggestion.street, suggestion.house ? `дом ${suggestion.house}` : ""]
+        : [
+            suggestion.district ? `район: ${suggestion.district.replace(/\s*район$/i, "")}` : "",
+            suggestion.street,
+            suggestion.house ? `дом ${suggestion.house}` : "",
+          ]
             .filter(Boolean)
             .join(", ");
       if (meta.textContent) button.appendChild(meta);

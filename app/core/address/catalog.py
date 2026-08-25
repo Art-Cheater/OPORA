@@ -21,6 +21,25 @@ _KIND_RANK = {
     "микрорайон": 9,
 }
 
+# При равном совпадении имени — сначала центральные районы, Нововятский в конце.
+_DISTRICT_RANK = {
+    "Ленинский район": 0,
+    "Октябрьский район": 1,
+    "Первомайский район": 2,
+    "Нововятский район": 3,
+}
+
+# Главная «городская» улица, если одно имя есть в нескольких районах.
+_PRIMARY_DISTRICT: dict[tuple[str, str], str] = {
+    ("ленина", "улица"): "Октябрьский район",
+    ("воровского", "улица"): "Первомайский район",
+    ("московская", "улица"): "Ленинский район",
+    ("советская", "улица"): "Октябрьский район",
+    ("комсомольская", "улица"): "Октябрьский район",
+    ("мира", "улица"): "Первомайский район",
+    ("производственная", "улица"): "Ленинский район",
+}
+
 
 def _fold(text: str) -> str:
     return (text or "").casefold().replace("ё", "е").replace("й", "и")
@@ -106,6 +125,17 @@ def _kind_bonus(query_kind: str | None, street_kind: str) -> int:
     return -6
 
 
+def _district_bonus(street: StreetRecord) -> int:
+    primary = _PRIMARY_DISTRICT.get((street.folded_name, street.kind))
+    if primary and street.district == primary:
+        return 18
+    return 0
+
+
+def _district_rank(district: str) -> int:
+    return _DISTRICT_RANK.get(district, 50)
+
+
 @dataclass(frozen=True, slots=True)
 class CatalogHit:
     name: str
@@ -124,7 +154,11 @@ def search_streets(query: str, *, limit: int = 8) -> list[CatalogHit]:
 
     ranked: list[tuple[int, StreetRecord]] = []
     for street in all_streets():
-        score = _name_score(name, street.name) + _kind_bonus(kind, street.kind)
+        score = (
+            _name_score(name, street.name)
+            + _kind_bonus(kind, street.kind)
+            + _district_bonus(street)
+        )
         if score < 40:
             continue
         ranked.append((score, street))
@@ -133,7 +167,7 @@ def search_streets(query: str, *, limit: int = 8) -> list[CatalogHit]:
         key=lambda item: (
             -item[0],
             _KIND_RANK.get(item[1].kind, 20),
-            item[1].district,
+            _district_rank(item[1].district),
             item[1].name,
         )
     )
@@ -162,3 +196,37 @@ def search_streets(query: str, *, limit: int = 8) -> list[CatalogHit]:
         if len(hits) >= limit:
             break
     return hits
+
+
+def unique_districts_for_street(name: str, kind: str) -> list[str]:
+    """Все районы, где есть улица с таким именем и типом."""
+    folded = _fold(name)
+    districts: list[str] = []
+    seen: set[str] = set()
+    for street in all_streets():
+        if street.kind != kind or street.folded_name != folded:
+            continue
+        if street.district in seen:
+            continue
+        seen.add(street.district)
+        districts.append(street.district)
+    districts.sort(key=_district_rank)
+    return districts
+
+
+def resolve_catalog_district(name: str, kind: str, preferred: str | None = None) -> str | None:
+    """Район для улицы: явный preferred, единственный вариант или главный из справочника."""
+    options = unique_districts_for_street(name, kind)
+    if not options:
+        return None
+    preferred_norm = (preferred or "").strip()
+    if preferred_norm:
+        for item in options:
+            if preferred_norm.casefold() in item.casefold() or item.casefold() in preferred_norm.casefold():
+                return item
+    if len(options) == 1:
+        return options[0]
+    primary = _PRIMARY_DISTRICT.get((_fold(name), kind))
+    if primary and primary in options:
+        return primary
+    return None

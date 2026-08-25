@@ -212,7 +212,7 @@ class RequestService:
 
         payload.latitude = None
         payload.longitude = None
-        fallback = HeuristicGeocodingProvider().search(submitted, limit=1)
+        fallback = HeuristicGeocodingProvider().search(submitted, limit=8)
         if not fallback:
             payload.original_address = submitted
             payload.normalized_address = submitted
@@ -226,14 +226,29 @@ class RequestService:
             payload.address_external_id = None
             return
         suggestion = fallback[0]
+        from app.core.address.catalog import resolve_catalog_district
+        from app.modules.requests.address_format import split_address_query
+
+        _kind, street_name, _house = split_address_query(submitted)
+        street_kind = suggestion.street.split(" ", 1)[0] if suggestion.street else (_kind or "улица")
+        street_only = (
+            suggestion.street.split(" ", 1)[1]
+            if suggestion.street and " " in suggestion.street
+            else street_name
+        )
+        form_district = normalize_request_district(payload.district)
+        resolved = resolve_catalog_district(
+            street_only or street_name or "",
+            street_kind,
+            preferred=form_district or suggestion.district,
+        )
+        # Если улица в нескольких районах и диспетчер район не выбрал — не угадываем
+        # по алфавиту: либо явный выбор / primary, либо пусто.
         payload.original_address = submitted
         payload.normalized_address = suggestion.normalized_address
         payload.address = suggestion.normalized_address[:500]
         payload.region = suggestion.region
-        # Район из формы важнее: диспетчер мог выбрать его вручную
-        payload.district = normalize_request_district(payload.district) or normalize_request_district(
-            suggestion.district
-        )
+        payload.district = form_district or normalize_request_district(resolved)
         payload.settlement = suggestion.settlement
         payload.street = suggestion.street
         payload.house = suggestion.house

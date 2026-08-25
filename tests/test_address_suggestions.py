@@ -180,6 +180,24 @@ def test_catalog_corrects_typos_and_street_type():
     assert all("улица Искожевский" not in (item.street or "") for item in lane)
 
 
+def test_catalog_prefers_primary_district_for_ambiguous_streets():
+    from app.core.address.catalog import resolve_catalog_district, search_streets
+
+    lenina = search_streets("Ленина")
+    assert lenina
+    assert lenina[0].kind == "улица"
+    assert lenina[0].district == "Октябрьский район"
+    # варианты других районов всё ещё в выдаче
+    assert any(hit.district == "Нововятский район" for hit in lenina)
+
+    vorovskogo = search_streets("Воровского")
+    assert vorovskogo[0].district == "Первомайский район"
+
+    assert resolve_catalog_district("Ленина", "улица") == "Октябрьский район"
+    assert resolve_catalog_district("Ленина", "улица", preferred="Нововятский") == "Нововятский район"
+    assert resolve_catalog_district("Лепсе", "улица") == "Ленинский район"
+
+
 def test_address_suggestions_endpoint_requires_login(client):
     response = client.get("/requests/api/address-suggestions?q=Лепсе")
 

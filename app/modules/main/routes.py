@@ -22,7 +22,7 @@ def health():
     return (
         {
             "status": "ok",
-            "release": "20260825c",
+            "release": "20260825d",
             "eis_year_from": int(current_app.config.get("EIS_YEAR_FROM") or 0),
         },
         200,
