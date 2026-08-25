@@ -577,6 +577,66 @@ def _register_cli_commands(app: Flask) -> None:
             f"Напоминания: месяц={result.get('month', 0)}, две недели={result.get('two_weeks', 0)}"
         )
 
+    @app.cli.command("repair-request-districts")
+    @click.option("--dry-run", is_flag=True, help="Только показать, без записи в БД")
+    @click.option("--limit", default=0, show_default=True, help="Максимум заявок (0 = все)")
+    def repair_request_districts(dry_run: bool, limit: int):
+        """Пересчитать район по адресу (с домом — через геокодер)."""
+        import time
+
+        from app.core.address import get_address_suggestion_service
+        from app.models.requests.request import Request
+        from app.modules.requests.address_format import split_address_query
+        from app.modules.requests.districts import normalize_request_district
+
+        service = get_address_suggestion_service()
+        stmt = (
+            db.select(Request)
+            .where(Request.active_filter())
+            .order_by(Request.created_at.desc())
+        )
+        if limit and limit > 0:
+            stmt = stmt.limit(limit)
+        rows = list(db.session.scalars(stmt))
+        changed = 0
+        skipped = 0
+        for index, req in enumerate(rows, 1):
+            address = (req.address or req.normalized_address or "").strip()
+            if not address:
+                skipped += 1
+                continue
+            _kind, _name, house = split_address_query(address)
+            try:
+                hits = service.suggest(address, limit=5)
+            except Exception as exc:
+                click.echo(f"#{req.number}: ошибка геокодера: {exc}")
+                skipped += 1
+                continue
+            if house:
+                # Не чаще 1 запроса в секунду к Nominatim
+                time.sleep(1.05)
+            if not hits:
+                skipped += 1
+                continue
+            new_district = normalize_request_district(hits[0].district)
+            old_district = normalize_request_district(req.district)
+            if not new_district or new_district == old_district:
+                skipped += 1
+                continue
+            click.echo(
+                f"{req.number}: {old_district or '—'} → {new_district} ({address[:80]})"
+            )
+            if not dry_run:
+                req.district = new_district
+                changed += 1
+            else:
+                changed += 1
+            if index % 20 == 0 and not dry_run:
+                db.session.commit()
+        if not dry_run:
+            db.session.commit()
+        click.echo(f"Готово: обновлено {changed}, без изменений/пропуск {skipped}, всего {len(rows)}.")
+
     @app.cli.command("init-db")
     def init_db():
         """Создаёт схему (SQLite: create_all) и заполняет справочники + админа."""

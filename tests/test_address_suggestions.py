@@ -114,13 +114,14 @@ def test_service_prioritizes_kirov_and_marks_other_settlement():
     )
     service = AddressSuggestionService(provider, fallback=StubProvider([]))
 
-    results = service.suggest("Лепсе 79")
+    # Без номера дома — внешний геокодер как раньше
+    results = service.suggest("Лепсе улица")
 
-    assert provider.queries == ["Лепсе 79, Кировская область"]
+    assert provider.queries == ["Лепсе улица, Кировская область"]
     assert [item.settlement for item in results] == ["Киров", "Слободской"]
     assert results[0].other_settlement is False
     assert results[1].other_settlement is True
-    assert all(item.original_address == "Лепсе 79" for item in results)
+    assert all(item.original_address == "Лепсе улица" for item in results)
 
 
 def test_service_falls_back_without_blocking_on_provider_error():

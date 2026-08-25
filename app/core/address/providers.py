@@ -232,7 +232,7 @@ class NominatimGeocodingProvider(GeocodingProvider):
         street = next(
             (
                 str(address[key]).strip()
-                for key in ("road", "pedestrian", "residential", "suburb", "quarter")
+                for key in ("road", "pedestrian", "residential")
                 if address.get(key)
             ),
             None,
@@ -240,16 +240,26 @@ class NominatimGeocodingProvider(GeocodingProvider):
         osm_type = str(item.get("osm_type") or "").strip()
         osm_id = str(item.get("osm_id") or "").strip()
         external_id = f"{osm_type}/{osm_id}" if osm_type and osm_id else None
-        district = (
+        from app.modules.requests.districts import long_district_name
+
+        raw_district = (
             str(
                 address.get("city_district")
                 or address.get("suburb")
+                or address.get("quarter")
+                or address.get("neighbourhood")
                 or address.get("county")
                 or address.get("state_district")
                 or ""
             ).strip()
             or None
         )
+        # Нововятск в OSM часто без city_district — только suburb
+        district = long_district_name(raw_district)
+        if district is None and address.get("suburb"):
+            district = long_district_name(str(address.get("suburb") or "").strip())
+        if district is None and raw_district:
+            district = raw_district
         return AddressSuggestion(
             original_address=query,
             normalized_address=display_name,

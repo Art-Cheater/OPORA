@@ -212,7 +212,13 @@ class RequestService:
 
         payload.latitude = None
         payload.longitude = None
-        fallback = HeuristicGeocodingProvider().search(submitted, limit=8)
+        from app.core.address import get_address_suggestion_service
+        from app.modules.requests.address_format import split_address_query
+
+        try:
+            fallback = get_address_suggestion_service().suggest(submitted, limit=8)
+        except Exception:
+            fallback = HeuristicGeocodingProvider().search(submitted, limit=8)
         if not fallback:
             payload.original_address = submitted
             payload.normalized_address = submitted
@@ -227,9 +233,8 @@ class RequestService:
             return
         suggestion = fallback[0]
         from app.core.address.catalog import resolve_catalog_district
-        from app.modules.requests.address_format import split_address_query
 
-        _kind, street_name, _house = split_address_query(submitted)
+        _kind, street_name, house = split_address_query(submitted)
         street_kind = suggestion.street.split(" ", 1)[0] if suggestion.street else (_kind or "улица")
         street_only = (
             suggestion.street.split(" ", 1)[1]
@@ -237,13 +242,15 @@ class RequestService:
             else street_name
         )
         form_district = normalize_request_district(payload.district)
-        resolved = resolve_catalog_district(
-            street_only or street_name or "",
-            street_kind,
-            preferred=form_district or suggestion.district,
-        )
-        # Если улица в нескольких районах и диспетчер район не выбрал — не угадываем
-        # по алфавиту: либо явный выбор / primary, либо пусто.
+        # При наличии дома район из подсказки (OSM) важнее «главной» улицы справочника
+        if house and suggestion.district:
+            resolved = suggestion.district
+        else:
+            resolved = resolve_catalog_district(
+                street_only or street_name or "",
+                street_kind,
+                preferred=form_district or suggestion.district,
+            )
         payload.original_address = submitted
         payload.normalized_address = suggestion.normalized_address
         payload.address = suggestion.normalized_address[:500]
@@ -251,9 +258,9 @@ class RequestService:
         payload.district = form_district or normalize_request_district(resolved)
         payload.settlement = suggestion.settlement
         payload.street = suggestion.street
-        payload.house = suggestion.house
+        payload.house = suggestion.house or house or None
         payload.address_source = suggestion.address_source
-        payload.address_external_id = None
+        payload.address_external_id = suggestion.address_external_id
 
     @staticmethod
     def _snapshot(req: Request) -> dict[str, Any]:

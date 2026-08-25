@@ -118,14 +118,38 @@ class AddressSuggestionService:
         return found
 
     def suggest(self, query: str, *, limit: int | None = None) -> list[AddressSuggestion]:
+        from app.modules.requests.address_format import format_address, split_address_query
+        from app.modules.requests.districts import long_district_name, normalize_request_district
+
         cleaned = " ".join((query or "").split())
         if len(cleaned) < 3:
             return []
         safe_limit = min(max(int(limit or self.default_limit), 1), 20)
+        _kind, _name, house = split_address_query(cleaned)
         catalog = [
             replace(item.with_query(cleaned), other_settlement=False)
             for item in self.fallback.search(cleaned, limit=safe_limit)
         ]
+
+        # С номером дома район нельзя брать «все варианты улицы» — уточняем по OSM.
+        if house:
+            formatted = format_address(cleaned)
+            regional_query = f"{formatted}, Кировская область"
+            # В проде 0.45 с мало для Nominatim; в тестах короткий timeout не трогаем.
+            house_timeout = self.provider_timeout_seconds
+            if house_timeout >= 0.4:
+                house_timeout = max(house_timeout, 2.5)
+            old_timeout = self.provider_timeout_seconds
+            self.provider_timeout_seconds = house_timeout
+            try:
+                found = self._search_provider(regional_query, safe_limit)
+            finally:
+                self.provider_timeout_seconds = old_timeout
+            ranked = self._rank_region(found, cleaned)
+            house_hits = self._house_suggestions(ranked, catalog, cleaned, house)
+            if house_hits:
+                return house_hits[:safe_limit]
+
         if catalog:
             return catalog[:safe_limit]
 
@@ -136,6 +160,66 @@ class AddressSuggestionService:
             regional_query = f"{cleaned}, Кировская область"
         found = self._search_provider(regional_query, safe_limit)
         return self._rank_region(found, cleaned)[:safe_limit]
+
+    @classmethod
+    def _house_suggestions(
+        cls,
+        nominatim: list[AddressSuggestion],
+        catalog: list[AddressSuggestion],
+        original_query: str,
+        house: str,
+    ) -> list[AddressSuggestion]:
+        """Подсказки с домом: район из OSM, адрес в формате справочника."""
+        from app.modules.requests.districts import long_district_name, normalize_request_district
+
+        house_fold = house.casefold().replace("ё", "е")
+        catalog_street = next((item.street for item in catalog if item.street), None)
+        out: list[AddressSuggestion] = []
+        seen_districts: set[str] = set()
+
+        for item in nominatim:
+            if not cls._is_kirov_region(item):
+                continue
+            item_house = (item.house or "").casefold().replace("ё", "е").replace(" ", "")
+            if item_house and item_house != house_fold:
+                display = item.normalized_address.casefold().replace("ё", "е")
+                if house_fold not in display.replace(" ", ""):
+                    continue
+            district_long = long_district_name(item.district)
+            if not district_long:
+                continue
+            short = normalize_request_district(district_long) or ""
+            if short in seen_districts:
+                continue
+            seen_districts.add(short)
+
+            street_label = catalog_street or item.street or ""
+            if street_label and not street_label.casefold().startswith(
+                ("улица", "проспект", "переулок", "бульвар", "площадь", "шоссе")
+            ):
+                street_label = f"улица {street_label}"
+            if street_label:
+                normalized = f"Киров, {street_label}, дом {house}"
+            else:
+                normalized = item.normalized_address
+            out.append(
+                replace(
+                    item.with_query(original_query),
+                    normalized_address=normalized,
+                    region=item.region or "Кировская область",
+                    district=district_long,
+                    settlement="Киров",
+                    street=street_label or item.street,
+                    house=house,
+                    other_settlement=False,
+                )
+            )
+        # Стабильный порядок: Ленинский → Октябрьский → Первомайский → Нововятский
+        rank = {"Ленинский": 0, "Октябрьский": 1, "Первомайский": 2, "Нововятский": 3}
+        out.sort(
+            key=lambda item: rank.get(normalize_request_district(item.district) or "", 50)
+        )
+        return out
 
     @classmethod
     def _rank_region(
@@ -204,7 +288,7 @@ def get_address_suggestion_service() -> AddressSuggestionService:
             provider,
             default_limit=int(current_app.config.get("ADDRESS_SUGGESTION_LIMIT", 8)),
             provider_timeout_seconds=float(
-                current_app.config.get("GEOCODING_SUGGEST_TIMEOUT_SECONDS") or 0.45
+                current_app.config.get("GEOCODING_SUGGEST_TIMEOUT_SECONDS") or 2.5
             ),
         )
         current_app.extensions[extension_key] = service

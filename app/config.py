@@ -163,7 +163,7 @@ class Config:
     GEOCODING_TIMEOUT_SECONDS = float(os.getenv("GEOCODING_TIMEOUT_SECONDS", "2.5"))
     # Подсказки в форме не ждут внешний геокодер: иначе ввод адреса «молчит».
     GEOCODING_SUGGEST_TIMEOUT_SECONDS = float(
-        os.getenv("GEOCODING_SUGGEST_TIMEOUT_SECONDS", "0.45")
+        os.getenv("GEOCODING_SUGGEST_TIMEOUT_SECONDS", "2.5")
     )
     GEOCODING_CACHE_TTL_SECONDS = float(
         os.getenv("GEOCODING_CACHE_TTL_SECONDS", "600")
