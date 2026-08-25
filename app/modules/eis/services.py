@@ -276,14 +276,22 @@ class EisImportService:
         extra: dict | None = None,
         user_id: uuid.UUID | None = None,
     ) -> None:
+        # Ссылки zakupki с длинным querystring > 700 символов роняли весь прогон
+        # (StringDataRightTruncation) ещё на записи ошибки скачивания.
+        safe_url = (url or "").strip() or None
+        if safe_url and len(safe_url) > 2000:
+            safe_url = safe_url[:1997] + "..."
+        safe_number = (eis_number or "").strip() or None
+        if safe_number and len(safe_number) > 64:
+            safe_number = safe_number[:64]
         db.session.add(
             EisImportEvent(
                 run_id=run.id,
-                kind=kind,
-                message=message,
-                eis_number=eis_number,
-                url=url,
-                entity_type=entity_type,
+                kind=(kind or "error")[:20],
+                message=(message or "")[:8000],
+                eis_number=safe_number,
+                url=safe_url,
+                entity_type=(entity_type[:40] if entity_type else None),
                 entity_id=entity_id,
                 extra=extra,
                 created_by=user_id,

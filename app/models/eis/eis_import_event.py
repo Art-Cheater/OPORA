@@ -34,7 +34,7 @@ class EisImportEvent(BaseModel):
     entity_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     entity_id: Mapped[uuid.UUID | None] = mapped_column(GUID(), nullable=True)
     eis_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    url: Mapped[str | None] = mapped_column(String(700), nullable=True)
+    url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     message: Mapped[str] = mapped_column(Text, nullable=False, default="")
     extra: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
 

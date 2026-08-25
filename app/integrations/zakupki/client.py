@@ -44,7 +44,9 @@ class EisClient:
             except (urllib.error.URLError, TimeoutError, OSError) as exc:
                 last_error = exc
                 time.sleep(min(4.0, 0.8 * attempt))
-        raise EisFetchError(f"Не удалось скачать {url}: {last_error}") from last_error
+        # Полный URL с длинным querystring не дублируем в тексте — он есть в ParseIssue.url
+        short = url if len(url) <= 120 else f"{url[:117]}..."
+        raise EisFetchError(f"Не удалось скачать {short}: {last_error}") from last_error
 
     def _throttle(self) -> None:
         if self.delay <= 0:
