@@ -66,3 +66,30 @@ def test_svobody_primary_is_pervomaysky():
     assert hits
     assert hits[0].district == "Первомайский район"
     assert any(h.district == "Октябрьский район" for h in hits)
+
+
+def test_truda_74_does_not_duplicate_city_districts_from_catalog():
+    """Без OSM один дом не должен появляться и в Ленинском, и в Октябрьском."""
+    from app.core.address import AddressSuggestionService
+    from app.core.address.providers import HeuristicGeocodingProvider
+
+    class EmptyProvider:
+        def search(self, query: str, *, limit: int = 8):
+            return []
+
+    service = AddressSuggestionService(EmptyProvider(), fallback=HeuristicGeocodingProvider())
+    service.provider_timeout_seconds = 0
+    results = service.suggest("труда 74", limit=8)
+    assert results
+    districts = {item.district for item in results}
+    # Запасной каталог: один городской (Октябрьский — primary для Труда), без пары ЛН+ОК
+    assert "Октябрьский район" in districts
+    assert not ({"Ленинский район", "Октябрьский район"} <= districts)
+
+
+def test_nominatim_house_query_format():
+    from app.core.address import AddressSuggestionService
+
+    assert AddressSuggestionService._nominatim_house_query("труда 74") == (
+        "улица Труда 74, Киров, Кировская область"
+    )

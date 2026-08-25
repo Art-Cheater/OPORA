@@ -118,8 +118,7 @@ class AddressSuggestionService:
         return found
 
     def suggest(self, query: str, *, limit: int | None = None) -> list[AddressSuggestion]:
-        from app.modules.requests.address_format import format_address, split_address_query
-        from app.modules.requests.districts import long_district_name, normalize_request_district
+        from app.modules.requests.address_format import split_address_query
 
         cleaned = " ".join((query or "").split())
         if len(cleaned) < 3:
@@ -133,9 +132,8 @@ class AddressSuggestionService:
 
         # С номером дома район нельзя брать «все варианты улицы» — уточняем по OSM.
         if house:
-            formatted = format_address(cleaned)
-            regional_query = f"{formatted}, Кировская область"
-            # В проде 0.45 с мало для Nominatim; в тестах короткий timeout не трогаем.
+            # Nominatim плохо понимает «…, дом 74» — формат «улица X 74, Киров».
+            regional_query = self._nominatim_house_query(cleaned)
             house_timeout = self.provider_timeout_seconds
             if house_timeout >= 0.4:
                 house_timeout = max(house_timeout, 2.5)
@@ -149,6 +147,10 @@ class AddressSuggestionService:
             house_hits = self._house_suggestions(ranked, catalog, cleaned, house)
             if house_hits:
                 return house_hits[:safe_limit]
+            # Геокодер молчит: не клонируем один дом во все районы улицы
+            fallback_hits = self._catalog_house_fallback(catalog, cleaned, house)
+            if fallback_hits:
+                return fallback_hits[:safe_limit]
 
         if catalog:
             return catalog[:safe_limit]
@@ -160,6 +162,74 @@ class AddressSuggestionService:
             regional_query = f"{cleaned}, Кировская область"
         found = self._search_provider(regional_query, safe_limit)
         return self._rank_region(found, cleaned)[:safe_limit]
+
+    @staticmethod
+    def _nominatim_house_query(cleaned: str) -> str:
+        from app.modules.requests.address_format import split_address_query
+
+        kind, name, house = split_address_query(cleaned)
+        street = f"{kind or 'улица'} {name}".strip()
+        return f"{street} {house}, Киров, Кировская область"
+
+    @classmethod
+    def _catalog_house_fallback(
+        cls,
+        catalog: list[AddressSuggestion],
+        original_query: str,
+        house: str,
+    ) -> list[AddressSuggestion]:
+        """Запасной вариант без OSM: один городской район + отдельно Нововятский, если есть."""
+        from app.core.address.catalog import resolve_catalog_district
+        from app.modules.requests.address_format import split_address_query
+        from app.modules.requests.districts import long_district_name, normalize_request_district
+
+        if not catalog:
+            return []
+        kind, name, _house = split_address_query(original_query)
+        street_label = catalog[0].street or f"{kind or 'улица'} {name}"
+        districts = []
+        seen: set[str] = set()
+        for item in catalog:
+            short = normalize_request_district(item.district)
+            if not short or short in seen:
+                continue
+            seen.add(short)
+            districts.append(short)
+
+        city = [d for d in districts if d != "Нововятский"]
+        novo = [d for d in districts if d == "Нововятский"]
+        chosen: list[str] = []
+        if len(city) == 1:
+            chosen.extend(city)
+        elif len(city) > 1:
+            primary = resolve_catalog_district(name, kind or "улица")
+            primary_short = normalize_request_district(primary)
+            if primary_short and primary_short in city:
+                chosen.append(primary_short)
+            else:
+                chosen.append(city[0])
+        chosen.extend(novo)
+
+        out: list[AddressSuggestion] = []
+        for short in chosen:
+            long_name = long_district_name(short) or f"{short} район"
+            title = f"Киров, {street_label}, дом {house}"
+            if len(chosen) > 1:
+                title = f"{title} ({short})"
+            out.append(
+                AddressSuggestion(
+                    original_address=original_query,
+                    normalized_address=title,
+                    region="Кировская область",
+                    district=long_name,
+                    settlement="Киров",
+                    street=street_label,
+                    house=house,
+                    address_source="catalog",
+                    other_settlement=False,
+                )
+            )
+        return out
 
     @classmethod
     def _house_suggestions(
@@ -174,8 +244,7 @@ class AddressSuggestionService:
 
         house_fold = house.casefold().replace("ё", "е")
         catalog_street = next((item.street for item in catalog if item.street), None)
-        out: list[AddressSuggestion] = []
-        seen_districts: set[str] = set()
+        candidates: list[AddressSuggestion] = []
 
         for item in nominatim:
             if not cls._is_kirov_region(item):
@@ -188,10 +257,6 @@ class AddressSuggestionService:
             district_long = long_district_name(item.district)
             if not district_long:
                 continue
-            short = normalize_request_district(district_long) or ""
-            if short in seen_districts:
-                continue
-            seen_districts.add(short)
 
             street_label = catalog_street or item.street or ""
             if street_label and not street_label.casefold().startswith(
@@ -202,7 +267,7 @@ class AddressSuggestionService:
                 normalized = f"Киров, {street_label}, дом {house}"
             else:
                 normalized = item.normalized_address
-            out.append(
+            candidates.append(
                 replace(
                     item.with_query(original_query),
                     normalized_address=normalized,
@@ -214,11 +279,41 @@ class AddressSuggestionService:
                     other_settlement=False,
                 )
             )
-        # Стабильный порядок: Ленинский → Октябрьский → Первомайский → Нововятский
-        rank = {"Ленинский": 0, "Октябрьский": 1, "Первомайский": 2, "Нововятский": 3}
-        out.sort(
-            key=lambda item: rank.get(normalize_request_district(item.district) or "", 50)
-        )
+
+        # Один дом — один городской район; Нововятский оставляем отдельной локацией.
+        by_district: dict[str, AddressSuggestion] = {}
+        for item in candidates:
+            short = normalize_request_district(item.district) or ""
+            if short and short not in by_district:
+                by_district[short] = item
+
+        city = {k: v for k, v in by_district.items() if k != "Нововятский"}
+        novo = by_district.get("Нововятский")
+        out: list[AddressSuggestion] = []
+        if len(city) == 1:
+            out.extend(city.values())
+        elif len(city) > 1:
+            # Несколько «городских» районов на один дом — берём с координатами / первый стабильный
+            ranked_city = sorted(
+                city.items(),
+                key=lambda pair: (
+                    0 if pair[1].latitude is not None else 1,
+                    {"Ленинский": 0, "Октябрьский": 1, "Первомайский": 2}.get(pair[0], 9),
+                ),
+            )
+            out.append(ranked_city[0][1])
+        if novo is not None:
+            out.append(novo)
+
+        if len(out) > 1:
+            decorated: list[AddressSuggestion] = []
+            for item in out:
+                short = normalize_request_district(item.district) or ""
+                base = item.normalized_address
+                if short and f"({short})" not in base:
+                    base = f"{base} ({short})"
+                decorated.append(replace(item, normalized_address=base))
+            out = decorated
         return out
 
     @classmethod
