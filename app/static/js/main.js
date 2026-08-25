@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initSidebar();
     initSearchShortcut();
     initMessengerUnreadBadge();
+    initNotificationsBell();
     initOporaTourLazy();
 });
 
@@ -943,6 +944,83 @@ function initSearchShortcut() {
             searchInput.focus();
         }
     });
+}
+
+function initNotificationsBell() {
+    const listEl = document.getElementById("topbarNotifyList");
+    const dot = document.getElementById("topbarNotifyDot");
+    const readAllBtn = document.getElementById("topbarNotifyReadAll");
+    if (!listEl) return;
+
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
+
+    function render(items, total) {
+        if (dot) dot.classList.toggle("d-none", !(total > 0));
+        if (!items.length) {
+            listEl.innerHTML = '<div class="text-muted small px-3 py-2">Пока нет уведомлений</div>';
+            return;
+        }
+        listEl.innerHTML = items
+            .map(
+                (item) => `
+            <a href="${item.link || "#"}" class="topbar__notify-item" data-notify-id="${item.id}">
+                <strong>${escapeHtml(item.title || "Уведомление")}</strong>
+                <span>${escapeHtml(item.message || "")}</span>
+                <small>${escapeHtml(item.created_at || "")}</small>
+            </a>`
+            )
+            .join("");
+        listEl.querySelectorAll("[data-notify-id]").forEach((link) => {
+            link.addEventListener("click", () => {
+                const id = link.getAttribute("data-notify-id");
+                if (!id) return;
+                fetch(`/notifications/api/${id}/read`, {
+                    method: "POST",
+                    headers: { "X-CSRFToken": csrf, "X-Requested-With": "XMLHttpRequest" },
+                }).catch(() => {});
+            });
+        });
+    }
+
+    function escapeHtml(value) {
+        return String(value || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+    }
+
+    async function refresh() {
+        try {
+            const res = await fetch("/notifications/api/unread", {
+                credentials: "same-origin",
+                headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
+                cache: "no-store",
+                priority: "low",
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            render(data.items || [], data.total || 0);
+        } catch {
+            /* ignore */
+        }
+    }
+
+    readAllBtn?.addEventListener("click", async (event) => {
+        event.preventDefault();
+        try {
+            await fetch("/notifications/api/read-all", {
+                method: "POST",
+                headers: { "X-CSRFToken": csrf, "X-Requested-With": "XMLHttpRequest" },
+            });
+            await refresh();
+        } catch {
+            /* ignore */
+        }
+    });
+
+    window.setTimeout(refresh, 1200);
+    window.setInterval(refresh, 45000);
 }
 
 function initMessengerUnreadBadge() {

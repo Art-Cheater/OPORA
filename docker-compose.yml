@@ -113,6 +113,27 @@ services:
       web:
         condition: service_healthy
 
+  documents-notify:
+    build: .
+    container_name: opora_documents_notify
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      DB_HOST: db
+      DB_PORT: "5432"
+      FLASK_ENV: ${FLASK_ENV:-production}
+      OPORA_RUN_MIGRATE: "0"
+      DB_POOL_SIZE: "1"
+      DB_MAX_OVERFLOW: "0"
+    command: ["flask", "documents-notify", "--loop"]
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   uploads_data:

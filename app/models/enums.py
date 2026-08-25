@@ -137,3 +137,4 @@ class EntityType(str, Enum):
   ATTACHMENT = "attachment"
   MESSENGER_MESSAGE = "messenger_message"
   PERSONAL_DOCUMENT = "personal_document"
+  PERSONAL_CONTRACT = "personal_contract"

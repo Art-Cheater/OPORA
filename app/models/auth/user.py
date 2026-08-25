@@ -56,6 +56,9 @@ class User(UserMixin, BaseModel):
     # Явная колонка: перекрывает property is_active из Flask-Login UserMixin
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    personal_contracts_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
     blocked_at: Mapped[datetime | None] = mapped_column(nullable=True)
     blocked_by: Mapped[uuid.UUID | None] = mapped_column(
         GUID(),

@@ -294,22 +294,48 @@
         {
           target: "page-header",
           title: "Личные документы",
-          text: "Ваш личный архив — файлы видите только вы.",
+          text: "Ваш личный архив: обычные файлы и, по желанию, договоры. Чужие сюда не заглянут.",
+        },
+        {
+          target: "docs-feature",
+          title: "Включить договоры",
+          text: "Переключатель включает вкладку «Договоры». Можно работать только с файлами — тогда оставьте выключенным.",
+          optional: true,
+        },
+        {
+          target: "docs-tabs",
+          title: "Вкладки",
+          text: "«Файлы» — обычные документы. «Договоры» — контракты со сроком и напоминаниями.",
+          optional: true,
         },
         {
           target: "docs-file",
           title: "Выбор файлов",
-          text: "Нажмите поле выбора и укажите один или несколько файлов (PDF, Word, Excel, фото).",
+          text: "На вкладке «Файлы» укажите PDF, Word, Excel или фото и нажмите «Загрузить».",
+          optional: true,
         },
         {
-          target: "docs-save",
-          title: "Загрузить",
-          text: "Кнопка отправляет файлы на сервер. После загрузки они появятся в списке ниже.",
+          target: "docs-contract-upload",
+          title: "Загрузка договора",
+          text: "На вкладке «Договоры» загрузите PDF/Word — система попробует вытащить название, описание и дату окончания. Поля можно поправить вручную.",
+          optional: true,
+        },
+        {
+          target: "docs-contracts",
+          title: "Список договоров",
+          text: "Здесь сроки и напоминания: за месяц и за 2 недели до окончания придёт уведомление в колокольчик.",
+          optional: true,
         },
         {
           target: "docs-list",
           title: "Мои файлы",
-          text: "Открыть, скачать или удалить документ. Чужие сюда не заглянут.",
+          text: "Открыть, скачать или удалить обычный документ.",
+          optional: true,
+        },
+        {
+          target: "notifications",
+          title: "Колокольчик",
+          text: "Напоминания о сроках договоров появятся здесь. Можно отметить все прочитанными.",
         },
       ],
     },
@@ -887,33 +913,10 @@
     }
   }
 
-  function bindTriggers() {
-    document.getElementById("oporaTourBtn")?.addEventListener("click", (event) => {
-      event.preventDefault();
-      openMenu();
-    });
-    document.getElementById("oporaTourMenuStart")?.addEventListener("click", (event) => {
-      event.preventDefault();
-      openMenu();
-    });
-  }
-
-  function maybeAutoOffer() {
-    if (hasSeen()) return;
-    if (!document.getElementById("appShell")) return;
-    markSeen();
-    window.setTimeout(() => {
-      if (document.getElementById("messengerApp")) return;
-      openMenu();
-    }, 700);
-  }
-
   function init() {
     const parsed = readConfig();
     if (!parsed) return;
     config = parsed;
-    bindTriggers();
-    maybeAutoOffer();
     window.addEventListener("resize", () => {
       if (!root || root.hidden || mode !== "step") return;
       const step = steps[index];
@@ -928,10 +931,4 @@
     startSection,
     stop,
   };
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
-  }
 })();

@@ -47,6 +47,10 @@ _INSECURE_SECRET_KEYS = {
     "dev-secret-key-change-in-production",
     "change-me-to-a-random-secret-key",
 }
+_INSECURE_ADMIN_PASSWORDS = {
+    "admin123",
+    "change-me-strong-password",
+}
 
 
 def _reject_insecure_production_secrets(app: Flask) -> None:
@@ -55,6 +59,11 @@ def _reject_insecure_production_secrets(app: Flask) -> None:
     if (app.config.get("SECRET_KEY") or "") in _INSECURE_SECRET_KEYS:
         raise RuntimeError(
             "В production нельзя оставлять SECRET_KEY по умолчанию. Задайте свой ключ в .env."
+        )
+    admin_pw = (app.config.get("ADMIN_PASSWORD") or "").strip()
+    if admin_pw in _INSECURE_ADMIN_PASSWORDS:
+        raise RuntimeError(
+            "В production задайте свой ADMIN_PASSWORD в .env (не значение из .env.example)."
         )
 
 
@@ -78,19 +87,21 @@ def _ensure_upload_folder(app: Flask) -> None:
 
 
 def _configure_static_assets(app: Flask) -> None:
-    """Кэш статики и cache-bust, чтобы повторная навигация не качала CSS/JS заново."""
+    """Кэш статики с cache-bust (?v=), чтобы immutable в nginx не залипал на старых JS/CSS."""
     app.config.setdefault("SEND_FILE_MAX_AGE_DEFAULT", 60 * 60 * 24 * 30)
+    version = str(app.config.get("APP_VERSION", "1"))
 
     @app.url_defaults
     def _static_cache_bust(endpoint, values):
         if endpoint != "static" or "filename" not in values or "v" in values:
             return
-        filename = values["filename"]
-        file_path = Path(app.static_folder or "") / filename
-        try:
-            values["v"] = str(int(file_path.stat().st_mtime))
-        except OSError:
-            values["v"] = str(app.config.get("APP_VERSION", "1"))
+        values["v"] = version
+
+    @app.template_global()
+    def static_url(filename: str) -> str:
+        from flask import url_for
+
+        return url_for("static", filename=filename, v=version)
 
     @app.after_request
     def _cache_static_assets(response):
@@ -136,6 +147,7 @@ def _init_extensions(app: Flask) -> None:
         MessengerConversation,
         MessengerMessage,
         Notification,
+        PersonalContract,
         Permission,
         Position,
         Project,
@@ -550,6 +562,20 @@ def _register_cli_commands(app: Flask) -> None:
 
         hidden = AgreementService.collapse_duplicates()
         click.echo(f"Убраны повторы: {hidden}.")
+
+    @app.cli.command("documents-notify")
+    @click.option("--loop", "as_loop", is_flag=True, help="Проверять сроки по кругу")
+    def documents_notify(as_loop: bool):
+        """Напоминания о сроках личных договоров (за месяц и за 2 недели)."""
+        from app.modules.documents.scheduler import run_loop, run_once
+
+        if as_loop:
+            run_loop()
+            return
+        result = run_once()
+        click.echo(
+            f"Напоминания: месяц={result.get('month', 0)}, две недели={result.get('two_weeks', 0)}"
+        )
 
     @app.cli.command("init-db")
     def init_db():

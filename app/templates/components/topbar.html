@@ -46,10 +46,27 @@
             <span class="topbar__action-dot d-none" id="topbarMessengerDot"></span>
         </a>
 
-        <a href="#" class="topbar__action" title="Уведомления" data-tour="notifications">
-            <i class="bi bi-bell"></i>
-            <span class="topbar__action-dot"></span>
-        </a>
+        <div class="dropdown" data-tour="notifications">
+            <button type="button"
+                    class="topbar__action dropdown-toggle"
+                    id="topbarNotifyBtn"
+                    data-bs-toggle="dropdown"
+                    data-bs-auto-close="outside"
+                    aria-expanded="false"
+                    title="Уведомления">
+                <i class="bi bi-bell"></i>
+                <span class="topbar__action-dot d-none" id="topbarNotifyDot"></span>
+            </button>
+            <div class="dropdown-menu dropdown-menu-end topbar__dropdown topbar__notify-menu" id="topbarNotifyMenu">
+                <div class="dropdown-header d-flex justify-content-between align-items-center">
+                    <strong>Уведомления</strong>
+                    <button type="button" class="btn btn-link btn-sm p-0" id="topbarNotifyReadAll">Прочитать все</button>
+                </div>
+                <div id="topbarNotifyList" class="topbar__notify-list">
+                    <div class="text-muted small px-3 py-2">Пока нет уведомлений</div>
+                </div>
+            </div>
+        </div>
 
         <div class="dropdown" data-tour="profile">
             <button class="topbar__profile dropdown-toggle"
@@ -94,7 +111,9 @@
     </div>
 </header>
 {% if current_user.is_authenticated %}
-<script type="application/json" id="oporaTourConfig">
+<script type="application/json" id="oporaTourConfig"
+        data-tour-css="{{ static_url('css/tour.css') }}"
+        data-tour-js="{{ static_url('js/tour.js') }}">
 {
   "userId": {{ current_user.id|string|tojson }},
   "userName": {{ current_user.full_name|tojson }},

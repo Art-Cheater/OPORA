@@ -193,6 +193,7 @@ body.is-opora-busy { cursor: wait; }
 .topbar__action {
     position: relative; display: flex; align-items: center; justify-content: center;
     width: 40px; height: 40px; border-radius: var(--opora-radius-sm); color: #495057;
+    background: none; border: none; padding: 0; cursor: pointer;
 }
 .topbar__action:hover { background: var(--opora-bg); color: var(--opora-primary); }
 .topbar__action-dot {
@@ -214,6 +215,17 @@ body.is-opora-busy { cursor: wait; }
 .topbar__profile-name { font-size: 0.875rem; font-weight: 500; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topbar__dropdown { border-radius: var(--opora-radius); box-shadow: var(--opora-shadow-hover); padding: 0.5rem; min-width: 220px; }
 .topbar__dropdown .dropdown-item { border-radius: var(--opora-radius-sm); font-size: 0.875rem; }
+.topbar__action.dropdown-toggle::after { display: none; }
+.topbar__notify-menu { min-width: min(360px, 92vw); max-width: 400px; padding: 0.35rem 0; }
+.topbar__notify-list { max-height: 360px; overflow: auto; }
+.topbar__notify-item {
+    display: block; padding: 0.65rem 0.9rem; text-decoration: none; color: inherit;
+    border-top: 1px solid var(--opora-border-light);
+}
+.topbar__notify-item:hover { background: #fff8f0; }
+.topbar__notify-item strong { display: block; font-size: 0.86rem; margin-bottom: 0.15rem; }
+.topbar__notify-item span { display: block; font-size: 0.8rem; color: #6c757d; line-height: 1.35; }
+.topbar__notify-item small { color: #adb5bd; }
 
 /* Page Header */
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.75rem; flex-wrap: wrap; }

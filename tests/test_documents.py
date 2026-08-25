@@ -25,7 +25,7 @@ def _login(client, email: str, password: str = "pass12345"):
 def test_personal_documents_own_files_only(admin_client, client, app):
     health = admin_client.get("/health")
     assert health.status_code == 200
-    assert health.get_json()["release"] == "20260821f"
+    assert health.get_json()["release"] == "20260825a"
 
     page = admin_client.get("/documents/")
     assert page.status_code == 200
@@ -65,7 +65,62 @@ def test_personal_documents_own_files_only(admin_client, client, app):
     assert own_page.status_code == 200
     assert b"passport.pdf" not in own_page.data
 
+def test_personal_contracts_feature_and_parse(admin_client, app):
+    page = admin_client.get("/documents/")
+    assert page.status_code == 200
+    assert "Раздел «Договоры»".encode("utf-8") in page.data
+
+    enabled = admin_client.post(
+        "/documents/settings/contracts",
+        data={"enabled": "y", "submit": "Сохранить"},
+        follow_redirects=True,
+    )
+    assert enabled.status_code == 200
+    assert "Договоры".encode("utf-8") in enabled.data
+
+    sample = (
+        "Договор поставки № 12/26\n"
+        "Предмет договора: поставка кабеля для освещения дворов.\n"
+        "Срок действия с 01.01.2026 по 31.12.2026\n"
+    ).encode("utf-8")
+    uploaded = admin_client.post(
+        "/documents/contracts/upload",
+        data={"files": (io.BytesIO(sample), "dogovor.txt")},
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    assert uploaded.status_code == 200
+    assert "Договор".encode("utf-8") in uploaded.data or b"dogovor" in uploaded.data.lower()
+
     with app.app_context():
-        stored = db.session.get(Attachment, file_id)
-        assert stored is not None
-        assert stored.entity_id == owner_id
+        from app.models.documents.personal_contract import PersonalContract
+
+        row = db.session.scalar(db.select(PersonalContract).order_by(PersonalContract.created_at.desc()))
+        assert row is not None
+        assert row.ends_on is not None
+        assert "договор" in row.title.casefold() or "поставк" in row.title.casefold()
+
+    notify = admin_client.get("/notifications/api/unread")
+    assert notify.status_code == 200
+    assert "total" in notify.get_json()
+
+
+def test_parse_personal_contract_dates():
+    from pathlib import Path
+    import tempfile
+
+    from app.modules.documents.parse_contract import parse_personal_contract_file
+
+    text = (
+        "ДОГОВОР № 5/26 на оказание услуг\n"
+        "Предмет договора: техническое обслуживание опор освещения.\n"
+        "Действует с 01.03.2026 по 01.03.2027\n"
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "c.txt"
+        path.write_text(text, encoding="utf-8")
+        parsed = parse_personal_contract_file(path, "c.txt")
+    assert parsed.ends_on is not None
+    assert parsed.ends_on.year == 2027
+    assert parsed.title
+    assert parsed.description

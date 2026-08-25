@@ -5,13 +5,48 @@
 {% block title %}Личные документы — {{ app_name }}{% endblock %}
 
 {% block page_header %}
-{% call page_header("Личные документы", "Только ваши файлы: PDF, офисные документы, фото. Формат карточки позже можно уточнить.", "folder") %}
+{% call page_header("Личные документы", "Ваши файлы и, по желанию, договоры с напоминанием о сроке", "folder") %}
 {% endcall %}
 {% endblock %}
 
 {% block content %}
+<div class="card mb-4" data-tour="docs-feature">
+    <div class="card-header"><i class="bi bi-toggles"></i> Раздел «Договоры»</div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('documents.toggle_contracts') }}" class="row g-2 align-items-center">
+            {{ feature_form.hidden_tag() }}
+            <div class="col-md-8">
+                <div class="form-check form-switch">
+                    {{ feature_form.enabled(class="form-check-input", role="switch", id="contractsEnabled") }}
+                    <label class="form-check-label" for="contractsEnabled">
+                        Включить договоры: из файла подтянутся название, описание и дата окончания;
+                        за месяц и за 2 недели придёт напоминание.
+                    </label>
+                </div>
+            </div>
+            <div class="col-md-4">
+                {{ feature_form.submit(class="btn btn-outline-primary w-100") }}
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if contracts_enabled %}
+<ul class="nav nav-tabs mb-3" data-tour="docs-tabs">
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'files' %}active{% endif %}"
+           href="{{ url_for('documents.index', tab='files') }}">Файлы</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'contracts' %}active{% endif %}"
+           href="{{ url_for('documents.index', tab='contracts') }}">Договоры</a>
+    </li>
+</ul>
+{% endif %}
+
+{% if active_tab == 'files' or not contracts_enabled %}
 <div class="card mb-4" data-tour="docs-upload">
-    <div class="card-header"><i class="bi bi-upload"></i>Загрузить</div>
+    <div class="card-header"><i class="bi bi-upload"></i> Загрузить файлы</div>
     <div class="card-body">
         <form method="POST" action="{{ url_for('documents.upload') }}" enctype="multipart/form-data">
             {{ form.hidden_tag() }}
@@ -20,7 +55,7 @@
                     {{ form.files(class="form-control", multiple=true) }}
                     <div class="form-text">
                         Можно несколько файлов сразу (суммарно до {{ max_upload_mb }} МБ).
-                        Допустимы PDF, Word, Excel, изображения, ZIP, TXT.
+                        PDF, Word, Excel, изображения, ZIP, TXT.
                     </div>
                 </div>
                 <div class="col-md-4" data-tour="docs-save">
@@ -32,9 +67,112 @@
 </div>
 
 <div class="card" data-tour="docs-list">
-    <div class="card-header"><i class="bi bi-files"></i>Мои файлы</div>
+    <div class="card-header"><i class="bi bi-files"></i> Мои файлы</div>
     <div class="card-body">
         {{ file_gallery(file_items, "Пока нет файлов. Загрузите документ выше — его увидите только вы.") }}
     </div>
 </div>
+{% else %}
+<div class="card mb-4" data-tour="docs-contract-upload">
+    <div class="card-header"><i class="bi bi-file-earmark-text"></i> Загрузить договор</div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('documents.upload_contract') }}" enctype="multipart/form-data">
+            {{ contract_form.hidden_tag() }}
+            <div class="row g-2 align-items-end">
+                <div class="col-md-8">
+                    {{ contract_form.files(class="form-control", multiple=true, accept=".pdf,.doc,.docx,.txt,.rtf") }}
+                    <div class="form-text">
+                        Из PDF/Word постараемся вытащить название, краткое описание и дату окончания.
+                        Поля можно поправить в карточке ниже.
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    {{ contract_form.submit(class="btn btn-primary w-100") }}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card" data-tour="docs-contracts">
+    <div class="card-header"><i class="bi bi-journal-text"></i> Мои договоры</div>
+    <div class="card-body">
+        {% if not contract_rows %}
+        <p class="text-muted mb-0">Пока нет договоров. Загрузите файл выше.</p>
+        {% else %}
+        <div class="vstack gap-3">
+            {% for row in contract_rows %}
+            {% set c = row.contract %}
+            <div class="border rounded-3 p-3">
+                <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                    <div>
+                        <strong>{{ c.title }}</strong>
+                        {% if c.ends_on %}
+                        <div class="small text-muted">
+                            До {{ c.ends_on.strftime('%d.%m.%Y') }}
+                            {% if row.days_left is not none %}
+                            ·
+                            {% if row.days_left < 0 %}
+                            <span class="text-danger">срок истёк</span>
+                            {% elif row.days_left <= 14 %}
+                            <span class="text-danger">осталось {{ row.days_left }} дн.</span>
+                            {% elif row.days_left <= 30 %}
+                            <span class="text-warning">осталось {{ row.days_left }} дн.</span>
+                            {% else %}
+                            осталось {{ row.days_left }} дн.
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <div class="small text-warning">Дата окончания не указана — напоминания не сработают</div>
+                        {% endif %}
+                    </div>
+                    <div class="btn-group btn-group-sm">
+                        <a class="btn btn-outline-secondary" href="{{ row.preview_url }}" target="_blank">Открыть</a>
+                        <a class="btn btn-outline-secondary" href="{{ row.download_url }}">Скачать</a>
+                    </div>
+                </div>
+                {% if c.description %}
+                <p class="small text-muted">{{ c.description }}</p>
+                {% endif %}
+                <form method="POST" action="{{ url_for('documents.edit_contract', contract_id=c.id) }}" class="row g-2">
+                    {{ row.edit_form.hidden_tag() }}
+                    <div class="col-md-5">
+                        <label class="form-label">Название</label>
+                        {{ row.edit_form.title(class="form-control form-control-sm") }}
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Дата окончания</label>
+                        {{ row.edit_form.ends_on(class="form-control form-control-sm", type="date") }}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Описание</label>
+                        {{ row.edit_form.description(class="form-control form-control-sm", rows=1) }}
+                    </div>
+                    <div class="col-md-6 d-flex align-items-center">
+                        <div class="form-check">
+                            {{ row.edit_form.reminders_enabled(class="form-check-input", id="remind-" ~ c.id) }}
+                            <label class="form-check-label" for="remind-{{ c.id }}">Напоминать за месяц и за 2 недели</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        {{ row.edit_form.submit(class="btn btn-sm btn-primary") }}
+                        <button type="submit"
+                                class="btn btn-sm btn-outline-danger"
+                                form="delete-contract-{{ c.id }}">Удалить</button>
+                    </div>
+                </form>
+                <form id="delete-contract-{{ c.id }}"
+                      method="POST"
+                      action="{{ url_for('documents.delete_contract', contract_id=c.id) }}"
+                      onsubmit="return confirm('Удалить этот договор?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
 {% endblock %}

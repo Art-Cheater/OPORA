@@ -16,6 +16,7 @@ from app.modules.objects import objects_bp
 from app.modules.positions import positions_bp
 from app.modules.roles import roles_bp
 from app.modules.messenger import messenger_bp
+from app.modules.notifications import notifications_bp
 from app.modules.projects import projects_bp
 from app.modules.requests import requests_bp
 from app.modules.reports import reports_bp
@@ -42,6 +43,7 @@ ALL_BLUEPRINTS = [
     field_builder_bp,
     messenger_bp,
     documents_bp,
+    notifications_bp,
     search_bp,
     audit_bp,
     reports_bp,
