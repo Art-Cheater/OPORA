@@ -4,12 +4,14 @@ WORKDIR /app
 
 ARG WITH_LIBREOFFICE=0
 
-# LibreOffice нужен только для конвертации .doc/.rtf/.pdf договоров в .docx.
-# В web-образе по умолчанию не ставим (сотни МБ и долгий деплой).
-# Если конвертация нужна: docker compose build --build-arg WITH_LIBREOFFICE=1
+# LibreOffice — конвертация .doc/.rtf в .docx (редко).
+# Tesseract — OCR сканов PDF (личные договоры без текстового слоя).
+# LibreOffice по умолчанию выкл.: docker compose build --build-arg WITH_LIBREOFFICE=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpq-dev \
+        tesseract-ocr \
+        tesseract-ocr-rus \
     && if [ "$WITH_LIBREOFFICE" = "1" ]; then \
         apt-get install -y --no-install-recommends libreoffice-writer fonts-liberation; \
     fi \

@@ -82,7 +82,8 @@
                 <div class="col-md-8">
                     {{ contract_form.files(class="form-control", multiple=true, accept=".pdf,.doc,.docx,.txt,.rtf") }}
                     <div class="form-text">
-                        Из PDF/Word постараемся вытащить название, краткое описание и дату окончания.
+                        Из PDF, DOC и DOCX: название и дата окончания (в т.ч. «действует по 31 декабря…»).
+                        Сканы PDF читаются через OCR. Если дату не нашли — укажите вручную.
                         Поля можно поправить в карточке ниже.
                     </div>
                 </div>

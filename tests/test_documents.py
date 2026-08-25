@@ -25,7 +25,7 @@ def _login(client, email: str, password: str = "pass12345"):
 def test_personal_documents_own_files_only(admin_client, client, app):
     health = admin_client.get("/health")
     assert health.status_code == 200
-    assert health.get_json()["release"] == "20260825b"
+    assert health.get_json()["release"] == "20260825c"
 
     page = admin_client.get("/documents/")
     assert page.status_code == 200
@@ -124,3 +124,41 @@ def test_parse_personal_contract_dates():
     assert parsed.ends_on.year == 2027
     assert parsed.title
     assert parsed.description
+
+
+def test_parse_municipal_contract_verbal_and_numeric_dates():
+    from datetime import date
+
+    from app.modules.documents.parse_contract import parse_personal_contract_text
+
+    kuprit = (
+        "Муниципальный контракт №167/26\n"
+        "на предоставление во временное пользование имуществом\n"
+        "1. ПРЕДМЕТ КОНТРАКТА\n"
+        "1.1. Арендодатель обязуется предоставить контейнер.\n"
+        "2. СРОК ДЕЙСТВИЯ КОНТРАКТА\n"
+        "2.1. действует по «31» декабря 2026 года, а в части взаиморасчетов "
+        "до полного исполнения обязательств по контракту.\n"
+    )
+    parsed = parse_personal_contract_text(kuprit, "167_аренда_Куприт.pdf")
+    assert parsed.ends_on == date(2026, 12, 31)
+    assert "167" in parsed.title
+    assert "контракт" in parsed.title.casefold()
+
+    megafon = (
+        "Муниципальный контракт № 121/26\n"
+        "НА ОКАЗАНИЕ УСЛУГ СВЯЗИ\n"
+        "1.10. Сроки оказания услуг: с 01.05.2026 по 31.10.2026.\n"
+    )
+    parsed2 = parse_personal_contract_text(megafon, "121_услуги_Мегафон.pdf")
+    assert parsed2.ends_on == date(2026, 10, 31)
+
+    # Срок сертификата ЭП не должен становиться датой контракта
+    stamped = (
+        "МУНИЦИПАЛЬНЫЙ КОНТРАКТ № 126/26\n"
+        "Действителен: c 22.01.2026 по 17.04.2027\n"
+        "1.3. Срок оказания услуг: в течение 15 рабочих дней с даты заключения контракта.\n"
+        "7.1. Контракт действует до полного исполнения Сторонами принятых на себя обязательств.\n"
+    )
+    parsed3 = parse_personal_contract_text(stamped, "126_ремонт.pdf")
+    assert parsed3.ends_on is None
