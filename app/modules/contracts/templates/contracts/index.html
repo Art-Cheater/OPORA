@@ -33,8 +33,9 @@
                 <label class="form-label">{{ filter_form.responsible_id.label.text }}</label>
                 {{ filter_form.responsible_id(class="form-select") }}
             </div>
-            <div class="col-lg-1 d-flex align-items-end">
-                <button type="button" id="contractFilterReset" class="btn btn-outline-primary w-100">Сброс</button>
+            <div class="col-lg-2 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-grow-1"><i class="bi bi-search"></i> Поиск</button>
+                <button type="button" id="contractFilterReset" class="btn btn-outline-primary">Сброс</button>
             </div>
             <div class="col-lg-2">
                 <label class="form-label">{{ filter_form.date_from.label.text }}</label>

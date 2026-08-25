@@ -33,6 +33,7 @@ _FALLBACK_MODULE_FIELDS: dict[str, dict[str, str]] = {
         "applicant_name": "Заявитель",
         "has_barrier": "Шлагбаум",
         "barrier_phone": "Телефон шлагбаума",
+        "for_beresnev": "Для Береснева",
         "priority": "Приоритет",
         "status_id": "Статус",
         "responsible_id": "Ответственный",

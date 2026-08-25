@@ -1,4 +1,4 @@
-{% extends "layouts/app.html" %}
+﻿{% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header %}
 {% from "macros/badges.html" import request_status_badge %}
 {% from "macros/files.html" import file_gallery, file_preview_modal %}
@@ -6,7 +6,7 @@
 {% block title %}{{ req.number }} — {{ app_name }}{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+<link rel="stylesheet" href="{{ static_url('vendor/leaflet/leaflet.css') }}">
 {% endblock %}
 
 {% block page_header %}
@@ -91,6 +91,12 @@
                             {% endif %}
                         </div>
                     </div>
+                    {% if is_builtin_visible('requests', 'for_beresnev') and current_user.can_view_field('requests', 'for_beresnev') %}
+                    <div class="col-md-6">
+                        <small class="text-muted">{{ builtin_label('requests', 'for_beresnev', 'Для Береснева') }}</small>
+                        <div>{{ "Да" if req.for_beresnev else "Нет" }}</div>
+                    </div>
+                    {% endif %}
                     <div class="col-12">
                         <small class="text-muted">Адрес</small>
                         <div class="{% if req.repeat_count and req.repeat_count > 0 %}border border-danger rounded px-2 py-1{% endif %}">
@@ -296,6 +302,6 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
-<script src="{{ url_for('static', filename='js/request-detail.js') }}"></script>
+<script src="{{ static_url('vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ static_url('js/request-detail.js') }}"></script>
 {% endblock %}

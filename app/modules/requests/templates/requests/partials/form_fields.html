@@ -38,7 +38,7 @@
     <div class="col-12 d-none" data-address-hint-wrap>
         <div class="alert alert-warning py-2 mb-0 small" data-address-hint></div>
     </div>
-    {{ modal_field(form.district, col=6, placeholder="Определяется по выбранному адресу", module='requests') }}
+    {{ modal_field(form.district, col=6, module='requests') }}
     {{ modal_field(form.pp, col=6, placeholder="Пункт питания", module='requests') }}
     {{ modal_field(form.received_at, col=6, module='requests') }}
     {{ modal_field(form.dispatcher_name, col=6, module='requests') }}
@@ -60,8 +60,21 @@
         {% endif %}
     </div>
     {% endif %}
+    {% if is_builtin_visible('requests', 'for_beresnev') and current_user.can_view_field('requests', 'for_beresnev') %}
+    <div class="col-md-4">
+        {% if current_user.can_edit_field('requests', 'for_beresnev') %}
+        <div class="form-check mt-4 pt-2">
+            {{ form.for_beresnev(class="form-check-input") }}
+            <label class="form-check-label" for="{{ form.for_beresnev.id }}">{{ form.for_beresnev.label.text }}</label>
+        </div>
+        {% else %}
+        <label class="form-label">{{ form.for_beresnev.label.text }}</label>
+        <div class="form-control-plaintext border rounded px-3 py-2 bg-light">{{ "Да" if form.for_beresnev.data else "Нет" }}</div>
+        {% endif %}
+    </div>
+    {% endif %}
     {% if is_builtin_visible('requests', 'barrier_phone') and current_user.can_view_field('requests', 'barrier_phone') %}
-    <div class="col-md-8 {% if not form.has_barrier.data %}d-none{% endif %}" data-barrier-phone-wrap>
+    <div class="col-md-4 {% if not form.has_barrier.data %}d-none{% endif %}" data-barrier-phone-wrap>
         {{ modal_field(form.barrier_phone, col=12, module='requests') }}
     </div>
     {% endif %}

@@ -24,11 +24,25 @@
         <form id="requestFilterForm" class="row g-3">
             <div class="col-lg-3">
                 <label class="form-label">{{ filter_form.q.label.text }}</label>
-                {{ filter_form.q(class="form-control", placeholder="№, адрес, ПП, диспетчер...") }}
+                {{ filter_form.q(class="form-control", placeholder="№, адрес, диспетчер...") }}
             </div>
-            <div class="col-lg-3">
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.district.label.text }}</label>
+                {{ filter_form.district(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.pp.label.text }}</label>
+                {{ filter_form.pp(class="form-control", placeholder="ПП") }}
+            </div>
+            <div class="col-lg-2">
                 <label class="form-label">{{ filter_form.preset.label.text }}</label>
                 {{ filter_form.preset(class="form-select") }}
+            </div>
+            <div class="col-lg-3 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-grow-1">
+                    <i class="bi bi-search"></i> Поиск
+                </button>
+                <button type="button" id="requestFilterReset" class="btn btn-outline-primary">Сброс</button>
             </div>
             <div class="col-lg-2">
                 <label class="form-label">{{ filter_form.status_id.label.text }}</label>
@@ -38,12 +52,15 @@
                 <label class="form-label">{{ filter_form.priority.label.text }}</label>
                 {{ filter_form.priority(class="form-select") }}
             </div>
-            <div class="col-lg-2 d-flex align-items-end">
-                <button type="button" id="requestFilterReset" class="btn btn-outline-primary w-100">Сброс</button>
-            </div>
             <div class="col-lg-2">
                 <label class="form-label">{{ filter_form.dispatcher_name.label.text }}</label>
                 {{ filter_form.dispatcher_name(class="form-select") }}
+            </div>
+            <div class="col-lg-2 d-flex align-items-end">
+                <div class="form-check mb-2">
+                    {{ filter_form.for_beresnev(class="form-check-input", value="1") }}
+                    <label class="form-check-label" for="{{ filter_form.for_beresnev.id }}">{{ filter_form.for_beresnev.label.text }}</label>
+                </div>
             </div>
             <div class="col-lg-2">
                 <label class="form-label">{{ filter_form.sort_by.label.text }}</label>

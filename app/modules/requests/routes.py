@@ -88,6 +88,7 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
     from app.core.address import load_address_selection_token
     from app.core.builtin_field_service import BuiltinFieldService as BFS
     from app.models.enums import Priority
+    from app.modules.requests.districts import normalize_request_district
 
     fp = FieldPermissionService.resolve_field
     u, m = current_user, "requests"
@@ -147,9 +148,11 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
             return None
 
     if FieldPermissionService.can_edit_field(u, m, "district"):
-        district = field("district", form.district.data, default=None)
+        district = normalize_request_district(
+            field("district", form.district.data, default=None)
+        )
     else:
-        district = machine_field("district")
+        district = normalize_request_district(machine_field("district"))
 
     responsible_raw = preserved(
         "responsible_id",
@@ -200,6 +203,7 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
         executor_id=executor_id,
         has_barrier=bool(field("has_barrier", form.has_barrier.data, default=False)),
         barrier_phone=field("barrier_phone", form.barrier_phone.data, default=None),
+        for_beresnev=bool(field("for_beresnev", form.for_beresnev.data, default=False)),
     )
 
 
@@ -269,11 +273,16 @@ def _apply_request_create_defaults(form: RequestForm) -> None:
     form.dispatcher_name.data = ""
     form.has_barrier.data = False
     form.barrier_phone.data = ""
+    form.for_beresnev.data = False
 
 
 def _build_filters() -> RequestFilter:
+    for_beresnev_raw = (request.args.get("for_beresnev") or "").strip().lower()
     return RequestFilter(
         q=request.args.get("q", ""),
+        district=request.args.get("district", ""),
+        pp=request.args.get("pp", ""),
+        for_beresnev=for_beresnev_raw in {"1", "true", "on", "yes", "y"},
         status_id=request.args.get("status_id", ""),
         priority=request.args.get("priority", ""),
         responsible_id=request.args.get("responsible_id", ""),
@@ -715,6 +724,10 @@ def edit(request_id: uuid.UUID):
         form.pp.data = req.pp or ""
         form.has_barrier.data = bool(req.has_barrier)
         form.barrier_phone.data = req.barrier_phone or ""
+        form.for_beresnev.data = bool(req.for_beresnev)
+        from app.modules.requests.districts import normalize_request_district
+
+        form.district.data = normalize_request_district(req.district) or ""
         if req.received_at is not None:
             form.received_at.data = req.received_at
 

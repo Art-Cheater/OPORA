@@ -1,4 +1,4 @@
-﻿{% extends "layouts/app.html" %}
+{% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header %}
 
 {% block title %}Обращения — {{ app_name }}{% endblock %}
@@ -51,8 +51,9 @@
                 <label class="form-label">{{ filter_form.status.label.text }}</label>
                 {{ filter_form.status(class="form-select") }}
             </div>
-            <div class="col-lg-2 d-flex align-items-end">
-                <button class="btn btn-outline-primary w-100" type="button" id="inquiryFilterReset">Сброс</button>
+            <div class="col-lg-3 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-grow-1"><i class="bi bi-search"></i> Поиск</button>
+                <button class="btn btn-outline-primary" type="button" id="inquiryFilterReset">Сброс</button>
             </div>
         </form>
     </div>

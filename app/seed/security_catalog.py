@@ -38,6 +38,7 @@ MODULE_FIELDS: dict[str, list[tuple[str, str, int]]] = {
         ("phone", "Телефон", 80),
         ("applicant_name", "Заявитель", 90),
         ("has_barrier", "Шлагбаум", 95),
+        ("for_beresnev", "Для Береснева", 97),
         ("barrier_phone", "Телефон шлагбаума", 96),
         ("priority", "Приоритет", 100),
         ("status_id", "Статус", 130),

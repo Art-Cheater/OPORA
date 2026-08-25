@@ -35,6 +35,9 @@ from app.modules.requests.workflow import (
 @dataclass
 class RequestFilter:
     q: str = ""
+    district: str = ""
+    pp: str = ""
+    for_beresnev: bool = False
     status_id: str = ""
     priority: str = ""
     responsible_id: str = ""
@@ -370,6 +373,7 @@ class RequestRepository:
                     Request.id,
                     Request.number,
                     Request.address,
+                    Request.district,
                     Request.pp,
                     Request.dispatcher_name,
                     Request.received_at,
@@ -378,6 +382,7 @@ class RequestRepository:
                     Request.repeat_dates,
                     Request.has_barrier,
                     Request.barrier_phone,
+                    Request.for_beresnev,
                     Request.applicant_name,
                     Request.status_id,
                     Request.priority,
@@ -405,6 +410,15 @@ class RequestRepository:
                     Request.phone.ilike(q),
                 )
             )
+
+        if filters.district:
+            stmt = stmt.where(Request.district.ilike(f"%{filters.district.strip()}%"))
+
+        if filters.pp:
+            stmt = stmt.where(Request.pp.ilike(f"%{filters.pp.strip()}%"))
+
+        if filters.for_beresnev:
+            stmt = stmt.where(Request.for_beresnev.is_(True))
 
         if filters.status_id:
             try:

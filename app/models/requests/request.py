@@ -65,6 +65,7 @@ class Request(BaseModel):
     applicant_name: Mapped[str] = mapped_column(String(255), nullable=False)
     has_barrier: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     barrier_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    for_beresnev: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     repeat_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     repeat_dates: Mapped[list | None] = mapped_column(JSONType, nullable=True)
     priority: Mapped[str] = mapped_column(

@@ -610,23 +610,10 @@ window.OporaList = (() => {
     if (form.dataset.oporaFilterBound === "1") return;
     form.dataset.oporaFilterBound = "1";
 
-    function debouncedReload() {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        currentPage = 1;
-        loadTable();
-      }, 250);
-    }
-
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       currentPage = 1;
       loadTable();
-    });
-
-    form.querySelectorAll("input, select").forEach((el) => {
-      el.addEventListener("input", debouncedReload);
-      el.addEventListener("change", debouncedReload);
     });
 
     resetBtn?.addEventListener("click", () => {

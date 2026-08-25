@@ -24,6 +24,7 @@ from app.models.requests.request import Request
 from app.models.requests.request_history import RequestHistory
 from app.models.requests.request_material import RequestMaterial
 from app.models.requests.request_status import RequestStatus
+from app.modules.requests.districts import normalize_request_district
 from app.modules.requests.workflow import (
     HISTORY_ACCEPT_MASTER,
     HISTORY_ASSIGN_MASTER,
@@ -69,6 +70,7 @@ class RequestPayload:
     executor_id: uuid.UUID | None
     has_barrier: bool = False
     barrier_phone: str | None = None
+    for_beresnev: bool = False
 
 
 class RequestService:
@@ -101,6 +103,7 @@ class RequestService:
         "executor_id",
         "has_barrier",
         "barrier_phone",
+        "for_beresnev",
         "repeat_count",
     ]
 
@@ -199,7 +202,7 @@ class RequestService:
             payload.normalized_address = selected
             payload.address = selected[:500]
             payload.region = cls._normalize_text(payload.region)
-            payload.district = cls._normalize_text(payload.district)
+            payload.district = normalize_request_district(payload.district)
             payload.settlement = cls._normalize_text(payload.settlement)
             payload.street = cls._normalize_text(payload.street)
             payload.house = cls._normalize_text(payload.house)
@@ -215,7 +218,7 @@ class RequestService:
             payload.normalized_address = submitted
             payload.address = submitted[:500]
             payload.region = None
-            payload.district = None
+            payload.district = normalize_request_district(payload.district)
             payload.settlement = None
             payload.street = None
             payload.house = None
@@ -227,7 +230,10 @@ class RequestService:
         payload.normalized_address = suggestion.normalized_address
         payload.address = suggestion.normalized_address[:500]
         payload.region = suggestion.region
-        payload.district = suggestion.district
+        # Район из формы важнее: диспетчер мог выбрать его вручную
+        payload.district = normalize_request_district(payload.district) or normalize_request_district(
+            suggestion.district
+        )
         payload.settlement = suggestion.settlement
         payload.street = suggestion.street
         payload.house = suggestion.house
@@ -423,6 +429,7 @@ class RequestService:
             applicant_name=(payload.applicant_name or "—").strip(),
             has_barrier=bool(payload.has_barrier),
             barrier_phone=cls._normalize_text(payload.barrier_phone),
+            for_beresnev=bool(payload.for_beresnev),
             repeat_count=0,
             repeat_dates=[],
             priority=payload.priority,
@@ -493,6 +500,7 @@ class RequestService:
         req.applicant_name = (payload.applicant_name or "—").strip()
         req.has_barrier = bool(payload.has_barrier)
         req.barrier_phone = cls._normalize_text(payload.barrier_phone)
+        req.for_beresnev = bool(payload.for_beresnev)
         req.priority = payload.priority
         req.executor_id = payload.executor_id
         req.responsible_id = payload.responsible_id

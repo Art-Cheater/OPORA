@@ -21,10 +21,19 @@ from wtforms import (
 from wtforms.validators import DataRequired, Length, NumberRange, Optional
 
 from app.models.enums import Priority
+from app.modules.requests.districts import district_choices
 
 
 class RequestFilterForm(FlaskForm):
     q = StringField("Поиск", validators=[Optional(), Length(max=255)])
+    district = SelectField(
+        "Район",
+        choices=district_choices(empty_label="Любой"),
+        validators=[Optional()],
+        validate_choice=False,
+    )
+    pp = StringField("ПП", validators=[Optional(), Length(max=255)])
+    for_beresnev = BooleanField("Для Береснева", default=False)
     status_id = SelectField("Статус", choices=[], validators=[Optional()])
     priority = SelectField(
         "Приоритет",
@@ -81,7 +90,12 @@ class RequestForm(FlaskForm):
     original_address = HiddenField(validators=[Optional(), Length(max=500)])
     normalized_address = HiddenField(validators=[Optional(), Length(max=1000)])
     region = HiddenField(validators=[Optional(), Length(max=255)])
-    district = StringField("Район", validators=[Optional(), Length(max=255)])
+    district = SelectField(
+        "Район",
+        choices=district_choices(empty_label="Не указан"),
+        validators=[Optional()],
+        validate_choice=False,
+    )
     settlement = HiddenField(validators=[Optional(), Length(max=255)])
     street = HiddenField(validators=[Optional(), Length(max=500)])
     house = HiddenField(validators=[Optional(), Length(max=100)])
@@ -112,6 +126,7 @@ class RequestForm(FlaskForm):
     applicant_name = StringField("Заявитель", validators=[Optional(), Length(max=255)])
     has_barrier = BooleanField("Шлагбаум", default=False)
     barrier_phone = TelField("Телефон шлагбаума", validators=[Optional(), Length(max=30)])
+    for_beresnev = BooleanField("Для Береснева", default=False)
     priority = SelectField(
         "Приоритет",
         choices=[

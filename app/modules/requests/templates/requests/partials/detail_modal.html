@@ -91,6 +91,14 @@
                     </div>
                 </div>
             </div>
+            {% if is_builtin_visible('requests', 'for_beresnev') and current_user.can_view_field('requests', 'for_beresnev') %}
+            <div class="col-md-6">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">{{ builtin_label('requests', 'for_beresnev', 'Для Береснева') }}</div>
+                    <div>{{ "Да" if req.for_beresnev else "Нет" }}</div>
+                </div>
+            </div>
+            {% endif %}
             {% if is_builtin_visible('requests', 'address') %}
             <div class="col-md-6">
                 <div class="opora-detail-field">

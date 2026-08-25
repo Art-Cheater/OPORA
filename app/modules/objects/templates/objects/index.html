@@ -39,8 +39,9 @@
                 <label class="form-label">{{ filter_form.sort_by.label.text }}</label>
                 {{ filter_form.sort_by(class="form-select") }}
             </div>
-            <div class="col-lg-2 d-flex align-items-end">
-                <button type="button" id="objectFilterReset" class="btn btn-outline-primary w-100">Сброс</button>
+            <div class="col-lg-2 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-grow-1"><i class="bi bi-search"></i> Поиск</button>
+                <button type="button" id="objectFilterReset" class="btn btn-outline-primary">Сброс</button>
             </div>
             <div class="col-12">
                 <details class="mt-1">

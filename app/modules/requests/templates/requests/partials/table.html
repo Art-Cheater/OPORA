@@ -35,6 +35,12 @@
                     {% if req.has_barrier %}
                     <div class="small text-muted"><i class="bi bi-p-square"></i> Шлагбаум{% if req.barrier_phone %}: {{ req.barrier_phone }}{% endif %}</div>
                     {% endif %}
+                    {% if req.for_beresnev %}
+                    <div class="small text-muted"><i class="bi bi-person-check"></i> Для Береснева</div>
+                    {% endif %}
+                    {% if req.district %}
+                    <div class="small text-muted">{{ req.district }}</div>
+                    {% endif %}
                 </td>
                 <td>{{ req.pp or '—' }}</td>
                 <td>{{ request_status_badge(req.status) }}</td>

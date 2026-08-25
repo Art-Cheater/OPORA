@@ -124,9 +124,22 @@
     "longitude",
   ];
 
+  const REQUEST_DISTRICTS = ["Ленинский", "Октябрьский", "Первомайский", "Нововятский"];
+
+  function shortDistrict(value) {
+    const text = String(value || "");
+    const folded = text.toLowerCase();
+    for (const name of REQUEST_DISTRICTS) {
+      if (folded.includes(name.toLowerCase())) return name;
+    }
+    return text;
+  }
+
   function setField(form, name, value) {
     const field = form.querySelector(`[name="${name}"]`);
-    if (field) field.value = value ?? "";
+    if (!field) return;
+    const next = name === "district" ? shortDistrict(value) : value ?? "";
+    field.value = next;
   }
 
   function clearAddressSelection(form) {

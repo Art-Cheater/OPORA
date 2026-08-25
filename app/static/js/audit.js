@@ -57,17 +57,10 @@ window.OporaAudit = (() => {
       });
     }
 
-    function debouncedReload() {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        currentPage = 1;
-        loadTable();
-      }, 300);
-    }
-
-    form.querySelectorAll("input, select").forEach((el) => {
-      el.addEventListener("input", debouncedReload);
-      el.addEventListener("change", debouncedReload);
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      currentPage = 1;
+      loadTable();
     });
 
     resetBtn?.addEventListener("click", () => {
