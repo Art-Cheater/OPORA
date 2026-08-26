@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import ssl
 import time
 import urllib.error
@@ -14,13 +15,20 @@ class EisFetchError(RuntimeError):
     pass
 
 
+def _ssl_context() -> ssl.SSLContext | None:
+    """По умолчанию проверяем TLS. EIS_SSL_VERIFY=0 — только для сломанных корп. MITM."""
+    if os.environ.get("EIS_SSL_VERIFY", "1").strip().lower() in {"0", "false", "no"}:
+        return ssl._create_unverified_context()
+    return ssl.create_default_context()
+
+
 class EisClient:
     def __init__(self, delay: float = 1.2, timeout: int = 45, retries: int = 3) -> None:
         self.delay = delay
         self.timeout = timeout
         self.retries = retries
         self._last_request_at = 0.0
-        self._context = ssl._create_unverified_context()
+        self._context = _ssl_context()
 
     def get(self, url: str) -> str:
         last_error: Exception | None = None

@@ -193,16 +193,20 @@ def test_restore_missing_inquiry_files(admin_client, app):
     assert restored.data
 
 
-def test_download_refetches_file_from_mailbox(admin_client, app, monkeypatch):
+def test_download_does_not_block_on_imap(admin_client, app, monkeypatch):
+    """HTTP-скачивание не ходит в IMAP — только inquiry-sync."""
+    called = {"imap": False}
+
+    def _boom(*_args, **_kwargs):
+        called["imap"] = True
+        raise AssertionError("IMAP не должен вызываться из HTTP")
+
+    monkeypatch.setattr(
+        "app.modules.inquiries.services.InquiryService._refetch_inquiry_attachments",
+        _boom,
+    )
     mailbox = FakeMailbox({12: _sample_message(subject="Скан", with_file=True)})
-
-    def _connect(**_kwargs):
-        return mailbox
-
-    monkeypatch.setattr("app.modules.inquiries.services.connect_mailbox", _connect)
     with app.app_context():
-        app.config["INQUIRY_IMAP_USER"] = "kirovsvet@mail.ru"
-        app.config["INQUIRY_IMAP_PASSWORD"] = "secret"
         InquiryService.sync(client=mailbox)
         inquiry = db.session.scalar(db.select(Inquiry).where(Inquiry.subject == "Скан"))
         attachment = InquiryService.attachments(inquiry.id)[0]
@@ -210,15 +214,13 @@ def test_download_refetches_file_from_mailbox(admin_client, app, monkeypatch):
         inquiry_id = inquiry.id
         file_id = attachment.id
 
-    downloaded = admin_client.get(f"/inquiries/{inquiry_id}/files/{file_id}")
-    assert downloaded.status_code == 200
-    assert downloaded.data
-    preview = admin_client.get(f"/inquiries/{inquiry_id}/files/{file_id}?inline=1")
-    assert preview.status_code == 200
+    missing = admin_client.get(f"/inquiries/{inquiry_id}/files/{file_id}")
+    assert missing.status_code == 404
+    assert called["imap"] is False
 
 
 def _login(client, email: str, password: str = "pass12345") -> None:
-    client.get("/auth/logout", follow_redirects=True)
+    client.post("/auth/logout", follow_redirects=True)
     resp = client.post(
         "/auth/login",
         data={"email": email, "password": password, "submit": "Войти"},

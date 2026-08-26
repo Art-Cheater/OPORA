@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Index, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
@@ -21,10 +21,13 @@ class ContractContractor(BaseModel):
 
     __tablename__ = "contract_contractors"
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "ix_contract_contractors_pair_active",
             "contract_id",
             "contractor_id",
-            name="uq_contract_contractors_pair",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+            sqlite_where=text("deleted_at IS NULL"),
         ),
         Index("ix_contract_contractors_contract_id", "contract_id"),
         Index("ix_contract_contractors_contractor_id", "contractor_id"),

@@ -10,7 +10,7 @@ from app.modules.requests.districts import normalize_request_district
 
 
 def _login(client, email: str = "admin@opora.ru", password: str = "admin123"):
-    client.get("/auth/logout", follow_redirects=True)
+    client.post("/auth/logout", follow_redirects=True)
     resp = client.post(
         "/auth/login",
         data={"email": email, "password": password, "submit": "Войти"},

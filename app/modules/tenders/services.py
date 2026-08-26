@@ -162,15 +162,29 @@ class TenderService:
                     if project.work_object and project.work_object.status == WorkObjectStatus.IN_TENDER.value:
                         project.work_object.status = WorkObjectStatus.IN_PROJECT.value
         for project in projects:
-            if project.id not in current:
-                db.session.add(
-                    TenderProject(
-                        tender_id=tender.id,
-                        project_id=project.id,
-                        created_by=user_id,
-                        updated_by=user_id,
-                    )
+            if project.id in current:
+                continue
+            # Уже есть soft-deleted связь — восстанавливаем (unique без partial index).
+            stale = next(
+                (
+                    link
+                    for link in tender.project_links
+                    if link.project_id == project.id and link.deleted_at is not None
+                ),
+                None,
+            )
+            if stale is not None:
+                stale.restore()
+                stale.updated_by = user_id
+                continue
+            db.session.add(
+                TenderProject(
+                    tender_id=tender.id,
+                    project_id=project.id,
+                    created_by=user_id,
+                    updated_by=user_id,
                 )
+            )
 
     @classmethod
     def _apply_status_side_effects(

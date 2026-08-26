@@ -148,7 +148,13 @@ class Contract(BaseModel):
 
     @property
     def work_objects(self) -> list[WorkObject]:
-        return [link.work_object for link in self.object_links if link.work_object is not None]
+        return [
+            link.work_object
+            for link in self.object_links
+            if link.deleted_at is None
+            and link.work_object is not None
+            and link.work_object.deleted_at is None
+        ]
 
     @property
     def contractors(self) -> list[Contractor]:

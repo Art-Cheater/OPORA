@@ -9,6 +9,7 @@ from app.core.audit_service import AuditService
 from app.core.exceptions import ValidationError
 from app.extensions import db
 from app.models.auth.associations import UserRole
+from app.models.auth.constants import ROLE_ADMIN
 from app.models.auth.role import Role
 from app.models.auth.user import User
 from app.models.enums import AuditAction, EntityType
@@ -46,6 +47,37 @@ class EmployeeService:
             user.position = None
 
     @classmethod
+    def _actor(cls, actor_id: uuid.UUID) -> User:
+        actor = db.session.get(User, actor_id)
+        if actor is None or actor.deleted_at is not None:
+            raise ValidationError("Пользователь не найден.")
+        return actor
+
+    @classmethod
+    def _assert_privileged_changes(
+        cls,
+        actor: User,
+        *,
+        target: User | None,
+        role_ids: list[uuid.UUID],
+        password: str | None,
+    ) -> None:
+        """Не-админ не может трогать админов и назначать роль admin."""
+        if target is not None and target.is_admin and not actor.is_admin:
+            raise ValidationError("Редактировать администратора может только администратор.")
+        if password and target is not None and target.is_admin and not actor.is_admin:
+            raise ValidationError("Сбрасывать пароль администратора может только администратор.")
+        if not role_ids:
+            return
+        roles = list(
+            db.session.scalars(
+                db.select(Role).where(Role.id.in_(role_ids), Role.active_filter())
+            )
+        )
+        if any(r.code == ROLE_ADMIN for r in roles) and not actor.is_admin:
+            raise ValidationError("Назначать роль администратора может только администратор.")
+
+    @classmethod
     def _sync_roles(cls, user: User, role_ids: list[uuid.UUID]) -> None:
         active_roles = {
             ur.role_id: ur
@@ -64,7 +96,10 @@ class EmployeeService:
 
     @classmethod
     def create_employee(cls, payload: EmployeePayload, user_id: uuid.UUID) -> User:
-        email = payload.email.lower().strip()
+        actor = cls._actor(user_id)
+        email = (payload.email or "").lower().strip()
+        if not email:
+            raise ValidationError("Email обязателен.")
         existing = db.session.scalar(
             db.select(User).where(User.email == email, User.active_filter())
         )
@@ -74,6 +109,11 @@ class EmployeeService:
             raise ValidationError("Выберите хотя бы одну роль.")
         if not payload.password:
             raise ValidationError("Пароль обязателен.")
+        if not (payload.full_name or "").strip():
+            raise ValidationError("ФИО обязательно.")
+        cls._assert_privileged_changes(
+            actor, target=None, role_ids=payload.role_ids, password=payload.password
+        )
 
         user = User(
             email=email,
@@ -102,7 +142,16 @@ class EmployeeService:
 
     @classmethod
     def update_employee(cls, user: User, payload: EmployeePayload, actor_id: uuid.UUID) -> User:
-        email = payload.email.lower().strip()
+        actor = cls._actor(actor_id)
+        email = (payload.email or user.email or "").lower().strip()
+        full_name = (payload.full_name or user.full_name or "").strip()
+        if not email:
+            raise ValidationError("Email обязателен.")
+        if not full_name:
+            raise ValidationError("ФИО обязательно.")
+        cls._assert_privileged_changes(
+            actor, target=user, role_ids=payload.role_ids, password=payload.password
+        )
         if email != user.email:
             existing = db.session.scalar(
                 db.select(User).where(User.email == email, User.active_filter(), User.id != user.id)
@@ -111,7 +160,7 @@ class EmployeeService:
                 raise ValidationError("Сотрудник с таким email уже существует.")
 
         user.email = email
-        user.full_name = payload.full_name.strip()
+        user.full_name = full_name
         user.phone = cls._normalize(payload.phone)
         user.position_id = payload.position_id
         user.department = cls._normalize(payload.department)
@@ -135,8 +184,11 @@ class EmployeeService:
 
     @classmethod
     def delete_employee(cls, user: User, actor_id: uuid.UUID) -> None:
+        actor = cls._actor(actor_id)
         if user.id == actor_id:
             raise ValidationError("Нельзя удалить собственную учётную запись.")
+        if user.is_admin and not actor.is_admin:
+            raise ValidationError("Удалять администратора может только администратор.")
         name = user.full_name
         user.soft_delete(deleted_by=actor_id)
         AuditService.log(

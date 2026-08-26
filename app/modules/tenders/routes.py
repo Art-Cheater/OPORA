@@ -12,7 +12,7 @@ from app.core.decorators import permission_required
 from app.core.exceptions import ValidationError
 from app.core.forms_utils import form_errors_message
 from app.core.http import ajax_error, ajax_ok, is_ajax
-from app.core.upload_utils import collect_upload_files, resolve_download_filename, save_upload
+from app.core.upload_utils import collect_upload_files, resolve_download_filename, resolve_storage_path, save_upload
 from app.models.auth.constants import (
     PERM_CONTRACTS_CREATE,
     PERM_TENDERS_CREATE,
@@ -356,7 +356,14 @@ def download_document(tender_id: uuid.UUID, document_id: uuid.UUID):
     if doc is None or not doc.storage_key:
         flash("Файл не найден.", "danger")
         return redirect(url_for("tenders.detail", tender_id=tender.id))
-    path = Path(current_app.config["UPLOAD_FOLDER"]) / doc.storage_key
+    try:
+        path = resolve_storage_path(doc.storage_key)
+    except FileNotFoundError:
+        flash("Файл не найден.", "danger")
+        return redirect(url_for("tenders.detail", tender_id=tender.id))
+    if not path.is_file():
+        flash("Файл не найден.", "danger")
+        return redirect(url_for("tenders.detail", tender_id=tender.id))
     return send_file(
         path,
         as_attachment=True,

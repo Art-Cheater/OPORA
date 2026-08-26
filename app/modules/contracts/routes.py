@@ -547,7 +547,7 @@ def download_document(contract_id: uuid.UUID, document_id: uuid.UUID):
 
     from flask import abort, current_app, send_file
 
-    from app.core.upload_utils import resolve_download_filename
+    from app.core.upload_utils import resolve_download_filename, resolve_storage_path
     from app.models.contracts.contract_document import ContractDocument
 
     contract = ContractRepository.get_by_id(contract_id)
@@ -560,7 +560,10 @@ def download_document(contract_id: uuid.UUID, document_id: uuid.UUID):
     ).first()
     if document is None or not document.storage_key:
         abort(404)
-    path = Path(current_app.config["UPLOAD_FOLDER"]) / document.storage_key
+    try:
+        path = resolve_storage_path(document.storage_key)
+    except FileNotFoundError:
+        abort(404)
     if not path.is_file():
         abort(404)
     inline = request.args.get("inline") == "1"

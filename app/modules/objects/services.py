@@ -787,23 +787,34 @@ class ObjectService:
         return result
 
     @classmethod
-    def wipe_all(cls, user_id: uuid.UUID) -> int:
-        """Мягко удалить все активные объекты (для повторного импорта)."""
+    def wipe_all(cls, user_id: uuid.UUID) -> tuple[int, int]:
+        """Мягко удалить свободные/архивные объекты. Занятые в цепочке пропускаются."""
         items = list(
             db.session.scalars(db.select(WorkObject).where(WorkObject.active_filter())).all()
         )
+        removed = 0
+        skipped = 0
+        busy = {
+            WorkObjectStatus.IN_PROJECT.value,
+            WorkObjectStatus.IN_TENDER.value,
+            WorkObjectStatus.IN_CONTRACT.value,
+        }
         for obj in items:
+            if obj.status in busy:
+                skipped += 1
+                continue
             obj.soft_delete(user_id)
-        if items:
+            removed += 1
+        if removed:
             AuditService.log(
                 user_id=user_id,
                 action=AuditAction.SOFT_DELETE.value,
                 entity_type=EntityType.WORK_OBJECT.value,
-                description=f"Массовое удаление объектов: {len(items)}",
-                new_values={"count": len(items)},
+                description=f"Массовое удаление объектов: {removed} (пропущено {skipped})",
+                new_values={"count": removed, "skipped": skipped},
             )
             db.session.commit()
-        return len(items)
+        return removed, skipped
 
     @classmethod
     def _compose_full_name(cls, work_type: str | None, address: str) -> str:

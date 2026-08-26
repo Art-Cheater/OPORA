@@ -264,6 +264,19 @@ def _register_security_hooks(app: Flask) -> None:
             flash("Ваша учётная запись заблокирована или деактивирована.", "danger")
             return redirect(url_for("auth.login"))
 
+    @app.after_request
+    def set_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+        # Базовый CSP: приложение — server-rendered + inline scripts в шаблонах.
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "frame-ancestors 'self'; base-uri 'self'; form-action 'self'",
+        )
+        return response
+
 
 def _register_spa_nav(app: Flask) -> None:
     """Клиентский кабинет: по заголовку отдаём только середину страницы, без сайдбара."""

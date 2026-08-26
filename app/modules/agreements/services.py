@@ -13,7 +13,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.exceptions import ValidationError
-from app.core.upload_utils import SavedUpload, save_upload
+from app.core.upload_utils import SavedUpload, resolve_storage_path, save_upload
 from app.extensions import db
 from app.models.agreements.pole_agreement import PoleAgreement
 from app.models.agreements.pole_agreement_site import PoleAgreementSite
@@ -175,7 +175,7 @@ class AgreementService:
 
         hidden = cls.collapse_duplicates(user_id)
         saved: SavedUpload = save_upload(file_storage, relative_dir="agreements")
-        path = Path(current_app.config["UPLOAD_FOLDER"]) / saved.storage_key
+        path = resolve_storage_path(saved.storage_key)
         parsed = parse_agreement_file(path)
         if not parsed.sites or WRONG_AGREEMENT_MESSAGE in parsed.warnings:
             path.unlink(missing_ok=True)

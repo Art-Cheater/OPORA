@@ -10,7 +10,7 @@ from flask import current_app, url_for
 from werkzeug.datastructures import FileStorage
 
 from app.core.exceptions import NotFoundError, ValidationError
-from app.core.upload_utils import UploadValidationError, save_upload
+from app.core.upload_utils import UploadValidationError, resolve_storage_path, save_upload
 from app.extensions import db
 from app.models.auth.user import User
 from app.models.base import utcnow
@@ -105,7 +105,7 @@ class PersonalDocumentService:
 
     @staticmethod
     def disk_path(item: Attachment) -> Path:
-        return Path(current_app.config["UPLOAD_FOLDER"]) / item.storage_key
+        return resolve_storage_path(item.storage_key)
 
     @staticmethod
     def set_contracts_enabled(user: User, enabled: bool) -> None:
@@ -165,7 +165,7 @@ class PersonalContractService:
             )
             db.session.add(attachment)
             db.session.flush()
-            path = Path(current_app.config["UPLOAD_FOLDER"]) / stored.storage_key
+            path = resolve_storage_path(stored.storage_key)
             parsed = parse_personal_contract_file(path, stored.file_name)
             db.session.add(
                 PersonalContract(

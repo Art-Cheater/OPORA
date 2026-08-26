@@ -22,6 +22,7 @@ from app.models.auth.constants import (
     PERM_USERS_DELETE,
     PERM_USERS_EDIT,
     PERM_USERS_VIEW,
+    ROLE_ADMIN,
     ROLE_EXECUTOR,
 )
 from app.modules.employees.blueprint import employees_bp
@@ -49,6 +50,8 @@ def _prepare_employee_form(form: EmployeeForm) -> None:
     from app.core.builtin_field_service import BuiltinFieldService
 
     roles = EmployeeRepository.get_roles()
+    if not current_user.is_admin:
+        roles = [r for r in roles if r.code != ROLE_ADMIN]
     form.role_ids.choices = [(str(r.id), r.name) for r in roles]
     positions = EmployeeRepository.get_positions()
     form.position_id.choices = [("", "—")] + [(str(p.id), p.name) for p in positions]
@@ -64,6 +67,8 @@ def _apply_employee_create_defaults(form: EmployeeForm) -> None:
     if default_pos is not None:
         form.position_id.data = str(default_pos.id)
     roles = EmployeeRepository.get_roles()
+    if not current_user.is_admin:
+        roles = [r for r in roles if r.code != ROLE_ADMIN]
     default = next((r for r in roles if r.code == ROLE_EXECUTOR), roles[0] if roles else None)
     if default is not None:
         form.role_ids.data = [str(default.id)]
@@ -78,21 +83,38 @@ def _uuid_or_none(value: str) -> uuid.UUID | None:
         return None
 
 
+def _default_role_ids() -> list[uuid.UUID]:
+    roles = EmployeeRepository.get_roles()
+    if not current_user.is_admin:
+        roles = [r for r in roles if r.code != ROLE_ADMIN]
+    default = next((r for r in roles if r.code == ROLE_EXECUTOR), roles[0] if roles else None)
+    return [default.id] if default is not None else []
+
+
 def _payload_from_form(form: EmployeeForm, employee=None) -> EmployeePayload:
     fp = FieldPermissionService.resolve_field
     u, m = current_user, "users"
     role_ids = _uuid_list(form.role_ids.data or [])
-    if employee and not FieldPermissionService.can_edit_field(u, m, "role_ids"):
-        role_ids = EmployeeRepository.get_role_ids(employee)
+    if not FieldPermissionService.can_edit_field(u, m, "role_ids"):
+        role_ids = EmployeeRepository.get_role_ids(employee) if employee else _default_role_ids()
     password = form.password.data or None
     if employee and not FieldPermissionService.can_edit_field(u, m, "password"):
+        password = None
+    elif not employee and not FieldPermissionService.can_edit_field(u, m, "password"):
         password = None
     pos_id = _uuid_or_none(form.position_id.data or "")
     if employee and not FieldPermissionService.can_edit_field(u, m, "position_id"):
         pos_id = employee.position_id
+    email = fp(u, m, "email", form.email.data, employee)
+    full_name = fp(u, m, "full_name", form.full_name.data, employee)
+    if employee is not None:
+        if email is None:
+            email = employee.email
+        if full_name is None:
+            full_name = employee.full_name
     return EmployeePayload(
-        email=fp(u, m, "email", form.email.data, employee),
-        full_name=fp(u, m, "full_name", form.full_name.data, employee),
+        email=email or "",
+        full_name=full_name or "",
         phone=fp(u, m, "phone", form.phone.data, employee),
         position_id=pos_id,
         department=fp(u, m, "department", form.department.data, employee),

@@ -9,7 +9,7 @@ from flask import current_app, flash, jsonify, redirect, render_template, reques
 from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
 
-from app.core.decorators import permission_required
+from app.core.decorators import admin_required, permission_required
 from app.core.exceptions import ValidationError
 from app.core.field_permissions import FieldPermissionService
 from app.core.forms_utils import form_errors_message
@@ -249,11 +249,17 @@ def import_plan():
 
 @objects_bp.route("/wipe", methods=["POST"])
 @login_required
-@permission_required(PERM_OBJECTS_DELETE)
+@admin_required
 def wipe():
-    """Мягко удалить все объекты — перед повторным импортом из Excel."""
-    count = ObjectService.wipe_all(current_user.id)
-    flash(f"Удалено объектов: {count}. Можно заново импортировать файл.", "success")
+    """Мягко удалить свободные объекты — перед повторным импортом из Excel (только admin)."""
+    count, skipped = ObjectService.wipe_all(current_user.id)
+    if skipped:
+        flash(
+            f"Удалено объектов: {count}. Пропущено занятых (проект/торги/контракт): {skipped}.",
+            "warning",
+        )
+    else:
+        flash(f"Удалено объектов: {count}. Можно заново импортировать файл.", "success")
     return redirect(url_for("objects.index"))
 
 

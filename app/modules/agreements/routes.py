@@ -11,7 +11,7 @@ from flask_login import current_user, login_required
 from app.core.decorators import permission_required
 from app.core.exceptions import ValidationError
 from app.core.forms_utils import form_errors_message
-from app.core.upload_utils import UploadValidationError
+from app.core.upload_utils import UploadValidationError, resolve_storage_path
 from app.extensions import db
 from app.models.auth.constants import (
     PERM_AGREEMENTS_CREATE,
@@ -138,7 +138,10 @@ def download(agreement_id):
     agreement = AgreementRepository.get_by_id(agreement_id)
     if agreement is None or not agreement.storage_key:
         abort(404)
-    path = Path(current_app.config["UPLOAD_FOLDER"]) / agreement.storage_key
+    try:
+        path = resolve_storage_path(agreement.storage_key)
+    except FileNotFoundError:
+        abort(404)
     if not path.is_file():
         abort(404)
     return send_file(

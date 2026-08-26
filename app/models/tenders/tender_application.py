@@ -113,7 +113,11 @@ class TenderApplication(ActiveRecordMixin, BaseModel):
 
     @property
     def projects(self) -> list[Project]:
-        return [link.project for link in self.project_links if link.project is not None]
+        return [
+            link.project
+            for link in self.project_links
+            if link.deleted_at is None and link.project is not None and link.project.deleted_at is None
+        ]
 
     def __repr__(self) -> str:
         return f"<TenderApplication {self.number}>"

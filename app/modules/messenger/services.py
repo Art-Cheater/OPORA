@@ -10,6 +10,7 @@ from flask import current_app
 from sqlalchemy import update
 
 from app.core.exceptions import NotFoundError, ValidationError
+from app.core.upload_utils import resolve_storage_path
 from app.extensions import db
 from app.models.messenger.messenger_conversation import MessengerConversation
 from app.models.messenger.messenger_message import MessengerMessage
@@ -194,7 +195,10 @@ class MessengerService:
     def get_file_path(message: MessengerMessage) -> Path:
         if not message.storage_key:
             raise NotFoundError("Файл не найден.")
-        path = current_app.config["UPLOAD_FOLDER"] / message.storage_key
+        try:
+            path = resolve_storage_path(message.storage_key)
+        except FileNotFoundError as exc:
+            raise NotFoundError("Файл не найден.") from exc
         if not path.exists():
             raise NotFoundError("Файл не найден.")
         return path

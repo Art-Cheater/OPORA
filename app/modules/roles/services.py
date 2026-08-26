@@ -165,6 +165,12 @@ class RoleService:
 
     @classmethod
     def duplicate_role(cls, role: Role, actor_id: uuid.UUID) -> Role:
+        from app.models.auth.user import User
+
+        actor = db.session.get(User, actor_id)
+        if role.code == ROLE_ADMIN and not (actor and actor.is_admin):
+            raise ValidationError("Копировать роль администратора может только администратор.")
+
         base_code = f"{role.code}_copy"
         code = base_code
         suffix = 1

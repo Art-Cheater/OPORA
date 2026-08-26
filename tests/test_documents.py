@@ -13,7 +13,7 @@ from app.models.files.attachment import Attachment
 def _login(client, email: str, password: str = "pass12345"):
     if email == "admin@opora.ru":
         password = "admin123"
-    client.get("/auth/logout", follow_redirects=True)
+    client.post("/auth/logout", follow_redirects=True)
     resp = client.post(
         "/auth/login",
         data={"email": email, "password": password, "submit": "Войти"},
@@ -25,7 +25,7 @@ def _login(client, email: str, password: str = "pass12345"):
 def test_personal_documents_own_files_only(admin_client, client, app):
     health = admin_client.get("/health")
     assert health.status_code == 200
-    assert health.get_json()["release"] == "20260826g"
+    assert health.get_json()["release"] == "20260826h"
 
     page = admin_client.get("/documents/")
     assert page.status_code == 200

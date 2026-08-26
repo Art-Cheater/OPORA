@@ -542,7 +542,7 @@ def download_document(project_id: uuid.UUID, document_id: uuid.UUID):
 
     from flask import current_app, send_file
 
-    from app.core.upload_utils import resolve_download_filename
+    from app.core.upload_utils import resolve_download_filename, resolve_storage_path
     from app.models.projects.project_document import ProjectDocument
 
     project = ProjectRepository.get_by_id(project_id)
@@ -555,7 +555,10 @@ def download_document(project_id: uuid.UUID, document_id: uuid.UUID):
     ).first()
     if document is None or not document.storage_key:
         abort(404)
-    path = Path(current_app.config["UPLOAD_FOLDER"]) / document.storage_key
+    try:
+        path = resolve_storage_path(document.storage_key)
+    except FileNotFoundError:
+        abort(404)
     if not path.is_file():
         abort(404)
     inline = request.args.get("inline") == "1"
@@ -607,10 +610,7 @@ def add_attachment(project_id: uuid.UUID):
 @login_required
 @permission_required(PERM_PROJECTS_VIEW)
 def download_attachment(project_id: uuid.UUID, attachment_id: uuid.UUID):
-    from pathlib import Path
-
-    from flask import current_app, send_file
-    from app.core.upload_utils import resolve_download_filename
+    from app.core.upload_utils import resolve_download_filename, resolve_storage_path
     from app.models.files.attachment import Attachment
 
     project = ProjectRepository.get_by_id(project_id)
@@ -624,7 +624,10 @@ def download_attachment(project_id: uuid.UUID, attachment_id: uuid.UUID):
     ).first()
     if attachment is None or not attachment.storage_key:
         abort(404)
-    path = Path(current_app.config["UPLOAD_FOLDER"]) / attachment.storage_key
+    try:
+        path = resolve_storage_path(attachment.storage_key)
+    except FileNotFoundError:
+        abort(404)
     if not path.is_file():
         abort(404)
     inline = request.args.get("inline") == "1"

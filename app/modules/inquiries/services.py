@@ -413,11 +413,9 @@ class InquiryService:
 
     @staticmethod
     def attachment_disk_path(item: Attachment, upload_root: Path | None = None) -> Path:
-        from flask import current_app
+        from app.core.upload_utils import resolve_storage_path
 
-        root = Path(upload_root or current_app.config["UPLOAD_FOLDER"])
-        key = str(item.storage_key or "").replace("\\", "/").lstrip("/")
-        return root / key
+        return resolve_storage_path(item.storage_key, upload_root=upload_root)
 
     @staticmethod
     def _match_parsed_part(stored: Attachment, unused: list) -> object | None:
@@ -492,10 +490,7 @@ class InquiryService:
 
     @classmethod
     def ensure_attachment_file(cls, inquiry: Inquiry, item: Attachment) -> Path | None:
-        path = cls.attachment_disk_path(item)
-        if path.is_file() and path.stat().st_size > 0:
-            return path
-        cls._refetch_inquiry_attachments(inquiry)
+        """Только диск: докачка с IMAP — в inquiry-sync, не в HTTP-запросе."""
         path = cls.attachment_disk_path(item)
         if path.is_file() and path.stat().st_size > 0:
             return path

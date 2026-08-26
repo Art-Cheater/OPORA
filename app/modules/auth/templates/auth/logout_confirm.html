@@ -1,0 +1,15 @@
+{% extends "layouts/app.html" %}
+{% block title %}Выход{% endblock %}
+{% block content %}
+<div class="card mx-auto" style="max-width: 28rem">
+    <div class="card-body">
+        <h1 class="h4 mb-3">Выйти из системы?</h1>
+        <p class="text-muted mb-4">Подтвердите выход из учётной записи.</p>
+        <form method="post" action="{{ url_for('auth.logout') }}" class="d-flex gap-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger">Выйти</button>
+            <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">Отмена</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

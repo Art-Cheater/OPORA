@@ -39,10 +39,13 @@ def login():
     return render_template("auth/login.html", form=form)
 
 
-@auth_bp.route("/logout")
+@auth_bp.route("/logout", methods=["GET", "POST"])
 @login_required
 def logout():
-    """Выход из системы."""
+    """Выход из системы. POST предпочтителен (CSRF); GET оставлен для совместимости закладок."""
+    if request.method == "GET":
+        # Не выполняем logout по cross-site GET (SameSite=Lax всё ещё шлёт cookie на top-level).
+        return render_template("auth/logout_confirm.html")
     AuthService.logout()
     flash("Вы успешно вышли из системы.", "info")
     return redirect(url_for("auth.login"))

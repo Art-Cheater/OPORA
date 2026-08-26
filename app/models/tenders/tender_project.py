@@ -1,15 +1,15 @@
-"""Состав заявки на торги: проекты."""
+"""Связь заявки на торги с проектом."""
 
 from __future__ import annotations
 
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Index, UniqueConstraint
-from app.models.types import GUID
+from sqlalchemy import ForeignKey, Index, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
+from app.models.types import GUID
 
 if TYPE_CHECKING:
     from app.models.projects.project import Project
@@ -21,7 +21,14 @@ class TenderProject(BaseModel):
 
     __tablename__ = "tender_projects"
     __table_args__ = (
-        UniqueConstraint("tender_id", "project_id", name="uq_tender_projects_tender_project"),
+        Index(
+            "ix_tender_projects_pair_active",
+            "tender_id",
+            "project_id",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+            sqlite_where=text("deleted_at IS NULL"),
+        ),
         Index("ix_tender_projects_tender_id", "tender_id"),
         Index("ix_tender_projects_project_id", "project_id"),
     )

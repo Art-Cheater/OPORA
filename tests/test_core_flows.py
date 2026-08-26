@@ -17,7 +17,7 @@ AJAX = {"X-Requested-With": "XMLHttpRequest"}
 def _login(client, email: str, password: str = "pass12345"):
     if email == "admin@opora.ru":
         password = "admin123"
-    client.get("/auth/logout", follow_redirects=True)
+    client.post("/auth/logout", follow_redirects=True)
     resp = client.post(
         "/auth/login",
         data={"email": email, "password": password, "submit": "Войти"},

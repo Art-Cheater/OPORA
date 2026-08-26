@@ -151,7 +151,8 @@ class PermissionService:
             return submitted
         if entity is not None:
             return getattr(entity, field_name, submitted)
-        return submitted
+        # Создание: без права на поле игнорируем клиентское значение (не IDOR через POST).
+        return None
 
     @classmethod
     def editable_fields(cls, user: User, module: str) -> set[str] | None:

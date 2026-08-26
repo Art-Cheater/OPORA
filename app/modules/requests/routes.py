@@ -28,7 +28,7 @@ from app.core.exceptions import NotFoundError, ValidationError
 from app.core.field_permissions import FieldPermissionService
 from app.core.forms_utils import form_errors_message
 from app.core.http import ajax_error, ajax_ok, is_ajax
-from app.core.upload_utils import resolve_download_filename
+from app.core.upload_utils import resolve_download_filename, resolve_storage_path
 from app.extensions import db
 from app.models.auth.constants import (
     PERM_REQUESTS_APPROVE,
@@ -624,7 +624,10 @@ def ensure_coords(request_id: uuid.UUID):
             address=req.address,
         )
     try:
-        filled = RequestService.fill_missing_coordinates(req, persist=True)
+        filled = RequestService.fill_missing_coordinates(
+            req,
+            persist=current_user.has_permission(PERM_REQUESTS_EDIT),
+        )
     except Exception:
         current_app.logger.exception("ensure_coords %s", request_id)
         filled = False
@@ -1015,7 +1018,10 @@ def download_attachment(request_id: uuid.UUID, attachment_id: uuid.UUID):
     if attachment is None or not attachment.storage_key:
         abort(404)
 
-    path = Path(current_app.config["UPLOAD_FOLDER"]) / attachment.storage_key
+    try:
+        path = resolve_storage_path(attachment.storage_key)
+    except FileNotFoundError:
+        abort(404)
     if not path.is_file():
         abort(404)
 

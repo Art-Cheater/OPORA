@@ -252,13 +252,33 @@ def validate_upload(file_storage: FileStorage) -> tuple[str, str]:
     return original_name, mime
 
 
+def resolve_storage_path(
+    storage_key: str | None,
+    *,
+    upload_root: Path | str | None = None,
+) -> Path:
+    """Абсолютный путь к файлу строго внутри UPLOAD_FOLDER (защита от path traversal)."""
+    root = Path(upload_root if upload_root is not None else current_app.config["UPLOAD_FOLDER"])
+    root = root.resolve()
+    key = str(storage_key or "").replace("\\", "/").strip()
+    if not key or key.startswith("/") or key.startswith("~"):
+        raise FileNotFoundError("Некорректный ключ файла.")
+    parts = [p for p in key.split("/") if p]
+    if not parts or any(p == ".." or p == "." for p in parts):
+        raise FileNotFoundError("Некорректный ключ файла.")
+    path = (root.joinpath(*parts)).resolve()
+    if not path.is_relative_to(root):
+        raise FileNotFoundError("Файл вне каталога загрузок.")
+    return path
+
+
 def save_upload(file_storage: FileStorage, *, relative_dir: str) -> SavedUpload:
     """Сохраняет файл на диск под UPLOAD_FOLDER/{relative_dir}/."""
     original_name, mime_type = validate_upload(file_storage)
 
     upload_root: Path = current_app.config["UPLOAD_FOLDER"]
     relative_key = f"{relative_dir.strip('/')}/{uuid.uuid4()}_{original_name}"
-    absolute_path = upload_root / relative_key
+    absolute_path = resolve_storage_path(relative_key, upload_root=upload_root)
     absolute_path.parent.mkdir(parents=True, exist_ok=True)
     file_storage.save(absolute_path)
 

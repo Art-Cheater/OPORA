@@ -286,6 +286,10 @@ class ContractService:
                     updated_by=user_id,
                 )
             )
+            return
+        if existing.deleted_at is not None:
+            existing.restore()
+            existing.updated_by = user_id
 
     @classmethod
     def create_draft_from_plan(
