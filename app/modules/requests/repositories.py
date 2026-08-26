@@ -294,23 +294,65 @@ class RequestRepository:
 
     @staticmethod
     def next_number() -> str:
+        """Номер вида YY-N: 25-1, 25-149, 26-1…"""
         from datetime import datetime
 
-        year = datetime.now().year
-        prefix = f"REQ-{year}-"
-        last = db.session.scalar(
-            db.select(Request.number)
-            .where(Request.number.ilike(f"{prefix}%"))
-            .order_by(Request.number.desc())
-            .limit(1)
-        )
-        if not last:
-            return f"{prefix}001"
-        try:
-            seq = int(last.rsplit("-", 1)[-1]) + 1
-        except ValueError:
-            seq = 1
-        return f"{prefix}{seq:03d}"
+        year_yy = datetime.now().year % 100
+        prefix = f"{year_yy}-"
+        pattern = re.compile(rf"^{year_yy}-(\d+)$")
+        numbers = db.session.scalars(
+            db.select(Request.number).where(
+                Request.number.like(f"{prefix}%"),
+                Request.active_filter(),
+            )
+        ).all()
+        max_seq = 0
+        for raw in numbers:
+            match = pattern.fullmatch((raw or "").strip())
+            if match:
+                max_seq = max(max_seq, int(match.group(1)))
+        return f"{prefix}{max_seq + 1}"
+
+    @classmethod
+    def _number_sort_keys(cls):
+        """Ключи сортировки для номеров вида 25-149 (год, порядковый номер)."""
+        from sqlalchemy import Integer, case, cast
+
+        number = Request.number
+        dialect = db.session.get_bind().dialect.name
+        if dialect == "postgresql":
+            part1 = func.split_part(number, "-", 1)
+            part2 = func.split_part(number, "-", 2)
+            part3 = func.split_part(number, "-", 3)
+            # 25-149 → year=25, seq=149; REQ-2025-001 → year=2025, seq=1
+            year_expr = cast(
+                case((part3 != "", part2), else_=part1),
+                Integer,
+            )
+            seq_expr = cast(
+                case((part3 != "", part3), else_=part2),
+                Integer,
+            )
+        else:
+            # SQLite: первые два сегмента через instr
+            dash1 = func.instr(number, "-")
+            rest = func.substr(number, dash1 + 1)
+            dash2 = func.instr(rest, "-")
+            year_expr = cast(
+                case(
+                    (dash2 > 0, func.substr(rest, 1, dash2 - 1)),
+                    else_=func.substr(number, 1, dash1 - 1),
+                ),
+                Integer,
+            )
+            seq_expr = cast(
+                case(
+                    (dash2 > 0, func.substr(rest, dash2 + 1)),
+                    else_=rest,
+                ),
+                Integer,
+            )
+        return year_expr, seq_expr, number
 
     @classmethod
     def _apply_preset(cls, stmt, preset: str, current_user_id: uuid.UUID | None):
@@ -446,9 +488,16 @@ class RequestRepository:
 
         stmt = cls._apply_preset(stmt, filters.preset, current_user_id)
 
-        sort_col = cls.SORT_FIELDS.get(filters.sort_by, Request.created_at)
-        sort_expr = sort_col.desc() if filters.sort_dir == "desc" else sort_col.asc()
-        stmt = stmt.order_by(sort_expr, Request.created_at.desc())
+        if filters.sort_by == "number":
+            year_key, seq_key, number_key = cls._number_sort_keys()
+            if filters.sort_dir == "desc":
+                stmt = stmt.order_by(year_key.desc(), seq_key.desc(), number_key.desc())
+            else:
+                stmt = stmt.order_by(year_key.asc(), seq_key.asc(), number_key.asc())
+        else:
+            sort_col = cls.SORT_FIELDS.get(filters.sort_by, Request.created_at)
+            sort_expr = sort_col.desc() if filters.sort_dir == "desc" else sort_col.asc()
+            stmt = stmt.order_by(sort_expr, Request.created_at.desc())
 
         return db.paginate(stmt, page=page, per_page=per_page, error_out=False)
 

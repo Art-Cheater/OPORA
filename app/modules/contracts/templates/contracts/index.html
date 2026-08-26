@@ -1,4 +1,4 @@
-﻿{% extends "layouts/app.html" %}
+{% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header, list_loading %}
 {% from "macros/crud.html" import create_button %}
 
@@ -38,12 +38,8 @@
                 <button type="button" id="contractFilterReset" class="btn btn-outline-primary">Сброс</button>
             </div>
             <div class="col-lg-2">
-                <label class="form-label">{{ filter_form.date_from.label.text }}</label>
-                {{ filter_form.date_from(class="form-control", type="date") }}
-            </div>
-            <div class="col-lg-2">
-                <label class="form-label">{{ filter_form.date_to.label.text }}</label>
-                {{ filter_form.date_to(class="form-control", type="date") }}
+                <label class="form-label">{{ filter_form.contract_date.label.text }}</label>
+                {{ filter_form.contract_date(class="form-control", type="date") }}
             </div>
             <div class="col-lg-2">
                 <label class="form-label">{{ filter_form.end_date_from.label.text }}</label>

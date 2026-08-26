@@ -21,8 +21,7 @@ class ContractFilter:
     contract_type: str = ""
     status: str = ""
     responsible_id: str = ""
-    date_from: str = ""
-    date_to: str = ""
+    contract_date: str = ""
     end_date_from: str = ""
     end_date_to: str = ""
     sort_by: str = "created_at"
@@ -150,15 +149,11 @@ class ContractRepository:
             except ValueError:
                 pass
 
-        if filters.date_from:
+        if filters.contract_date:
             try:
-                stmt = stmt.where(Contract.contract_date >= date.fromisoformat(filters.date_from))
-            except ValueError:
-                pass
-
-        if filters.date_to:
-            try:
-                stmt = stmt.where(Contract.contract_date <= date.fromisoformat(filters.date_to))
+                stmt = stmt.where(
+                    Contract.contract_date == date.fromisoformat(filters.contract_date)
+                )
             except ValueError:
                 pass
 

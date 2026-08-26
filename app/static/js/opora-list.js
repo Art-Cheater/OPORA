@@ -280,6 +280,14 @@ window.OporaList = (() => {
         return;
       }
 
+      const repeatBtn = e.target.closest("[data-opora-repeat]");
+      if (repeatBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        markRepeatFromList(repeatBtn.dataset.id, repeatBtn.dataset.number || "");
+        return;
+      }
+
       if (!config.baseUrl) return;
       if (e.target.closest("[data-opora-create]")) {
         e.preventDefault();
@@ -571,6 +579,57 @@ window.OporaList = (() => {
       config.deleteMessage ||
       "Вы уверены, что хотите удалить эту запись? Это действие нельзя отменить.";
     bootstrap.Modal.getOrCreateInstance(confirmModal()).show();
+  }
+
+  function defaultLocalDateTime() {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  }
+
+  function parseRepeatInput(raw) {
+    const text = String(raw || "").trim().replace("T", " ");
+    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ ](\d{2}):(\d{2}))?$/);
+    if (!match) return null;
+    const [, y, m, d, hh = "12", mm = "00"] = match;
+    return `${y}-${m}-${d}T${hh}:${mm}`;
+  }
+
+  async function markRepeatFromList(id, number) {
+    if (!id) return;
+    const label = number ? ` заявки ${number}` : "";
+    const raw = window.prompt(
+      `Дата и время повторного обращения${label}\nФормат: ГГГГ-ММ-ДД ЧЧ:ММ`,
+      defaultLocalDateTime()
+    );
+    if (raw === null) return;
+    const receivedAt = parseRepeatInput(raw);
+    if (!receivedAt) {
+      showToast("Неверный формат даты. Пример: 2026-08-26 14:30", "danger");
+      return;
+    }
+    try {
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
+      const body = new FormData();
+      if (csrf) body.append("csrf_token", csrf);
+      body.append("received_at", receivedAt);
+      const response = await fetch(`/requests/${id}/mark-repeat`, {
+        method: "POST",
+        headers: {
+          ...AJAX_HEADERS,
+          ...(csrf ? { "X-CSRFToken": csrf } : {}),
+        },
+        body,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Не удалось зафиксировать повтор");
+      }
+      showToast(data.message || "Повторное обращение зафиксировано.");
+      await refreshAfterMutation();
+    } catch (err) {
+      showToast(err.message || "Ошибка", "danger");
+    }
   }
 
   async function executeDelete() {

@@ -58,13 +58,25 @@
                     {% endif %}
                 </td>
                 <td class="text-end">
-                    {{ table_actions(
-                        view_url=url_for('requests.detail', request_id=req.id),
-                        edit_url=url_for('requests.edit', request_id=req.id),
-                        entity_id=req.id,
-                        can_edit=current_user.has_permission('requests.edit'),
-                        can_delete=current_user.has_permission('requests.delete')
-                    ) }}
+                    <div class="d-inline-flex align-items-center gap-1 justify-content-end">
+                        {% if current_user.has_permission('requests.edit') and req.status and not req.status.is_final %}
+                        <button type="button"
+                                class="table-actions__btn"
+                                title="Повторное обращение"
+                                data-opora-repeat
+                                data-id="{{ req.id }}"
+                                data-number="{{ req.number }}">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                        {% endif %}
+                        {{ table_actions(
+                            view_url=url_for('requests.detail', request_id=req.id),
+                            edit_url=url_for('requests.edit', request_id=req.id),
+                            entity_id=req.id,
+                            can_edit=current_user.has_permission('requests.edit'),
+                            can_delete=current_user.has_permission('requests.delete')
+                        ) }}
+                    </div>
                 </td>
             </tr>
             {% else %}

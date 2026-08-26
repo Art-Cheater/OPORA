@@ -261,6 +261,8 @@ class RequestService:
         payload.house = suggestion.house or house or None
         payload.address_source = suggestion.address_source
         payload.address_external_id = suggestion.address_external_id
+        payload.latitude = suggestion.latitude
+        payload.longitude = suggestion.longitude
 
     @staticmethod
     def _snapshot(req: Request) -> dict[str, Any]:

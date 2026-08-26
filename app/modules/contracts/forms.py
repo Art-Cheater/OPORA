@@ -83,8 +83,7 @@ class ContractFilterForm(FlaskForm):
         validators=[Optional()],
     )
     responsible_id = SelectField("Ответственный", choices=[], validators=[Optional()])
-    date_from = DateField("Дата с", validators=[Optional()], format="%Y-%m-%d")
-    date_to = DateField("Дата по", validators=[Optional()], format="%Y-%m-%d")
+    contract_date = DateField("Дата заключения", validators=[Optional()], format="%Y-%m-%d")
     end_date_from = DateField("Окончание с", validators=[Optional()], format="%Y-%m-%d")
     end_date_to = DateField("Окончание по", validators=[Optional()], format="%Y-%m-%d")
     sort_by = SelectField(
@@ -96,7 +95,7 @@ class ContractFilterForm(FlaskForm):
             ("title", "По названию"),
             ("status", "По статусу"),
             ("contract_type", "По типу"),
-            ("contract_date", "По дате контракта"),
+            ("contract_date", "По дате заключения"),
             ("end_date", "По дате окончания"),
             ("contractor_name", "По подрядчику"),
             ("amount", "По сумме"),
@@ -137,7 +136,7 @@ class ContractForm(FlaskForm):
         rounding=None,
     )
     status = SelectField("Статус", choices=CONTRACT_STATUS_CHOICES, validators=[DataRequired()])
-    contract_date = DateField("Дата", validators=[Optional()], format="%Y-%m-%d")
+    contract_date = DateField("Дата заключения", validators=[Optional()], format="%Y-%m-%d")
     end_date = RussianDateField(
         "Дата окончания",
         validators=[InputRequired(message="Укажите дату окончания контракта.")],

@@ -199,6 +199,23 @@ def test_catalog_prefers_primary_district_for_ambiguous_streets():
     assert resolve_catalog_district("Лепсе", "улица") == "Ленинский район"
 
 
+def test_catalog_renamed_streets_2025():
+    from app.core.address.catalog import search_streets
+
+    nikitskaya = search_streets("Никитская")
+    assert nikitskaya
+    assert nikitskaya[0].normalized_address == "Киров, улица Никитская"
+    assert nikitskaya[0].district == "Октябрьский район"
+
+    uspenskaya = search_streets("Успенская")
+    assert uspenskaya
+    assert uspenskaya[0].district == "Ленинский район"
+
+    vladimirskaya = search_streets("Владимирская")
+    assert vladimirskaya
+    assert vladimirskaya[0].district == "Ленинский район"
+
+
 def test_address_suggestions_endpoint_requires_login(client):
     response = client.get("/requests/api/address-suggestions?q=Лепсе")
 

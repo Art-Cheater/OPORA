@@ -86,3 +86,64 @@ def test_request_filters_district_pp_beresnev(admin_client, app):
     flag_html = by_flag.get_json()["table_html"]
     assert target_id in flag_html
     assert other_id not in flag_html
+
+
+def test_request_number_format_and_natural_sort(admin_client, app):
+    from datetime import datetime
+
+    from app.models.auth.user import User
+    from app.models.requests.request_status import RequestStatus
+    from app.modules.requests.repositories import RequestFilter, RequestRepository
+    from app.modules.requests.services import RequestPayload, RequestService
+    from app.modules.requests.workflow import STATUS_NEW
+
+    _login(admin_client)
+    with app.app_context():
+        admin = db.session.scalar(db.select(User).where(User.email == "admin@opora.ru"))
+        status = db.session.scalar(
+            db.select(RequestStatus).where(RequestStatus.code == STATUS_NEW)
+        )
+        assert admin and status
+
+        def payload(number: str) -> RequestPayload:
+            return RequestPayload(
+                number=number,
+                title=f"Заявка {number}",
+                description=None,
+                address=f"Адрес {number}",
+                original_address=None,
+                normalized_address=None,
+                region=None,
+                district=None,
+                settlement=None,
+                street=None,
+                house=None,
+                address_source=None,
+                address_external_id=None,
+                pp=None,
+                received_at=None,
+                dispatcher_name=None,
+                latitude=None,
+                longitude=None,
+                phone=None,
+                applicant_name="Тест",
+                priority="medium",
+                status_id=status.id,
+                responsible_id=None,
+                executor_id=None,
+            )
+
+        for number in ("25-149", "25-13", "25-121", "25-2"):
+            RequestService.create_request(payload(number), admin.id)
+
+        assert RequestRepository.next_number().startswith(f"{datetime.now().year % 100}-")
+
+        page = RequestRepository.paginated_list(
+            RequestFilter(sort_by="number", sort_dir="asc"),
+            page=1,
+            per_page=100,
+        )
+        numbers = [item.number for item in page.items if item.number.startswith("25-")]
+        expected = ["25-2", "25-13", "25-121", "25-149"]
+        positions = {n: numbers.index(n) for n in expected}
+        assert positions["25-2"] < positions["25-13"] < positions["25-121"] < positions["25-149"]

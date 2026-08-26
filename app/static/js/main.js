@@ -613,11 +613,6 @@ function initInstantNav(sidebar, closeSidebar) {
                 window.OporaRequestsForm.init(form);
             });
         }
-            document.querySelectorAll("[data-requests-form]").forEach((form) => {
-                delete form.dataset.requestsInited;
-                window.OporaRequestsForm.init(form);
-            });
-        }
         if (document.getElementById("agreementMap")) {
             window.OporaAgreementMap?.init?.();
         }

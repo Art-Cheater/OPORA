@@ -1,7 +1,23 @@
 window.OporaRequestDetail = (() => {
+  let mapInstance = null;
+
+  function destroy() {
+    if (mapInstance) {
+      mapInstance.remove();
+      mapInstance = null;
+    }
+    const mapNode = document.getElementById("requestMap");
+    if (mapNode) {
+      mapNode._leaflet_id = null;
+      mapNode.innerHTML = "";
+    }
+  }
+
   function init() {
     const mapNode = document.getElementById("requestMap");
     if (!mapNode || typeof L === "undefined") return;
+
+    destroy();
 
     const address = document.getElementById("requestAddress")?.value ?? "";
     const latValue = document.getElementById("requestLat")?.value ?? "";
@@ -19,22 +35,22 @@ window.OporaRequestDetail = (() => {
       });
     }
 
-    const map = L.map("requestMap", { zoomControl: true });
+    mapInstance = L.map(mapNode, { zoomControl: true });
     L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
       maxZoom: 19,
       subdomains: "abcd",
       attribution: "&copy; OpenStreetMap &copy; CARTO",
-    }).addTo(map);
+    }).addTo(mapInstance);
 
-    map.setView([lat, lng], 15);
-    L.marker([lat, lng]).addTo(map).bindPopup(address || "Адрес заявки").openPopup();
-    const refreshSize = () => map.invalidateSize();
-    map.whenReady(refreshSize);
+    mapInstance.setView([lat, lng], 15);
+    L.marker([lat, lng]).addTo(mapInstance).bindPopup(address || "Адрес заявки").openPopup();
+    const refreshSize = () => mapInstance?.invalidateSize();
+    mapInstance.whenReady(refreshSize);
     window.addEventListener("resize", refreshSize);
     setTimeout(refreshSize, 250);
   }
 
   document.addEventListener("DOMContentLoaded", init);
 
-  return { init };
+  return { init, destroy };
 })();
