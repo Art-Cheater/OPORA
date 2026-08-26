@@ -435,6 +435,9 @@ window.OporaList = (() => {
       };
 
       try {
+        if (!validateRequestFormBeforeSave(form)) {
+          return;
+        }
         if (window.OporaRequestsForm?.handleCreateSubmit) {
           await OporaRequestsForm.handleCreateSubmit(form, doSubmit);
         } else {
@@ -584,35 +587,110 @@ window.OporaList = (() => {
   function defaultLocalDateTime() {
     const now = new Date();
     const pad = (n) => String(n).padStart(2, "0");
-    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
   }
 
   function parseRepeatInput(raw) {
-    const text = String(raw || "").trim().replace("T", " ");
-    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ ](\d{2}):(\d{2}))?$/);
+    const text = String(raw || "").trim().replace(" ", "T");
+    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
     if (!match) return null;
-    const [, y, m, d, hh = "12", mm = "00"] = match;
+    const [, y, m, d, hh, mm] = match;
     return `${y}-${m}-${d}T${hh}:${mm}`;
+  }
+
+  function ensureRepeatModal() {
+    let modal = document.getElementById("oporaRepeatModal");
+    if (modal) return modal;
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `<div class="modal fade" id="oporaRepeatModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="oporaRepeatModalTitle">Повторное обращение</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label" for="oporaRepeatAt">Дата и время <span class="text-danger">*</span></label>
+                <input type="datetime-local" class="form-control" id="oporaRepeatAt" required>
+              </div>
+              <div class="mb-0">
+                <label class="form-label" for="oporaRepeatDescription">Новое описание (необязательно)</label>
+                <textarea class="form-control" id="oporaRepeatDescription" rows="4"
+                  placeholder="Можно оставить пустым"></textarea>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+              <button type="button" class="btn btn-primary" id="oporaRepeatSaveBtn">Сохранить</button>
+            </div>
+          </div>
+        </div>
+      </div>`
+    );
+    return document.getElementById("oporaRepeatModal");
+  }
+
+  function askRepeatDetails(number) {
+    return new Promise((resolve) => {
+      const modalEl = ensureRepeatModal();
+      const title = document.getElementById("oporaRepeatModalTitle");
+      const atInput = document.getElementById("oporaRepeatAt");
+      const descInput = document.getElementById("oporaRepeatDescription");
+      const saveBtn = document.getElementById("oporaRepeatSaveBtn");
+      if (title) title.textContent = number ? `Повторное обращение — ${number}` : "Повторное обращение";
+      if (atInput) atInput.value = defaultLocalDateTime();
+      if (descInput) descInput.value = "";
+
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      let settled = false;
+
+      const cleanup = () => {
+        saveBtn?.removeEventListener("click", onSave);
+        modalEl.removeEventListener("hidden.bs.modal", onHide);
+      };
+
+      const onHide = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(null);
+      };
+
+      const onSave = () => {
+        const receivedAt = parseRepeatInput(atInput?.value || "");
+        if (!receivedAt) {
+          showToast("Укажите дату и время повторного обращения", "danger");
+          atInput?.focus();
+          return;
+        }
+        settled = true;
+        cleanup();
+        modal.hide();
+        resolve({
+          receivedAt,
+          description: (descInput?.value || "").trim(),
+        });
+      };
+
+      saveBtn?.addEventListener("click", onSave);
+      modalEl.addEventListener("hidden.bs.modal", onHide);
+      modal.show();
+      window.setTimeout(() => atInput?.focus(), 200);
+    });
   }
 
   async function markRepeatFromList(id, number) {
     if (!id) return;
-    const label = number ? ` заявки ${number}` : "";
-    const raw = window.prompt(
-      `Дата и время повторного обращения${label}\nФормат: ГГГГ-ММ-ДД ЧЧ:ММ`,
-      defaultLocalDateTime()
-    );
-    if (raw === null) return;
-    const receivedAt = parseRepeatInput(raw);
-    if (!receivedAt) {
-      showToast("Неверный формат даты. Пример: 2026-08-26 14:30", "danger");
-      return;
-    }
+    const details = await askRepeatDetails(number || "");
+    if (!details) return;
     try {
       const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
       const body = new FormData();
       if (csrf) body.append("csrf_token", csrf);
-      body.append("received_at", receivedAt);
+      body.append("received_at", details.receivedAt);
+      if (details.description) body.append("description", details.description);
       const response = await fetch(`/requests/${id}/mark-repeat`, {
         method: "POST",
         headers: {
@@ -630,6 +708,28 @@ window.OporaList = (() => {
     } catch (err) {
       showToast(err.message || "Ошибка", "danger");
     }
+  }
+
+  function validateRequestFormBeforeSave(form) {
+    if (!form?.matches?.("[data-requests-form]")) return true;
+    const received = form.querySelector('[name="received_at"]');
+    if (received && !String(received.value || "").trim()) {
+      showToast("Укажите дату и время получения заявки", "danger");
+      received.classList.add("is-invalid");
+      received.focus();
+      return false;
+    }
+    const phone = form.querySelector('[name="phone"]');
+    if (phone && !String(phone.value || "").trim()) {
+      const ok = window.confirm(
+        "Телефон заявителя не заполнен.\n\nСохранить заявку без телефона?"
+      );
+      if (!ok) {
+        phone.focus();
+        return false;
+      }
+    }
+    return true;
   }
 
   async function executeDelete() {

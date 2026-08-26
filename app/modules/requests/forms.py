@@ -122,7 +122,7 @@ class RequestForm(FlaskForm):
     description = TextAreaField("Описание", validators=[Optional(), Length(max=10000)])
     latitude = DecimalField("Широта", validators=[Optional()], places=7)
     longitude = DecimalField("Долгота", validators=[Optional()], places=7)
-    phone = TelField("Телефон", validators=[Optional(), Length(max=30)])
+    phone = TelField("Телефон заявителя", validators=[Optional(), Length(max=30)])
     applicant_name = StringField("Заявитель", validators=[Optional(), Length(max=255)])
     has_barrier = BooleanField("Шлагбаум", default=False)
     barrier_phone = TelField("Телефон шлагбаума", validators=[Optional(), Length(max=30)])

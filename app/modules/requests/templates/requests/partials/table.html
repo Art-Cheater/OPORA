@@ -19,12 +19,24 @@
             {% for req in requests_pagination.items %}
             <tr data-opora-id="{{ req.id }}" class="{{ request_row_class(req) }}">
                 <td class="fw-semibold">
-                    <span class="request-number {% if req.repeat_count and req.repeat_count > 0 %}request-number--repeat{% endif %}">
-                        {{ req.number }}
-                        {% if req.repeat_count and req.repeat_count > 0 %}
-                        <span class="badge text-bg-danger" title="Повторные обращения">×{{ req.repeat_count }}</span>
+                    <div class="d-flex align-items-center gap-2">
+                        {% if current_user.has_permission('requests.edit') and req.status and not req.status.is_final %}
+                        <button type="button"
+                                class="table-actions__btn"
+                                title="Повторное обращение"
+                                data-opora-repeat
+                                data-id="{{ req.id }}"
+                                data-number="{{ req.number }}">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
                         {% endif %}
-                    </span>
+                        <span class="request-number {% if req.repeat_count and req.repeat_count > 0 %}request-number--repeat{% endif %}">
+                            {{ req.number }}
+                            {% if req.repeat_count and req.repeat_count > 0 %}
+                            <span class="badge text-bg-danger" title="Повторные обращения">×{{ req.repeat_count }}</span>
+                            {% endif %}
+                        </span>
+                    </div>
                 </td>
                 <td>
                     <div class="fw-medium {% if req.repeat_count and req.repeat_count > 0 %}text-danger{% endif %}">{{ req.address }}</div>
@@ -58,16 +70,6 @@
                 </td>
                 <td class="text-end">
                     <div class="table-actions" data-tour="row-actions">
-                        {% if current_user.has_permission('requests.edit') and req.status and not req.status.is_final %}
-                        <button type="button"
-                                class="table-actions__btn"
-                                title="Повторное обращение"
-                                data-opora-repeat
-                                data-id="{{ req.id }}"
-                                data-number="{{ req.number }}">
-                            <i class="bi bi-plus-lg"></i>
-                        </button>
-                        {% endif %}
                         <button type="button" class="table-actions__btn" title="Просмотр"
                                 data-opora-action="view" data-id="{{ req.id }}"
                                 data-url="{{ url_for('requests.detail', request_id=req.id) }}">

@@ -380,7 +380,26 @@
     toggleBarrier(form);
     bindAddressCheck(form);
     bindAddressSuggestions(form);
-    form.addEventListener("submit", () => syncOriginalAddress(form));
+    form.addEventListener("submit", (event) => {
+      syncOriginalAddress(form);
+      const received = form.querySelector('[name="received_at"]');
+      if (received && !String(received.value || "").trim()) {
+        event.preventDefault();
+        alert("Укажите дату и время получения заявки");
+        received.focus();
+        return;
+      }
+      const phone = form.querySelector('[name="phone"]');
+      if (phone && !String(phone.value || "").trim()) {
+        const ok = window.confirm(
+          "Телефон заявителя не заполнен.\n\nСохранить заявку без телефона?"
+        );
+        if (!ok) {
+          event.preventDefault();
+          phone.focus();
+        }
+      }
+    });
   }
 
   window.OporaRequestsForm = {

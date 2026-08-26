@@ -156,6 +156,8 @@ class RequestService:
             raise ValidationError("Номер заявки обязателен.")
         if not (payload.address or "").strip():
             raise ValidationError("Адрес обязателен.")
+        if payload.received_at is None:
+            raise ValidationError("Укажите дату и время получения заявки.")
         cls._prepare_address(payload)
         if not payload.address:
             raise ValidationError("Адрес обязателен.")

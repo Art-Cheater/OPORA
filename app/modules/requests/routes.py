@@ -117,9 +117,12 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
     received_at = field(
         "received_at",
         form.received_at.data,
-        default=datetime.now(timezone.utc) if entity is None else getattr(entity, "received_at", None),
+        default=None,
     )
-    if isinstance(received_at, datetime) and received_at.tzinfo is None:
+    if received_at is None:
+        # Не подставляем «сейчас» молча — дата обязательна в форме.
+        received_at = None
+    elif isinstance(received_at, datetime) and received_at.tzinfo is None:
         received_at = received_at.replace(tzinfo=timezone.utc)
 
     def preserved(code, submitted, attr, default=None):
