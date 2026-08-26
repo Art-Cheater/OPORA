@@ -1,5 +1,4 @@
 {% from "macros/badges.html" import request_status_badge, request_row_class %}
-{% from "macros/crud.html" import table_actions %}
 {% from "macros/ui.html" import sortable_th %}
 {% set sort_by = sort_by|default(request.args.get('sort_by', 'received_at'), true) %}
 {% set sort_dir = sort_dir|default(request.args.get('sort_dir', 'desc'), true) %}
@@ -58,7 +57,7 @@
                     {% endif %}
                 </td>
                 <td class="text-end">
-                    <div class="d-inline-flex align-items-center gap-1 justify-content-end">
+                    <div class="table-actions" data-tour="row-actions">
                         {% if current_user.has_permission('requests.edit') and req.status and not req.status.is_final %}
                         <button type="button"
                                 class="table-actions__btn"
@@ -69,13 +68,24 @@
                             <i class="bi bi-plus-lg"></i>
                         </button>
                         {% endif %}
-                        {{ table_actions(
-                            view_url=url_for('requests.detail', request_id=req.id),
-                            edit_url=url_for('requests.edit', request_id=req.id),
-                            entity_id=req.id,
-                            can_edit=current_user.has_permission('requests.edit'),
-                            can_delete=current_user.has_permission('requests.delete')
-                        ) }}
+                        <button type="button" class="table-actions__btn" title="Просмотр"
+                                data-opora-action="view" data-id="{{ req.id }}"
+                                data-url="{{ url_for('requests.detail', request_id=req.id) }}">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                        {% if current_user.has_permission('requests.edit') %}
+                        <button type="button" class="table-actions__btn" title="Редактировать"
+                                data-opora-action="edit" data-id="{{ req.id }}"
+                                data-url="{{ url_for('requests.edit', request_id=req.id) }}">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        {% endif %}
+                        {% if current_user.has_permission('requests.delete') %}
+                        <button type="button" class="table-actions__btn table-actions__btn--danger" title="Удалить"
+                                data-opora-action="delete" data-id="{{ req.id }}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                        {% endif %}
                     </div>
                 </td>
             </tr>

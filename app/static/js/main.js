@@ -1134,9 +1134,16 @@ function initOporaTourLazy() {
 
     function openTour(event) {
         event?.preventDefault();
+        event?.stopPropagation();
         ensureTourLoaded()
-            .then((tour) => tour?.open?.())
-            .catch(() => {});
+            .then((tour) => {
+                if (!tour?.open) throw new Error("OporaTour.open недоступен");
+                tour.open();
+            })
+            .catch((err) => {
+                console.error("Обучение:", err);
+                window.alert("Не удалось загрузить обучение. Обновите страницу (Ctrl+F5).");
+            });
     }
 
     document.getElementById("oporaTourBtn")?.addEventListener("click", openTour);

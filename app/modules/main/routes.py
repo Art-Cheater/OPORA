@@ -4,6 +4,7 @@ from flask import current_app, render_template
 from flask_login import current_user, login_required
 
 from app.modules.main.blueprint import main_bp
+from app.release import RELEASE
 
 
 @main_bp.route("/")
@@ -22,7 +23,7 @@ def health():
     return (
         {
             "status": "ok",
-            "release": "20260826a",
+            "release": RELEASE,
             "eis_year_from": int(current_app.config.get("EIS_YEAR_FROM") or 0),
         },
         200,

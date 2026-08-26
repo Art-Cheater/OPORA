@@ -181,7 +181,7 @@ window.OporaList = (() => {
         applySort(sortBtn.dataset.oporaSort, sortBtn.dataset.oporaSortDefault || "asc");
         return;
       }
-      if (e.target.closest("[data-opora-action]")) return;
+      if (e.target.closest("[data-opora-action], [data-opora-repeat], .table-actions")) return;
       const row = e.target.closest("tr[data-opora-id]");
       if (row) openView(row.dataset.oporaId);
     });

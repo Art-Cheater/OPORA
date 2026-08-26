@@ -87,9 +87,12 @@ def _ensure_upload_folder(app: Flask) -> None:
 
 
 def _configure_static_assets(app: Flask) -> None:
-    """Кэш статики с cache-bust (?v=), чтобы immutable в nginx не залипал на старых JS/CSS."""
+    """Кэш статики с cache-bust (?v=RELEASE), иначе nginx immutable залипает на старом JS."""
+    from app.release import RELEASE
+
     app.config.setdefault("SEND_FILE_MAX_AGE_DEFAULT", 60 * 60 * 24 * 30)
-    version = str(app.config.get("APP_VERSION", "1"))
+    # Не APP_VERSION из .env — он почти не меняется и после деплоя браузер держит битый JS.
+    version = str(RELEASE)
 
     @app.url_defaults
     def _static_cache_bust(endpoint, values):
