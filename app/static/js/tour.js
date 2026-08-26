@@ -438,7 +438,13 @@
   function can(permission) {
     if (!permission) return true;
     const perms = config.permissions || [];
-    return perms.includes("*") || perms.includes(permission);
+    if (perms.includes("*") || perms.includes(permission)) return true;
+    // Запасной путь: пункт есть в боковом меню — значит право уже проверено на сервере
+    const module = permission.split(".")[0];
+    const tourId = module === "users" ? "employees" : module;
+    const nav = document.querySelector(`#sidebar a[data-tour="${tourId}"]`);
+    if (nav && !nav.classList.contains("sidebar__link--disabled")) return true;
+    return false;
   }
 
   function primaryRole() {
@@ -450,7 +456,28 @@
   }
 
   function availableSections() {
-    return SECTIONS.filter((section) => can(section.permission));
+    const allowed = SECTIONS.filter((section) => can(section.permission));
+    if (allowed.some((s) => s.id !== "welcome")) return allowed;
+    // Конфиг не подгрузился — показываем то, что видно в меню
+    return SECTIONS.filter((section) => {
+      if (!section.permission) return true;
+      const id = section.id;
+      const nav = document.querySelector(`#sidebar a[data-tour="${id}"]`);
+      return Boolean(nav);
+    });
+  }
+
+  function refreshConfig() {
+    const parsed = readConfig();
+    if (parsed && typeof parsed === "object") {
+      config = {
+        userId: parsed.userId || "",
+        userName: parsed.userName || "",
+        roles: parsed.roles || [],
+        roleNames: parsed.roleNames || [],
+        permissions: parsed.permissions || [],
+      };
+    }
   }
 
   function sleep(ms) {
@@ -899,6 +926,7 @@
   }
 
   function openMenu() {
+    refreshConfig();
     show();
     renderMenu();
   }
@@ -914,21 +942,28 @@
   }
 
   function init() {
-    const parsed = readConfig();
-    if (!parsed) return;
-    config = parsed;
-    window.addEventListener("resize", () => {
-      if (!root || root.hidden || mode !== "step") return;
-      const step = steps[index];
-      if (step) highlight(step.target);
-    });
+    refreshConfig();
+    if (!window.__oporaTourResizeBound) {
+      window.__oporaTourResizeBound = true;
+      window.addEventListener("resize", () => {
+        if (!root || root.hidden || mode !== "step") return;
+        const step = steps[index];
+        if (step) highlight(step.target);
+      });
+    }
   }
 
   window.OporaTour = {
     init,
     open: openMenu,
-    startFull,
-    startSection,
+    startFull: () => {
+      refreshConfig();
+      return startFull();
+    },
+    startSection: (sectionId) => {
+      refreshConfig();
+      return startSection(sectionId);
+    },
     stop,
   };
 })();

@@ -1105,10 +1105,11 @@ function initOporaTourLazy() {
     }
 
     function ensureTourLoaded() {
+        if (loadPromise) return loadPromise;
         if (window.OporaTour?.open) {
+            window.OporaTour.init?.();
             return Promise.resolve(window.OporaTour);
         }
-        if (loadPromise) return loadPromise;
         const cssHref = cfgNode.dataset.tourCss;
         const jsSrc = cfgNode.dataset.tourJs;
         if (!jsSrc) return Promise.reject(new Error("tour.js missing"));
@@ -1125,11 +1126,17 @@ function initOporaTourLazy() {
             script.src = jsSrc;
             script.async = true;
             script.onload = () => {
-                window.OporaTour?.init?.();
-                resolve(window.OporaTour);
+                try {
+                    window.OporaTour?.init?.();
+                    resolve(window.OporaTour);
+                } catch (err) {
+                    reject(err);
+                }
             };
             script.onerror = () => reject(new Error("tour.js load failed"));
             document.body.appendChild(script);
+        }).finally(() => {
+            /* оставляем loadPromise, чтобы повторно не вешать script */
         });
         return loadPromise;
     }
@@ -1140,6 +1147,7 @@ function initOporaTourLazy() {
         ensureTourLoaded()
             .then((tour) => {
                 if (!tour?.open) throw new Error("OporaTour.open недоступен");
+                tour.init?.();
                 tour.open();
             })
             .catch((err) => {
@@ -1157,7 +1165,10 @@ function initOporaTourLazy() {
         localStorage.setItem(tourSeenKey(), "1");
         window.setTimeout(() => {
             ensureTourLoaded()
-                .then((tour) => tour?.open?.())
+                .then((tour) => {
+                    tour?.init?.();
+                    tour?.open?.();
+                })
                 .catch(() => {});
         }, 700);
     } catch {
