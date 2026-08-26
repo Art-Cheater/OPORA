@@ -608,6 +608,36 @@ def create():
     )
 
 
+@requests_bp.route("/<uuid:request_id>/coords", methods=["GET", "POST"])
+@login_required
+@permission_required(PERM_REQUESTS_VIEW)
+def ensure_coords(request_id: uuid.UUID):
+    """Ленивое геокодирование для карты — не блокирует открытие карточки."""
+    req = RequestRepository.get_by_id(request_id)
+    if req is None:
+        return ajax_error("Заявка не найдена.", status=404)
+    if req.latitude is not None and req.longitude is not None:
+        return ajax_ok(
+            "ok",
+            latitude=float(req.latitude),
+            longitude=float(req.longitude),
+            address=req.address,
+        )
+    try:
+        filled = RequestService.fill_missing_coordinates(req, persist=True)
+    except Exception:
+        current_app.logger.exception("ensure_coords %s", request_id)
+        filled = False
+    if not filled or req.latitude is None or req.longitude is None:
+        return ajax_error("Не удалось определить координаты по адресу.", status=422)
+    return ajax_ok(
+        "ok",
+        latitude=float(req.latitude),
+        longitude=float(req.longitude),
+        address=req.address,
+    )
+
+
 @requests_bp.route("/<uuid:request_id>")
 @login_required
 @permission_required(PERM_REQUESTS_VIEW)
@@ -616,13 +646,6 @@ def detail(request_id: uuid.UUID):
     if req is None:
         flash("Заявка не найдена.", "danger")
         return redirect(url_for("requests.index"))
-
-    if req.latitude is None or req.longitude is None:
-        try:
-            RequestService.fill_missing_coordinates(req, persist=True)
-            req = RequestRepository.get_by_id(request_id) or req
-        except Exception:
-            current_app.logger.exception("Не удалось геокодировать заявку %s", request_id)
 
     comments = list(
         Comment.query.filter_by(

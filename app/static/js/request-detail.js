@@ -1,47 +1,24 @@
 window.OporaRequestDetail = (() => {
-  let mapInstance = null;
-  let resizeHandler = null;
-
-  function iconBase() {
-    const link = document.querySelector('link[href*="leaflet.css"]');
-    if (link?.href) {
-      return link.href.replace(/leaflet\.css.*$/i, "images/");
-    }
-    return "/static/vendor/leaflet/images/";
-  }
-
-  function destroy() {
-    if (resizeHandler) {
-      window.removeEventListener("resize", resizeHandler);
-      resizeHandler = null;
-    }
-    if (mapInstance) {
-      try {
-        mapInstance.remove();
-      } catch (_) {
-        /* ignore */
-      }
-      mapInstance = null;
-    }
-    const mapNode = document.getElementById("requestMap");
-    if (mapNode) {
-      mapNode._leaflet_id = null;
-      mapNode.innerHTML = "";
-    }
-  }
+  let inflight = null;
 
   function showStatus(text, isError) {
     const el = document.getElementById("requestMapStatus");
     if (!el) return;
-    el.textContent = text;
+    el.textContent = text || "";
     el.classList.toggle("text-danger", Boolean(isError));
     el.classList.toggle("text-muted", !isError);
   }
 
-  function showOsmFallback(lat, lng, address) {
+  function setExternalLink(lat, lng) {
+    const link = document.getElementById("requestMapExternal");
+    if (!link) return;
+    link.href = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=17/${lat}/${lng}`;
+    link.classList.remove("d-none");
+  }
+
+  function paintIframe(lat, lng, address) {
     const mapNode = document.getElementById("requestMap");
     if (!mapNode) return;
-    destroy();
     const delta = 0.012;
     const bbox = `${lng - delta}%2C${lat - delta}%2C${lng + delta}%2C${lat + delta}`;
     const src =
@@ -49,16 +26,15 @@ window.OporaRequestDetail = (() => {
       `&marker=${lat}%2C${lng}`;
     mapNode.innerHTML =
       `<iframe title="Карта заявки" src="${src}" ` +
-      `style="width:100%;height:360px;border:0;border-radius:12px;" loading="lazy"></iframe>`;
-    showStatus(address ? `Точка: ${address}` : "Карта OpenStreetMap");
+      `style="width:100%;height:360px;border:0;border-radius:12px;" loading="lazy" ` +
+      `referrerpolicy="no-referrer-when-downgrade"></iframe>`;
+    setExternalLink(lat, lng);
+    showStatus(address ? `Точка: ${address}` : "");
   }
 
-  function readCoords() {
-    const mapNode = document.getElementById("requestMap");
-    const latRaw =
-      mapNode?.dataset.lat || document.getElementById("requestLat")?.value || "";
-    const lngRaw =
-      mapNode?.dataset.lng || document.getElementById("requestLng")?.value || "";
+  function readCoords(mapNode) {
+    const latRaw = mapNode?.dataset.lat || "";
+    const lngRaw = mapNode?.dataset.lng || "";
     const lat = latRaw !== "" ? Number(latRaw) : null;
     const lng = lngRaw !== "" ? Number(lngRaw) : null;
     if (lat === null || lng === null || Number.isNaN(lat) || Number.isNaN(lng)) {
@@ -67,77 +43,66 @@ window.OporaRequestDetail = (() => {
     return { lat, lng };
   }
 
-  function buildMap(lat, lng, address) {
-    const mapNode = document.getElementById("requestMap");
-    if (!mapNode || typeof L === "undefined") return false;
-
-    destroy();
-
-    try {
-      const base = iconBase();
-      if (typeof L.Icon?.Default?.mergeOptions === "function") {
-        L.Icon.Default.mergeOptions({
-          iconUrl: `${base}marker-icon.png`,
-          iconRetinaUrl: `${base}marker-icon-2x.png`,
-          shadowUrl: `${base}marker-shadow.png`,
-        });
-      }
-
-      mapInstance = L.map(mapNode, { zoomControl: true });
-      // OSM напрямую — cartocdn часто недоступен из РФ/корпсети
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "&copy; OpenStreetMap",
-      }).addTo(mapInstance);
-
-      mapInstance.setView([lat, lng], 16);
-      L.marker([lat, lng]).addTo(mapInstance).bindPopup(address || "Адрес заявки").openPopup();
-
-      resizeHandler = () => mapInstance?.invalidateSize();
-      mapInstance.whenReady(resizeHandler);
-      window.addEventListener("resize", resizeHandler);
-      setTimeout(resizeHandler, 100);
-      setTimeout(resizeHandler, 400);
-      showStatus("");
-      return true;
-    } catch (err) {
-      console.error("request map:", err);
-      showOsmFallback(lat, lng, address);
-      return true;
+  async function fetchCoords(url) {
+    const response = await fetch(url, {
+      headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.success) {
+      throw new Error(data.message || "Не удалось определить координаты");
     }
+    return {
+      lat: Number(data.latitude),
+      lng: Number(data.longitude),
+      address: data.address || "",
+    };
   }
 
-  function init(attempt) {
+  async function init() {
     const mapNode = document.getElementById("requestMap");
     if (!mapNode) return;
+    if (inflight) return;
 
-    const coords = readCoords();
-    if (!coords) {
+    const address = mapNode.dataset.address || "";
+    const existing = readCoords(mapNode);
+    if (existing) {
+      paintIframe(existing.lat, existing.lng, address);
+      return;
+    }
+
+    const url = mapNode.dataset.coordsUrl;
+    if (!url) {
       showStatus("Координаты для этой заявки не сохранены.", true);
       return;
     }
 
-    const address =
-      mapNode.dataset.address ||
-      document.getElementById("requestAddress")?.value ||
-      "";
-
-    if (typeof L === "undefined") {
-      const n = attempt || 0;
-      if (n < 50) {
-        window.setTimeout(() => init(n + 1), 80);
-        return;
-      }
-      showOsmFallback(coords.lat, coords.lng, address);
-      return;
-    }
-
-    if (!buildMap(coords.lat, coords.lng, address)) {
-      showOsmFallback(coords.lat, coords.lng, address);
-    }
+    showStatus("Определяем координаты по адресу…");
+    inflight = fetchCoords(url)
+      .then((coords) => {
+        if (Number.isNaN(coords.lat) || Number.isNaN(coords.lng)) {
+          throw new Error("Пустой ответ геокодера");
+        }
+        mapNode.dataset.lat = String(coords.lat);
+        mapNode.dataset.lng = String(coords.lng);
+        paintIframe(coords.lat, coords.lng, coords.address || address);
+      })
+      .catch((err) => {
+        showStatus(err.message || "Не удалось показать карту по адресу.", true);
+      })
+      .finally(() => {
+        inflight = null;
+      });
+    await inflight;
   }
 
-  document.addEventListener("DOMContentLoaded", () => init(0));
+  function destroy() {
+    const mapNode = document.getElementById("requestMap");
+    if (mapNode) mapNode.innerHTML = "";
+  }
 
-  return { init: () => init(0), destroy };
+  document.addEventListener("DOMContentLoaded", () => {
+    init();
+  });
+
+  return { init, destroy };
 })();

@@ -5,10 +5,6 @@
 
 {% block title %}{{ req.number }} — {{ app_name }}{% endblock %}
 
-{% block extra_css %}
-<link rel="stylesheet" href="{{ static_url('vendor/leaflet/leaflet.css') }}">
-{% endblock %}
-
 {% block page_header %}
 {% call page_header(req.number ~ " — " ~ req.address, (req.pp or ''), "geo-alt") %}
 {% if current_user.has_permission('requests.edit') %}
@@ -176,21 +172,20 @@
         <div class="card mb-4">
             <div class="card-header"><i class="bi bi-map"></i>Карта (OpenStreetMap)</div>
             <div class="card-body">
-                {% if req.latitude is not none and req.longitude is not none %}
                 <div id="requestMap"
                      style="height: 360px; border-radius: 12px; background: #e8eef3;"
-                     data-lat="{{ req.latitude }}"
-                     data-lng="{{ req.longitude }}"
-                     data-address="{{ req.address|e }}"></div>
-                <div id="requestMapStatus" class="small text-muted mt-2"></div>
-                <a class="btn btn-sm btn-outline-primary mt-2"
-                   href="https://www.openstreetmap.org/?mlat={{ req.latitude }}&mlon={{ req.longitude }}#map=17/{{ req.latitude }}/{{ req.longitude }}"
+                     data-request-id="{{ req.id }}"
+                     data-lat="{{ req.latitude if req.latitude is not none else '' }}"
+                     data-lng="{{ req.longitude if req.longitude is not none else '' }}"
+                     data-address="{{ req.address|e }}"
+                     data-coords-url="{{ url_for('requests.ensure_coords', request_id=req.id) }}"></div>
+                <div id="requestMapStatus" class="small text-muted mt-2">Загрузка карты…</div>
+                <a id="requestMapExternal"
+                   class="btn btn-sm btn-outline-primary mt-2 {% if req.latitude is none or req.longitude is none %}d-none{% endif %}"
+                   href="{% if req.latitude is not none and req.longitude is not none %}https://www.openstreetmap.org/?mlat={{ req.latitude }}&mlon={{ req.longitude }}#map=17/{{ req.latitude }}/{{ req.longitude }}{% else %}#{% endif %}"
                    target="_blank" rel="noopener noreferrer">
                     <i class="bi bi-box-arrow-up-right"></i> Открыть точку на карте
                 </a>
-                {% else %}
-                <div class="text-muted">Координаты для этой заявки не сохранены. Сохраните адрес через подсказку или обновите страницу после деплоя геокодера.</div>
-                {% endif %}
             </div>
         </div>
 
@@ -304,6 +299,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ static_url('vendor/leaflet/leaflet.js') }}"></script>
 <script src="{{ static_url('js/request-detail.js') }}"></script>
 {% endblock %}

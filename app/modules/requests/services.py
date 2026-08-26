@@ -276,6 +276,7 @@ class RequestService:
 
     @staticmethod
     def _geocode_latlng(query: str) -> tuple[Decimal, Decimal] | None:
+        """Короткий запрос к Nominatim. Без suggest() — он для домов ждёт до 2.5 с и блокирует воркер."""
         text = (query or "").strip()
         if len(text) < 3:
             return None
@@ -283,13 +284,19 @@ class RequestService:
             from app.core.address import get_address_suggestion_service
 
             service = get_address_suggestion_service()
-            candidates = list(service.suggest(text, limit=5))
-            if hasattr(service, "_search_provider"):
-                regional = text
-                folded = text.casefold()
-                if "киров" not in folded:
-                    regional = f"{text}, Киров, Кировская область"
-                candidates.extend(service._search_provider(regional, 5) or [])
+            if not hasattr(service, "_search_provider"):
+                return None
+            regional = text
+            folded = text.casefold()
+            if "киров" not in folded:
+                regional = f"{text}, Киров, Кировская область"
+            old_timeout = service.provider_timeout_seconds
+            # Не держим HTTP-воркер: таймаут геокодера жёстко ограничен.
+            service.provider_timeout_seconds = min(max(old_timeout, 0.3), 1.0)
+            try:
+                candidates = service._search_provider(regional, 3) or []
+            finally:
+                service.provider_timeout_seconds = old_timeout
         except Exception:
             return None
         for hit in candidates:
