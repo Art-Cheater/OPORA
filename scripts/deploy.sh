@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Обновление с origin/main. Тома БД не трогаем. Короче простой, чем force-recreate всего стека.
+# Обновление с origin/main. Тома БД не трогаем.
+# Если Docker Hub недоступен (часто IPv6), пересобираем поверх уже
+# имеющихся opora-web / opora-nginx — код всё равно берётся из git.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,8 +23,43 @@ if [[ ! -f "$ROOT/.env" ]]; then
   exit 1
 fi
 
+build_from_local_images() {
+  echo "==> Docker Hub недоступен — сборка из локальных образов (код из git)"
+  if ! docker image inspect opora-web:latest >/dev/null 2>&1; then
+    echo "Нет образа opora-web:latest. Нужен хотя бы один успешный build с Docker Hub."
+    exit 1
+  fi
+  if ! docker image inspect opora-nginx:latest >/dev/null 2>&1; then
+    echo "Нет образа opora-nginx:latest. Нужен хотя бы один успешный build с Docker Hub."
+    exit 1
+  fi
+
+  local tmp_web tmp_nginx
+  tmp_web="$(mktemp)"
+  tmp_nginx="$(mktemp)"
+  cat >"$tmp_web" <<'EOF'
+FROM opora-web:latest
+WORKDIR /app
+COPY . .
+EOF
+  cat >"$tmp_nginx" <<'EOF'
+FROM opora-nginx:latest
+COPY docker/nginx.conf /etc/nginx/nginx.conf
+COPY app/static /usr/share/nginx/html/static
+EOF
+
+  docker build -f "$tmp_web" -t opora-web:latest .
+  docker tag opora-web:latest opora-eis-sync:latest
+  docker tag opora-web:latest opora-inquiry-sync:latest
+  docker build -f "$tmp_nginx" -t opora-nginx:latest .
+  rm -f "$tmp_web" "$tmp_nginx"
+}
+
 echo "==> docker compose build web nginx inquiry-sync eis-sync"
-docker compose build web nginx inquiry-sync eis-sync
+if ! docker compose build --pull=false web nginx inquiry-sync eis-sync; then
+  echo "==> обычная сборка не удалась, пробуем без Docker Hub"
+  build_from_local_images
+fi
 
 echo "==> пересоздаём web (миграции в entrypoint), nginx ждёт healthcheck"
 docker compose up -d --no-deps --force-recreate web
