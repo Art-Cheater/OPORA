@@ -620,7 +620,9 @@ function initInstantNav(sidebar, closeSidebar) {
             window.OporaAudit?.init?.();
         }
         if (document.getElementById("requestMap")) {
-            window.OporaRequestDetail?.init?.();
+            // Leaflet/скрипт детали могли только что подгрузиться через SPA
+            window.setTimeout(() => window.OporaRequestDetail?.init?.(), 0);
+            window.setTimeout(() => window.OporaRequestDetail?.init?.(), 200);
         }
         if (document.getElementById("inquiryForwardCard")) {
             const card = document.getElementById("inquiryForwardCard");

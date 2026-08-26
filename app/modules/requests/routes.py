@@ -614,6 +614,13 @@ def detail(request_id: uuid.UUID):
         flash("Заявка не найдена.", "danger")
         return redirect(url_for("requests.index"))
 
+    if req.latitude is None or req.longitude is None:
+        try:
+            RequestService.fill_missing_coordinates(req, persist=True)
+            req = RequestRepository.get_by_id(request_id) or req
+        except Exception:
+            current_app.logger.exception("Не удалось геокодировать заявку %s", request_id)
+
     comments = list(
         Comment.query.filter_by(
             entity_type="request",

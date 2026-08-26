@@ -208,6 +208,10 @@ class RequestService:
             payload.house = cls._normalize_text(payload.house)
             payload.address_source = cls._normalize_text(payload.address_source) or "selected"
             payload.address_external_id = cls._normalize_text(payload.address_external_id)
+            if payload.latitude is None or payload.longitude is None:
+                latlng = cls._geocode_latlng(selected or submitted)
+                if latlng:
+                    payload.latitude, payload.longitude = latlng
             return
 
         payload.latitude = None
@@ -263,6 +267,51 @@ class RequestService:
         payload.address_external_id = suggestion.address_external_id
         payload.latitude = suggestion.latitude
         payload.longitude = suggestion.longitude
+        if payload.latitude is None or payload.longitude is None:
+            latlng = cls._geocode_latlng(payload.normalized_address or submitted)
+            if latlng:
+                payload.latitude, payload.longitude = latlng
+
+    @staticmethod
+    def _geocode_latlng(query: str) -> tuple[Decimal, Decimal] | None:
+        text = (query or "").strip()
+        if len(text) < 3:
+            return None
+        try:
+            from app.core.address import get_address_suggestion_service
+
+            service = get_address_suggestion_service()
+            candidates = list(service.suggest(text, limit=5))
+            if hasattr(service, "_search_provider"):
+                regional = text
+                folded = text.casefold()
+                if "киров" not in folded:
+                    regional = f"{text}, Киров, Кировская область"
+                candidates.extend(service._search_provider(regional, 5) or [])
+        except Exception:
+            return None
+        for hit in candidates:
+            if hit.latitude is None or hit.longitude is None:
+                continue
+            try:
+                return Decimal(str(hit.latitude)), Decimal(str(hit.longitude))
+            except Exception:
+                continue
+        return None
+
+    @classmethod
+    def fill_missing_coordinates(cls, req: Request, *, persist: bool = True) -> bool:
+        """Дополнить lat/lng у заявки без координат (каталог улиц их не хранит)."""
+        if req.latitude is not None and req.longitude is not None:
+            return True
+        query = (req.normalized_address or req.address or "").strip()
+        latlng = cls._geocode_latlng(query)
+        if not latlng:
+            return False
+        req.latitude, req.longitude = latlng
+        if persist:
+            db.session.commit()
+        return True
 
     @staticmethod
     def _snapshot(req: Request) -> dict[str, Any]:

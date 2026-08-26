@@ -1,4 +1,4 @@
-﻿{% extends "layouts/app.html" %}
+{% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header %}
 {% from "macros/badges.html" import request_status_badge %}
 {% from "macros/files.html" import file_gallery, file_preview_modal %}
@@ -177,17 +177,19 @@
             <div class="card-header"><i class="bi bi-map"></i>Карта (OpenStreetMap)</div>
             <div class="card-body">
                 {% if req.latitude is not none and req.longitude is not none %}
-                <div id="requestMap" style="height: 360px; border-radius: 12px;"></div>
-                <input type="hidden" id="requestAddress" value="{{ req.address }}">
-                <input type="hidden" id="requestLat" value="{{ req.latitude }}">
-                <input type="hidden" id="requestLng" value="{{ req.longitude }}">
-                <a class="btn btn-sm btn-outline-primary mt-3"
+                <div id="requestMap"
+                     style="height: 360px; border-radius: 12px; background: #e8eef3;"
+                     data-lat="{{ req.latitude }}"
+                     data-lng="{{ req.longitude }}"
+                     data-address="{{ req.address|e }}"></div>
+                <div id="requestMapStatus" class="small text-muted mt-2"></div>
+                <a class="btn btn-sm btn-outline-primary mt-2"
                    href="https://www.openstreetmap.org/?mlat={{ req.latitude }}&mlon={{ req.longitude }}#map=17/{{ req.latitude }}/{{ req.longitude }}"
                    target="_blank" rel="noopener noreferrer">
                     <i class="bi bi-box-arrow-up-right"></i> Открыть точку на карте
                 </a>
                 {% else %}
-                <div class="text-muted">Координаты для этой заявки не сохранены.</div>
+                <div class="text-muted">Координаты для этой заявки не сохранены. Сохраните адрес через подсказку или обновите страницу после деплоя геокодера.</div>
                 {% endif %}
             </div>
         </div>
