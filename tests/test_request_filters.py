@@ -89,7 +89,7 @@ def test_request_filters_district_pp_beresnev(admin_client, app):
 
 
 def test_request_number_format_and_natural_sort(admin_client, app):
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     from app.models.auth.user import User
     from app.models.requests.request_status import RequestStatus
@@ -104,6 +104,7 @@ def test_request_number_format_and_natural_sort(admin_client, app):
             db.select(RequestStatus).where(RequestStatus.code == STATUS_NEW)
         )
         assert admin and status
+        now = datetime.now(timezone.utc)
 
         def payload(number: str) -> RequestPayload:
             return RequestPayload(
@@ -121,7 +122,7 @@ def test_request_number_format_and_natural_sort(admin_client, app):
                 address_source=None,
                 address_external_id=None,
                 pp=None,
-                received_at=None,
+                received_at=now,
                 dispatcher_name=None,
                 latitude=None,
                 longitude=None,
