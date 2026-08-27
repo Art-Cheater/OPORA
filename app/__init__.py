@@ -468,6 +468,14 @@ def _register_cli_commands(app: Flask) -> None:
         ReferenceDataService.seed_all()
         print("Справочные данные заполнены.")
 
+    @app.cli.command("seed-wallpapers")
+    def seed_wallpapers():
+        """Добавляет реальные фото Кирова в каталог обоев."""
+        from app.modules.wallpapers.seed import WallpaperSeedService
+
+        n = WallpaperSeedService.ensure_kirov_wallpapers()
+        print(f"Обои Кирова: создано новых {n}, каталог обновлён.")
+
     @app.cli.command("sync-security")
     def sync_security():
         """Синхронизирует каталог модулей и разрешений (без сброса ролей)."""

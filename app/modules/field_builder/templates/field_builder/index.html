@@ -1,4 +1,4 @@
-{% extends "layouts/app.html" %}
+﻿{% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header %}
 
 {% block title %}Конструктор полей — {{ app_name }}{% endblock %}
@@ -125,5 +125,5 @@
 
 {% block extra_js %}
 {{ super() }}
-<script src="{{ url_for('static', filename='js/field-builder.js') }}"></script>
+<script src="{{ static_url('js/field-builder.js') }}"></script>
 {% endblock %}

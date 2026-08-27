@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:17-alpine
         env:
           POSTGRES_USER: opora_ci
           POSTGRES_PASSWORD: opora_ci
@@ -50,7 +50,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Unit + HTTP tests (PostgreSQL 16)
+      - name: Unit + HTTP tests (PostgreSQL 17)
         env:
           FLASK_ENV: testing
           USE_SQLITE: "0"

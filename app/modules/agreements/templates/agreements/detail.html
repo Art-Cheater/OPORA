@@ -1,11 +1,11 @@
-{% extends "layouts/app.html" %}
+﻿{% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header %}
 
 {% block title %}{{ agreement.title }} — {{ app_name }}{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
-<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+<link rel="stylesheet" href="{{ static_url('vendor/leaflet/leaflet.css') }}">
 {% endblock %}
 
 {% block page_header %}
@@ -90,6 +90,6 @@
 
 {% block extra_js %}
 {{ super() }}
-<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
-<script src="{{ url_for('static', filename='js/agreements-map.js') }}"></script>
+<script src="{{ static_url('vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ static_url('js/agreements-map.js') }}"></script>
 {% endblock %}

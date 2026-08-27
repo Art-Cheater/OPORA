@@ -1,4 +1,4 @@
-{% extends "layouts/app.html" %}
+﻿{% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header %}
 
 {% block title %}Роли — {{ app_name }}{% endblock %}
@@ -79,5 +79,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/roles-admin.js') }}"></script>
+<script src="{{ static_url('js/roles-admin.js') }}"></script>
 {% endblock %}

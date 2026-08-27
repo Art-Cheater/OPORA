@@ -1,4 +1,4 @@
-{% extends "layouts/app.html" %}
+﻿{% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header %}
 {% from "macros/files.html" import file_gallery %}
 
@@ -109,6 +109,6 @@
 {% block extra_js %}
 {{ super() }}
 {% if can_forward %}
-<script src="{{ url_for('static', filename='js/inquiries-forward.js') }}?v=20260821e"></script>
+<script src="{{ static_url('js/inquiries-forward.js') }}?v=20260821e"></script>
 {% endif %}
 {% endblock %}

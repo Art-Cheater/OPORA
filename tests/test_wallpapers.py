@@ -57,7 +57,11 @@ def test_admin_can_add_wallpaper_and_user_can_select(app):
     assert b"Oboi" in res.data or "добавлены" in res.get_data(as_text=True).lower() or "Киров" in res.get_data(as_text=True)
 
     with app.app_context():
-        wp = db.session.query(Wallpaper).filter(Wallpaper.deleted_at.is_(None)).one()
+        wp = (
+            db.session.query(Wallpaper)
+            .filter(Wallpaper.deleted_at.is_(None), Wallpaper.title == "Киров — тест")
+            .one()
+        )
         bg_id = wallpaper_bg_id(wp.id)
         wp_id = wp.id
 
@@ -86,3 +90,29 @@ def test_appearance_rejects_unknown_legacy_bg(admin_client):
         json={"theme": "light", "background": "kirov_center"},
     )
     assert res.status_code == 400
+
+
+def test_seed_kirov_wallpapers_and_previews(admin_client, app):
+    with app.app_context():
+        from app.modules.wallpapers.seed import WallpaperSeedService
+
+        WallpaperSeedService.ensure_kirov_wallpapers()
+        items = (
+            db.session.query(Wallpaper)
+            .filter(
+                Wallpaper.deleted_at.is_(None),
+                Wallpaper.is_active.is_(True),
+                Wallpaper.storage_key.like("wallpapers/seed/%"),
+            )
+            .all()
+        )
+        assert len(items) >= 6
+        sample = items[0]
+
+    home = admin_client.get("/").get_data(as_text=True)
+    assert "Трифонов монастырь" in home or "Театральная площадь" in home
+    assert "appearance-bg-card__preview" in home
+
+    file_res = admin_client.get(f"/wallpapers/{sample.id}/file")
+    assert file_res.status_code == 200
+    assert file_res.mimetype and "image" in file_res.mimetype

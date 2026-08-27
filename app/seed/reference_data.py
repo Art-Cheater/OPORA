@@ -175,6 +175,15 @@ class ReferenceDataService:
         cls._seed_roles_and_permissions()
         db.session.commit()
         cls._clear_permission_cache()
+        try:
+            from app.modules.wallpapers.seed import WallpaperSeedService
+
+            WallpaperSeedService.ensure_kirov_wallpapers()
+        except Exception:
+            # seed обоев не должен ломать весь reference seed
+            from flask import current_app
+
+            current_app.logger.exception("Не удалось засеять обои Кирова")
 
     @classmethod
     def sync_security_roles(cls) -> None:

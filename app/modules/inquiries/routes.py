@@ -196,7 +196,10 @@ def download(inquiry_id, file_id):
         abort(404)
     path = InquiryService.ensure_attachment_file(inquiry, item)
     if path is None:
-        abort(404)
+        abort(
+            404,
+            description="Файл временно недоступен. Подождите минуту — inquiry-sync восстановит его с почты.",
+        )
     download_name = resolve_download_filename(
         item.file_name,
         storage_key=item.storage_key,

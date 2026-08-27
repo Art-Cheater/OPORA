@@ -24,7 +24,6 @@ class MessengerMessage(BaseModel):
     __table_args__ = (
         Index("ix_messenger_messages_conversation_id", "conversation_id"),
         Index("ix_messenger_messages_sender_id", "sender_id"),
-        Index("ix_messenger_messages_is_read", "is_read"),
     )
 
     conversation_id: Mapped[uuid.UUID] = mapped_column(
