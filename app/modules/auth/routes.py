@@ -104,6 +104,94 @@ def change_password():
     return redirect(url_for("auth.profile"))
 
 
+@auth_bp.route("/ui/appearance", methods=["POST"])
+@login_required
+def ui_appearance():
+    """Сохранение темы / выбранного системного фона (JSON)."""
+    from flask import jsonify
+
+    from app.modules.auth.appearance_service import AppearanceService
+
+    data = request.get_json(silent=True) or {}
+    try:
+        if "theme" in data:
+            AppearanceService.set_theme(current_user, data.get("theme"))
+        if "background" in data:
+            AppearanceService.set_background(current_user, data.get("background") or "none")
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify(
+        {
+            "ok": True,
+            "theme": current_user.ui_theme,
+            "background": current_user.ui_background,
+        }
+    )
+
+
+@auth_bp.route("/ui/background", methods=["POST"])
+@login_required
+def ui_background_upload():
+    """Загрузка пользовательского фона."""
+    from flask import jsonify
+
+    from app.core.upload_utils import UploadValidationError
+    from app.core.ui_backgrounds import resolve_user_background_url
+    from app.modules.auth.appearance_service import AppearanceService
+
+    file_storage = request.files.get("background") or request.files.get("file")
+    try:
+        AppearanceService.upload_background(current_user, file_storage)
+    except UploadValidationError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify(
+        {
+            "ok": True,
+            "background": "custom",
+            "url": resolve_user_background_url(current_user),
+        }
+    )
+
+
+@auth_bp.route("/ui/background", methods=["DELETE"])
+@login_required
+def ui_background_delete():
+    """Удаление пользовательского фона."""
+    from flask import jsonify
+
+    from app.modules.auth.appearance_service import AppearanceService
+
+    AppearanceService.clear_custom_background(current_user)
+    return jsonify({"ok": True, "background": current_user.ui_background})
+
+
+@auth_bp.route("/ui/background/file")
+@login_required
+def ui_background_file():
+    """Отдаёт только свой загруженный фон текущего пользователя."""
+    from flask import abort, send_file
+
+    from app.core.upload_utils import resolve_storage_path
+
+    key = current_user.ui_background_key
+    if not key or current_user.ui_background != "custom":
+        abort(404)
+    # чужой ключ в сессии невозможен — ключ берётся из своей записи
+    try:
+        path = resolve_storage_path(key)
+    except FileNotFoundError:
+        abort(404)
+    if not path.is_file():
+        abort(404)
+    # защита: ключ обязан принадлежать каталогу пользователя
+    expected_prefix = f"users/{current_user.id}/background/"
+    if not str(key).replace("\\", "/").startswith(expected_prefix):
+        abort(403)
+    return send_file(path, conditional=True, max_age=3600)
+
+
 @auth_bp.route("/login-logs")
 @login_required
 @permission_required(PERM_AUTH_LOGIN_LOGS_VIEW)

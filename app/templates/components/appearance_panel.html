@@ -1,0 +1,72 @@
+{# Панель внешнего вида: тема + фон #}
+{% if current_user.is_authenticated %}
+<button type="button"
+        class="topbar__theme"
+        id="appearanceToggle"
+        data-bs-toggle="offcanvas"
+        data-bs-target="#appearancePanel"
+        aria-controls="appearancePanel"
+        aria-label="Внешний вид"
+        title="Внешний вид">
+    <i class="bi bi-palette2" aria-hidden="true"></i>
+</button>
+
+<div class="offcanvas offcanvas-end appearance-panel" tabindex="-1" id="appearancePanel" aria-labelledby="appearancePanelLabel">
+    <div class="offcanvas-header">
+        <h2 class="offcanvas-title h5 mb-0" id="appearancePanelLabel">
+            <i class="bi bi-palette2 me-1"></i> Внешний вид
+        </h2>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Закрыть"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="appearance-section">
+            <div class="appearance-section__label">Тема</div>
+            <div class="appearance-theme-btns" role="group" aria-label="Тема">
+                <button type="button" class="appearance-theme-btn" data-appearance-theme="light">
+                    <i class="bi bi-sun-fill"></i> Светлая
+                </button>
+                <button type="button" class="appearance-theme-btn" data-appearance-theme="dark">
+                    <i class="bi bi-moon-stars-fill"></i> Тёмная
+                </button>
+            </div>
+        </div>
+
+        <div class="appearance-section">
+            <div class="appearance-section__label">Фон интерфейса</div>
+            <div class="appearance-bg-grid" id="appearanceBgGrid">
+                {% for opt in ui_background_options %}
+                <button type="button"
+                        class="appearance-bg-card{% if opt.selected %} is-selected{% endif %}"
+                        data-appearance-bg="{{ opt.id }}"
+                        title="{{ opt.title }}">
+                    {% if opt.thumb %}
+                    <span class="appearance-bg-card__preview" style="background-image:url('{{ opt.thumb }}')"></span>
+                    {% else %}
+                    <span class="appearance-bg-card__preview appearance-bg-card__preview--none">
+                        <i class="bi bi-slash-circle"></i>
+                    </span>
+                    {% endif %}
+                    <span class="appearance-bg-card__title">{{ opt.title }}</span>
+                    <span class="appearance-bg-card__check"><i class="bi bi-check-lg"></i></span>
+                </button>
+                {% endfor %}
+            </div>
+
+            <div class="appearance-upload mt-3">
+                <label class="btn btn-outline-primary w-100 appearance-upload__btn">
+                    <i class="bi bi-upload"></i> Загрузить своё
+                    <input type="file"
+                           id="appearanceBgFile"
+                           accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                           hidden>
+                </label>
+                <button type="button" class="btn btn-link btn-sm px-0 mt-1{% if ui_background_id != 'custom' %} d-none{% endif %}" id="appearanceBgClear">
+                    Удалить свой фон
+                </button>
+                <div class="form-text">JPG, PNG или WebP, до 5 МБ</div>
+                <div class="text-danger small mt-1 d-none" id="appearanceBgError"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}

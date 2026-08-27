@@ -4,16 +4,20 @@ from flask import current_app, render_template
 from flask_login import current_user, login_required
 
 from app.modules.main.blueprint import main_bp
+from app.modules.main.dashboard_service import DashboardService
 from app.release import RELEASE
 
 
 @main_bp.route("/")
 @login_required
 def index():
-    """Главная страница — дашборд."""
+    """Главная страница — рабочий дашборд."""
+    tz_name = current_app.config.get("EIS_SYNC_TIMEZONE") or "Europe/Moscow"
+    dashboard = DashboardService.build(current_user, tz_name=tz_name)
     return render_template(
         "main/index.html",
         user=current_user,
+        dashboard=dashboard,
     )
 
 

@@ -59,6 +59,9 @@ class User(UserMixin, BaseModel):
     personal_contracts_enabled: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )
+    ui_theme: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    ui_background: Mapped[str] = mapped_column(String(64), default="none", nullable=False)
+    ui_background_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     blocked_at: Mapped[datetime | None] = mapped_column(nullable=True)
     blocked_by: Mapped[uuid.UUID | None] = mapped_column(
         GUID(),

@@ -1,139 +1,196 @@
 {% extends "layouts/app.html" %}
-{% from "macros/badges.html" import status_badge %}
-{% from "macros/ui.html" import page_header %}
+{% from "macros/badges.html" import request_status_badge, project_status_badge, contract_status_badge %}
 
 {% block title %}Главная — {{ app_name }}{% endblock %}
 
-{% block page_header %}
-{% call page_header("Панель управления", "Добро пожаловать, " ~ user.full_name, "grid-1x2") %}{% endcall %}
-{% endblock %}
+{% block page_header %}{% endblock %}
 
 {% block content %}
-<div class="row g-4 mb-4">
-    <div class="col-sm-6 col-xl-3">
-        <a href="{{ url_for('requests.index') }}" class="dashboard-card">
-            <div class="card card-stat h-100">
-                <div class="card-stat__icon card-stat__icon--orange">
-                    <i class="bi bi-clipboard-check"></i>
-                </div>
-                <div class="card-stat__title">Заявки</div>
-                <div class="card-stat__desc">Управление заявками</div>
-                {{ status_badge('in_progress', 'В работе') }}
-            </div>
-        </a>
+<section class="dash-hero" data-tour="dashboard-hero">
+    <div class="dash-hero__main">
+        <h1 class="dash-hero__title">{{ dashboard.greeting }}</h1>
+        <p class="dash-hero__subtitle">{{ dashboard.subtitle }}</p>
     </div>
-    <div class="col-sm-6 col-xl-3">
-        <a href="{{ url_for('projects.index') }}" class="dashboard-card">
-            <div class="card card-stat h-100">
-                <div class="card-stat__icon card-stat__icon--green">
-                    <i class="bi bi-folder2-open"></i>
-                </div>
-                <div class="card-stat__title">Проекты</div>
-                <div class="card-stat__desc">Текущие проекты</div>
-                {{ status_badge('done', 'Готово') }}
-            </div>
-        </a>
-    </div>
-    <div class="col-sm-6 col-xl-3">
-        <a href="{{ url_for('contracts.index') }}" class="dashboard-card">
-            <div class="card card-stat h-100">
-                <div class="card-stat__icon card-stat__icon--yellow">
-                    <i class="bi bi-file-earmark-text"></i>
-                </div>
-                <div class="card-stat__title">Договоры</div>
-                <div class="card-stat__desc">Документооборот</div>
-                {{ status_badge('not_ready', 'Не готово') }}
-            </div>
-        </a>
-    </div>
-    <div class="col-sm-6 col-xl-3">
-        {% if current_user.has_permission('users.view') %}
-        <a href="{{ url_for('employees.index') }}" class="dashboard-card">
-            <div class="card card-stat h-100">
-                <div class="card-stat__icon card-stat__icon--orange">
-                    <i class="bi bi-people"></i>
-                </div>
-                <div class="card-stat__title">Сотрудники</div>
-                <div class="card-stat__desc">Управление персоналом</div>
-                {{ status_badge('done', 'Активен') }}
-            </div>
-        </a>
-        {% else %}
-        <div class="dashboard-card dashboard-card--disabled">
-            <div class="card card-stat h-100">
-                <div class="card-stat__icon card-stat__icon--orange">
-                    <i class="bi bi-people"></i>
-                </div>
-                <div class="card-stat__title">Сотрудники</div>
-                <div class="card-stat__desc">Управление персоналом</div>
-                <span class="badge badge-neutral">Скоро</span>
-            </div>
-        </div>
+    <div class="dash-hero__meta">
+        <div class="dash-hero__chip"><i class="bi bi-calendar3"></i> {{ dashboard.now_date }}</div>
+        <div class="dash-hero__chip" id="dashClock"><i class="bi bi-clock"></i> {{ dashboard.now_time }}</div>
+        {% if dashboard.position %}
+        <div class="dash-hero__chip"><i class="bi bi-person-badge"></i> {{ dashboard.position }}</div>
         {% endif %}
     </div>
-</div>
+</section>
 
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-activity"></i> Разделы системы</span>
+{% if dashboard.metrics %}
+<section class="dash-metrics" data-tour="dashboard-metrics">
+    {% for m in dashboard.metrics %}
+    <a href="{{ m.href }}" class="dash-metric dash-metric--{{ m.tone }}">
+        <div class="dash-metric__icon"><i class="bi bi-{{ m.icon }}"></i></div>
+        <div class="dash-metric__body">
+            <div class="dash-metric__label">{{ m.title }}</div>
+            <div class="dash-metric__value">{{ m.value }}</div>
+        </div>
+    </a>
+    {% endfor %}
+</section>
+{% endif %}
+
+<div class="dash-grid">
+    <div class="dash-grid__main">
+        {% if dashboard.attention %}
+        <section class="dash-card dash-attention" data-tour="dashboard-attention">
+            <div class="dash-card__head">
+                <h2 class="dash-card__title"><i class="bi bi-exclamation-triangle"></i> Требует внимания</h2>
+            </div>
+            <div class="dash-attention__list">
+                {% for item in dashboard.attention %}
+                <a href="{{ item.href }}" class="dash-attention__item dash-attention__item--{{ item.tone }}">
+                    <span class="dash-attention__dot" aria-hidden="true"></span>
+                    <span class="dash-attention__count">{{ item.count }}</span>
+                    <span class="dash-attention__label">{{ item.label }}</span>
+                    <i class="bi bi-chevron-right"></i>
+                </a>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        {% if current_user.has_permission('requests.view') %}
+        <section class="dash-card" data-tour="dashboard-requests">
+            <div class="dash-card__head">
+                <h2 class="dash-card__title"><i class="bi bi-clipboard-check"></i> Последние заявки</h2>
+                <a class="dash-card__link" href="{{ url_for('requests.index') }}">Все заявки →</a>
+            </div>
+            {% if dashboard.recent_requests %}
+            <div class="table-responsive">
+                <table class="table table-opora dash-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>№</th>
+                            <th>Адрес</th>
+                            <th>Описание</th>
+                            <th>Статус</th>
+                            <th>Дата</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in dashboard.recent_requests %}
+                        <tr class="dash-row" data-href="{{ r.href }}">
+                            <td class="fw-semibold">{{ r.number }}</td>
+                            <td>{{ r.address }}</td>
+                            <td class="text-muted">{{ r.description }}</td>
+                            <td>
+                                <span class="badge badge-status"
+                                      style="background-color: color-mix(in srgb, {{ r.status_color }} 28%, var(--opora-card)); color: {{ r.status_color }}; border: 1px solid color-mix(in srgb, {{ r.status_color }} 45%, var(--opora-border));">
+                                    {{ r.status_name }}
+                                </span>
+                            </td>
+                            <td class="text-nowrap text-muted">{{ r.date|local_dt('%d.%m.%Y') if r.date else '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="dash-empty">Пока нет заявок</div>
+            {% endif %}
+        </section>
+        {% endif %}
+
+        <div class="row g-3">
+            {% if current_user.has_permission('projects.view') %}
+            <div class="col-lg-6">
+                <section class="dash-card h-100" data-tour="dashboard-projects">
+                    <div class="dash-card__head">
+                        <h2 class="dash-card__title"><i class="bi bi-folder2-open"></i> Последние проекты</h2>
+                        <a class="dash-card__link" href="{{ url_for('projects.index') }}">Все →</a>
+                    </div>
+                    {% if dashboard.recent_projects %}
+                    <ul class="dash-list">
+                        {% for p in dashboard.recent_projects %}
+                        <li>
+                            <a href="{{ p.href }}" class="dash-list__item">
+                                <div>
+                                    <div class="dash-list__title">{{ p.name }}</div>
+                                    <div class="dash-list__meta">{{ p.object }}</div>
+                                </div>
+                                <span class="badge badge-status badge-neutral">{{ p.status_label }}</span>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="dash-empty">Нет проектов</div>
+                    {% endif %}
+                </section>
+            </div>
+            {% endif %}
+
+            {% if current_user.has_permission('contracts.view') %}
+            <div class="col-lg-6">
+                <section class="dash-card h-100" data-tour="dashboard-contracts">
+                    <div class="dash-card__head">
+                        <h2 class="dash-card__title"><i class="bi bi-file-earmark-text"></i> Последние контракты</h2>
+                        <a class="dash-card__link" href="{{ url_for('contracts.index') }}">Все →</a>
+                    </div>
+                    {% if dashboard.recent_contracts %}
+                    <ul class="dash-list">
+                        {% for c in dashboard.recent_contracts %}
+                        <li>
+                            <a href="{{ c.href }}" class="dash-list__item">
+                                <div>
+                                    <div class="dash-list__title">{{ c.number }}</div>
+                                    <div class="dash-list__meta">{{ c.contractor }} · {{ c.amount_fmt }}{% if c.end_date %} · до {{ c.end_date.strftime('%d.%m.%Y') }}{% endif %}</div>
+                                </div>
+                                <span class="badge badge-status badge-neutral">{{ c.status_label }}</span>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="dash-empty">Нет контрактов</div>
+                    {% endif %}
+                </section>
+            </div>
+            {% endif %}
+        </div>
     </div>
-    <div class="table-card border-0 shadow-none">
-        <table class="table table-opora">
-            <thead>
-                <tr>
-                    <th>Модуль</th>
-                    <th>Описание</th>
-                    <th>Статус</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr class="dashboard-row" data-href="{{ url_for('requests.index') }}">
-                    <td><i class="bi bi-clipboard-check text-primary me-2"></i>Заявки</td>
-                    <td class="text-muted">Создание и обработка заявок</td>
-                    <td>{{ status_badge('in_progress') }}</td>
-                    <td class="text-end"><i class="bi bi-chevron-right text-muted"></i></td>
-                </tr>
-                <tr class="dashboard-row" data-href="{{ url_for('projects.index') }}">
-                    <td><i class="bi bi-folder2-open text-primary me-2"></i>Проекты</td>
-                    <td class="text-muted">Управление проектами</td>
-                    <td>{{ status_badge('in_progress') }}</td>
-                    <td class="text-end"><i class="bi bi-chevron-right text-muted"></i></td>
-                </tr>
-                <tr class="dashboard-row" data-href="{{ url_for('contracts.index') }}">
-                    <td><i class="bi bi-file-earmark-text text-primary me-2"></i>Договоры</td>
-                    <td class="text-muted">Реестр договоров</td>
-                    <td>{{ status_badge('in_progress') }}</td>
-                    <td class="text-end"><i class="bi bi-chevron-right text-muted"></i></td>
-                </tr>
-                {% if current_user.has_permission('users.view') %}
-                <tr class="dashboard-row" data-href="{{ url_for('employees.index') }}">
-                    <td><i class="bi bi-people text-primary me-2"></i>Сотрудники</td>
-                    <td class="text-muted">Управление персоналом</td>
-                    <td>{{ status_badge('done') }}</td>
-                    <td class="text-end"><i class="bi bi-chevron-right text-muted"></i></td>
-                </tr>
-                {% endif %}
-                {% if current_user.has_permission('audit.view') %}
-                <tr class="dashboard-row" data-href="{{ url_for('audit.index') }}">
-                    <td><i class="bi bi-journal-text text-primary me-2"></i>Журнал действий</td>
-                    <td class="text-muted">Аудит системы</td>
-                    <td>{{ status_badge('done') }}</td>
-                    <td class="text-end"><i class="bi bi-chevron-right text-muted"></i></td>
-                </tr>
-                {% endif %}
-            </tbody>
-        </table>
-    </div>
+
+    {% if dashboard.quick_actions %}
+    <aside class="dash-grid__side">
+        <section class="dash-card dash-actions" data-tour="dashboard-actions">
+            <div class="dash-card__head">
+                <h2 class="dash-card__title"><i class="bi bi-lightning-charge"></i> Быстрые действия</h2>
+            </div>
+            <div class="dash-actions__grid">
+                {% for a in dashboard.quick_actions %}
+                <a href="{{ a.href }}" class="dash-action">
+                    <i class="bi bi-{{ a.icon }}"></i>
+                    <span>{{ a.label }}</span>
+                </a>
+                {% endfor %}
+            </div>
+        </section>
+    </aside>
+    {% endif %}
 </div>
 {% endblock %}
 
 {% block extra_js %}
 {{ super() }}
 <script>
-document.querySelectorAll(".dashboard-row[data-href]").forEach((row) => {
-  row.style.cursor = "pointer";
+document.querySelectorAll(".dash-row[data-href]").forEach((row) => {
   row.addEventListener("click", () => { window.location.href = row.dataset.href; });
 });
+(function () {
+  const el = document.getElementById("dashClock");
+  if (!el) return;
+  function tick() {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    el.innerHTML = '<i class="bi bi-clock"></i> ' + hh + ":" + mm;
+  }
+  setInterval(tick, 30000);
+})();
 </script>
 {% endblock %}

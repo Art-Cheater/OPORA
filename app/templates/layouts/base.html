@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru"{% if ui_theme_pref %} data-theme-pref="{{ ui_theme_pref }}"{% endif %}>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,7 +7,8 @@
     <script>
     (function () {
         try {
-            var t = localStorage.getItem("opora-theme");
+            var server = document.documentElement.getAttribute("data-theme-pref");
+            var t = (server === "light" || server === "dark") ? server : localStorage.getItem("opora-theme");
             if (t !== "light" && t !== "dark") {
                 t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
             }
@@ -24,16 +25,24 @@
     <link href="{{ static_url('vendor/bootstrap.min.css') }}" rel="stylesheet">
     <link href="{{ static_url('vendor/bootstrap-icons.min.css') }}" rel="stylesheet">
     <link href="{{ static_url('css/main.css') }}" rel="stylesheet">
+    <link href="{{ static_url('css/dashboard.css') }}" rel="stylesheet">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    {% if ui_background_url %}
+    <style id="oporaUiBgStyle">:root{--opora-ui-bg-image:url("{{ ui_background_url }}");}</style>
+    {% endif %}
 
     {% block extra_css %}{% endblock %}
 </head>
-<body class="{% block body_class %}{% endblock %}"
-      data-messenger-unread-interval="{{ messenger_unread_interval_ms|default(15000) }}">
+<body class="{% block body_class %}{% endblock %}{% if ui_background_url %} has-ui-bg{% endif %}"
+      data-messenger-unread-interval="{{ messenger_unread_interval_ms|default(15000) }}"
+      data-ui-bg="{{ ui_background_id|default('none') }}"
+      data-appearance-url="{{ url_for('auth.ui_appearance') if current_user.is_authenticated else '' }}"
+      data-appearance-bg-url="{{ url_for('auth.ui_background_upload') if current_user.is_authenticated else '' }}">
     {% block body %}{% endblock %}
 
     <script src="{{ static_url('vendor/bootstrap.bundle.min.js') }}"></script>
     <script src="{{ static_url('js/theme.js') }}"></script>
+    <script src="{{ static_url('js/appearance.js') }}"></script>
     <script src="{{ static_url('js/main.js') }}"></script>
     {% block extra_js %}{% endblock %}
 </body>
