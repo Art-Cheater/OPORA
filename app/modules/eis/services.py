@@ -701,7 +701,9 @@ class EisImportService:
         ContractServiceLink.ensure_object(contract, obj, user_id)
         contractors = self._sync_suppliers(run, contract, eis.suppliers, user_id)
         if contractors:
-            contract.contractor_name = "; ".join(item.name for item in contractors)[:500]
+            names = "; ".join(item.name for item in contractors)[:500]
+            if not (contract.contractor_name or "").strip():
+                contract.contractor_name = names
         self._apply_object_denorm(obj, contract, eis)
         project.status = ProjectStatus.IN_CONTRACT.value
         if tender is not None and tender.status != TenderApplicationStatus.WON.value:
@@ -785,32 +787,27 @@ class EisImportService:
             contract.eis_stage = eis.stage
         if eis.url:
             contract.eis_url = eis.url[:700]
-        if eis.delivery_place:
+        if eis.delivery_place and not (contract.delivery_place or "").strip():
             contract.delivery_place = eis.delivery_place[:5000]
         return contract, created
 
     def _apply_object_denorm(
         self, obj: WorkObject, contract: Contract, eis: EisContract
     ) -> None:
-        """Денормализация с активного/актуального контракта, не со случайного старого."""
-        active = ObjectService._active_contract(obj) or contract
-        if active.id != contract.id and contract.id is not None:
-            # обновляем денорм только если этот контракт — активный/актуальный
-            # (после ensure_object активный пересчитается на следующем чтении)
-            pass
-        if eis.number:
+        """Денормализация: дополняем пустые поля объекта, не затираем заполненные."""
+        if eis.number and not (obj.contract_number or "").strip():
             obj.contract_number = eis.number[:100]
-        elif contract.number:
+        elif contract.number and not (obj.contract_number or "").strip():
             obj.contract_number = contract.number[:100]
-        if eis.contract_date:
+        if eis.contract_date and obj.contract_date is None:
             obj.contract_date = eis.contract_date
-        elif contract.contract_date:
+        elif contract.contract_date and obj.contract_date is None:
             obj.contract_date = contract.contract_date
-        if eis.amount is not None:
+        if eis.amount is not None and obj.contract_amount is None:
             obj.contract_amount = eis.amount
-        elif contract.amount is not None:
+        elif contract.amount is not None and obj.contract_amount is None:
             obj.contract_amount = contract.amount
-        if contract.contractor_name:
+        if contract.contractor_name and not (obj.contractor_name or "").strip():
             obj.contractor_name = contract.contractor_name
         obj.status = WorkObjectStatus.IN_CONTRACT.value
 
@@ -836,19 +833,23 @@ class EisImportService:
     def _update_contract_fields(
         self, contract: Contract, eis: EisContract, user_id: uuid.UUID | None
     ) -> None:
-        if eis.number:
+        """ЕИС только дополняет пустые поля; заполненное вручную не затирает."""
+        if eis.number and not (contract.number or "").strip():
             contract.number = eis.number[:100]
         if eis.subject:
-            contract.title = eis.subject[:500]
-            contract.description = eis.subject
-        if eis.contract_date:
+            if not (contract.title or "").strip():
+                contract.title = eis.subject[:500]
+            if not (contract.description or "").strip():
+                contract.description = eis.subject
+        if eis.contract_date and contract.contract_date is None:
             contract.contract_date = eis.contract_date
-        if eis.start_date:
+        if eis.start_date and contract.start_date is None:
             contract.start_date = eis.start_date
-        if eis.end_date:
+        if eis.end_date and contract.end_date is None:
             contract.end_date = eis.end_date
-        if eis.amount is not None:
+        if eis.amount is not None and (contract.amount is None or contract.amount == 0):
             contract.amount = eis.amount
+        # Статус workflow трогаем осторожно: только если не в «занятых» стадиях
         mapped = map_contract_status(eis.stage, contract.status)
         if mapped:
             contract.status = mapped

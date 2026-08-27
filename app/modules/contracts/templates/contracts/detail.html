@@ -1,7 +1,6 @@
 {% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header %}
 {% from "macros/badges.html" import contract_status_badge, contract_type_badge %}
-{% from "macros/files.html" import file_gallery %}
 
 {% block title %}{{ contract.number }} — {{ app_name }}{% endblock %}
 
@@ -57,14 +56,51 @@
                 <div class="row g-3">
                     {% include "contracts/partials/detail_fields.html" %}
                     <div class="col-md-12">
-                        <small class="text-muted">Объекты</small>
-                        <ul class="mb-0">
+                        <small class="text-muted">Проект</small>
+                        <div>
+                            {% if contract.project and current_user.has_permission('projects.view') %}
+                            <a href="{{ url_for('projects.detail', project_id=contract.project.id) }}">
+                                {{ contract.project.code }} — {{ contract.project.name }}
+                            </a>
+                            {% elif contract.project %}
+                            {{ contract.project.code }} — {{ contract.project.name }}
+                            {% else %}—{% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-12">
+                        <small class="text-muted">Объекты контракта</small>
+                        <ul class="mb-2">
                             {% for obj in contract.work_objects %}
-                            <li><a href="{{ url_for('objects.detail', object_id=obj.id) }}">{{ obj.name }}</a></li>
+                            <li class="d-flex flex-wrap align-items-center gap-2">
+                                {% if current_user.has_permission('objects.view') %}
+                                <a href="{{ url_for('objects.detail', object_id=obj.id) }}">{{ obj.display_address or obj.name }}</a>
+                                {% else %}
+                                {{ obj.display_address or obj.name }}
+                                {% endif %}
+                                {% if current_user.has_permission('contracts.edit') %}
+                                <form method="POST" action="{{ url_for('contracts.unlink_object', contract_id=contract.id, object_id=obj.id) }}"
+                                      class="d-inline" onsubmit="return confirm('Отвязать объект от контракта?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-link btn-sm text-danger p-0">Отвязать</button>
+                                </form>
+                                {% endif %}
+                            </li>
                             {% else %}
                             <li class="text-muted">—</li>
                             {% endfor %}
                         </ul>
+                        {% if current_user.has_permission('contracts.edit') and link_object_form %}
+                        <form method="POST" action="{{ url_for('contracts.link_object', contract_id=contract.id) }}" class="row g-2 align-items-end">
+                            {{ link_object_form.hidden_tag() }}
+                            <div class="col-md-8">
+                                <label class="form-label small mb-1">Привязать объект</label>
+                                {{ link_object_form.object_id(class="form-select form-select-sm") }}
+                            </div>
+                            <div class="col-md-4">
+                                {{ link_object_form.submit(class="btn btn-outline-primary btn-sm") }}
+                            </div>
+                        </form>
+                        {% endif %}
                     </div>
                     {% if contract.contractors %}
                     <div class="col-md-12">
@@ -83,43 +119,7 @@
             </div>
         </div>
 
-        <div class="card mb-4">
-            <div class="card-header"><i class="bi bi-file-earmark-text"></i>Документы</div>
-            <div class="card-body">
-                <form method="POST" action="{{ url_for('contracts.add_document', contract_id=contract.id) }}" enctype="multipart/form-data" class="mb-3">
-                    {{ document_form.hidden_tag() }}
-                    <div class="row g-2">
-                        <div class="col-md-4">{{ document_form.title(class="form-control", placeholder="Название документа") }}</div>
-                        <div class="col-md-4">{{ document_form.document_type(class="form-select") }}</div>
-                        <div class="col-md-2">{{ document_form.document_number(class="form-control", placeholder="Номер") }}</div>
-                        <div class="col-md-2">{{ document_form.document_date(class="form-control", type="date") }}</div>
-                        <div class="col-md-9">
-                            {{ document_form.files(class="form-control form-control-sm", multiple=true) }}
-                            <div class="form-text">Несколько файлов сразу (до {{ max_upload_mb }} МБ суммарно).</div>
-                        </div>
-                        <div class="col-md-12">{{ document_form.description(class="form-control", rows=2, placeholder="Описание") }}</div>
-                        <div class="col-md-12">{{ document_form.submit(class="btn btn-primary btn-sm") }}</div>
-                    </div>
-                </form>
-                <div class="small mb-3">
-                    {% for doc in contract.documents if doc.deleted_at is none %}
-                    <div class="border rounded-2 p-3 mb-2">
-                        <div class="fw-medium">{{ doc.title }}</div>
-                        <div class="text-muted">
-                            {% if doc.document_number %}№ {{ doc.document_number }}{% endif %}
-                            {% if doc.document_date %} · {{ doc.document_date.strftime('%d.%m.%Y') }}{% endif %}
-                        </div>
-                        {% if doc.description %}
-                        <div class="mt-1">{{ doc.description }}</div>
-                        {% endif %}
-                    </div>
-                    {% else %}
-                    <div class="text-muted">Документы не добавлены.</div>
-                    {% endfor %}
-                </div>
-                {{ file_gallery(file_items, empty_text="") }}
-            </div>
-        </div>
+        {% include "contracts/partials/documents_block.html" %}
 
         <div class="card mb-4">
             <div class="card-header"><i class="bi bi-chat-left-text"></i>Комментарии</div>

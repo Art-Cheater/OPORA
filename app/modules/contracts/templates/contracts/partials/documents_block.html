@@ -1,0 +1,147 @@
+{# Документы контракта — тот же UX, что у проектов. Ожидает: contract, document_form, document_items, can_edit_docs #}
+<div class="card mb-4" data-tour="contract-documents">
+    <div class="card-header"><i class="bi bi-file-earmark-text"></i>Документы контракта</div>
+    <div class="card-body">
+        {% if can_edit_docs %}
+        <form method="POST"
+              action="{{ url_for('contracts.add_document', contract_id=contract.id) }}"
+              enctype="multipart/form-data"
+              class="mb-4"
+              data-project-documents
+              data-other-type="other">
+            {{ document_form.hidden_tag() }}
+            <div class="row g-2">
+                <div class="col-md-4">
+                    <label class="form-label small mb-1">{{ document_form.document_type.label.text }}</label>
+                    {{ document_form.document_type(class="form-select form-select-sm", data_doc_type=true) }}
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label small mb-1">{{ document_form.title.label.text }}</label>
+                    {{ document_form.title(class="form-control form-control-sm", placeholder="Заполнится автоматически", data_doc_title=true) }}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">{{ document_form.document_number.label.text }}</label>
+                    {{ document_form.document_number(class="form-control form-control-sm", placeholder="Номер") }}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">{{ document_form.document_date.label.text }}</label>
+                    {{ document_form.document_date(class="form-control form-control-sm", type="date") }}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small mb-1" data-doc-files-label>Выберите файл</label>
+                    {{ document_form.files(class="form-control form-control-sm", data_doc_files=true) }}
+                    <div class="form-text" data-doc-files-hint>Для данного типа можно загрузить только один файл.</div>
+                    <div class="alert alert-warning py-1 px-2 small mt-2 mb-0 d-none" role="alert" data-doc-files-warn></div>
+                    <div class="small text-muted mt-1 d-none" data-doc-files-preview></div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label small mb-1">{{ document_form.description.label.text }}</label>
+                    {{ document_form.description(class="form-control form-control-sm", rows=2, placeholder="Описание (необязательно)") }}
+                </div>
+                <div class="col-12">
+                    {{ document_form.submit(class="btn btn-primary btn-sm") }}
+                </div>
+            </div>
+        </form>
+        {% endif %}
+
+        <h6 class="text-muted text-uppercase small mb-3">Документы в контракте</h6>
+        {% if document_items %}
+        <div class="d-flex flex-column gap-2">
+            {% for item in document_items %}
+            <div class="border rounded-2 p-3">
+                <div class="d-flex flex-wrap justify-content-between gap-2">
+                    <div class="fw-medium">{{ item.title }}</div>
+                    {% if item.created_at %}
+                    <small class="text-muted">{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</small>
+                    {% endif %}
+                </div>
+                <div class="text-muted small mt-1">
+                    Тип: {{ item.type_label }}
+                    {% if item.number %} · № {{ item.number }}{% endif %}
+                    {% if item.doc_date %} · {{ item.doc_date.strftime('%d.%m.%Y') }}{% endif %}
+                </div>
+                {% if item.file_name %}
+                <div class="small mt-1">Файл: {{ item.file_name }}</div>
+                {% endif %}
+                {% if item.description %}
+                <div class="small mt-1">{{ item.description }}</div>
+                {% endif %}
+                <div class="mt-2 d-flex flex-wrap gap-2">
+                    {% if item.preview_url %}
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            data-bs-toggle="modal"
+                            data-bs-target="#filePreviewModal"
+                            data-preview-url="{{ item.preview_url }}"
+                            data-preview-name="{{ item.file_name or item.title }}"
+                            data-preview-type="{{ 'image' if item.mime and item.mime.startswith('image/') else 'pdf' }}">
+                        Открыть
+                    </button>
+                    {% endif %}
+                    {% if item.download_url %}
+                    <a class="btn btn-sm btn-outline-primary" href="{{ item.download_url }}">Скачать</a>
+                    {% endif %}
+                    {% if item.edit_url %}
+                    <button type="button" class="btn btn-sm btn-outline-primary"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#ctrDocEdit-{{ item.id }}"
+                            aria-expanded="false">
+                        Изменить
+                    </button>
+                    {% endif %}
+                    {% if item.delete_url %}
+                    <form method="POST" action="{{ item.delete_url }}" class="d-inline"
+                          onsubmit="return confirm('Удалить документ?\nДокумент будет удалён из контракта.');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Удалить</button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% if item.edit_url %}
+                <div class="collapse mt-3" id="ctrDocEdit-{{ item.id }}">
+                    <form method="POST" action="{{ item.edit_url }}" class="border-top pt-3">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label class="form-label small mb-1">Тип документа</label>
+                                <select name="document_type" class="form-select form-select-sm" required>
+                                    {% for value, label in document_form.document_type.choices %}
+                                    <option value="{{ value }}" {% if value == item.type_code %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label small mb-1">Название</label>
+                                <input type="text" name="title" class="form-control form-control-sm"
+                                       value="{{ item.title }}" maxlength="500" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">Номер</label>
+                                <input type="text" name="document_number" class="form-control form-control-sm"
+                                       value="{{ item.number or '' }}" maxlength="100">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">Дата документа</label>
+                                <input type="date" name="document_date" class="form-control form-control-sm"
+                                       value="{{ item.doc_date.strftime('%Y-%m-%d') if item.doc_date else '' }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small mb-1">Описание</label>
+                                <textarea name="description" class="form-control form-control-sm" rows="2"
+                                          maxlength="5000">{{ item.description or '' }}</textarea>
+                            </div>
+                            <div class="col-12">
+                                <button type="submit" name="submit" value="1" class="btn btn-primary btn-sm">Сохранить</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-muted">Документы не добавлены.</div>
+        {% endif %}
+    </div>
+</div>

@@ -203,6 +203,21 @@ class ObjectService:
         )
 
     @classmethod
+    def related_projects(cls, obj: WorkObject) -> list:
+        from app.models.projects.project import Project
+
+        return list(
+            db.session.scalars(
+                db.select(Project)
+                .where(
+                    Project.object_id == obj.id,
+                    Project.active_filter(),
+                )
+                .order_by(Project.created_at.desc())
+            )
+        )
+
+    @classmethod
     def related_contracts(cls, obj: WorkObject) -> list:
         """Все контракты, связанные с объектом (новые сверху)."""
         from sqlalchemy import desc, nulls_last
@@ -216,6 +231,7 @@ class ObjectService:
                 .join(ContractObject, ContractObject.contract_id == Contract.id)
                 .where(
                     ContractObject.object_id == obj.id,
+                    ContractObject.active_filter(),
                     Contract.active_filter(),
                 )
                 .order_by(
@@ -232,6 +248,7 @@ class ObjectService:
         contracts = cls.related_contracts(obj)
         return {
             "project": project,
+            "projects": cls.related_projects(obj),
             "tender": cls._active_tender(obj, project),
             "contract": cls._active_contract(obj),
             "contracts": contracts,

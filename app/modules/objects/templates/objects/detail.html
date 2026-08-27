@@ -105,9 +105,29 @@
     </div>
 </div>
 
+{% if linked_projects %}
+<div class="card mb-4">
+    <div class="card-header">Связанные проекты</div>
+    <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+            {% for p in linked_projects %}
+            <li class="list-group-item d-flex justify-content-between">
+                {% if current_user.has_permission('projects.view') %}
+                <a href="{{ url_for('projects.detail', project_id=p.id) }}">{{ p.code }} — {{ p.name }}</a>
+                {% else %}
+                {{ p.code }} — {{ p.name }}
+                {% endif %}
+                <span class="text-muted small">{{ p.status }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endif %}
+
 {% if linked_contracts %}
 <div class="card mb-4">
-    <div class="card-header">Контракты объекта</div>
+    <div class="card-header">Связанные контракты</div>
     <div class="card-body p-0">
         <table class="table table-opora mb-0">
             <thead>

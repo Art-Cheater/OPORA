@@ -6,6 +6,34 @@
     <div class="col-lg-7">
         <div class="row g-3">
             {% include "contracts/partials/detail_fields.html" %}
+            <div class="col-12">
+                <small class="text-muted">Проект</small>
+                <div>
+                    {% if contract.project and current_user.has_permission('projects.view') %}
+                    <a href="{{ url_for('projects.detail', project_id=contract.project.id) }}">
+                        {{ contract.project.code }} — {{ contract.project.name }}
+                    </a>
+                    {% elif contract.project %}
+                    {{ contract.project.code }} — {{ contract.project.name }}
+                    {% else %}—{% endif %}
+                </div>
+            </div>
+            <div class="col-12">
+                <small class="text-muted">Объекты</small>
+                <ul class="mb-0 small">
+                    {% for obj in contract.work_objects %}
+                    <li>
+                        {% if current_user.has_permission('objects.view') %}
+                        <a href="{{ url_for('objects.detail', object_id=obj.id) }}">{{ obj.display_address or obj.name }}</a>
+                        {% else %}
+                        {{ obj.display_address or obj.name }}
+                        {% endif %}
+                    </li>
+                    {% else %}
+                    <li class="text-muted">—</li>
+                    {% endfor %}
+                </ul>
+            </div>
         </div>
     </div>
     <div class="col-lg-5">
@@ -39,10 +67,37 @@
                 {% endfor %}
             </div>
             <div class="tab-pane fade" id="ctrTabDocs">
-                {% for doc in contract.documents %}
+                {% if can_edit_docs and document_form %}
+                <form method="POST"
+                      action="{{ url_for('contracts.add_document', contract_id=contract.id) }}"
+                      enctype="multipart/form-data"
+                      class="mb-3"
+                      data-project-documents
+                      data-other-type="other"
+                      data-opora-detail-form>
+                    {{ document_form.hidden_tag() }}
+                    <div class="mb-2">
+                        {{ document_form.document_type(class="form-select form-select-sm", data_doc_type=true) }}
+                    </div>
+                    <div class="mb-2">
+                        {{ document_form.title(class="form-control form-control-sm", placeholder="Название", data_doc_title=true) }}
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1" data-doc-files-label>Файл</label>
+                        {{ document_form.files(class="form-control form-control-sm", data_doc_files=true) }}
+                        <div class="form-text" data-doc-files-hint>Один файл; для «Прочее» — несколько.</div>
+                        <div class="alert alert-warning py-1 px-2 small mt-2 mb-0 d-none" data-doc-files-warn></div>
+                    </div>
+                    {{ document_form.submit(class="btn btn-primary btn-sm") }}
+                </form>
+                {% endif %}
+                {% for item in document_items|default([]) %}
                 <div class="border rounded-2 p-2 mb-2">
-                    <div class="fw-medium">{{ doc.title }}</div>
-                    <div class="text-muted small">{{ doc.document_date.strftime('%d.%m.%Y') if doc.document_date else '' }}</div>
+                    <div class="fw-medium">{{ item.title }}</div>
+                    <div class="text-muted small">{{ item.type_label }}{% if item.doc_date %} · {{ item.doc_date.strftime('%d.%m.%Y') }}{% endif %}</div>
+                    {% if item.download_url %}
+                    <a class="btn btn-sm btn-outline-primary mt-1" href="{{ item.download_url }}">Скачать</a>
+                    {% endif %}
                 </div>
                 {% else %}
                 <div class="text-muted small">Документы не добавлены.</div>

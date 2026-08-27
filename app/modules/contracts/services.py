@@ -576,6 +576,91 @@ class ContractService:
         return comment
 
     @classmethod
+    def document_type_label(cls, document_type: str) -> str:
+        from app.modules.contracts.forms import CONTRACT_DOC_TYPE_LABELS
+
+        return CONTRACT_DOC_TYPE_LABELS.get(document_type, "Документ")
+
+    @staticmethod
+    def _title_from_filename(file_name: str | None) -> str:
+        raw = (file_name or "").strip()
+        stem = raw.rsplit(".", 1)[0].strip() if raw else "файл"
+        stem = stem.replace("_", " ").replace("-", " ").strip()
+        return (stem or "файл")[:500]
+
+    @classmethod
+    def suggest_document_title(
+        cls,
+        *,
+        document_type: str,
+        file_name: str | None,
+        user_title: str | None = None,
+        for_batch: bool = False,
+    ) -> str:
+        manual = (user_title or "").strip()
+        type_label = cls.document_type_label(document_type)
+        if document_type == ContractDocumentType.OTHER.value:
+            stem = cls._title_from_filename(file_name)
+            if manual and for_batch:
+                return f"{manual} — {stem}"[:500]
+            if manual and not for_batch:
+                return manual[:500]
+            return stem
+        if manual:
+            return manual[:500]
+        return type_label[:500]
+
+    @classmethod
+    def add_documents_from_uploads(
+        cls,
+        contract: Contract,
+        *,
+        document_type: str,
+        title: str | None,
+        document_number: str | None,
+        document_date: date | None,
+        description: str | None,
+        uploads: list,
+        user_id: uuid.UUID,
+    ) -> list[ContractDocument]:
+        if not uploads:
+            raise ValidationError("Выберите файл для загрузки.")
+        from app.modules.contracts.forms import CONTRACT_DOC_TYPE_LABELS
+
+        if document_type not in CONTRACT_DOC_TYPE_LABELS:
+            raise ValidationError("Некорректный тип документа.")
+        if document_type != ContractDocumentType.OTHER.value and len(uploads) > 1:
+            raise ValidationError("Для выбранного типа документа можно загрузить только один файл.")
+
+        created: list[ContractDocument] = []
+        batch = len(uploads) > 1
+        for item in uploads:
+            file_name = getattr(item, "file_name", None)
+            doc_title = cls.suggest_document_title(
+                document_type=document_type,
+                file_name=file_name,
+                user_title=title,
+                for_batch=batch,
+            )
+            created.append(
+                cls.add_document(
+                    contract,
+                    title=doc_title,
+                    document_type=document_type,
+                    document_number=document_number,
+                    document_date=document_date,
+                    description=description,
+                    file_name=file_name,
+                    mime_type=getattr(item, "mime_type", None),
+                    storage_key=getattr(item, "storage_key", None),
+                    user_id=user_id,
+                    commit=False,
+                )
+            )
+        db.session.commit()
+        return created
+
+    @classmethod
     def add_document(
         cls,
         contract: Contract,
@@ -589,13 +674,14 @@ class ContractService:
         storage_key: str | None,
         user_id: uuid.UUID,
         document_type: str = ContractDocumentType.OTHER.value,
+        commit: bool = True,
     ) -> ContractDocument:
-        if not title.strip():
+        if not (title or "").strip():
             raise ValidationError("Название документа обязательно.")
 
         document = ContractDocument(
             contract_id=contract.id,
-            title=title.strip(),
+            title=title.strip()[:500],
             document_type=document_type or ContractDocumentType.OTHER.value,
             document_number=cls._normalize_text(document_number),
             document_date=document_date,
@@ -622,8 +708,188 @@ class ContractService:
             "Добавлен документ",
             {"title": document.title, "type": document.document_type},
         )
+        if commit:
+            db.session.commit()
+        else:
+            db.session.flush()
+        return document
+
+    @classmethod
+    def update_document(
+        cls,
+        document: ContractDocument,
+        *,
+        title: str,
+        document_type: str,
+        document_number: str | None,
+        document_date: date | None,
+        description: str | None,
+        user_id: uuid.UUID,
+    ) -> ContractDocument:
+        if not (title or "").strip():
+            raise ValidationError("Название документа обязательно.")
+        from app.modules.contracts.forms import CONTRACT_DOC_TYPE_LABELS
+
+        if document_type not in CONTRACT_DOC_TYPE_LABELS:
+            raise ValidationError("Некорректный тип документа.")
+        before = {
+            "title": document.title,
+            "document_type": document.document_type,
+            "document_number": document.document_number,
+            "document_date": document.document_date.isoformat() if document.document_date else None,
+            "description": document.description,
+        }
+        document.title = title.strip()[:500]
+        document.document_type = document_type
+        document.document_number = cls._normalize_text(document_number)
+        document.document_date = document_date
+        document.description = cls._normalize_text(description)
+        document.updated_by = user_id
+        after = {
+            "title": document.title,
+            "document_type": document.document_type,
+            "document_number": document.document_number,
+            "document_date": document.document_date.isoformat() if document.document_date else None,
+            "description": document.description,
+        }
+        cls._log_audit(
+            user_id,
+            AuditAction.UPDATE.value,
+            document.contract_id,
+            f"Изменён документ контракта: {document.title}",
+            before,
+            after,
+        )
+        contract = db.session.get(Contract, document.contract_id)
+        if contract is not None:
+            cls._log_history(
+                contract,
+                user_id,
+                "document_update",
+                "Изменён документ",
+                {"title": document.title, "document_id": str(document.id)},
+            )
         db.session.commit()
         return document
+
+    @classmethod
+    def delete_document(cls, document: ContractDocument, user_id: uuid.UUID) -> None:
+        title = document.title
+        contract_id = document.contract_id
+        document.soft_delete(deleted_by=user_id)
+        cls._log_audit(
+            user_id,
+            AuditAction.SOFT_DELETE.value,
+            contract_id,
+            f"Удалён документ контракта: {title}",
+            {"document": {"title": title, "id": str(document.id)}},
+            None,
+        )
+        contract = db.session.get(Contract, contract_id)
+        if contract is not None:
+            cls._log_history(
+                contract,
+                user_id,
+                "document_delete",
+                "Удалён документ",
+                {"title": title, "document_id": str(document.id)},
+            )
+        db.session.commit()
+
+    @classmethod
+    def link_object(
+        cls, contract: Contract, work_object: WorkObject, user_id: uuid.UUID
+    ) -> ContractObject:
+        before = None
+        existing = db.session.scalar(
+            db.select(ContractObject).where(
+                ContractObject.contract_id == contract.id,
+                ContractObject.object_id == work_object.id,
+            )
+        )
+        created = False
+        if existing is None:
+            existing = ContractObject(
+                contract_id=contract.id,
+                object_id=work_object.id,
+                created_by=user_id,
+                updated_by=user_id,
+            )
+            db.session.add(existing)
+            created = True
+        elif existing.deleted_at is not None:
+            existing.restore()
+            existing.updated_by = user_id
+            created = True
+        work_object.status = WorkObjectStatus.IN_CONTRACT.value
+        work_object.updated_by = user_id
+        if created:
+            cls._log_audit(
+                user_id,
+                AuditAction.UPDATE.value,
+                contract.id,
+                f"Привязан объект к контракту: {work_object.display_address}",
+                before,
+                {"object_id": str(work_object.id)},
+            )
+            cls._log_history(
+                contract,
+                user_id,
+                "object_link",
+                "Привязан объект",
+                {"object_id": str(work_object.id)},
+            )
+        db.session.commit()
+        return existing
+
+    @classmethod
+    def unlink_object(
+        cls, contract: Contract, work_object: WorkObject, user_id: uuid.UUID
+    ) -> None:
+        link = db.session.scalar(
+            db.select(ContractObject).where(
+                ContractObject.contract_id == contract.id,
+                ContractObject.object_id == work_object.id,
+                ContractObject.active_filter(),
+            )
+        )
+        if link is None:
+            raise ValidationError("Связь с объектом не найдена.")
+        link.soft_delete(deleted_by=user_id)
+        cls._log_audit(
+            user_id,
+            AuditAction.UPDATE.value,
+            contract.id,
+            f"Отвязан объект от контракта: {work_object.display_address}",
+            {"object_id": str(work_object.id)},
+            None,
+        )
+        cls._log_history(
+            contract,
+            user_id,
+            "object_unlink",
+            "Отвязан объект",
+            {"object_id": str(work_object.id)},
+        )
+        db.session.commit()
+
+    @classmethod
+    def set_project(
+        cls, contract: Contract, project: Project | None, user_id: uuid.UUID
+    ) -> Contract:
+        old = str(contract.project_id) if contract.project_id else None
+        contract.project_id = project.id if project is not None else None
+        contract.updated_by = user_id
+        cls._log_audit(
+            user_id,
+            AuditAction.UPDATE.value,
+            contract.id,
+            "Изменена связь контракта с проектом",
+            {"project_id": old},
+            {"project_id": str(project.id) if project else None},
+        )
+        db.session.commit()
+        return contract
 
     @classmethod
     def delete_contract(cls, contract: Contract, user_id: uuid.UUID) -> None:

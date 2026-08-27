@@ -27,13 +27,17 @@ from app.models.communication.comment import Comment
 from app.models.enums import ContractStatus, ContractType, EntityType
 from app.modules.contracts.blueprint import contracts_bp
 from app.modules.contracts.forms import (
+    CONTRACT_DOC_TYPE_LABELS,
     ContractCommentForm,
+    ContractDocumentEditForm,
     ContractDocumentForm,
     ContractFilterForm,
     ContractForm,
+    ContractLinkObjectForm,
 )
 from app.modules.contracts.repositories import ContractFilter, ContractRepository
 from app.modules.contracts.services import ContractPayload, ContractService
+from app.modules.objects.repositories import ObjectRepository
 
 
 def _uuid_or_none(value: str) -> uuid.UUID | None:
@@ -43,6 +47,55 @@ def _uuid_or_none(value: str) -> uuid.UUID | None:
         return uuid.UUID(value)
     except ValueError:
         return None
+
+
+def _document_items(contract, *, can_edit: bool) -> list[dict]:
+    items = []
+    for doc in contract.documents:
+        if doc.deleted_at is not None:
+            continue
+        item = {
+            "id": doc.id,
+            "title": doc.title,
+            "type_code": doc.document_type,
+            "type_label": CONTRACT_DOC_TYPE_LABELS.get(doc.document_type, doc.document_type),
+            "number": doc.document_number,
+            "doc_date": doc.document_date,
+            "description": doc.description,
+            "file_name": doc.file_name,
+            "mime": doc.mime_type,
+            "created_at": doc.created_at,
+            "uploader": None,
+            "preview_url": None,
+            "download_url": None,
+            "edit_url": None,
+            "delete_url": None,
+        }
+        if doc.storage_key and doc.file_name:
+            item["download_url"] = url_for(
+                "contracts.download_document",
+                contract_id=contract.id,
+                document_id=doc.id,
+            )
+            item["preview_url"] = url_for(
+                "contracts.download_document",
+                contract_id=contract.id,
+                document_id=doc.id,
+                inline=1,
+            )
+        if can_edit:
+            item["edit_url"] = url_for(
+                "contracts.edit_document",
+                contract_id=contract.id,
+                document_id=doc.id,
+            )
+            item["delete_url"] = url_for(
+                "contracts.delete_document",
+                contract_id=contract.id,
+                document_id=doc.id,
+            )
+        items.append(item)
+    return items
 
 
 def _contract_payload_from_form(form: ContractForm, contract=None) -> ContractPayload:
@@ -81,13 +134,70 @@ def _prepare_filter_form(form: ContractFilterForm) -> None:
     form.responsible_id.choices = user_choices
 
 
-def _prepare_contract_form(form: ContractForm) -> None:
+def _prepare_contract_form(form: ContractForm, contract=None) -> None:
     from app.core.builtin_field_service import BuiltinFieldService
+    from app.extensions import db
+    from app.models.projects.project import Project
 
     users = ContractRepository.get_users()
     form.responsible_id.choices = [("", "Не назначен")] + [
         (str(item.id), item.full_name) for item in users
     ]
+
+    extra_object_ids = []
+    current_object_id = None
+    if contract is not None:
+        for obj in contract.work_objects:
+            extra_object_ids.append(obj.id)
+        if contract.project and contract.project.object_id:
+            extra_object_ids.append(contract.project.object_id)
+            current_object_id = contract.project.object_id
+    prefill_oid = _uuid_or_none(request.args.get("object_id", "") or request.form.get("object_id", ""))
+    if prefill_oid:
+        extra_object_ids.append(prefill_oid)
+        current_object_id = prefill_oid
+
+    objects = ObjectRepository.list_choices(
+        q="",
+        limit=20,
+        extra_ids=extra_object_ids,
+        free_only=False,
+        current_id=current_object_id,
+    )
+    form.object_id.choices = [("", "Не выбран")] + [
+        (str(item.id), ObjectRepository.label_for_select(item)) for item in objects
+    ]
+    form.object_id.render_kw = {
+        **(form.object_id.render_kw or {}),
+        "data-choice-url": url_for("objects.api_choices"),
+        "data-choice-placeholder": "Начните вводить адрес или название…",
+    }
+    if current_object_id and request.method == "GET":
+        form.object_id.data = str(current_object_id)
+
+    projects = list(
+        db.session.scalars(
+            db.select(Project)
+            .where(Project.active_filter())
+            .order_by(Project.code.asc())
+            .limit(40)
+        )
+    )
+    form.project_id.choices = [("", "Не выбран")] + [
+        (str(p.id), f"{p.code} — {p.name}"[:120]) for p in projects
+    ]
+    if contract is not None and contract.project_id and request.method == "GET":
+        form.project_id.data = str(contract.project_id)
+        if str(contract.project_id) not in {c[0] for c in form.project_id.choices}:
+            form.project_id.choices.append(
+                (
+                    str(contract.project_id),
+                    f"{contract.project.code} — {contract.project.name}"[:120]
+                    if contract.project
+                    else str(contract.project_id),
+                )
+            )
+
     BuiltinFieldService.apply_to_form(form, "contracts")
 
 
@@ -273,10 +383,22 @@ def create():
     if form.validate_on_submit():
         try:
             payload = _contract_payload_from_form(form)
-            object_id = _uuid_or_none(request.args.get("object_id", "") or request.form.get("object_id", ""))
+            object_id = _uuid_or_none(
+                form.object_id.data
+                or request.args.get("object_id", "")
+                or request.form.get("object_id", "")
+            )
             created = ContractService.create_contract(
                 payload, current_user.id, object_id=object_id
             )
+            project_id = _uuid_or_none(form.project_id.data)
+            if project_id is not None:
+                from app.extensions import db
+                from app.models.projects.project import Project
+
+                project = db.session.get(Project, project_id)
+                if project is not None and project.deleted_at is None:
+                    ContractService.set_project(created, project, current_user.id)
             save_custom_fields(_CF, created.id, request.form, current_user)
             if is_ajax():
                 return ajax_ok("Контракт успешно создан.", id=str(created.id))
@@ -341,46 +463,33 @@ def detail(contract_id: uuid.UUID):
     )
     comment_form = ContractCommentForm()
     document_form = ContractDocumentForm()
-    file_items = [
-        {
-            "name": doc.file_name or doc.title,
-            "mime": doc.mime_type,
-            "preview_url": url_for(
-                "contracts.download_document",
-                contract_id=contract.id,
-                document_id=doc.id,
-                inline=1,
-            ),
-            "download_url": url_for(
-                "contracts.download_document",
-                contract_id=contract.id,
-                document_id=doc.id,
-            ),
-            "created_at": doc.created_at.strftime("%d.%m.%Y %H:%M") if doc.created_at else None,
-        }
-        for doc in contract.documents
-        if doc.deleted_at is None and doc.storage_key and doc.file_name
+    link_object_form = ContractLinkObjectForm()
+    objects = ObjectRepository.list_choices(q="", limit=20, free_only=False)
+    link_object_form.object_id.choices = [("", "Выберите объект…")] + [
+        (str(item.id), ObjectRepository.label_for_select(item)) for item in objects
     ]
+    link_object_form.object_id.render_kw = {
+        "data-choice-url": url_for("objects.api_choices"),
+        "data-choice-placeholder": "Начните вводить адрес или название…",
+    }
+    can_edit_docs = current_user.has_permission(PERM_CONTRACTS_EDIT)
+    document_items = _document_items(contract, can_edit=can_edit_docs)
+
+    ctx = {
+        "contract": contract,
+        "comments": comments,
+        "comment_form": comment_form,
+        "document_form": document_form,
+        "document_items": document_items,
+        "can_edit_docs": can_edit_docs,
+        "link_object_form": link_object_form,
+        **custom_field_detail_context(_CF, contract.id, current_user),
+    }
 
     if is_ajax():
-        return render_template(
-            "contracts/partials/detail_modal.html",
-            contract=contract,
-            comments=comments,
-            comment_form=comment_form,
-            file_items=file_items,
-            **custom_field_detail_context(_CF, contract.id, current_user),
-        )
+        return render_template("contracts/partials/detail_modal.html", **ctx)
 
-    return render_template(
-        "contracts/detail.html",
-        contract=contract,
-        comments=comments,
-        comment_form=comment_form,
-        document_form=document_form,
-        file_items=file_items,
-        **custom_field_detail_context(_CF, contract.id, current_user),
-    )
+    return render_template("contracts/detail.html", **ctx)
 
 
 @contracts_bp.route("/<uuid:contract_id>/edit", methods=["GET", "POST"])
@@ -393,7 +502,7 @@ def edit(contract_id: uuid.UUID):
         return redirect(url_for("contracts.index"))
 
     form = ContractForm(obj=contract)
-    _prepare_contract_form(form)
+    _prepare_contract_form(form, contract)
     if request.method == "GET":
         form.responsible_id.data = str(contract.responsible_id) if contract.responsible_id else ""
 
@@ -401,6 +510,21 @@ def edit(contract_id: uuid.UUID):
         try:
             payload = _contract_payload_from_form(form, contract)
             ContractService.update_contract(contract, payload, current_user.id)
+            object_id = _uuid_or_none(form.object_id.data)
+            if object_id is not None:
+                work_object = ObjectRepository.get_by_id(object_id)
+                if work_object is not None:
+                    ContractService.link_object(contract, work_object, current_user.id)
+            project_id = _uuid_or_none(form.project_id.data)
+            from app.extensions import db
+            from app.models.projects.project import Project
+
+            if project_id is not None:
+                project = db.session.get(Project, project_id)
+                if project is not None and project.deleted_at is None:
+                    ContractService.set_project(contract, project, current_user.id)
+            elif form.project_id.data == "":
+                ContractService.set_project(contract, None, current_user.id)
             save_custom_fields(_CF, contract.id, request.form, current_user)
             if is_ajax():
                 return ajax_ok("Контракт обновлён.", id=str(contract.id))
@@ -502,42 +626,128 @@ def add_document(contract_id: uuid.UUID):
     if form.validate_on_submit():
         try:
             files = collect_upload_files(form.files.data, request.files.getlist("files"))
-            if files:
-                for file_storage in files:
-                    saved = save_upload(file_storage, relative_dir=f"contracts/{contract.id}/docs")
-                    ContractService.add_document(
-                        contract,
-                        title=form.title.data or saved.file_name,
-                        document_type=form.document_type.data,
-                        document_number=form.document_number.data,
-                        document_date=form.document_date.data,
-                        description=form.description.data,
-                        file_name=saved.file_name,
-                        mime_type=saved.mime_type,
-                        storage_key=saved.storage_key,
-                        user_id=current_user.id,
-                    )
-                flash(f"Добавлено документов: {len(files)}.", "success")
-            else:
-                ContractService.add_document(
-                    contract,
-                    title=form.title.data,
-                    document_type=form.document_type.data,
-                    document_number=form.document_number.data,
-                    document_date=form.document_date.data,
-                    description=form.description.data,
-                    file_name=None,
-                    mime_type=None,
-                    storage_key=None,
-                    user_id=current_user.id,
-                )
-                flash("Документ добавлен.", "success")
+            if not files:
+                raise ValidationError("Выберите файл для загрузки.")
+            uploads = [
+                save_upload(file_storage, relative_dir=f"contracts/{contract.id}/docs")
+                for file_storage in files
+            ]
+            created = ContractService.add_documents_from_uploads(
+                contract,
+                document_type=form.document_type.data,
+                title=form.title.data,
+                document_number=form.document_number.data,
+                document_date=form.document_date.data,
+                description=form.description.data,
+                uploads=uploads,
+                user_id=current_user.id,
+            )
+            flash(f"Добавлено документов: {len(created)}.", "success")
         except (ValidationError, UploadValidationError) as exc:
             flash(str(exc), "danger")
     else:
         flash("Проверьте корректность данных документа.", "danger")
     return redirect(url_for("contracts.detail", contract_id=contract.id))
 
+
+@contracts_bp.route("/<uuid:contract_id>/document/<uuid:document_id>/edit", methods=["POST"])
+@login_required
+@permission_required(PERM_CONTRACTS_EDIT)
+def edit_document(contract_id: uuid.UUID, document_id: uuid.UUID):
+    from app.models.contracts.contract_document import ContractDocument
+
+    contract = ContractRepository.get_by_id(contract_id)
+    if contract is None:
+        flash("Контракт не найден.", "danger")
+        return redirect(url_for("contracts.index"))
+    document = ContractDocument.query.filter_by(
+        id=document_id, contract_id=contract.id, deleted_at=None
+    ).first()
+    if document is None:
+        flash("Документ не найден.", "danger")
+        return redirect(url_for("contracts.detail", contract_id=contract.id))
+    form = ContractDocumentEditForm()
+    if form.validate_on_submit():
+        try:
+            ContractService.update_document(
+                document,
+                title=form.title.data,
+                document_type=form.document_type.data,
+                document_number=form.document_number.data,
+                document_date=form.document_date.data,
+                description=form.description.data,
+                user_id=current_user.id,
+            )
+            flash("Документ обновлён.", "success")
+        except ValidationError as exc:
+            flash(str(exc), "danger")
+    else:
+        flash(form_errors_message(form), "danger")
+    return redirect(url_for("contracts.detail", contract_id=contract.id))
+
+
+@contracts_bp.route("/<uuid:contract_id>/document/<uuid:document_id>/delete", methods=["POST"])
+@login_required
+@permission_required(PERM_CONTRACTS_EDIT)
+def delete_document(contract_id: uuid.UUID, document_id: uuid.UUID):
+    from app.models.contracts.contract_document import ContractDocument
+
+    contract = ContractRepository.get_by_id(contract_id)
+    if contract is None:
+        flash("Контракт не найден.", "danger")
+        return redirect(url_for("contracts.index"))
+    document = ContractDocument.query.filter_by(
+        id=document_id, contract_id=contract.id, deleted_at=None
+    ).first()
+    if document is None:
+        flash("Документ не найден.", "danger")
+        return redirect(url_for("contracts.detail", contract_id=contract.id))
+    ContractService.delete_document(document, current_user.id)
+    flash("Документ удалён.", "success")
+    return redirect(url_for("contracts.detail", contract_id=contract.id))
+
+
+@contracts_bp.route("/<uuid:contract_id>/objects", methods=["POST"])
+@login_required
+@permission_required(PERM_CONTRACTS_EDIT)
+def link_object(contract_id: uuid.UUID):
+    contract = ContractRepository.get_by_id(contract_id)
+    if contract is None:
+        flash("Контракт не найден.", "danger")
+        return redirect(url_for("contracts.index"))
+    form = ContractLinkObjectForm()
+    form.object_id.choices = [("", "Выберите объект…")]
+    if form.validate_on_submit():
+        object_id = _uuid_or_none(form.object_id.data)
+        work_object = ObjectRepository.get_by_id(object_id) if object_id else None
+        if work_object is None:
+            flash("Объект не найден.", "danger")
+        else:
+            try:
+                ContractService.link_object(contract, work_object, current_user.id)
+                flash("Объект привязан к контракту.", "success")
+            except ValidationError as exc:
+                flash(str(exc), "danger")
+    else:
+        flash(form_errors_message(form), "danger")
+    return redirect(url_for("contracts.detail", contract_id=contract.id))
+
+
+@contracts_bp.route("/<uuid:contract_id>/objects/<uuid:object_id>/unlink", methods=["POST"])
+@login_required
+@permission_required(PERM_CONTRACTS_EDIT)
+def unlink_object(contract_id: uuid.UUID, object_id: uuid.UUID):
+    contract = ContractRepository.get_by_id(contract_id)
+    work_object = ObjectRepository.get_by_id(object_id)
+    if contract is None or work_object is None:
+        flash("Контракт или объект не найден.", "danger")
+        return redirect(url_for("contracts.index"))
+    try:
+        ContractService.unlink_object(contract, work_object, current_user.id)
+        flash("Объект отвязан от контракта.", "success")
+    except ValidationError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("contracts.detail", contract_id=contract.id))
 
 @contracts_bp.route("/<uuid:contract_id>/document/<uuid:document_id>/download")
 @login_required

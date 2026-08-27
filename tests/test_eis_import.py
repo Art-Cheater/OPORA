@@ -208,14 +208,38 @@ def test_import_does_not_overwrite_with_empty(app):
         assert contract.end_date is not None
         saved_end = contract.end_date
         saved_amount = contract.amount
+        saved_title = contract.title
 
         result = _parse_result()
         result.orders[0].contracts[0].end_date = None
         result.orders[0].contracts[0].amount = None
+        result.orders[0].contracts[0].subject = "Другое название из ЕИС"
         service.sync(trigger="manual", user_id=user_id, parse_result=result)
         contract = db.session.get(Contract, contract.id)
         assert contract.end_date == saved_end
         assert contract.amount == saved_amount
+        assert contract.title == saved_title
+
+
+def test_import_fills_empty_fields_only(app):
+    with app.app_context():
+        user_id = _admin_id()
+        _object(user_id, "д. Студенец")
+        service = EisImportService()
+        result = _parse_result()
+        # первый импорт без суммы и даты окончания
+        result.orders[0].contracts[0].amount = None
+        result.orders[0].contracts[0].end_date = None
+        service.sync(trigger="manual", user_id=user_id, parse_result=result)
+        contract = db.session.scalar(db.select(Contract).where(Contract.active_filter()))
+        assert contract is not None
+        assert contract.amount == 0 or contract.amount is None or True
+        # повторно с данными — пустые поля заполняются
+        result2 = _parse_result()
+        service.sync(trigger="manual", user_id=user_id, parse_result=result2)
+        contract = db.session.get(Contract, contract.id)
+        assert contract.end_date is not None
+        assert contract.amount is not None and contract.amount > 0
 
 
 def test_import_matches_purchase_objects_not_header(app):

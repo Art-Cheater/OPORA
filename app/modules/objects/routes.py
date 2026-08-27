@@ -113,11 +113,39 @@ def api_choices():
         if parsed is not None:
             extra_ids.append(parsed)
     free_only = request.args.get("free_only", "").strip().lower() in {"1", "true", "yes"}
+    try:
+        limit = min(max(int(request.args.get("limit", 20)), 1), 20)
+    except (TypeError, ValueError):
+        limit = 20
     items = ObjectRepository.list_choices(
         q=request.args.get("q", ""),
+        limit=limit,
         extra_ids=extra_ids,
         free_only=free_only,
     )
+    return jsonify(
+        {
+            "items": [
+                {"id": str(item.id), "label": ObjectRepository.label_for_select(item)}
+                for item in items
+            ]
+        }
+    )
+
+
+@objects_bp.route("/search")
+@login_required
+@permission_required(PERM_OBJECTS_VIEW)
+def search():
+    """Autocomplete объектов: q >= 2, limit <= 20."""
+    q = (request.args.get("q") or "").strip()
+    if len(q) < 2:
+        return jsonify({"items": []})
+    try:
+        limit = min(max(int(request.args.get("limit", 20)), 1), 20)
+    except (TypeError, ValueError):
+        limit = 20
+    items = ObjectRepository.list_choices(q=q, limit=limit, free_only=False)
     return jsonify(
         {
             "items": [
@@ -298,6 +326,7 @@ def detail(object_id: uuid.UUID):
     linked_tender = chain["tender"]
     linked_contract = chain["contract"]
     linked_contracts = chain.get("contracts") or []
+    linked_projects = chain.get("projects") or []
     can_create_project = (not has_active_project) and obj.status not in (
         "in_tender",
         "in_contract",
@@ -313,6 +342,7 @@ def detail(object_id: uuid.UUID):
         "can_create_project": can_create_project,
         "can_create_contract": can_create_contract,
         "linked_project": linked_project,
+        "linked_projects": linked_projects,
         "linked_tender": linked_tender,
         "linked_contract": linked_contract,
         "linked_contracts": linked_contracts,
