@@ -46,10 +46,12 @@ def index():
                 db.select(EisImportEvent)
                 .where(
                     EisImportEvent.run_id == latest.id,
-                    EisImportEvent.kind.in_(("unmatched", "error")),
+                    EisImportEvent.kind.in_(
+                        ("unmatched", "ambiguous", "error", "partial", "page_limit")
+                    ),
                 )
                 .order_by(EisImportEvent.created_at.desc())
-                .limit(20)
+                .limit(40)
             )
         )
     running = EisImportService().is_running()

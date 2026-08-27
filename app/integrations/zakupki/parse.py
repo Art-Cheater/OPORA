@@ -321,10 +321,16 @@ def parse_contract_card(html_text: str, reestr_number: str, url: str | None = No
     for title, field_name in _CONTRACT_FIELDS.items():
         if title in sections:
             mapped[field_name] = sections[title]
+        else:
+            # fallback: частичное совпадение заголовка
+            for sec_title, sec_val in sections.items():
+                if title in sec_title or sec_title in title:
+                    mapped.setdefault(field_name, sec_val)
 
     amount_raw = mapped.get("amount")
     if amount_raw:
         amount_raw = re.sub(r"\s*Загрузка \.\.\.\s*", " ", amount_raw).strip()
+    suppliers = parse_suppliers(html_text)
     contract = EisContract(
         reestr_number=reestr_number,
         url=url or contract_card_url(reestr_number),
@@ -336,8 +342,26 @@ def parse_contract_card(html_text: str, reestr_number: str, url: str | None = No
         amount_raw=amount_raw,
         subject=mapped.get("subject") or None,
         delivery_place=mapped.get("delivery_place") or None,
-        suppliers=parse_suppliers(html_text),
+        suppliers=suppliers,
     )
+    expected = [
+        "number",
+        "contract_date",
+        "start_date",
+        "end_date",
+        "amount",
+        "subject",
+        "delivery_place",
+        "suppliers",
+    ]
+    missing: list[str] = []
+    for field_name in expected:
+        if field_name == "suppliers":
+            if not suppliers:
+                missing.append(field_name)
+        elif getattr(contract, field_name) in (None, ""):
+            missing.append(field_name)
+    contract.missing_fields = missing
     return contract
 
 
@@ -373,6 +397,49 @@ def parse_purchase_objects(html_text: str) -> list[str]:
     return names
 
 
+def is_supplier_defined(status: str | None) -> bool:
+    """Поставщик определён / можно забирать результаты."""
+    return map_eis_order_status(status) in {"won", "supplier_defined"}
+
+
+def map_eis_order_status(status: str | None) -> str:
+    """
+    Нормализованный статус извещения.
+    won — контракт заключён / определение поставщика завершено.
+    cancelled — отмена / не состоялось.
+    submitted — идёт размещение / подача заявок.
+    draft — пусто.
+    """
+    text = re.sub(r"\s+", " ", (status or "").casefold().strip())
+    if not text:
+        return "draft"
+    negative = (
+        "отмен",
+        "не состо",
+        "аннулир",
+        "признана несостоявшейся",
+        "закупка не состоялась",
+    )
+    if any(token in text for token in negative):
+        return "cancelled"
+    # «размещение завершено» — ещё не победа
+    if "размещен" in text and "завершен" in text and "поставщик" not in text:
+        return "submitted"
+    if "определение поставщика заверш" in text:
+        return "won"
+    if "контракт заключ" in text or "заключен контракт" in text or "заключён контракт" in text:
+        return "won"
+    if "исполнен" in text and "контракт" in text:
+        return "won"
+    if text in {"закупка завершена", "завершена"}:
+        return "won"
+    if "подача заявок" in text or "прием заявок" in text or "приём заявок" in text:
+        return "submitted"
+    if text:
+        return "submitted"
+    return "draft"
+
+
 def order_object_names(order: EisOrder) -> list[str]:
     if order.purchase_objects:
         return list(order.purchase_objects)
@@ -388,7 +455,7 @@ def parse_order_notice(html_text: str, reg_number: str, url: str) -> EisOrder:
     nmck_raw = clean_text(price_match.group(1)) if price_match else None
     status = clean_text(state_match.group(1)) if state_match else None
     results_url = None
-    if status == STATUS_SUPPLIER_DEFINED:
+    if is_supplier_defined(status) or status == STATUS_SUPPLIER_DEFINED:
         results_match = _RESULTS_LINK_RE.search(html_text)
         if results_match:
             results_url = absolute_url(results_match.group(1))
@@ -417,7 +484,3 @@ def parse_order_results(html_text: str) -> list[str]:
         seen.add(reestr)
         numbers.append(reestr)
     return numbers
-
-
-def is_supplier_defined(status: str | None) -> bool:
-    return (status or "").strip() == STATUS_SUPPLIER_DEFINED

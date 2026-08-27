@@ -2,11 +2,14 @@
 
 from pathlib import Path
 
+from unittest.mock import MagicMock
+
 from app.integrations.zakupki.parse import (
     eis_number_year,
     in_eis_year_range,
     is_supplier_defined,
     keep_eis_listing,
+    map_eis_order_status,
     parse_contract_card,
     parse_contract_search,
     parse_money,
@@ -16,6 +19,7 @@ from app.integrations.zakupki.parse import (
     parse_purchase_objects,
     split_purchase_object_names,
 )
+from app.integrations.zakupki.runner import EisParseResult, EisParser
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "zakupki"
 
@@ -153,3 +157,111 @@ def test_parse_money_nbsp_and_ruble():
     assert str(parse_money("37&nbsp;628&nbsp;869,27 ₽")) == "37628869.27"
     assert str(parse_money("2 511 041,28")) == "2511041.28"
     assert str(parse_money("7 557 103,14\n \n Загрузка ...")) == "7557103.14"
+
+
+def test_parse_contract_card_partial_without_price():
+    html = _html("contract_card.html").replace("Цена контракта", "XценаX")
+    contract = parse_contract_card(html, "3434528856325000213", "https://example.test/c")
+    assert contract.reestr_number == "3434528856325000213"
+    assert "amount" in contract.missing_fields
+
+
+def test_map_eis_order_status_variants():
+    assert map_eis_order_status("Определение поставщика завершено") == "won"
+    assert map_eis_order_status("  определение   поставщика завершено ") == "won"
+    assert map_eis_order_status("Заключен контракт") == "won"
+    assert map_eis_order_status("Контракт заключен") == "won"
+    assert map_eis_order_status("Отменено") == "cancelled"
+    assert map_eis_order_status("Закупка не состоялась") == "cancelled"
+    assert map_eis_order_status("Размещение завершено") == "submitted"
+    assert map_eis_order_status("Подача заявок") == "submitted"
+    assert not is_supplier_defined("Размещение завершено")
+    assert is_supplier_defined("Определение поставщика завершено")
+
+
+def test_pagination_stops_without_next():
+    client = MagicMock()
+    page = _html("contract_search.html")
+    card = _html("contract_card.html")
+
+    def fake_get(url: str) -> str:
+        if "contractCard" in url or "reestrNumber=" in url:
+            return card
+        return page
+
+    client.get.side_effect = fake_get
+    parser = EisParser(client)
+    result = EisParseResult()
+    contracts, issues, total, _skipped = parser.fetch_contracts(
+        pages=5, limit=2, per_page="_50", result=result
+    )
+    assert total == 137
+    assert len(contracts) <= 2
+    assert result.pages_fetched == 1
+    assert not result.pagination_limit_reached
+    assert not any(i.kind == "page_limit" for i in issues)
+
+
+def test_pagination_limit_reached_when_has_next():
+    client = MagicMock()
+    page = _html("contract_search.html") + '<a class="paginator-button-next" href="?page=2">next</a>'
+    card = _html("contract_card.html")
+
+    def fake_get(url: str) -> str:
+        if "contractCard" in url or ("reestrNumber=" in url and "search" not in url):
+            return card
+        return page
+
+    client.get.side_effect = fake_get
+    parser = EisParser(client)
+    result = EisParseResult()
+    _contracts, issues, total, _skipped = parser.fetch_contracts(
+        pages=1, limit=2, per_page="_50", result=result
+    )
+    assert total == 137
+    assert result.pagination_limit_reached or any(i.kind == "page_limit" for i in issues)
+
+
+def test_pagination_two_pages():
+    client = MagicMock()
+    page1 = _html("contract_search.html") + '<a class="paginator-button-next" href="?pageNumber=2">next</a>'
+    page2 = _html("contract_search.html")  # без next
+    card = _html("contract_card.html")
+    calls = {"n": 0}
+
+    def fake_get(url: str) -> str:
+        if "contractCard" in url or ("reestrNumber=" in url and "pageNumber" not in url and "search" not in url.lower()):
+            # карточка: URL содержит reestrNumber
+            if "common-info.html" in url:
+                return card
+        calls["n"] += 1
+        if "pageNumber=2" in url or calls["n"] > 1:
+            # после первой страницы поиска
+            if "search" in url.lower() or "epz/contract/search" in url or "pageNumber" in url:
+                if calls["n"] >= 2 and "common-info" not in url:
+                    return page2
+        if "common-info.html" in url:
+            return card
+        return page1 if calls["n"] <= 1 else page2
+
+    # Более предсказуемый роутер
+    search_calls = []
+
+    def fake_get2(url: str) -> str:
+        if "common-info.html" in url:
+            return card
+        search_calls.append(url)
+        if len(search_calls) == 1:
+            return page1
+        return page2
+
+    client.get.side_effect = fake_get2
+    parser = EisParser(client)
+    result = EisParseResult()
+    contracts, issues, total, _skipped = parser.fetch_contracts(
+        pages=5, limit=4, per_page="_50", result=result
+    )
+    assert total == 137
+    assert result.pages_fetched == 2
+    assert len(search_calls) == 2
+    assert not result.pagination_limit_reached

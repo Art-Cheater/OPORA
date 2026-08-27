@@ -45,6 +45,7 @@ class EisContract:
     delivery_place: str | None = None
     stage: str | None = None
     suppliers: list[EisSupplier] = field(default_factory=list)
+    missing_fields: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -78,6 +79,10 @@ class ParseIssue:
     message: str
     url: str | None = None
     number: str | None = None
+    http_status: int | None = None
+    attempts: int | None = None
+    missing: list[str] | None = None
+    extra: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return _jsonable(asdict(self))

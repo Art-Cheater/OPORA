@@ -10,7 +10,7 @@ from flask import current_app
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.extensions import db
-from app.integrations.zakupki.parse import keep_eis_listing, order_object_names
+from app.integrations.zakupki.parse import keep_eis_listing, map_eis_order_status, order_object_names
 from app.integrations.zakupki.models import EisContract, EisOrder, EisSupplier
 from app.integrations.zakupki.runner import EisParseResult, EisParser
 from app.models.base import utcnow
@@ -32,7 +32,7 @@ from app.models.tenders.tender_project import TenderProject
 from app.models.work_objects.work_object import WorkObject
 from app.modules.contractors.repositories import ContractorRepository
 from app.modules.contractors.services import ContractorService
-from app.modules.eis.matching import match_work_objects
+from app.modules.eis.matching import AddressMatch, match_work_objects
 from app.modules.objects.services import ObjectService
 from app.modules.projects.repositories import ProjectRepository
 from app.modules.tenders.services import TenderPayload, TenderService
@@ -43,14 +43,16 @@ class EisSyncLocked(RuntimeError):
 
 
 def map_tender_status(eis_status: str | None) -> str:
-    text = (eis_status or "").casefold()
-    if "отмен" in text:
+    mapped = map_eis_order_status(eis_status)
+    if mapped == "cancelled":
         return TenderApplicationStatus.CANCELLED.value
-    if "завершен" in text or "заключен" in text:
+    if mapped == "won":
         return TenderApplicationStatus.WON.value
-    if text:
+    if mapped in {"submitted", "supplier_defined"}:
         return TenderApplicationStatus.SUBMITTED.value
-    return TenderApplicationStatus.DRAFT.value
+    if mapped == "draft":
+        return TenderApplicationStatus.DRAFT.value
+    return TenderApplicationStatus.SUBMITTED.value
 
 
 def map_contract_status(eis_stage: str | None, current: str | None) -> str | None:
@@ -77,6 +79,31 @@ def map_contract_status(eis_stage: str | None, current: str | None) -> str | Non
     return None
 
 
+def _empty_summary() -> dict:
+    return {
+        "pages_fetched": 0,
+        "cards_found": 0,
+        "cards_parsed": 0,
+        "partial_parse": 0,
+        "created": 0,
+        "updated": 0,
+        "created_projects": 0,
+        "created_tenders": 0,
+        "updated_tenders": 0,
+        "created_contracts": 0,
+        "updated_contracts": 0,
+        "created_contractors": 0,
+        "matched": 0,
+        "unmatched": 0,
+        "ambiguous": 0,
+        "fetch_errors": 0,
+        "parse_errors": 0,
+        "errors": 0,
+        "skipped_old": 0,
+        "pagination_limit_reached": False,
+    }
+
+
 class EisImportService:
     def __init__(self, parser: EisParser | None = None) -> None:
         self.parser = parser or EisParser()
@@ -99,7 +126,7 @@ class EisImportService:
             if started is not None and started.tzinfo is None:
                 started = started.replace(tzinfo=timezone.utc)
             if started is None or started < cutoff:
-                item.status = "error"
+                item.status = "failed"
                 item.finished_at = utcnow()
                 item.error_message = "Прогон прерван по таймауту"
                 changed = True
@@ -130,17 +157,7 @@ class EisImportService:
             started_at=utcnow(),
             created_by=user_id,
             updated_by=user_id,
-            summary={
-                "created_projects": 0,
-                "created_tenders": 0,
-                "updated_tenders": 0,
-                "created_contracts": 0,
-                "updated_contracts": 0,
-                "created_contractors": 0,
-                "unmatched": 0,
-                "errors": 0,
-                "skipped_old": 0,
-            },
+            summary=_empty_summary(),
         )
         db.session.add(run)
         db.session.commit()
@@ -160,21 +177,14 @@ class EisImportService:
                     year_from=int(cfg.get("EIS_YEAR_FROM", 2025)),
                     year_to=int(cfg.get("EIS_YEAR_TO", 2100)),
                 )
+            self._absorb_parse_stats(run, result)
             objects = list(
                 db.session.scalars(
                     db.select(WorkObject).where(WorkObject.active_filter())
                 )
             )
             for issue in result.issues:
-                self._event(
-                    run,
-                    kind="error",
-                    message=issue.message,
-                    eis_number=issue.number,
-                    url=issue.url,
-                    entity_type="fetch",
-                )
-                self._bump(run, "errors")
+                self._record_parse_issue(run, issue, user_id)
             if result.skipped_old:
                 run.summary["skipped_old"] = int(run.summary.get("skipped_old") or 0) + int(
                     result.skipped_old
@@ -210,19 +220,80 @@ class EisImportService:
                         )
                     )
             run = db.session.get(EisImportRun, run.id) or run
-            run.status = "success"
+            run.status = self._final_status(run)
             run.finished_at = utcnow()
             db.session.commit()
         except Exception as exc:
             db.session.rollback()
             run = db.session.get(EisImportRun, run.id) or run
-            run.status = "error"
+            run.status = "failed"
             run.finished_at = utcnow()
             run.error_message = str(exc)[:2000]
             db.session.add(run)
             db.session.commit()
             raise
         return run
+
+    def _absorb_parse_stats(self, run: EisImportRun, result: EisParseResult) -> None:
+        summary = dict(run.summary or {})
+        summary["pages_fetched"] = int(result.pages_fetched or 0)
+        summary["cards_found"] = int(result.cards_found or 0)
+        summary["cards_parsed"] = int(result.cards_parsed or 0)
+        summary["partial_parse"] = int(result.partial_parse or 0)
+        summary["fetch_errors"] = int(result.fetch_errors or 0)
+        summary["parse_errors"] = int(result.parse_errors or 0)
+        summary["pagination_limit_reached"] = bool(result.pagination_limit_reached)
+        if result.contract_total is not None or result.order_total is not None:
+            summary["total_reported"] = int(result.contract_total or 0) + int(result.order_total or 0)
+        summary["last_page"] = int(result.last_page or 0)
+        run.summary = summary
+        flag_modified(run, "summary")
+
+    def _record_parse_issue(
+        self, run: EisImportRun, issue, user_id: uuid.UUID | None
+    ) -> None:
+        kind = issue.kind
+        event_kind = {
+            "fetch": "error",
+            "parse": "error",
+            "partial": "partial",
+            "page_limit": "page_limit",
+        }.get(kind, "error")
+        if kind == "page_limit":
+            run.summary["pagination_limit_reached"] = True
+            flag_modified(run, "summary")
+        extra = dict(issue.extra or {})
+        if issue.http_status is not None:
+            extra["http_status"] = issue.http_status
+        if issue.attempts is not None:
+            extra["attempts"] = issue.attempts
+        if issue.missing:
+            extra["missing"] = list(issue.missing)
+        extra["issue_kind"] = kind
+        self._event(
+            run,
+            kind=event_kind,
+            message=issue.message,
+            eis_number=issue.number,
+            url=issue.url,
+            entity_type="fetch" if kind == "fetch" else "parse",
+            extra=extra or None,
+            user_id=user_id,
+        )
+
+    def _final_status(self, run: EisImportRun) -> str:
+        summary = run.summary or {}
+        soft = (
+            int(summary.get("errors") or 0)
+            + int(summary.get("fetch_errors") or 0)
+            + int(summary.get("parse_errors") or 0)
+            + int(summary.get("partial_parse") or 0)
+            + int(summary.get("unmatched") or 0)
+            + int(summary.get("ambiguous") or 0)
+        )
+        if soft:
+            return "partial"
+        return "success"
 
     def _recover_run_error(
         self,
@@ -237,7 +308,7 @@ class EisImportService:
         if run is None:
             return
         if run.summary is None:
-            run.summary = {}
+            run.summary = _empty_summary()
         run.summary["errors"] = int(run.summary.get("errors") or 0) + 1
         self._event(
             run,
@@ -251,7 +322,10 @@ class EisImportService:
 
     def _bump(self, run: EisImportRun, key: str) -> None:
         summary = dict(run.summary or {})
-        summary[key] = int(summary.get(key) or 0) + 1
+        if key == "pagination_limit_reached":
+            summary[key] = True
+        else:
+            summary[key] = int(summary.get(key) or 0) + 1
         run.summary = summary
         flag_modified(run, "summary")
 
@@ -299,6 +373,24 @@ class EisImportService:
             )
         )
 
+    def _match_extra(self, match: AddressMatch, eis: EisContract | None = None, **more) -> dict:
+        data = match.to_extra()
+        data.update(more)
+        if eis is not None:
+            data["eis_number"] = eis.reestr_number
+            data["url"] = eis.url
+            data["subject"] = eis.subject
+            data["delivery_place"] = eis.delivery_place
+            data["parsed"] = {
+                "number": eis.number,
+                "amount": str(eis.amount) if eis.amount is not None else None,
+                "contract_date": eis.contract_date.isoformat() if eis.contract_date else None,
+                "suppliers": [s.name for s in eis.suppliers],
+            }
+            if eis.missing_fields:
+                data["missing"] = list(eis.missing_fields)
+        return data
+
     def _sync_order(
         self,
         run: EisImportRun,
@@ -307,7 +399,7 @@ class EisImportService:
         user_id: uuid.UUID | None,
     ) -> None:
         names = order_object_names(order)
-        matched: list[tuple[str, WorkObject]] = []
+        matched: list[tuple[str, WorkObject, AddressMatch]] = []
         seen_ids: set[uuid.UUID] = set()
         if not names:
             self._event(
@@ -321,35 +413,52 @@ class EisImportService:
                 user_id=user_id,
             )
             self._bump(run, "unmatched")
+            for eis_contract in order.contracts:
+                if self._out_of_year_range(eis_contract.reestr_number, eis_contract.contract_date):
+                    self._bump(run, "skipped_old")
+                    continue
+                self._sync_contract(run, eis_contract, objects, user_id, tender=None)
             db.session.commit()
             return
 
         for name in names:
             hit = match_work_objects([name], objects)
-            if hit.work_object is None:
+            if hit.status != "matched" or hit.work_object is None:
+                event_kind = "ambiguous" if hit.status == "ambiguous" else "unmatched"
                 self._event(
                     run,
-                    kind="unmatched",
+                    kind=event_kind,
                     message=f"{hit.reason}: {name}",
                     eis_number=order.reg_number,
                     url=order.url,
                     entity_type="tender",
-                    extra={"purchase_object": name, "status": order.status},
+                    extra={
+                        **hit.to_extra(),
+                        "purchase_object": name,
+                        "status": order.status,
+                        "query": name,
+                    },
                     user_id=user_id,
                 )
-                self._bump(run, "unmatched")
+                self._bump(run, event_kind)
                 continue
             if hit.work_object.id in seen_ids:
                 continue
             seen_ids.add(hit.work_object.id)
-            matched.append((name, hit.work_object))
+            matched.append((name, hit.work_object, hit))
+            self._bump(run, "matched")
 
         if not matched:
+            for eis_contract in order.contracts:
+                if self._out_of_year_range(eis_contract.reestr_number, eis_contract.contract_date):
+                    self._bump(run, "skipped_old")
+                    continue
+                self._sync_contract(run, eis_contract, objects, user_id, tender=None)
             db.session.commit()
             return
 
         projects: list[Project] = []
-        for name, obj in matched:
+        for name, obj, _hit in matched:
             projects.append(self._ensure_project(run, obj, name, user_id))
             if order.nmck is not None and len(matched) == 1:
                 obj.budget_amount = order.nmck
@@ -361,9 +470,11 @@ class EisImportService:
         )
         if created:
             self._bump(run, "created_tenders")
+            self._bump(run, "created")
             kind = "created"
         else:
             self._bump(run, "updated_tenders")
+            self._bump(run, "updated")
             kind = "updated"
         self._event(
             run,
@@ -373,7 +484,10 @@ class EisImportService:
             url=order.url,
             entity_type="tender",
             entity_id=tender.id,
-            extra={"objects": [name for name, _ in matched]},
+            extra={
+                "objects": [name for name, _, _ in matched],
+                "matched_by": [hit.matched_by for _, _, hit in matched],
+            },
             user_id=user_id,
         )
         if map_tender_status(order.status) == TenderApplicationStatus.WON.value:
@@ -419,6 +533,7 @@ class EisImportService:
             obj.status = WorkObjectStatus.IN_PROJECT.value
             obj.updated_by = user_id
         self._bump(run, "created_projects")
+        self._bump(run, "created")
         self._event(
             run,
             kind="created",
@@ -470,15 +585,20 @@ class EisImportService:
             created = True
         else:
             tender.status = status
-            tender.title = (order.object_title or tender.title)[:500]
-            tender.published_at = order.published_at or tender.published_at
+            if order.object_title:
+                tender.title = order.object_title[:500]
+            if order.published_at:
+                tender.published_at = order.published_at
             tender.updated_by = user_id
             if user_id is not None:
                 TenderService._apply_status_side_effects(tender, user_id)
         tender.eis_reg_number = order.reg_number
-        tender.eis_status = order.status
-        tender.eis_url = order.url
-        tender.nmck = order.nmck
+        if order.status:
+            tender.eis_status = order.status
+        if order.url:
+            tender.eis_url = order.url
+        if order.nmck is not None:
+            tender.nmck = order.nmck
         if extra_projects and user_id is not None:
             self._add_tender_projects(tender, extra_projects, user_id)
         db.session.flush()
@@ -518,86 +638,89 @@ class EisImportService:
         tender: TenderApplication | None,
         obj: WorkObject | None = None,
     ) -> None:
+        match: AddressMatch | None = None
         if obj is None:
             match = match_work_objects(
                 [eis.delivery_place, eis.subject],
                 objects,
             )
-            if match.work_object is None:
+            if match.status == "matched" and match.work_object is not None:
+                obj = match.work_object
+                self._bump(run, "matched")
+            else:
+                event_kind = "ambiguous" if match.status == "ambiguous" else "unmatched"
+                contract, created = self._upsert_contract(
+                    run, eis, user_id, project=None, tender=None
+                )
                 self._event(
                     run,
-                    kind="unmatched",
+                    kind=event_kind,
                     message=match.reason,
                     eis_number=eis.reestr_number,
                     url=eis.url,
                     entity_type="contract",
-                    extra={"subject": eis.subject, "delivery_place": eis.delivery_place},
+                    entity_id=contract.id,
+                    extra=self._match_extra(match, eis),
                     user_id=user_id,
                 )
-                self._bump(run, "unmatched")
+                self._bump(run, event_kind)
+                if eis.missing_fields:
+                    self._event(
+                        run,
+                        kind="partial",
+                        message="Контракт сохранён с неполными полями: "
+                        + ", ".join(eis.missing_fields),
+                        eis_number=eis.reestr_number,
+                        url=eis.url,
+                        entity_type="contract",
+                        entity_id=contract.id,
+                        extra={"missing": list(eis.missing_fields)},
+                        user_id=user_id,
+                    )
+                self._event(
+                    run,
+                    kind="created" if created else "updated",
+                    message=f"Контракт {contract.number} без привязки к объекту",
+                    eis_number=eis.reestr_number,
+                    url=eis.url,
+                    entity_type="contract",
+                    entity_id=contract.id,
+                    extra=self._match_extra(match, eis, saved_unmatched=True),
+                    user_id=user_id,
+                )
                 db.session.commit()
                 return
-            obj = match.work_object
 
         project = self._ensure_project(run, obj, eis.subject, user_id)
         if tender is None:
             tender = ObjectService._active_tender(obj, project)
 
-        contract = self._find_contract(eis)
-        created = contract is None
-        if contract is None:
-            number = (eis.number or eis.reestr_number)[:100]
-            amount = eis.amount if eis.amount is not None else Decimal("0")
-            contract = Contract(
-                contract_type=ContractType.WORK.value,
-                number=number,
-                title=(eis.subject or obj.display_address or number)[:500],
-                description=eis.subject,
-                status=map_contract_status(eis.stage, ContractStatus.DRAFT.value)
-                or ContractStatus.ACTIVE.value,
-                contract_date=eis.contract_date,
-                start_date=eis.start_date,
-                end_date=eis.end_date,
-                amount=amount,
-                contractor_name="",
-                project_id=project.id,
-                tender_application_id=tender.id if tender is not None else None,
-                responsible_id=user_id,
-                created_by=user_id,
-                updated_by=user_id,
-            )
-            db.session.add(contract)
-            db.session.flush()
-            self._bump(run, "created_contracts")
-        else:
-            self._update_contract_fields(contract, eis, user_id)
-            if contract.project_id is None:
-                contract.project_id = project.id
-            if tender is not None and contract.tender_application_id is None:
-                contract.tender_application_id = tender.id
-            self._bump(run, "updated_contracts")
-
-        contract.eis_reestr_number = eis.reestr_number
-        contract.eis_stage = eis.stage
-        contract.eis_url = eis.url
-        if eis.delivery_place:
-            contract.delivery_place = eis.delivery_place[:5000]
+        contract, created = self._upsert_contract(
+            run, eis, user_id, project=project, tender=tender
+        )
         ContractServiceLink.ensure_object(contract, obj, user_id)
         contractors = self._sync_suppliers(run, contract, eis.suppliers, user_id)
         if contractors:
             contract.contractor_name = "; ".join(item.name for item in contractors)[:500]
-            obj.contractor_name = contract.contractor_name
-        if eis.number:
-            obj.contract_number = eis.number[:100]
-        if eis.contract_date:
-            obj.contract_date = eis.contract_date
-        if eis.amount is not None:
-            obj.contract_amount = eis.amount
-        obj.status = WorkObjectStatus.IN_CONTRACT.value
+        self._apply_object_denorm(obj, contract, eis)
         project.status = ProjectStatus.IN_CONTRACT.value
         if tender is not None and tender.status != TenderApplicationStatus.WON.value:
             if map_tender_status(tender.eis_status) == TenderApplicationStatus.WON.value or eis.reestr_number:
                 tender.status = TenderApplicationStatus.WON.value
+        extra = {"matched_by": match.matched_by if match else "provided", "score": match.score if match else 1.0}
+        if eis.missing_fields:
+            extra["missing"] = list(eis.missing_fields)
+            self._event(
+                run,
+                kind="partial",
+                message="Контракт сохранён с неполными полями: " + ", ".join(eis.missing_fields),
+                eis_number=eis.reestr_number,
+                url=eis.url,
+                entity_type="contract",
+                entity_id=contract.id,
+                extra={"missing": list(eis.missing_fields)},
+                user_id=user_id,
+            )
         self._event(
             run,
             kind="created" if created else "updated",
@@ -606,9 +729,90 @@ class EisImportService:
             url=eis.url,
             entity_type="contract",
             entity_id=contract.id,
+            extra=extra,
             user_id=user_id,
         )
         db.session.commit()
+
+    def _upsert_contract(
+        self,
+        run: EisImportRun,
+        eis: EisContract,
+        user_id: uuid.UUID | None,
+        *,
+        project: Project | None,
+        tender: TenderApplication | None,
+    ) -> tuple[Contract, bool]:
+        contract = self._find_contract(eis)
+        created = contract is None
+        if contract is None:
+            number = (eis.number or eis.reestr_number)[:100]
+            amount = eis.amount if eis.amount is not None else Decimal("0")
+            contract = Contract(
+                contract_type=ContractType.WORK.value,
+                number=number,
+                title=(eis.subject or number)[:500],
+                description=eis.subject,
+                status=map_contract_status(eis.stage, ContractStatus.DRAFT.value)
+                or ContractStatus.ACTIVE.value,
+                contract_date=eis.contract_date,
+                start_date=eis.start_date,
+                end_date=eis.end_date,
+                amount=amount,
+                contractor_name="",
+                project_id=project.id if project is not None else None,
+                tender_application_id=tender.id if tender is not None else None,
+                responsible_id=user_id,
+                created_by=user_id,
+                updated_by=user_id,
+            )
+            db.session.add(contract)
+            db.session.flush()
+            self._bump(run, "created_contracts")
+            self._bump(run, "created")
+        else:
+            self._update_contract_fields(contract, eis, user_id)
+            if project is not None and contract.project_id is None:
+                contract.project_id = project.id
+            if tender is not None and contract.tender_application_id is None:
+                contract.tender_application_id = tender.id
+            self._bump(run, "updated_contracts")
+            self._bump(run, "updated")
+
+        if eis.reestr_number:
+            contract.eis_reestr_number = eis.reestr_number
+        if eis.stage:
+            contract.eis_stage = eis.stage
+        if eis.url:
+            contract.eis_url = eis.url[:700]
+        if eis.delivery_place:
+            contract.delivery_place = eis.delivery_place[:5000]
+        return contract, created
+
+    def _apply_object_denorm(
+        self, obj: WorkObject, contract: Contract, eis: EisContract
+    ) -> None:
+        """Денормализация с активного/актуального контракта, не со случайного старого."""
+        active = ObjectService._active_contract(obj) or contract
+        if active.id != contract.id and contract.id is not None:
+            # обновляем денорм только если этот контракт — активный/актуальный
+            # (после ensure_object активный пересчитается на следующем чтении)
+            pass
+        if eis.number:
+            obj.contract_number = eis.number[:100]
+        elif contract.number:
+            obj.contract_number = contract.number[:100]
+        if eis.contract_date:
+            obj.contract_date = eis.contract_date
+        elif contract.contract_date:
+            obj.contract_date = contract.contract_date
+        if eis.amount is not None:
+            obj.contract_amount = eis.amount
+        elif contract.amount is not None:
+            obj.contract_amount = contract.amount
+        if contract.contractor_name:
+            obj.contractor_name = contract.contractor_name
+        obj.status = WorkObjectStatus.IN_CONTRACT.value
 
     def _find_contract(self, eis: EisContract) -> Contract | None:
         if eis.reestr_number:

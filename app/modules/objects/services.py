@@ -169,9 +169,24 @@ class ObjectService:
 
     @classmethod
     def _active_contract(cls, obj: WorkObject):
+        from sqlalchemy import case, desc, nulls_last
+
         from app.models.contracts.contract import Contract
         from app.models.contracts.contract_object import ContractObject
+        from app.models.enums import ContractStatus
 
+        active_statuses = (
+            ContractStatus.ACTIVE.value,
+            ContractStatus.WORK_DOCS_PENDING.value,
+            ContractStatus.IN_PROGRESS.value,
+            ContractStatus.KS2_PENDING.value,
+            ContractStatus.REJECTED.value,
+        )
+        priority = case(
+            (Contract.status.in_(active_statuses), 0),
+            (Contract.status == ContractStatus.COMPLETED.value, 1),
+            else_=2,
+        )
         return db.session.scalar(
             db.select(Contract)
             .join(ContractObject, ContractObject.contract_id == Contract.id)
@@ -179,18 +194,47 @@ class ObjectService:
                 ContractObject.object_id == obj.id,
                 Contract.active_filter(),
             )
-            .order_by(Contract.created_at.asc())
+            .order_by(
+                priority,
+                nulls_last(desc(Contract.contract_date)),
+                desc(Contract.created_at),
+            )
             .limit(1)
+        )
+
+    @classmethod
+    def related_contracts(cls, obj: WorkObject) -> list:
+        """Все контракты, связанные с объектом (новые сверху)."""
+        from sqlalchemy import desc, nulls_last
+
+        from app.models.contracts.contract import Contract
+        from app.models.contracts.contract_object import ContractObject
+
+        return list(
+            db.session.scalars(
+                db.select(Contract)
+                .join(ContractObject, ContractObject.contract_id == Contract.id)
+                .where(
+                    ContractObject.object_id == obj.id,
+                    Contract.active_filter(),
+                )
+                .order_by(
+                    nulls_last(desc(Contract.contract_date)),
+                    desc(Contract.created_at),
+                )
+            )
         )
 
     @classmethod
     def related_chain(cls, obj: WorkObject) -> dict:
         """Активные проект / заявка / контракт объекта — для ссылок с карточки."""
         project = cls._active_project(obj)
+        contracts = cls.related_contracts(obj)
         return {
             "project": project,
             "tender": cls._active_tender(obj, project),
             "contract": cls._active_contract(obj),
+            "contracts": contracts,
         }
 
     @classmethod

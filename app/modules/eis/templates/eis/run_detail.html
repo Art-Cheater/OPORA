@@ -21,8 +21,24 @@
     <a class="btn btn-sm btn-outline-primary" href="{{ url_for('eis.run_detail', run_id=run.id, kind='created') }}">Создано</a>
     <a class="btn btn-sm btn-outline-primary" href="{{ url_for('eis.run_detail', run_id=run.id, kind='updated') }}">Обновлено</a>
     <a class="btn btn-sm btn-outline-primary" href="{{ url_for('eis.run_detail', run_id=run.id, kind='unmatched') }}">Без объекта</a>
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('eis.run_detail', run_id=run.id, kind='ambiguous') }}">Ambiguous</a>
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('eis.run_detail', run_id=run.id, kind='partial') }}">Partial</a>
     <a class="btn btn-sm btn-outline-primary" href="{{ url_for('eis.run_detail', run_id=run.id, kind='error') }}">Ошибки</a>
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('eis.run_detail', run_id=run.id, kind='page_limit') }}">Лимит стр.</a>
 </div>
+
+{% if run.summary %}
+<div class="row g-2 small mb-3">
+    <div class="col-md-3">Найдено: {{ run.summary.get('cards_found', 0) }}</div>
+    <div class="col-md-3">Разобрано: {{ run.summary.get('cards_parsed', 0) }}</div>
+    <div class="col-md-3">Matched: {{ run.summary.get('matched', 0) }}</div>
+    <div class="col-md-3">Unmatched: {{ run.summary.get('unmatched', 0) }}</div>
+    <div class="col-md-3">Ambiguous: {{ run.summary.get('ambiguous', 0) }}</div>
+    <div class="col-md-3">Partial: {{ run.summary.get('partial_parse', 0) }}</div>
+    <div class="col-md-3">Fetch err: {{ run.summary.get('fetch_errors', 0) }}</div>
+    <div class="col-md-3">Parse err: {{ run.summary.get('parse_errors', 0) }}</div>
+</div>
+{% endif %}
 
 <div class="table-card">
     <table class="table table-opora">
@@ -33,6 +49,7 @@
                 <th>Сущность</th>
                 <th>Номер ЕИС</th>
                 <th>Сообщение</th>
+                <th>Детали</th>
             </tr>
         </thead>
         <tbody>
@@ -49,9 +66,20 @@
                     {% endif %}
                 </td>
                 <td>{{ item.message }}</td>
+                <td class="small text-muted">
+                    {% if item.extra and item.extra.get('candidates') %}
+                    {% for c in item.extra.get('candidates')[:3] %}
+                    {{ c.get('address') }} ({{ c.get('score') }}){% if not loop.last %}; {% endif %}
+                    {% endfor %}
+                    {% elif item.extra and item.extra.get('http_status') %}
+                    HTTP {{ item.extra.get('http_status') }}
+                    {% elif item.extra and item.extra.get('missing') %}
+                    {{ item.extra.get('missing')|join(', ') }}
+                    {% else %}—{% endif %}
+                </td>
             </tr>
             {% else %}
-            <tr><td colspan="5" class="table-empty">Нет событий</td></tr>
+            <tr><td colspan="6" class="table-empty">Нет событий</td></tr>
             {% endfor %}
         </tbody>
     </table>

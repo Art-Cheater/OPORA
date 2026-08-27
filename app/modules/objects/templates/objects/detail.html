@@ -104,4 +104,48 @@
         </div>
     </div>
 </div>
+
+{% if linked_contracts %}
+<div class="card mb-4">
+    <div class="card-header">Контракты объекта</div>
+    <div class="card-body p-0">
+        <table class="table table-opora mb-0">
+            <thead>
+                <tr>
+                    <th>Номер</th>
+                    <th>Реестр ЕИС</th>
+                    <th>Дата</th>
+                    <th>Сумма</th>
+                    <th>Подрядчик</th>
+                    <th>Статус</th>
+                    <th>ЕИС</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in linked_contracts %}
+                <tr>
+                    <td>
+                        {% if current_user.has_permission('contracts.view') %}
+                        <a href="{{ url_for('contracts.detail', contract_id=c.id) }}">{{ c.number }}</a>
+                        {% else %}
+                        {{ c.number }}
+                        {% endif %}
+                    </td>
+                    <td>{{ c.eis_reestr_number or "—" }}</td>
+                    <td>{% if c.contract_date %}{{ c.contract_date.strftime('%d.%m.%Y') }}{% else %}—{% endif %}</td>
+                    <td>{{ c.amount if c.amount is not none else "—" }}</td>
+                    <td>{{ c.contractor_name or "—" }}</td>
+                    <td>{{ c.status }}</td>
+                    <td>
+                        {% if c.eis_url %}
+                        <a href="{{ c.eis_url }}" target="_blank" rel="noopener">Открыть</a>
+                        {% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
 {% endblock %}

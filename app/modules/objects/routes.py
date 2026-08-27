@@ -297,6 +297,7 @@ def detail(object_id: uuid.UUID):
     linked_project = chain["project"]
     linked_tender = chain["tender"]
     linked_contract = chain["contract"]
+    linked_contracts = chain.get("contracts") or []
     can_create_project = (not has_active_project) and obj.status not in (
         "in_tender",
         "in_contract",
@@ -314,6 +315,7 @@ def detail(object_id: uuid.UUID):
         "linked_project": linked_project,
         "linked_tender": linked_tender,
         "linked_contract": linked_contract,
+        "linked_contracts": linked_contracts,
     }
     if is_ajax() and not request.args.get("full"):
         return render_template("objects/partials/detail_modal.html", **ctx)

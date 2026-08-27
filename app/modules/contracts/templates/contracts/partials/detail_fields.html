@@ -72,4 +72,36 @@
     </div>
 </div>
 {% endif %}
+{% if contract.eis_reestr_number or contract.eis_url or contract.eis_stage or contract.delivery_place %}
+<div class="col-md-4">
+    <div class="opora-detail-field">
+        <div class="opora-detail-field__label">Реестровый номер ЕИС</div>
+        <div>{{ contract.eis_reestr_number or "—" }}</div>
+    </div>
+</div>
+<div class="col-md-4">
+    <div class="opora-detail-field">
+        <div class="opora-detail-field__label">Этап ЕИС</div>
+        <div>{{ contract.eis_stage or "—" }}</div>
+    </div>
+</div>
+<div class="col-md-4">
+    <div class="opora-detail-field">
+        <div class="opora-detail-field__label">ЕИС</div>
+        <div>
+            {% if contract.eis_url %}
+            <a class="btn btn-sm btn-outline-primary" href="{{ contract.eis_url }}" target="_blank" rel="noopener">Открыть в ЕИС</a>
+            {% else %}—{% endif %}
+        </div>
+    </div>
+</div>
+{% if contract.delivery_place %}
+<div class="col-12">
+    <div class="opora-detail-field">
+        <div class="opora-detail-field__label">Место поставки</div>
+        <div>{{ contract.delivery_place }}</div>
+    </div>
+</div>
+{% endif %}
+{% endif %}
 {{ custom_fields_detail(custom_field_details|default([])) }}

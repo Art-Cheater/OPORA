@@ -169,7 +169,7 @@ def test_import_creates_chain_and_is_idempotent(app):
         assert second.summary["updated_tenders"] >= 1
 
 
-def test_import_unmatched_goes_to_journal(app):
+def test_import_unmatched_saves_contract(app):
     with app.app_context():
         user_id = _admin_id()
         _object(user_id, "д. Студенец")
@@ -178,6 +178,7 @@ def test_import_unmatched_goes_to_journal(app):
             user_id=user_id,
             parse_result=_parse_result(matched=False),
         )
+        assert run.status == "partial"
         events = list(
             db.session.scalars(
                 db.select(EisImportEvent).where(
@@ -188,6 +189,33 @@ def test_import_unmatched_goes_to_journal(app):
         )
         assert events
         assert db.session.scalar(db.select(db.func.count(TenderApplication.id))) == 0
+        contracts = list(db.session.scalars(db.select(Contract).where(Contract.active_filter())))
+        assert len(contracts) == 1
+        assert contracts[0].eis_reestr_number == "3434528856325000213"
+        assert contracts[0].project_id is None
+        links = db.session.scalar(db.select(db.func.count(ContractObject.id)))
+        assert links == 0
+
+
+def test_import_does_not_overwrite_with_empty(app):
+    with app.app_context():
+        user_id = _admin_id()
+        _object(user_id, "д. Студенец")
+        service = EisImportService()
+        service.sync(trigger="manual", user_id=user_id, parse_result=_parse_result())
+        contract = db.session.scalar(db.select(Contract).where(Contract.active_filter()))
+        assert contract is not None
+        assert contract.end_date is not None
+        saved_end = contract.end_date
+        saved_amount = contract.amount
+
+        result = _parse_result()
+        result.orders[0].contracts[0].end_date = None
+        result.orders[0].contracts[0].amount = None
+        service.sync(trigger="manual", user_id=user_id, parse_result=result)
+        contract = db.session.get(Contract, contract.id)
+        assert contract.end_date == saved_end
+        assert contract.amount == saved_amount
 
 
 def test_import_matches_purchase_objects_not_header(app):
@@ -208,7 +236,7 @@ def test_import_matches_purchase_objects_not_header(app):
             user_id=user_id,
             parse_result=result,
         )
-        assert run.status == "success"
+        assert run.status == "partial"
         tenders = list(
             db.session.scalars(
                 db.select(TenderApplication).where(TenderApplication.active_filter())
@@ -243,6 +271,47 @@ def test_import_matches_purchase_objects_not_header(app):
             )
         )
         assert any("Космонавтов" in event.message or "Васнецовых" in event.message for event in unmatched)
+
+
+def test_match_street_house_and_conflicts(app):
+    with app.app_context():
+        user_id = _admin_id()
+        obj18 = _object(user_id, "Искожевский переулок, д. 18")
+        hit = match_work_objects(["Искожевский пер., д. 18"], [obj18])
+        assert hit.status == "matched"
+        assert hit.work_object.id == obj18.id
+
+        miss180 = match_work_objects(["Искожевский 180"], [obj18])
+        assert miss180.work_object is None
+
+        miss18a = match_work_objects(["Искожевский 18А"], [obj18])
+        assert miss18a.work_object is None
+
+        obj180 = _object(user_id, "Искожевский переулок, д. 180")
+        amb = match_work_objects(
+            ["г. Киров, Искожевский переулок"],
+            [obj18, obj180],
+        )
+        assert amb.status in {"ambiguous", "unmatched"}
+        assert amb.work_object is None
+
+
+def test_import_card_error_does_not_fail_run(app):
+    with app.app_context():
+        user_id = _admin_id()
+        _object(user_id, "д. Студенец")
+        good = _parse_result()
+        bad = EisContract(
+            reestr_number="3434528856325000999",
+            url="https://zakupki.gov.ru/epz/contract/contractCard/common-info.html?reestrNumber=3434528856325000999",
+            number="BAD.999",
+            subject="Небылица освещение",
+            delivery_place="д. Небылица",
+        )
+        result = EisParseResult(orders=good.orders, contracts=[bad])
+        run = EisImportService().sync(trigger="manual", user_id=user_id, parse_result=result)
+        assert run.status in {"success", "partial"}
+        assert db.session.scalar(db.select(db.func.count(Contract.id))) >= 1
 
 
 def test_import_skips_years_before_2025(app):

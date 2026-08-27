@@ -28,19 +28,30 @@
             {% if latest.trigger == 'schedule' %}по расписанию{% else %}вручную{% endif %}
             ·
             статус <strong>{{ latest.status }}</strong>
+            {% if latest.finished_at and latest.started_at %}
+            · длительность
+            {% set secs = ((latest.finished_at - latest.started_at).total_seconds())|int %}
+            {{ (secs // 60) }}м {{ (secs % 60) }}с
+            {% endif %}
             {% if latest.user %} · {{ latest.user.full_name }}{% endif %}
         </p>
         {% if latest.summary %}
         <div class="row g-2 small">
-            <div class="col-md-3">Проекты созданы: {{ latest.summary.get('created_projects', 0) }}</div>
-            <div class="col-md-3">Заявки созданы: {{ latest.summary.get('created_tenders', 0) }}</div>
-            <div class="col-md-3">Заявки обновлены: {{ latest.summary.get('updated_tenders', 0) }}</div>
-            <div class="col-md-3">Контракты созданы: {{ latest.summary.get('created_contracts', 0) }}</div>
-            <div class="col-md-3">Контракты обновлены: {{ latest.summary.get('updated_contracts', 0) }}</div>
-            <div class="col-md-3">Подрядчики: {{ latest.summary.get('created_contractors', 0) }}</div>
-            <div class="col-md-3">Без объекта: {{ latest.summary.get('unmatched', 0) }}</div>
+            <div class="col-md-3">Страниц: {{ latest.summary.get('pages_fetched', 0) }}</div>
+            <div class="col-md-3">Найдено карточек: {{ latest.summary.get('cards_found', 0) }}</div>
+            <div class="col-md-3">Разобрано: {{ latest.summary.get('cards_parsed', 0) }}</div>
+            <div class="col-md-3">Partial: {{ latest.summary.get('partial_parse', 0) }}</div>
+            <div class="col-md-3">Создано: {{ latest.summary.get('created', latest.summary.get('created_contracts', 0)) }}</div>
+            <div class="col-md-3">Обновлено: {{ latest.summary.get('updated', latest.summary.get('updated_contracts', 0)) }}</div>
+            <div class="col-md-3">Matched: {{ latest.summary.get('matched', 0) }}</div>
+            <div class="col-md-3">Unmatched: {{ latest.summary.get('unmatched', 0) }}</div>
+            <div class="col-md-3">Ambiguous: {{ latest.summary.get('ambiguous', 0) }}</div>
+            <div class="col-md-3">Ошибки fetch: {{ latest.summary.get('fetch_errors', 0) }}</div>
+            <div class="col-md-3">Ошибки parse: {{ latest.summary.get('parse_errors', latest.summary.get('errors', 0)) }}</div>
             <div class="col-md-3">Вне {{ config.EIS_YEAR_FROM }}–{{ config.EIS_YEAR_TO }}: {{ latest.summary.get('skipped_old', 0) }}</div>
-            <div class="col-md-3">Ошибки: {{ latest.summary.get('errors', 0) }}</div>
+            {% if latest.summary.get('pagination_limit_reached') %}
+            <div class="col-md-12 text-warning">Достигнут лимит страниц (pagination_limit_reached)</div>
+            {% endif %}
         </div>
         {% endif %}
         {% if latest.error_message %}
@@ -62,6 +73,7 @@
                     <th>Тип</th>
                     <th>Номер ЕИС</th>
                     <th>Сообщение</th>
+                    <th>Детали</th>
                 </tr>
             </thead>
             <tbody>
@@ -76,9 +88,31 @@
                         {% endif %}
                     </td>
                     <td>{{ item.message }}</td>
+                    <td class="small text-muted">
+                        {% if item.extra %}
+                        {% if item.extra.get('delivery_place') or item.extra.get('subject') %}
+                        {{ item.extra.get('delivery_place') or item.extra.get('subject') }}
+                        {% endif %}
+                        {% if item.extra.get('candidates') %}
+                        <div>кандидаты:
+                            {% for c in item.extra.get('candidates')[:3] %}
+                            {{ c.get('address') }} ({{ c.get('score') }}){% if not loop.last %}; {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        {% if item.extra.get('http_status') %}
+                        <div>HTTP {{ item.extra.get('http_status') }}
+                            {% if item.extra.get('attempts') %}· попыток {{ item.extra.get('attempts') }}{% endif %}
+                        </div>
+                        {% endif %}
+                        {% if item.extra.get('missing') %}
+                        <div>нет полей: {{ item.extra.get('missing')|join(', ') }}</div>
+                        {% endif %}
+                        {% else %}—{% endif %}
+                    </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="3" class="table-empty">Ошибок нет</td></tr>
+                <tr><td colspan="4" class="table-empty">Ошибок нет</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -111,9 +145,11 @@
                     <td>{{ run.user.full_name if run.user else '—' }}</td>
                     <td class="small text-muted">
                         {% if run.summary %}
-                        +{{ run.summary.get('created_tenders', 0) }} заявок,
-                        +{{ run.summary.get('created_contracts', 0) }} контрактов,
-                        {{ run.summary.get('unmatched', 0) }} без объекта
+                        +{{ run.summary.get('created', run.summary.get('created_contracts', 0)) }} /
+                        ~{{ run.summary.get('updated', run.summary.get('updated_contracts', 0)) }},
+                        {{ run.summary.get('matched', 0) }} match,
+                        {{ run.summary.get('unmatched', 0) }} unmatch,
+                        {{ run.summary.get('ambiguous', 0) }} ambig
                         {% else %}—{% endif %}
                     </td>
                 </tr>
