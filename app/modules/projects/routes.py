@@ -408,6 +408,15 @@ def detail(project_id: uuid.UUID):
                     if can_edit_docs
                     else None
                 ),
+                "edit_url": (
+                    url_for(
+                        "projects.edit_document",
+                        project_id=project.id,
+                        document_id=doc.id,
+                    )
+                    if can_edit_docs
+                    else None
+                ),
             }
         )
     for att in attachments:
@@ -454,6 +463,7 @@ def detail(project_id: uuid.UUID):
                     if can_edit_docs
                     else None
                 ),
+                "edit_url": None,
             }
         )
     document_items.sort(
@@ -621,6 +631,46 @@ def add_document(project_id: uuid.UUID):
             flash(str(exc), "danger")
     else:
         flash(form_errors_message(form) or "Проверьте корректность данных документа.", "danger")
+    return redirect(url_for("projects.detail", project_id=project.id))
+
+
+@projects_bp.route("/<uuid:project_id>/document/<uuid:document_id>/edit", methods=["POST"])
+@login_required
+@permission_required(PERM_PROJECTS_EDIT)
+def edit_document(project_id: uuid.UUID, document_id: uuid.UUID):
+    from app.models.projects.project_document import ProjectDocument
+
+    from app.modules.projects.forms import ProjectDocumentEditForm
+
+    project = ProjectRepository.get_by_id(project_id)
+    if project is None:
+        abort(404)
+    document = ProjectDocument.query.filter_by(
+        id=document_id,
+        project_id=project.id,
+        deleted_at=None,
+    ).first()
+    if document is None:
+        flash("Документ не найден.", "danger")
+        return redirect(url_for("projects.detail", project_id=project.id))
+
+    form = ProjectDocumentEditForm()
+    if form.validate_on_submit():
+        try:
+            ProjectService.update_document(
+                document,
+                title=form.title.data,
+                document_type=form.document_type.data,
+                document_number=form.document_number.data,
+                document_date=form.document_date.data,
+                description=form.description.data,
+                user_id=current_user.id,
+            )
+            flash("Документ обновлён.", "success")
+        except ValidationError as exc:
+            flash(str(exc), "danger")
+    else:
+        flash(form_errors_message(form) or "Проверьте данные документа.", "danger")
     return redirect(url_for("projects.detail", project_id=project.id))
 
 

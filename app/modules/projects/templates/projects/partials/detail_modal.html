@@ -187,6 +187,11 @@
                         {% if item.download_url %}
                         <a class="btn btn-sm btn-outline-primary py-0" href="{{ item.download_url }}">Скачать</a>
                         {% endif %}
+                        {% if item.edit_url %}
+                        <button type="button" class="btn btn-sm btn-outline-primary py-0"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#docEditModal-{{ item.id }}">Изменить</button>
+                        {% endif %}
                         {% if item.delete_url %}
                         <form method="POST" action="{{ item.delete_url }}" class="d-inline"
                               onsubmit="return confirm('Удалить документ?\nДокумент будет удалён из проекта.');">
@@ -195,6 +200,37 @@
                         </form>
                         {% endif %}
                     </div>
+                    {% if item.edit_url %}
+                    <div class="collapse mt-2" id="docEditModal-{{ item.id }}">
+                        <form method="POST" action="{{ item.edit_url }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="mb-1">
+                                <select name="document_type" class="form-select form-select-sm" required>
+                                    {% for value, label in document_form.document_type.choices %}
+                                    <option value="{{ value }}" {% if value == item.type_code %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-1">
+                                <input type="text" name="title" class="form-control form-control-sm"
+                                       value="{{ item.title }}" maxlength="500" required>
+                            </div>
+                            <div class="mb-1">
+                                <input type="text" name="document_number" class="form-control form-control-sm"
+                                       value="{{ item.number or '' }}" placeholder="Номер" maxlength="100">
+                            </div>
+                            <div class="mb-1">
+                                <input type="date" name="document_date" class="form-control form-control-sm"
+                                       value="{{ item.doc_date.strftime('%Y-%m-%d') if item.doc_date else '' }}">
+                            </div>
+                            <div class="mb-1">
+                                <textarea name="description" class="form-control form-control-sm" rows="2"
+                                          placeholder="Описание">{{ item.description or '' }}</textarea>
+                            </div>
+                            <button type="submit" name="submit" value="1" class="btn btn-primary btn-sm">Сохранить</button>
+                        </form>
+                    </div>
+                    {% endif %}
                 </div>
                 {% else %}
                 <div class="text-muted small">Документы не добавлены.</div>

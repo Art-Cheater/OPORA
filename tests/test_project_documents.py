@@ -386,3 +386,80 @@ def test_attachment_post_redirects_to_documents(app, admin_client):
     )
     assert resp.status_code == 200
     assert "Документы проекта" in resp.get_data(as_text=True)
+
+
+def test_edit_document_updates_metadata(app, admin_client):
+    project_id, user_id = _seed_project(app)
+    with app.app_context():
+        doc = ProjectDocument(
+            project_id=uuid.UUID(project_id),
+            title="Старое название",
+            document_type=ProjectDocumentType.OTHER.value,
+            document_number="1",
+            file_name="old.txt",
+            mime_type="text/plain",
+            storage_key=None,
+            created_by=uuid.UUID(user_id),
+            updated_by=uuid.UUID(user_id),
+        )
+        db.session.add(doc)
+        db.session.commit()
+        doc_id = str(doc.id)
+
+    page = admin_client.get(f"/projects/{project_id}?full=1")
+    assert "Изменить" in page.get_data(as_text=True)
+
+    resp = admin_client.post(
+        f"/projects/{project_id}/document/{doc_id}/edit",
+        data={
+            "title": "Новое название документа",
+            "document_type": ProjectDocumentType.ESTIMATE.value,
+            "document_number": "СМ-42",
+            "document_date": "2026-08-01",
+            "description": "Обновлённое описание",
+            "submit": "Сохранить",
+        },
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "Новое название документа" in html
+    assert "Смета" in html
+    with app.app_context():
+        doc = db.session.get(ProjectDocument, uuid.UUID(doc_id))
+        assert doc.title == "Новое название документа"
+        assert doc.document_type == ProjectDocumentType.ESTIMATE.value
+        assert doc.document_number == "СМ-42"
+        assert str(doc.document_date) == "2026-08-01"
+        assert doc.description == "Обновлённое описание"
+
+
+def test_edit_document_requires_edit_permission(app, client):
+    project_id, user_id = _seed_project(app)
+    with app.app_context():
+        doc = ProjectDocument(
+            project_id=uuid.UUID(project_id),
+            title="Без прав",
+            document_type=ProjectDocumentType.OTHER.value,
+            created_by=uuid.UUID(user_id),
+            updated_by=uuid.UUID(user_id),
+        )
+        db.session.add(doc)
+        db.session.commit()
+        doc_id = str(doc.id)
+
+    _grant_perms(app, "executor@test.local", ["projects.view"])
+    _login(client, "executor@test.local")
+    denied = client.post(
+        f"/projects/{project_id}/document/{doc_id}/edit",
+        data={
+            "title": "Хакинг",
+            "document_type": ProjectDocumentType.OTHER.value,
+            "submit": "Сохранить",
+        },
+        follow_redirects=False,
+    )
+    assert denied.status_code in {302, 403}
+    with app.app_context():
+        doc = db.session.get(ProjectDocument, uuid.UUID(doc_id))
+        assert doc.title == "Без прав"

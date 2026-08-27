@@ -136,6 +136,21 @@ class ProjectDocumentForm(FlaskForm):
     submit = SubmitField("Добавить документ")
 
 
+class ProjectDocumentEditForm(FlaskForm):
+    """Правка метаданных документа (без обязательной замены файла)."""
+
+    title = StringField("Название", validators=[DataRequired(), Length(max=500)])
+    document_type = SelectField(
+        "Тип документа",
+        choices=DOCUMENT_TYPE_CHOICES,
+        validators=[DataRequired()],
+    )
+    document_number = StringField("Номер", validators=[Optional(), Length(max=100)])
+    document_date = DateField("Дата документа", validators=[Optional()], format="%Y-%m-%d")
+    description = TextAreaField("Описание", validators=[Optional(), Length(max=5000)])
+    submit = SubmitField("Сохранить")
+
+
 class ProjectAttachmentForm(FlaskForm):
     """Устарело: загрузка без типа. Оставлено для совместимости API."""
 

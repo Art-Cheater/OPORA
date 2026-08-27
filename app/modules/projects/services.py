@@ -569,6 +569,64 @@ class ProjectService:
         return document
 
     @classmethod
+    def update_document(
+        cls,
+        document: ProjectDocument,
+        *,
+        title: str,
+        document_type: str,
+        document_number: str | None,
+        document_date: date | None,
+        description: str | None,
+        user_id: uuid.UUID,
+    ) -> ProjectDocument:
+        if not (title or "").strip():
+            raise ValidationError("Название документа обязательно.")
+        allowed = {item.value for item in ProjectDocumentType}
+        if document_type not in allowed:
+            raise ValidationError("Некорректный тип документа.")
+
+        before = {
+            "title": document.title,
+            "document_type": document.document_type,
+            "document_number": document.document_number,
+            "document_date": document.document_date.isoformat() if document.document_date else None,
+            "description": document.description,
+        }
+        document.title = title.strip()[:500]
+        document.document_type = document_type
+        document.document_number = cls._normalize_text(document_number)
+        document.document_date = document_date
+        document.description = cls._normalize_text(description)
+        document.updated_by = user_id
+        after = {
+            "title": document.title,
+            "document_type": document.document_type,
+            "document_number": document.document_number,
+            "document_date": document.document_date.isoformat() if document.document_date else None,
+            "description": document.description,
+        }
+        cls._log_audit(
+            user_id,
+            AuditAction.UPDATE.value,
+            document.project_id,
+            f"Изменён документ проекта: {document.title}",
+            before,
+            after,
+        )
+        project = db.session.get(Project, document.project_id)
+        if project is not None:
+            cls._log_history(
+                project,
+                user_id,
+                "document_update",
+                "Изменён документ",
+                {"title": document.title, "document_id": str(document.id)},
+            )
+        db.session.commit()
+        return document
+
+    @classmethod
     def delete_document(cls, document: ProjectDocument, user_id: uuid.UUID) -> None:
         title = document.title
         project_id = document.project_id

@@ -60,7 +60,7 @@
         {
           target: "sidebar",
           title: "Меню слева",
-          text: "Все доступные вам разделы. Чужие модули скрыты — так устроены роли.",
+          text: "Все доступные вам разделы. Модули без прав вашей роли в меню не показываются — это нормально.",
         },
         {
           target: "search",
@@ -484,18 +484,45 @@
     return new Promise((resolve) => window.setTimeout(resolve, ms));
   }
 
+  function isVisibleTarget(el) {
+    if (!el) return null;
+    try {
+      if (typeof el.checkVisibility === "function") {
+        if (!el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return null;
+      }
+    } catch {
+      /* older browsers */
+    }
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return null;
+    return el;
+  }
+
+  function isFormModalOpen() {
+    return !!document.querySelector("#oporaFormModal.show");
+  }
+
   function targetEl(name) {
     if (!name) return null;
-    return (
-      document.querySelector(`[data-tour="${name}"]`) ||
-      (name === "list-table" ? document.querySelector('[id$="TableContainer"]') : null) ||
-      (name === "form-save"
-        ? document.querySelector(
-            "#oporaFormModal.show [type=submit], #oporaFormModal.show .btn-primary, #oporaFormModal .modal-form-footer .btn-primary"
+    if (name === "form-body" || name === "form-save") {
+      if (!isFormModalOpen()) return null;
+      if (name === "form-save") {
+        return isVisibleTarget(
+          document.querySelector(
+            '#oporaFormModal.show [data-tour="form-save"], #oporaFormModal.show [type=submit], #oporaFormModal.show .modal-form-footer .btn-primary, #oporaFormModal.show .btn-primary'
           )
-        : null) ||
-      (name === "form-body"
-        ? document.querySelector("#oporaFormModal.show .opora-modal-form, #oporaFormModal.show .modal-body, #oporaFormModalBody")
+        );
+      }
+      return isVisibleTarget(
+        document.querySelector(
+          '#oporaFormModal.show [data-tour="form-body"], #oporaFormModal.show .opora-modal-form, #oporaFormModal.show .modal-body'
+        )
+      );
+    }
+    return (
+      isVisibleTarget(document.querySelector(`[data-tour="${name}"]`)) ||
+      (name === "list-table"
+        ? isVisibleTarget(document.querySelector('[id$="TableContainer"]'))
         : null)
     );
   }
@@ -512,20 +539,19 @@
 
   async function openCreate() {
     const btn = document.querySelector('[data-opora-create], [data-tour="create"]');
-    if (!btn) return false;
+    if (!btn || !isVisibleTarget(btn)) return false;
     btn.click();
-    const deadline = Date.now() + 4000;
+    const deadline = Date.now() + 6000;
     while (Date.now() < deadline) {
-      const form =
-        document.querySelector("#oporaFormModal.show form") ||
-        document.querySelector("#oporaFormModal .opora-modal-form") ||
-        document.querySelector("#oporaFormModalBody form");
-      if (form) {
+      const form = document.querySelector("#oporaFormModal.show form, #oporaFormModal.show .opora-modal-form");
+      if (form && isFormModalOpen()) {
         form.setAttribute("data-tour", "form-body");
+        const body = document.querySelector("#oporaFormModal.show .modal-body");
+        if (body) body.setAttribute("data-tour", "form-body");
         const save =
           form.querySelector('[type="submit"]') ||
           form.querySelector(".btn-primary") ||
-          document.querySelector("#oporaFormModal .modal-form-footer .btn-primary");
+          document.querySelector("#oporaFormModal.show .modal-form-footer .btn-primary");
         if (save) save.setAttribute("data-tour", "form-save");
         await sleep(200);
         return true;
@@ -679,6 +705,12 @@
     openSidebarIfNeeded(targetName);
     el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
     const rect = el.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) {
+      spot.hidden = true;
+      scrim.style.opacity = "1";
+      placeCardNear(null);
+      return false;
+    }
     el.classList.add("opora-tour-target");
     spot.hidden = false;
     scrim.style.opacity = "0";
@@ -825,6 +857,13 @@
     }
     if (step.action === "closeModals") {
       /* close after highlight via next/finish — keep form visible for this step */
+    }
+    // Форма закрыта / не открылась — не показываем «Поля» и «Сохранение» на списке
+    if (
+      (step.target === "form-body" || step.target === "form-save") &&
+      !isFormModalOpen()
+    ) {
+      return "skip";
     }
     if (step.optional && step.target && !targetEl(step.target)) return "skip";
     if (step.target === "list-table") {

@@ -84,6 +84,14 @@
                     {% if item.download_url %}
                     <a class="btn btn-sm btn-outline-primary" href="{{ item.download_url }}">Скачать</a>
                     {% endif %}
+                    {% if item.edit_url %}
+                    <button type="button" class="btn btn-sm btn-outline-primary"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#docEdit-{{ item.id }}"
+                            aria-expanded="false">
+                        Изменить
+                    </button>
+                    {% endif %}
                     {% if item.delete_url %}
                     <form method="POST" action="{{ item.delete_url }}" class="d-inline"
                           onsubmit="return confirm('Удалить документ?\nДокумент будет удалён из проекта.');">
@@ -92,6 +100,46 @@
                     </form>
                     {% endif %}
                 </div>
+                {% if item.edit_url %}
+                <div class="collapse mt-3" id="docEdit-{{ item.id }}">
+                    <form method="POST" action="{{ item.edit_url }}" class="border-top pt-3">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label class="form-label small mb-1">Тип документа</label>
+                                <select name="document_type" class="form-select form-select-sm" required>
+                                    {% for value, label in document_form.document_type.choices %}
+                                    <option value="{{ value }}" {% if value == item.type_code %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label small mb-1">Название</label>
+                                <input type="text" name="title" class="form-control form-control-sm"
+                                       value="{{ item.title }}" maxlength="500" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">Номер</label>
+                                <input type="text" name="document_number" class="form-control form-control-sm"
+                                       value="{{ item.number or '' }}" maxlength="100">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">Дата документа</label>
+                                <input type="date" name="document_date" class="form-control form-control-sm"
+                                       value="{{ item.doc_date.strftime('%Y-%m-%d') if item.doc_date else '' }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small mb-1">Описание</label>
+                                <textarea name="description" class="form-control form-control-sm" rows="2"
+                                          maxlength="5000">{{ item.description or '' }}</textarea>
+                            </div>
+                            <div class="col-12">
+                                <button type="submit" name="submit" value="1" class="btn btn-primary btn-sm">Сохранить</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                {% endif %}
             </div>
             {% endfor %}
         </div>
