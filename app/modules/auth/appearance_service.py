@@ -11,7 +11,8 @@ from app.core.ui_backgrounds import (
     BG_ALLOWED_EXTENSIONS,
     BG_ALLOWED_MIME,
     BG_MAX_BYTES,
-    SYSTEM_BACKGROUND_IDS,
+    get_active_wallpaper,
+    parse_wallpaper_id,
 )
 from app.core.upload_utils import (
     UploadValidationError,
@@ -37,14 +38,20 @@ class AppearanceService:
     @staticmethod
     def set_background(user, background_id: str) -> None:
         bg = (background_id or "none").strip()
-        if bg == "custom":
+        if bg == "none":
+            user.ui_background = "none"
+        elif bg == "custom":
             if not user.ui_background_key:
                 raise ValueError("Сначала загрузите своё изображение.")
             user.ui_background = "custom"
-        elif bg in SYSTEM_BACKGROUND_IDS:
-            user.ui_background = bg
         else:
-            raise ValueError("Неизвестный фон.")
+            wp_id = parse_wallpaper_id(bg)
+            if wp_id is None:
+                raise ValueError("Неизвестный фон.")
+            wp = get_active_wallpaper(wp_id)
+            if wp is None:
+                raise ValueError("Эти обои недоступны.")
+            user.ui_background = bg
         user.updated_by = user.id
         db.session.commit()
 
@@ -60,7 +67,6 @@ class AppearanceService:
         if mime not in BG_ALLOWED_MIME and not str(mime).startswith("image/"):
             raise UploadValidationError("Файл должен быть изображением.")
 
-        # Проверка размера до записи (stream)
         pos = file_storage.stream.tell()
         file_storage.stream.seek(0, 2)
         size = file_storage.stream.tell()

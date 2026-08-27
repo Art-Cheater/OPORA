@@ -169,6 +169,7 @@ def _init_extensions(app: Flask) -> None:
         User,
         UserPresence,
         UserRole,
+        Wallpaper,
         WorkObject,
     )
 
@@ -402,11 +403,7 @@ def _register_context_processors(app: Flask) -> None:
         from flask_login import current_user
 
         from app.core.builtin_field_service import BuiltinFieldService
-        from app.core.ui_backgrounds import (
-            SYSTEM_BACKGROUNDS,
-            resolve_background_thumb_url,
-            resolve_user_background_url,
-        )
+        from app.core.ui_backgrounds import build_background_options, resolve_user_background_url
 
         max_upload_mb = int(app.config.get("MAX_CONTENT_LENGTH", 0) / (1024 * 1024)) or 64
         ui_bg_url = None
@@ -417,19 +414,7 @@ def _register_context_processors(app: Flask) -> None:
             ui_bg_url = resolve_user_background_url(current_user)
             ui_theme = current_user.ui_theme
             ui_background = current_user.ui_background or "none"
-            custom_url = ui_bg_url if ui_background == "custom" else None
-            for opt in SYSTEM_BACKGROUNDS:
-                if opt.id == "custom" and not custom_url and not current_user.ui_background_key:
-                    continue
-                bg_options.append(
-                    {
-                        "id": opt.id,
-                        "title": opt.title,
-                        "thumb": resolve_background_thumb_url(opt, custom_url=custom_url),
-                        "selected": ui_background == opt.id
-                        or (opt.id == "custom" and ui_background == "custom"),
-                    }
-                )
+            bg_options = build_background_options(current_user)
         return {
             "app_name": app.config["APP_NAME"],
             "app_version": app.config["APP_VERSION"],

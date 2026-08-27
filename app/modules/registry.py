@@ -22,6 +22,7 @@ from app.modules.requests import requests_bp
 from app.modules.reports import reports_bp
 from app.modules.search import search_bp
 from app.modules.tenders import tenders_bp
+from app.modules.wallpapers import wallpapers_bp
 from app.modules.audit import audit_bp
 
 # Список всех модулей системы.
@@ -41,6 +42,7 @@ ALL_BLUEPRINTS = [
     positions_bp,
     roles_bp,
     field_builder_bp,
+    wallpapers_bp,
     messenger_bp,
     documents_bp,
     notifications_bp,

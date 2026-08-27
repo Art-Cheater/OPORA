@@ -51,6 +51,9 @@
                 </button>
                 {% endfor %}
             </div>
+            {% if ui_background_options|length <= 1 %}
+            <div class="form-text mt-2">Системные обои пока не загружены. Администратор добавляет их в разделе «Обои».</div>
+            {% endif %}
 
             <div class="appearance-upload mt-3">
                 <label class="btn btn-outline-primary w-100 appearance-upload__btn">

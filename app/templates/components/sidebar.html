@@ -152,6 +152,14 @@
                 <span>Должности</span>
             </a>
             {% endif %}
+            {% if current_user.has_permission('wallpapers.manage') %}
+            <a href="{{ url_for('wallpapers.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('wallpapers.') %}active{% endif %}"
+               data-tour="wallpapers">
+                <i class="bi bi-image"></i>
+                <span>Обои</span>
+            </a>
+            {% endif %}
         </div>
 
         <div class="sidebar__section">

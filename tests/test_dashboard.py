@@ -102,7 +102,7 @@ def test_dashboard_hides_requests_without_permission(client, app):
 def test_appearance_set_theme_and_background(admin_client, app):
     res = admin_client.post(
         "/auth/ui/appearance",
-        json={"theme": "dark", "background": "kirov_center"},
+        json={"theme": "dark", "background": "none"},
     )
     assert res.status_code == 200
     assert res.get_json()["ok"] is True
@@ -111,7 +111,7 @@ def test_appearance_set_theme_and_background(admin_client, app):
             db.select(User).where(User.email == "admin@opora.ru")
         ).scalar_one()
         assert user.ui_theme == "dark"
-        assert user.ui_background == "kirov_center"
+        assert user.ui_background == "none"
 
 
 def test_appearance_upload_and_isolation(app):
@@ -171,4 +171,4 @@ def test_dashboard_page_includes_appearance_panel(admin_client):
     html = admin_client.get("/").get_data(as_text=True)
     assert "appearancePanel" in html
     assert "Внешний вид" in html
-    assert "Киров" in html
+    assert "Без изображения" in html

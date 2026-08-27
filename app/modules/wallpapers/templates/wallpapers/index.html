@@ -1,0 +1,104 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}Обои — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Обои", "Каталог фонов интерфейса для всех пользователей", "image") %}{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-plus-lg"></i> Добавить обои</div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('wallpapers.create') }}" enctype="multipart/form-data">
+                    {{ form.hidden_tag() }}
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.title.id }}">Название</label>
+                        {{ form.title(class="form-control", placeholder="Например: Киров — набережная") }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.image.id }}">Изображение</label>
+                        {{ form.image(class="form-control", accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp") }}
+                        <div class="form-text">JPG, PNG или WebP, до 5 МБ. Рекомендуется 1920×1080.</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-upload"></i> Загрузить
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-images"></i> Каталог</span>
+                <span class="text-muted small">{{ items|length }} шт.</span>
+            </div>
+            <div class="card-body">
+                {% if items %}
+                <div class="wallpapers-admin-grid">
+                    {% for item in items %}
+                    <div class="wallpapers-admin-card{% if not item.is_active %} is-inactive{% endif %}">
+                        <div class="wallpapers-admin-card__preview"
+                             style="background-image:url('{{ url_for('wallpapers.file', wallpaper_id=item.id) }}')"></div>
+                        <div class="wallpapers-admin-card__body">
+                            <form method="post" action="{{ url_for('wallpapers.edit', wallpaper_id=item.id) }}" class="mb-2">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="text" name="title" class="form-control form-control-sm mb-2"
+                                       value="{{ item.title }}" maxlength="200" required>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" name="is_active" value="y"
+                                           id="active-{{ item.id }}"{% if item.is_active %} checked{% endif %}>
+                                    <label class="form-check-label" for="active-{{ item.id }}">Показывать пользователям</label>
+                                </div>
+                                <button type="submit" class="btn btn-sm btn-outline-primary">Сохранить</button>
+                            </form>
+                            <form method="post" action="{{ url_for('wallpapers.delete', wallpaper_id=item.id) }}"
+                                  onsubmit="return confirm('Удалить эти обои?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Удалить</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-muted text-center py-4">
+                    Пока нет обоев. Загрузите первое изображение слева —
+                    оно появится в панели «Внешний вид» у всех пользователей.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<style>
+.wallpapers-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+.wallpapers-admin-card {
+  border: 1px solid var(--opora-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--opora-card);
+}
+.wallpapers-admin-card.is-inactive { opacity: 0.65; }
+.wallpapers-admin-card__preview {
+  height: 120px;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--opora-bg-elevated);
+}
+.wallpapers-admin-card__body { padding: 0.75rem; }
+</style>
+{% endblock %}
