@@ -41,6 +41,8 @@
 {% include "components/crud_modals.html" %}
 {% from "macros/files.html" import file_preview_modal %}
 {{ file_preview_modal() }}
+{# Offcanvas вне топбара: иначе backdrop-filter на .topbar сжимает панель до высоты шапки #}
+{% include "components/appearance_panel.html" %}
 {% endif %}
 {% endblock %}
 

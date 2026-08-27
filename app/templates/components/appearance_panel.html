@@ -1,5 +1,6 @@
-{# Панель внешнего вида: тема + фон #}
+{# Кнопка в топбаре + offcanvas вне топбара (иначе backdrop-filter обрезает панель). #}
 {% if current_user.is_authenticated %}
+{% if appearance_panel_mode|default('full') == 'toggle' %}
 <button type="button"
         class="topbar__theme"
         id="appearanceToggle"
@@ -10,7 +11,7 @@
         title="Внешний вид">
     <i class="bi bi-palette2" aria-hidden="true"></i>
 </button>
-
+{% else %}
 <div class="offcanvas offcanvas-end appearance-panel" tabindex="-1" id="appearancePanel" aria-labelledby="appearancePanelLabel">
     <div class="offcanvas-header border-bottom">
         <h2 class="offcanvas-title h5 mb-0" id="appearancePanelLabel">
@@ -79,4 +80,5 @@
         </div>
     </div>
 </div>
+{% endif %}
 {% endif %}

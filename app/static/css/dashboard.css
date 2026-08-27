@@ -270,13 +270,27 @@ body.has-ui-bg .sidebar {
 }
 
 /* Appearance panel */
-.appearance-panel {
+.appearance-panel.offcanvas {
     --bs-offcanvas-width: min(420px, 100vw);
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
     width: min(420px, 100vw) !important;
     max-width: 100vw;
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-height: none !important;
+    z-index: 1046;
     background: var(--opora-card);
     color: var(--opora-text);
     border-left: 1px solid var(--opora-border);
+    display: flex;
+    flex-direction: column;
+    visibility: hidden;
+}
+.appearance-panel.offcanvas.show {
+    visibility: visible;
 }
 .appearance-panel .offcanvas-header {
     background: var(--opora-card);
@@ -284,7 +298,10 @@ body.has-ui-bg .sidebar {
     flex-shrink: 0;
 }
 .appearance-panel .offcanvas-title { color: var(--opora-text); }
-.appearance-panel__body {
+.appearance-panel__body,
+.appearance-panel .offcanvas-body {
+    flex: 1 1 auto;
+    min-height: 0;
     padding: 1.15rem 1.15rem 1.75rem;
     overflow-y: auto;
     overscroll-behavior: contain;
