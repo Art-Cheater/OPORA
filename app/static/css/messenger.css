@@ -1,22 +1,46 @@
 /* Корпоративный мессенджер — стиль Telegram Desktop */
 
-:root {
+:root,
+html[data-theme="light"] {
   --tg-sidebar-bg: #ffffff;
-  --tg-sidebar-border: #e6e6e6;
-  --tg-chat-bg: #e6ebee;
+  --tg-sidebar-border: #dde2e8;
+  --tg-chat-bg: #e8edf2;
   --tg-bubble-in: #ffffff;
   --tg-bubble-out: #effdde;
   --tg-bubble-out-border: #d9f0c3;
   --tg-accent: #3390ec;
   --tg-accent-hover: #2b7fd4;
-  --tg-text: #222222;
-  --tg-text-muted: #707579;
-  --tg-hover: #f4f4f5;
+  --tg-text: #20242b;
+  --tg-text-muted: #68717d;
+  --tg-hover: #f3f5f7;
   --tg-active: #3390ec14;
   --tg-online: #4dcd5e;
   --tg-unread: #3390ec;
   --tg-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --tg-composer-bg: #ffffff;
+  --tg-input-bg: #f7f8fa;
 }
+
+html[data-theme="dark"] {
+  --tg-sidebar-bg: #191e27;
+  --tg-sidebar-border: #2a303a;
+  --tg-chat-bg: #0f1115;
+  --tg-bubble-in: #202631;
+  --tg-bubble-out: #1e3a28;
+  --tg-bubble-out-border: #2d4a36;
+  --tg-accent: #4da3ff;
+  --tg-accent-hover: #6bb0ff;
+  --tg-text: #f1f3f5;
+  --tg-text-muted: #9aa3af;
+  --tg-hover: #202631;
+  --tg-active: rgba(77, 163, 255, 0.14);
+  --tg-online: #6bcb77;
+  --tg-unread: #4da3ff;
+  --tg-shadow: none;
+  --tg-composer-bg: #191e27;
+  --tg-input-bg: #151a22;
+}
+
 
 .messenger-body {
   overflow: hidden;
@@ -141,7 +165,8 @@
 .tg-search {
   width: 100%;
   border: none;
-  background: #f4f4f5;
+  background: var(--tg-input-bg);
+  color: var(--tg-text);
   border-radius: 20px;
   padding: 10px 14px 10px 38px;
   font-size: 14px;
@@ -149,7 +174,7 @@
 }
 
 .tg-search:focus {
-  background: #ececec;
+  background: var(--tg-input-bg);
 }
 
 .tg-tabs {
@@ -285,7 +310,7 @@
   width: 96px;
   height: 96px;
   border-radius: 50%;
-  background: #dce3e8;
+  background: var(--tg-sidebar-border);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -471,7 +496,7 @@
   height: 28px;
   border: none;
   border-radius: 50%;
-  background: #fff;
+  background: var(--tg-bubble-in);
   color: var(--tg-text-muted);
   box-shadow: var(--tg-shadow);
   display: inline-flex;
@@ -575,7 +600,7 @@
   height: 72px;
   border-radius: 8px;
   overflow: hidden;
-  background: #f0f0f0;
+  background: var(--tg-hover);
   flex-shrink: 0;
 }
 
@@ -643,7 +668,8 @@
   flex: 1;
   resize: none;
   border: none;
-  background: #f4f4f5;
+  background: var(--tg-input-bg);
+  color: var(--tg-text);
   border-radius: 18px;
   padding: 10px 14px;
   max-height: 120px;
@@ -675,7 +701,7 @@
 
 .tg-search-result {
   padding: 10px 14px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--tg-sidebar-border);
   cursor: pointer;
 }
 
@@ -857,7 +883,7 @@
 .tg-card-picker__search {
   margin: 8px 0;
   border: none;
-  background: #f4f4f5;
+  background: var(--tg-hover);
   border-radius: 14px;
   padding: 8px 12px;
   font-size: 13px;

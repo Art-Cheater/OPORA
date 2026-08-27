@@ -1,11 +1,11 @@
-{% extends "layouts/base.html" %}
+﻿{% extends "layouts/base.html" %}
 
 {% block title %}Мессенджер — {{ app_name }}{% endblock %}
 
 {% block body_class %}messenger-body{% endblock %}
 
 {% block extra_css %}
-<link href="{{ url_for('static', filename='css/messenger.css') }}" rel="stylesheet">
+<link href="{{ static_url('css/messenger.css') }}" rel="stylesheet">
 {% endblock %}
 
 {% block body %}
@@ -27,6 +27,14 @@
                     <div class="tg-sidebar__status">Мессенджер Опора</div>
                 </div>
             </div>
+            <button type="button"
+                    class="topbar__theme ms-auto"
+                    data-theme-toggle
+                    aria-label="Переключить тему"
+                    title="Тема">
+                <i class="bi bi-sun-fill" aria-hidden="true"></i>
+                <i class="bi bi-moon-stars-fill" aria-hidden="true"></i>
+            </button>
         </header>
 
         <div class="tg-search-wrap">
@@ -120,5 +128,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/messenger.js') }}"></script>
+<script src="{{ static_url('js/messenger.js') }}"></script>
 {% endblock %}

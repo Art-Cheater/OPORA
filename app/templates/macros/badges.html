@@ -18,7 +18,7 @@
     {% if status %}
     {% set color = status.color or '#546E7A' %}
     <span class="badge badge-status request-status-badge"
-          style="background-color: color-mix(in srgb, {{ color }} 28%, white); color: {{ color }}; border: 2px solid color-mix(in srgb, {{ color }} 55%, white);">
+          style="background-color: color-mix(in srgb, {{ color }} 28%, var(--opora-card)); color: {{ color }}; border: 2px solid color-mix(in srgb, {{ color }} 55%, var(--opora-border));">
         {{ status.name }}
     </span>
     {% else %}

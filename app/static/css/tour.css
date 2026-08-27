@@ -8,7 +8,7 @@
   padding: 0 0.85rem;
   border: 1px solid rgba(245, 124, 0, 0.35);
   border-radius: 999px;
-  background: linear-gradient(180deg, #fff8f0 0%, #fff 100%);
+  background: var(--opora-accent-light);
   color: var(--opora-primary-hover);
   font-size: 0.875rem;
   font-weight: 600;
@@ -18,7 +18,7 @@
 }
 
 .topbar__tour:hover {
-  background: #fff3e0;
+  background: var(--opora-accent-light);
   border-color: var(--opora-primary);
   box-shadow: 0 2px 10px rgba(245, 124, 0, 0.18);
   color: var(--opora-primary-hover);
