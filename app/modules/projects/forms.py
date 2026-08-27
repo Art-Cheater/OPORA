@@ -32,8 +32,14 @@ DOCUMENT_TYPE_CHOICES = [
     (ProjectDocumentType.TECH_SPEC.value, "Техническое задание"),
     (ProjectDocumentType.OBJECT_DESCRIPTION.value, "Описание объекта"),
     (ProjectDocumentType.ESTIMATE.value, "Смета"),
+    (ProjectDocumentType.CONTRACT.value, "Договор"),
+    (ProjectDocumentType.ACT.value, "Акт"),
+    (ProjectDocumentType.PLAN.value, "План"),
+    (ProjectDocumentType.ORDER.value, "Приказ"),
     (ProjectDocumentType.OTHER.value, "Прочее"),
 ]
+
+DOCUMENT_TYPE_LABELS = dict(DOCUMENT_TYPE_CHOICES)
 
 
 class ProjectFilterForm(FlaskForm):
@@ -116,19 +122,22 @@ class ProjectCommentForm(FlaskForm):
 
 
 class ProjectDocumentForm(FlaskForm):
-    title = StringField("Название", validators=[DataRequired(), Length(max=500)])
+    title = StringField("Название", validators=[Optional(), Length(max=500)])
     document_type = SelectField(
         "Тип документа",
         choices=DOCUMENT_TYPE_CHOICES,
         validators=[DataRequired()],
+        default=ProjectDocumentType.TECH_SPEC.value,
     )
     document_number = StringField("Номер", validators=[Optional(), Length(max=100)])
     document_date = DateField("Дата документа", validators=[Optional()], format="%Y-%m-%d")
     description = TextAreaField("Описание", validators=[Optional(), Length(max=5000)])
-    files = MultipleFileField("Файлы", validators=[Optional()])
+    files = MultipleFileField("Файл", validators=[DataRequired(message="Выберите файл")])
     submit = SubmitField("Добавить документ")
 
 
 class ProjectAttachmentForm(FlaskForm):
+    """Устарело: загрузка без типа. Оставлено для совместимости API."""
+
     files = MultipleFileField("Файлы", validators=[DataRequired(message="Выберите хотя бы один файл")])
     submit = SubmitField("Загрузить файлы")

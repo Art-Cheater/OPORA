@@ -629,6 +629,7 @@ function initInstantNav(sidebar, closeSidebar) {
             if (card) delete card.dataset.bound;
             window.OporaInquiryForward?.init?.(card);
         }
+        window.OporaProjectDocuments?.init?.();
         initFlashMessages();
     }
 

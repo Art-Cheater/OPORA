@@ -70,6 +70,22 @@ class ProjectRepository:
         )
 
     @staticmethod
+    def list_documents(project_id: uuid.UUID, *, limit: int = 100):
+        from app.models.projects.project_document import ProjectDocument
+
+        return list(
+            db.session.scalars(
+                db.select(ProjectDocument)
+                .where(
+                    ProjectDocument.project_id == project_id,
+                    ProjectDocument.active_filter(),
+                )
+                .order_by(ProjectDocument.created_at.desc())
+                .limit(limit)
+            )
+        )
+
+    @staticmethod
     def list_recent_history(project_id: uuid.UUID, limit: int = 40):
         from app.models.projects.project_history import ProjectHistory
 

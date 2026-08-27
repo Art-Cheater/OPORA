@@ -239,6 +239,7 @@ window.OporaList = (() => {
         };
       }
       bindDetailForms(id);
+      window.OporaProjectDocuments?.init?.(detailModalBody());
     } catch {
       detailModalBody().innerHTML = '<div class="alert alert-danger">Не удалось загрузить карточку</div>';
     }

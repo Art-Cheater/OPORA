@@ -31,14 +31,25 @@ from app.models.enums import EntityType, ProjectStatus
 from app.models.files.attachment import Attachment
 from app.modules.projects.blueprint import projects_bp
 from app.modules.projects.forms import (
-    ProjectAttachmentForm,
     ProjectCommentForm,
     ProjectDocumentForm,
     ProjectFilterForm,
     ProjectForm,
+    DOCUMENT_TYPE_LABELS,
 )
 from app.modules.projects.repositories import ProjectFilter, ProjectRepository
 from app.modules.projects.services import ProjectPayload, ProjectService
+
+
+def _users_by_ids(user_ids: set[uuid.UUID]) -> dict[uuid.UUID, User]:
+    if not user_ids:
+        return {}
+    rows = db.session.scalars(
+        db.select(User)
+        .options(load_only(User.id, User.full_name), noload(User.user_roles), noload(User.login_logs))
+        .where(User.id.in_(user_ids))
+    ).all()
+    return {u.id: u for u in rows}
 
 
 def _uuid_or_none(value: str) -> uuid.UUID | None:
@@ -335,39 +346,131 @@ def detail(project_id: uuid.UUID):
         .limit(50)
         .all()
     )
+    documents = ProjectRepository.list_documents(project.id)
+    uploader_ids = {
+        uid
+        for uid in [*(d.created_by for d in documents), *(a.uploaded_by for a in attachments)]
+        if uid is not None
+    }
+    uploaders = _users_by_ids(uploader_ids)
     history = ProjectRepository.list_recent_history(project.id)
     comment_form = ProjectCommentForm()
     document_form = ProjectDocumentForm()
-    attachment_form = ProjectAttachmentForm()
-    file_items = [
-        {
-            "name": f.file_name,
-            "mime": f.mime_type,
-            "preview_url": url_for(
-                "projects.download_attachment",
-                project_id=project.id,
-                attachment_id=f.id,
-                inline=1,
-            ),
-            "download_url": url_for(
-                "projects.download_attachment",
-                project_id=project.id,
-                attachment_id=f.id,
-            ),
-            "created_at": f.created_at.strftime("%d.%m.%Y %H:%M"),
-        }
-        for f in attachments
-    ]
+    can_edit_docs = current_user.has_permission(PERM_PROJECTS_EDIT)
+
+    document_items = []
+    for doc in documents:
+        uploader = uploaders.get(doc.created_by) if doc.created_by else None
+        document_items.append(
+            {
+                "kind": "document",
+                "id": doc.id,
+                "title": doc.title,
+                "type_code": doc.document_type,
+                "type_label": DOCUMENT_TYPE_LABELS.get(doc.document_type, doc.document_type),
+                "file_name": doc.file_name,
+                "mime": doc.mime_type,
+                "number": doc.document_number,
+                "doc_date": doc.document_date,
+                "description": doc.description,
+                "uploader": uploader.full_name if uploader else None,
+                "created_at": doc.created_at,
+                "download_url": (
+                    url_for(
+                        "projects.download_document",
+                        project_id=project.id,
+                        document_id=doc.id,
+                    )
+                    if doc.storage_key
+                    else None
+                ),
+                "preview_url": (
+                    url_for(
+                        "projects.download_document",
+                        project_id=project.id,
+                        document_id=doc.id,
+                        inline=1,
+                    )
+                    if doc.storage_key
+                    and doc.mime_type
+                    and (
+                        doc.mime_type.startswith("image/")
+                        or doc.mime_type == "application/pdf"
+                    )
+                    else None
+                ),
+                "delete_url": (
+                    url_for(
+                        "projects.delete_document",
+                        project_id=project.id,
+                        document_id=doc.id,
+                    )
+                    if can_edit_docs
+                    else None
+                ),
+            }
+        )
+    for att in attachments:
+        uploader = uploaders.get(att.uploaded_by) if att.uploaded_by else None
+        document_items.append(
+            {
+                "kind": "legacy_file",
+                "id": att.id,
+                "title": att.file_name or "Файл",
+                "type_code": "other",
+                "type_label": "Прочее (ранее «Файлы»)",
+                "file_name": att.file_name,
+                "mime": att.mime_type,
+                "number": None,
+                "doc_date": None,
+                "description": None,
+                "uploader": uploader.full_name if uploader else None,
+                "created_at": att.created_at,
+                "download_url": url_for(
+                    "projects.download_attachment",
+                    project_id=project.id,
+                    attachment_id=att.id,
+                ),
+                "preview_url": (
+                    url_for(
+                        "projects.download_attachment",
+                        project_id=project.id,
+                        attachment_id=att.id,
+                        inline=1,
+                    )
+                    if att.mime_type
+                    and (
+                        att.mime_type.startswith("image/")
+                        or att.mime_type == "application/pdf"
+                    )
+                    else None
+                ),
+                "delete_url": (
+                    url_for(
+                        "projects.delete_attachment",
+                        project_id=project.id,
+                        attachment_id=att.id,
+                    )
+                    if can_edit_docs
+                    else None
+                ),
+            }
+        )
+    document_items.sort(
+        key=lambda item: item["created_at"] or 0,
+        reverse=True,
+    )
 
     if is_ajax():
         return render_template(
             "projects/partials/detail_modal.html",
             project=project,
             comments=comments,
-            attachments=attachments,
+            document_items=document_items,
             history=history,
-            file_items=file_items,
             comment_form=comment_form,
+            document_form=document_form,
+            can_edit_docs=can_edit_docs,
             **custom_field_detail_context(_CF, project.id, current_user),
         )
 
@@ -375,12 +478,11 @@ def detail(project_id: uuid.UUID):
         "projects/detail.html",
         project=project,
         comments=comments,
-        attachments=attachments,
+        document_items=document_items,
         history=history,
-        file_items=file_items,
         comment_form=comment_form,
         document_form=document_form,
-        attachment_form=attachment_form,
+        can_edit_docs=can_edit_docs,
         **custom_field_detail_context(_CF, project.id, current_user),
     )
 
@@ -486,7 +588,7 @@ def add_comment(project_id: uuid.UUID):
 @login_required
 @permission_required(PERM_PROJECTS_EDIT)
 def add_document(project_id: uuid.UUID):
-    from app.core.upload_utils import collect_upload_files, save_upload, UploadValidationError
+    from app.core.upload_utils import UploadValidationError, collect_upload_files, save_upload
 
     project = ProjectRepository.get_by_id(project_id)
     if project is None:
@@ -497,40 +599,53 @@ def add_document(project_id: uuid.UUID):
     if form.validate_on_submit():
         try:
             files = collect_upload_files(form.files.data, request.files.getlist("files"))
-            if files:
-                for file_storage in files:
-                    saved = save_upload(file_storage, relative_dir=f"projects/{project.id}/docs")
-                    ProjectService.add_document(
-                        project,
-                        title=form.title.data or saved.file_name,
-                        document_type=form.document_type.data,
-                        document_number=form.document_number.data,
-                        document_date=form.document_date.data,
-                        description=form.description.data,
-                        file_name=saved.file_name,
-                        mime_type=saved.mime_type,
-                        storage_key=saved.storage_key,
-                        user_id=current_user.id,
-                    )
-                flash(f"Добавлено документов: {len(files)}.", "success")
-            else:
-                ProjectService.add_document(
-                    project,
-                    title=form.title.data,
-                    document_type=form.document_type.data,
-                    document_number=form.document_number.data,
-                    document_date=form.document_date.data,
-                    description=form.description.data,
-                    file_name=None,
-                    mime_type=None,
-                    storage_key=None,
-                    user_id=current_user.id,
-                )
+            uploads = [
+                save_upload(file_storage, relative_dir=f"projects/{project.id}/docs")
+                for file_storage in files
+            ]
+            created = ProjectService.add_documents_from_uploads(
+                project,
+                document_type=form.document_type.data,
+                title=form.title.data,
+                document_number=form.document_number.data,
+                document_date=form.document_date.data,
+                description=form.description.data,
+                uploads=uploads,
+                user_id=current_user.id,
+            )
+            if len(created) == 1:
                 flash("Документ добавлен.", "success")
+            else:
+                flash(f"Добавлено документов: {len(created)}.", "success")
         except (ValidationError, UploadValidationError) as exc:
             flash(str(exc), "danger")
     else:
-        flash("Проверьте корректность данных документа.", "danger")
+        flash(form_errors_message(form) or "Проверьте корректность данных документа.", "danger")
+    return redirect(url_for("projects.detail", project_id=project.id))
+
+
+@projects_bp.route("/<uuid:project_id>/document/<uuid:document_id>/delete", methods=["POST"])
+@login_required
+@permission_required(PERM_PROJECTS_EDIT)
+def delete_document(project_id: uuid.UUID, document_id: uuid.UUID):
+    from app.models.projects.project_document import ProjectDocument
+
+    project = ProjectRepository.get_by_id(project_id)
+    if project is None:
+        abort(404)
+    document = ProjectDocument.query.filter_by(
+        id=document_id,
+        project_id=project.id,
+        deleted_at=None,
+    ).first()
+    if document is None:
+        flash("Документ не найден.", "danger")
+        return redirect(url_for("projects.detail", project_id=project.id))
+    try:
+        ProjectService.delete_document(document, current_user.id)
+        flash("Документ удалён.", "success")
+    except ValidationError as exc:
+        flash(str(exc), "danger")
     return redirect(url_for("projects.detail", project_id=project.id))
 
 
@@ -538,9 +653,7 @@ def add_document(project_id: uuid.UUID):
 @login_required
 @permission_required(PERM_PROJECTS_VIEW)
 def download_document(project_id: uuid.UUID, document_id: uuid.UUID):
-    from pathlib import Path
-
-    from flask import current_app, send_file
+    from flask import send_file
 
     from app.core.upload_utils import resolve_download_filename, resolve_storage_path
     from app.models.projects.project_document import ProjectDocument
@@ -573,36 +686,48 @@ def download_document(project_id: uuid.UUID, document_id: uuid.UUID):
         ),
     )
 
+
 @projects_bp.route("/<uuid:project_id>/attachment", methods=["POST"])
 @login_required
 @permission_required(PERM_PROJECTS_EDIT)
 def add_attachment(project_id: uuid.UUID):
-    from app.core.upload_utils import UploadValidationError, collect_upload_files, save_upload
+    flash('Загрузка перенесена в блок «Документы проекта». Выберите тип документа.', "warning")
+    return redirect(url_for("projects.detail", project_id=project_id))
+
+
+@projects_bp.route("/<uuid:project_id>/attachment/<uuid:attachment_id>/delete", methods=["POST"])
+@login_required
+@permission_required(PERM_PROJECTS_EDIT)
+def delete_attachment(project_id: uuid.UUID, attachment_id: uuid.UUID):
+    from app.models.enums import AuditAction
 
     project = ProjectRepository.get_by_id(project_id)
     if project is None:
-        flash("Проект не найден.", "danger")
-        return redirect(url_for("projects.index"))
-
-    form = ProjectAttachmentForm()
-    files = collect_upload_files(form.files.data, request.files.getlist("files"))
-    if files:
-        try:
-            for file_storage in files:
-                saved = save_upload(file_storage, relative_dir=f"projects/{project.id}")
-                ProjectService.add_attachment(
-                    project,
-                    file_name=saved.file_name,
-                    mime_type=saved.mime_type,
-                    file_size=saved.file_size,
-                    storage_key=saved.storage_key,
-                    user_id=current_user.id,
-                )
-            flash(f"Загружено файлов: {len(files)}.", "success")
-        except (ValidationError, UploadValidationError) as exc:
-            flash(str(exc), "danger")
-    else:
-        flash("Выберите файлы для загрузки.", "danger")
+        abort(404)
+    attachment = Attachment.query.filter_by(
+        id=attachment_id,
+        entity_type=EntityType.PROJECT.value,
+        entity_id=project.id,
+        deleted_at=None,
+    ).first()
+    if attachment is None:
+        flash("Файл не найден.", "danger")
+        return redirect(url_for("projects.detail", project_id=project.id))
+    name = attachment.file_name
+    attachment.soft_delete(deleted_by=current_user.id)
+    ProjectService._log_audit(
+        current_user.id,
+        AuditAction.SOFT_DELETE.value,
+        project.id,
+        f"Удалён файл проекта: {name}",
+        {"attachment": name},
+        None,
+    )
+    ProjectService._log_history(
+        project, current_user.id, "attachment_delete", "Удалён файл", {"file_name": name}
+    )
+    db.session.commit()
+    flash("Файл удалён.", "success")
     return redirect(url_for("projects.detail", project_id=project.id))
 
 
@@ -610,8 +735,9 @@ def add_attachment(project_id: uuid.UUID):
 @login_required
 @permission_required(PERM_PROJECTS_VIEW)
 def download_attachment(project_id: uuid.UUID, attachment_id: uuid.UUID):
+    from flask import send_file
+
     from app.core.upload_utils import resolve_download_filename, resolve_storage_path
-    from app.models.files.attachment import Attachment
 
     project = ProjectRepository.get_by_id(project_id)
     if project is None:

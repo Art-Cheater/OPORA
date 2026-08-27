@@ -123,7 +123,7 @@
     <div class="col-lg-5">
         <ul class="nav nav-tabs opora-card-tabs mb-3" role="tablist">
             <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#projTabComments" type="button">Комментарии</button></li>
-            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#projTabFiles" type="button">Файлы</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#projTabDocs" type="button">Документы</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#projTabHistory" type="button">История</button></li>
         </ul>
         <div class="tab-content">
@@ -147,14 +147,57 @@
                 <div class="text-muted small">Комментариев пока нет.</div>
                 {% endfor %}
             </div>
-            <div class="tab-pane fade" id="projTabFiles">
-                {% for file in attachments %}
+            <div class="tab-pane fade" id="projTabDocs">
+                {% if can_edit_docs %}
+                <form method="POST"
+                      action="{{ url_for('projects.add_document', project_id=project.id) }}"
+                      enctype="multipart/form-data"
+                      class="mb-3"
+                      data-project-documents
+                      data-other-type="other">
+                    {{ document_form.hidden_tag() }}
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Тип</label>
+                        {{ document_form.document_type(class="form-select form-select-sm", data_doc_type=true) }}
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Название</label>
+                        {{ document_form.title(class="form-control form-control-sm", placeholder="Автоматически", data_doc_title=true) }}
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1" data-doc-files-label>Выберите файл</label>
+                        {{ document_form.files(class="form-control form-control-sm", data_doc_files=true) }}
+                        <div class="form-text" data-doc-files-hint>Для данного типа можно загрузить только один файл.</div>
+                        <div class="alert alert-warning py-1 px-2 small mt-2 mb-0 d-none" role="alert" data-doc-files-warn></div>
+                    </div>
+                    {{ document_form.submit(class="btn btn-primary btn-sm") }}
+                </form>
+                {% endif %}
+                <div class="small fw-medium text-muted mb-2">Документы в проекте</div>
+                {% for item in document_items %}
                 <div class="border rounded-2 p-2 mb-2">
-                    <div class="fw-medium text-truncate">{{ file.file_name }}</div>
-                    <div class="text-muted small">{{ file.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                    <div class="fw-medium text-truncate">{{ item.title }}</div>
+                    <div class="text-muted small">{{ item.type_label }}{% if item.file_name %} · {{ item.file_name }}{% endif %}</div>
+                    {% if item.uploader %}
+                    <div class="text-muted small">{{ item.uploader }}{% if item.created_at %} · {{ item.created_at.strftime('%d.%m.%Y %H:%M') }}{% endif %}</div>
+                    {% elif item.created_at %}
+                    <div class="text-muted small">{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                    {% endif %}
+                    <div class="mt-1 d-flex flex-wrap gap-1">
+                        {% if item.download_url %}
+                        <a class="btn btn-sm btn-outline-primary py-0" href="{{ item.download_url }}">Скачать</a>
+                        {% endif %}
+                        {% if item.delete_url %}
+                        <form method="POST" action="{{ item.delete_url }}" class="d-inline"
+                              onsubmit="return confirm('Удалить документ?\nДокумент будет удалён из проекта.');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger py-0">Удалить</button>
+                        </form>
+                        {% endif %}
+                    </div>
                 </div>
                 {% else %}
-                <div class="text-muted small">Файлы не загружены.</div>
+                <div class="text-muted small">Документы не добавлены.</div>
                 {% endfor %}
             </div>
             <div class="tab-pane fade" id="projTabHistory">

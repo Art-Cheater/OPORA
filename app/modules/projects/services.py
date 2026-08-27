@@ -14,13 +14,14 @@ from app.core.audit_service import AuditService
 from app.core.exceptions import NotFoundError, ValidationError
 from app.extensions import db
 from app.models.communication.comment import Comment
-from app.models.enums import AuditAction, EntityType, ProjectMemberRole, WorkObjectStatus
+from app.models.enums import AuditAction, EntityType, ProjectDocumentType, ProjectMemberRole, WorkObjectStatus
 from app.models.files.attachment import Attachment
 from app.models.projects.project import Project
 from app.models.projects.project_document import ProjectDocument
 from app.models.projects.project_history import ProjectHistory
 from app.models.projects.project_member import ProjectMember
 from app.models.work_objects.work_object import WorkObject
+from app.modules.projects.forms import DOCUMENT_TYPE_LABELS
 
 
 @dataclass
@@ -428,6 +429,92 @@ class ProjectService:
         return attachment
 
     @classmethod
+    def document_type_label(cls, document_type: str | None) -> str:
+        if not document_type:
+            return "Документ"
+        return DOCUMENT_TYPE_LABELS.get(document_type, document_type)
+
+    @staticmethod
+    def _title_from_filename(file_name: str | None) -> str:
+        raw = (file_name or "файл").strip()
+        stem = raw.rsplit(".", 1)[0].strip() if raw else "файл"
+        stem = stem.replace("_", " ").replace("-", " ").strip()
+        return (stem or "файл")[:500]
+
+    @classmethod
+    def suggest_document_title(
+        cls,
+        *,
+        document_type: str,
+        file_name: str | None,
+        user_title: str | None = None,
+        for_batch: bool = False,
+    ) -> str:
+        """Название: ручное (если есть) или по типу / имени файла."""
+        manual = (user_title or "").strip()
+        type_label = cls.document_type_label(document_type)
+        if document_type == ProjectDocumentType.OTHER.value:
+            stem = cls._title_from_filename(file_name)
+            if manual and for_batch:
+                return f"{manual} — {stem}"[:500]
+            if manual and not for_batch:
+                return manual[:500]
+            return stem
+        if manual:
+            return manual[:500]
+        return type_label[:500]
+
+    @classmethod
+    def add_documents_from_uploads(
+        cls,
+        project: Project,
+        *,
+        document_type: str,
+        title: str | None,
+        document_number: str | None,
+        document_date: date | None,
+        description: str | None,
+        uploads: list[Any],
+        user_id: uuid.UUID,
+    ) -> list[ProjectDocument]:
+        """Создаёт документы из загрузок. uploads — объекты с file_name/mime_type/storage_key."""
+        if not uploads:
+            raise ValidationError("Выберите файл для загрузки.")
+        allowed = {item.value for item in ProjectDocumentType}
+        if document_type not in allowed:
+            raise ValidationError("Некорректный тип документа.")
+        if document_type != ProjectDocumentType.OTHER.value and len(uploads) > 1:
+            raise ValidationError("Для выбранного типа документа можно загрузить только один файл.")
+
+        created: list[ProjectDocument] = []
+        batch = len(uploads) > 1
+        for item in uploads:
+            file_name = getattr(item, "file_name", None)
+            doc_title = cls.suggest_document_title(
+                document_type=document_type,
+                file_name=file_name,
+                user_title=title,
+                for_batch=batch,
+            )
+            created.append(
+                cls.add_document(
+                    project,
+                    title=doc_title,
+                    document_type=document_type,
+                    document_number=document_number,
+                    document_date=document_date,
+                    description=description,
+                    file_name=file_name,
+                    mime_type=getattr(item, "mime_type", None),
+                    storage_key=getattr(item, "storage_key", None),
+                    user_id=user_id,
+                    commit=False,
+                )
+            )
+        db.session.commit()
+        return created
+
+    @classmethod
     def add_document(
         cls,
         project: Project,
@@ -441,8 +528,9 @@ class ProjectService:
         mime_type: str | None,
         storage_key: str | None,
         user_id: uuid.UUID,
+        commit: bool = True,
     ) -> ProjectDocument:
-        if not title.strip():
+        if not (title or "").strip():
             raise ValidationError("Название документа обязательно.")
 
         document = ProjectDocument(
@@ -474,8 +562,35 @@ class ProjectService:
             "Добавлен документ",
             {"title": document.title, "document_type": document.document_type},
         )
-        db.session.commit()
+        if commit:
+            db.session.commit()
+        else:
+            db.session.flush()
         return document
+
+    @classmethod
+    def delete_document(cls, document: ProjectDocument, user_id: uuid.UUID) -> None:
+        title = document.title
+        project_id = document.project_id
+        document.soft_delete(deleted_by=user_id)
+        cls._log_audit(
+            user_id,
+            AuditAction.SOFT_DELETE.value,
+            project_id,
+            f"Удалён документ проекта: {title}",
+            {"document": {"title": title, "id": str(document.id)}},
+            None,
+        )
+        project = db.session.get(Project, project_id)
+        if project is not None:
+            cls._log_history(
+                project,
+                user_id,
+                "document_delete",
+                "Удалён документ",
+                {"title": title, "document_id": str(document.id)},
+            )
+        db.session.commit()
 
     @classmethod
     def delete_project(cls, project: Project, user_id: uuid.UUID) -> None:

@@ -108,16 +108,22 @@ def test_saved_rows_appear_in_ajax_tables(admin_client, app):
     assert project_name in modal.get_data(as_text=True)
 
     upload = admin_client.post(
-        f"/projects/{project_id}/attachment",
-        data={"files": [(io.BytesIO(b"project file"), "smeta.txt")], "submit": "Загрузить"},
+        f"/projects/{project_id}/document",
+        data={
+            "document_type": "other",
+            "title": "",
+            "files": [(io.BytesIO(b"project file"), "smeta.txt")],
+            "submit": "Добавить документ",
+        },
         content_type="multipart/form-data",
         follow_redirects=False,
     )
     assert upload.status_code in {302, 303}, upload.get_data(as_text=True)[:2000]
-    project_page = admin_client.get(f"/projects/{project_id}")
+    project_page = admin_client.get(f"/projects/{project_id}?full=1")
     assert project_page.status_code == 200, project_page.get_data(as_text=True)[:1500]
     assert "smeta.txt" in project_page.get_data(as_text=True)
-    assert "/attachment/" in project_page.get_data(as_text=True)
+    assert "/document/" in project_page.get_data(as_text=True)
+    assert "Документы проекта" in project_page.get_data(as_text=True)
 
     tender_number = f"ТРГ-SK-{uuid.uuid4().hex[:6].upper()}"
     tender_title = f"Торги сквозные {uuid.uuid4().hex[:6]}"
