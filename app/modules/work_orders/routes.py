@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from flask import jsonify, render_template, request
+from flask import abort, jsonify, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.core.decorators import any_permission_required, permission_required
@@ -82,7 +82,6 @@ def index():
         can_complete_defect=can_complete_defect,
         can_manage_plans=current_user.has_permission(PERM_WAYBILLS_EDIT),
         journals=RequestRepository.get_journals(),
-        exclude_reasons=EXCLUDE_REASONS,
     )
 
 
@@ -101,6 +100,7 @@ def queue_json():
             page=page,
             user=current_user,
             journal=request.args.get("journal") or "all",
+            open_only=(request.args.get("open_only") or "").strip().lower() in {"1", "true", "yes"},
         )
     )
 
@@ -163,6 +163,47 @@ def complete_defect(defect_id: uuid.UUID):
         return ajax_error(str(exc))
 
 
+@work_orders_bp.route("/plans/")
+@login_required
+@permission_required(PERM_WAYBILLS_VIEW)
+def plans_index():
+    return render_template(
+        "work_orders/plans_index.html",
+        plans=WorkPlanService.my_plans(current_user),
+        can_manage_plans=current_user.has_permission(PERM_WAYBILLS_EDIT),
+    )
+
+
+@work_orders_bp.route("/plans/new")
+@login_required
+@permission_required(PERM_WAYBILLS_EDIT)
+def plans_new():
+    from app.models.base import format_local_dt, utcnow
+
+    return render_template(
+        "work_orders/plans_new.html",
+        master_name=current_user.full_name,
+        created_label=format_local_dt(utcnow(), "%d.%m.%Y"),
+    )
+
+
+@work_orders_bp.route("/plans/", methods=["POST"])
+@login_required
+@permission_required(PERM_WAYBILLS_EDIT)
+def plans_create():
+    payload = request.get_json(silent=True) or {}
+    items = payload.get("items") if isinstance(payload.get("items"), list) else []
+    try:
+        plan = WorkPlanService.create_and_start(current_user, items)
+        return ajax_ok(
+            f"План {plan.number} сохранён. Работы переведены «В работе».",
+            plan=WorkPlanService.serialize_plan(plan, current_user),
+            redirect=url_for("work_orders.plan_page", plan_id=plan.id),
+        )
+    except ValidationError as exc:
+        return ajax_error(str(exc))
+
+
 @work_orders_bp.route("/plans.json")
 @login_required
 @permission_required(PERM_WAYBILLS_VIEW)
@@ -174,11 +215,10 @@ def plans_json():
 @login_required
 @permission_required(PERM_WAYBILLS_EDIT)
 def plans_draft():
-    try:
-        plan = WorkPlanService.get_or_create_draft(current_user)
-        return ajax_ok("Черновик плана открыт.", plan=WorkPlanService.serialize_plan(plan, current_user))
-    except ValidationError as exc:
-        return ajax_error(str(exc))
+    return ajax_ok(
+        "Создание плана перенесено на отдельную страницу.",
+        redirect=url_for("work_orders.plans_new"),
+    )
 
 
 @work_orders_bp.route("/plans/<uuid:plan_id>.json")
@@ -192,6 +232,28 @@ def plan_detail_json(plan_id: uuid.UUID):
         return ajax_error(str(exc), status=404)
     except ValidationError as exc:
         return ajax_error(str(exc), status=403)
+
+
+@work_orders_bp.route("/plans/<uuid:plan_id>")
+@login_required
+@permission_required(PERM_WAYBILLS_VIEW)
+def plan_page(plan_id: uuid.UUID):
+    try:
+        plan = WorkPlanService.get_owned(plan_id, current_user)
+    except NotFoundError:
+        abort(404)
+    except ValidationError:
+        abort(403)
+    payload = WorkPlanService.serialize_plan(plan, current_user)
+    percent = int(round((payload["done"] + payload["excluded"]) * 100 / payload["total"])) if payload["total"] else 0
+    return render_template(
+        "work_orders/plan_detail.html",
+        plan=payload,
+        works=payload["items"],
+        percent=percent,
+        exclude_reasons=EXCLUDE_REASONS,
+        can_manage_plans=current_user.has_permission(PERM_WAYBILLS_EDIT) and payload["status"] == "in_progress",
+    )
 
 
 @work_orders_bp.route("/plans/<uuid:plan_id>/items", methods=["POST"])
@@ -316,8 +378,20 @@ def related_json():
             plan = WorkPlanService.get_owned(plan_id, current_user)
         except (NotFoundError, ValidationError):
             plan = None
+    extra_skip_requests = {_uuid_or_none(value) for value in request.args.getlist("skip_request")}
+    extra_skip_defects = {_uuid_or_none(value) for value in request.args.getlist("skip_defect")}
+    extra_skip_requests.discard(None)
+    extra_skip_defects.discard(None)
     try:
-        return jsonify(WorkPlanService.related_works(entity_type=entity_type, entity_id=entity_id, plan=plan))
+        return jsonify(
+            WorkPlanService.related_works(
+                entity_type=entity_type,
+                entity_id=entity_id,
+                plan=plan,
+                extra_skip_requests=extra_skip_requests,
+                extra_skip_defects=extra_skip_defects,
+            )
+        )
     except (NotFoundError, ValidationError):
         return jsonify(empty)
 

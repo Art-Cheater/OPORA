@@ -483,10 +483,15 @@ class WorkOrderService:
         return user.has_permission(PERM_DEFECTS_EDIT) or user.has_permission(PERM_DEFECTS_STATUS_CHANGE)
 
     @classmethod
-    def queue(cls, *, preset: str, q: str, page: int, user: User, journal: str = "all") -> dict:
+    def queue(cls, *, preset: str, q: str, page: int, user: User, journal: str = "all", open_only: bool = False) -> dict:
         journal_key = (journal or "all").strip().lower()
         codes = cls.QUEUE_PRESETS.get((preset or "all").strip().lower(), cls.QUEUE_PRESETS["all"])
         defect_codes = cls.DEFECT_PRESETS.get((preset or "all").strip().lower(), cls.DEFECT_PRESETS["all"])
+        if open_only:
+            codes = tuple(OPEN_STATUS_CODES) if not codes else tuple(code for code in codes if code in OPEN_STATUS_CODES)
+            defect_codes = (DEFECT_OPEN, DEFECT_IN_PROGRESS) if not defect_codes else tuple(
+                code for code in defect_codes if code in {DEFECT_OPEN, DEFECT_IN_PROGRESS}
+            )
         needle = (q or "").strip()
         like = f"%{needle}%" if needle else None
         include_requests = journal_key != "defects"

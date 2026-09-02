@@ -89,9 +89,10 @@ def test_work_orders_access(client):
     assert 'id="workDesk"' in html
     assert "Очередь работ" in html
     assert "Мои планы" in html
-    assert "Создать план работ" in html
+    assert "Новый план работ" in html
     assert "css/work-desk.css" in html
     assert "js/work-orders.js" in html
+    assert "/work-orders/plans/new" in html
     assert "Мой план работ" not in html
     assert "Доступные работы" not in html
     assert "workbench__top" not in html
@@ -247,7 +248,8 @@ def test_dispatcher_cannot_edit_work_plan(client, app):
     )
     assert added.status_code == 403
     assert client.post("/work-orders/plan/complete", json={}).status_code == 403
-    assert client.post("/work-orders/plans/draft", json={}).status_code == 403
+    assert client.get("/work-orders/plans/new").status_code == 403
+    assert client.post("/work-orders/plans/", json={"items": []}).status_code == 403
 
 
 def test_work_plans_journals_related_complete_and_auto_close(client, app):
@@ -345,38 +347,62 @@ def test_work_plans_journals_related_complete_and_auto_close(client, app):
     village_only = client.get("/work-orders/queue.json?journal=oktyabrsky_villages").get_json()["items"]
     assert {row["id"] for row in village_only} == {village_id}
 
-    draft = client.post("/work-orders/plans/draft", json={})
-    assert draft.status_code == 200, draft.get_data(as_text=True)
-    plan = draft.get_json()["plan"]
-    plan_id = plan["id"]
-    assert plan["status"] == "draft"
+    with app.app_context():
+        from sqlalchemy import func
 
-    added = client.post(
-        f"/work-orders/plans/{plan_id}/items",
-        json={"entity_type": "request", "entity_id": first_id},
-    )
-    assert added.status_code == 200, added.get_data(as_text=True)
-    related = added.get_json()["related"]
+        from app.models.work_plans.work_plan import WorkPlan
+
+        plans_before = db.session.scalar(
+            db.select(func.count()).select_from(WorkPlan).where(WorkPlan.active_filter())
+        ) or 0
+
+    create_page = client.get("/work-orders/plans/new")
+    assert create_page.status_code == 200, create_page.get_data(as_text=True)
+    create_html = create_page.get_data(as_text=True)
+    assert "Создание плана работ" in create_html
+    assert "Сохранить план" in create_html
+    assert "черновик" not in create_html.lower()
+    with app.app_context():
+        from sqlalchemy import func
+
+        from app.models.work_plans.work_plan import WorkPlan
+
+        plans_after_open = db.session.scalar(
+            db.select(func.count()).select_from(WorkPlan).where(WorkPlan.active_filter())
+        ) or 0
+        assert plans_after_open == plans_before
+
+    related = client.get(
+        f"/work-orders/related.json?entity_type=request&entity_id={first_id}&skip_request={first_id}"
+    ).get_json()
     related_ids = {row["entity_id"] for row in related["by_pp"]}
     assert same_id in related_ids
     assert defect_id in related_ids
     assert first_id not in related_ids
     assert other_id not in related_ids
 
-    assert client.post(
-        f"/work-orders/plans/{plan_id}/items",
-        json={"entity_type": "request", "entity_id": same_id},
-    ).status_code == 200
-    assert client.post(
-        f"/work-orders/plans/{plan_id}/items",
-        json={"entity_type": "defect", "entity_id": defect_id},
-    ).status_code == 200
-
-    saved = client.post(f"/work-orders/plans/{plan_id}/save", json={})
-    assert saved.status_code == 200, saved.get_data(as_text=True)
-    saved_plan = saved.get_json()["plan"]
+    created = client.post(
+        "/work-orders/plans/",
+        json={
+            "items": [
+                {"entity_type": "request", "entity_id": first_id},
+                {"entity_type": "request", "entity_id": same_id},
+                {"entity_type": "defect", "entity_id": defect_id},
+            ]
+        },
+    )
+    assert created.status_code == 200, created.get_data(as_text=True)
+    body = created.get_json()
+    saved_plan = body["plan"]
+    plan_id = saved_plan["id"]
     assert saved_plan["number"].startswith("ПР-")
     assert saved_plan["status"] == "in_progress"
+    assert "draft" not in saved_plan["status"]
+    assert body["redirect"].endswith(f"/work-orders/plans/{plan_id}")
+    page = client.get(body["redirect"])
+    assert page.status_code == 200
+    assert saved_plan["number"] in page.get_data(as_text=True)
+    assert "В работе" in page.get_data(as_text=True)
     with app.app_context():
         for entity_id, model in ((first_id, Request), (same_id, Request)):
             row = db.session.get(model, entity_id)
@@ -385,7 +411,17 @@ def test_work_plans_journals_related_complete_and_auto_close(client, app):
         assert db.session.get(DefectStatus, defect_row.status_id).code == "in_progress"
 
     mine = client.get("/work-orders/plans.json").get_json()["plans"]
-    assert any(row["id"] == plan_id for row in mine)
+    mine_row = next(row for row in mine if row["id"] == plan_id)
+    assert mine_row["status"] == "in_progress"
+    assert mine_row["remaining"] == 3
+    assert mine_row["total"] == 3
+    assert "черновик" not in mine_row["status_label"].lower()
+
+    plans_page = client.get("/work-orders/plans/")
+    assert plans_page.status_code == 200
+    plans_html = plans_page.get_data(as_text=True)
+    assert saved_plan["number"] in plans_html
+    assert "В работе" in plans_html
 
     opened = client.get(f"/work-orders/plans/{plan_id}.json").get_json()
     assert opened["number"] == saved_plan["number"]
@@ -421,6 +457,11 @@ def test_work_plans_journals_related_complete_and_auto_close(client, app):
     history = client.get("/work-orders/plans.json").get_json()["plans"]
     row = next(item for item in history if item["id"] == plan_id)
     assert row["status"] == "completed"
+    assert row["remaining"] == 0
+    assert row["done"] == 2
+    history_page = client.get("/work-orders/plans/").get_data(as_text=True)
+    assert saved_plan["number"] in history_page
+    assert "Завершён" in history_page
     with app.app_context():
         plan_row = db.session.get(WorkPlan, plan_id)
         assert plan_row.status == "completed"

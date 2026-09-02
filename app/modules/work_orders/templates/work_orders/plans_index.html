@@ -1,0 +1,46 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Мои планы — {{ app_name }}{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ static_url('css/work-plans.css') }}">
+{% endblock %}
+
+{% block page_header %}{% endblock %}
+
+{% block content %}
+<div class="plan-page plan-page--list">
+    <a class="plan-page__back" href="{{ url_for('work_orders.index') }}">← К работе с заявками</a>
+    <header class="plan-page__hero plan-page__hero--row">
+        <div>
+            <p class="plan-page__eyebrow">Журнал мастера</p>
+            <h1>Мои планы</h1>
+        </div>
+        {% if can_manage_plans %}
+        <a class="plan-btn plan-btn--save" href="{{ url_for('work_orders.plans_new') }}">+ Новый план работ</a>
+        {% endif %}
+    </header>
+
+    {% if not plans %}
+    <p class="plan-empty">Сохранённых планов пока нет.</p>
+    {% else %}
+    <div class="plan-index-grid">
+        {% for item in plans %}
+        <a class="plan-index-card" href="{{ url_for('work_orders.plan_page', plan_id=item.id) }}">
+            <div class="plan-index-card__top">
+                <strong>{{ item.number }}</strong>
+                <span class="desk-item__status" data-code="{{ item.status }}">{{ item.status_label }}</span>
+            </div>
+            <p>{{ item.created_date }} · {{ item.master }}</p>
+            {% if item.status == 'completed' %}
+            <p>{{ item.total }} работ · {{ item.done }} завершено{% if item.excluded %} · {{ item.excluded }} исключено{% endif %}</p>
+            {% else %}
+            <p>{{ item.total }} работ · {{ item.done }} выполнено · {{ item.excluded }} исключено · {{ item.remaining }} осталось</p>
+            {% endif %}
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

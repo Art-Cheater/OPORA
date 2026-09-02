@@ -100,7 +100,10 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
         return BFS.value_or_default(m, code, raw, default=default, entity=entity)
 
     if entity is not None:
-        status_id = entity.status_id
+        if FieldPermissionService.can_edit_field(u, m, "status_id"):
+            status_id = _uuid_or_none(str(form.status_id.data or "")) or entity.status_id
+        else:
+            status_id = entity.status_id
     else:
         status = RequestRepository.get_status_by_code(STATUS_NEW)
         if status is None:
@@ -834,6 +837,7 @@ def edit(request_id: uuid.UUID):
         return redirect(url_for("requests.index"))
 
     form = RequestForm(obj=req)
+    form.submit.label.text = "Сохранить изменения"
     _prepare_request_form(form)
     if request.method == "GET":
         form.status_id.data = str(req.status_id)

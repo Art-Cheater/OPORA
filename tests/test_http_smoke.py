@@ -96,6 +96,103 @@ def test_request_lifecycle_and_upload(admin_client, app):
         assert status.code == "completed"
 
 
+def test_edit_completed_request_status_back_to_new(admin_client, app):
+    number = f"S-{uuid.uuid4().hex[:8].upper()}"
+    created = admin_client.post(
+        "/requests/new",
+        data={
+            "number": number,
+            "address": "Адрес статуса",
+            "pp": "ПП 69",
+            "received_at": "2026-08-10T12:00",
+            "dispatcher_name": "Иванова А.С.",
+            "description": "Проверка статуса",
+            "applicant_name": "Тест",
+            "priority": "medium",
+            "submit": "Сохранить",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 302, created.get_data(as_text=True)[:500]
+    request_id = created.headers["Location"].rstrip("/").split("/")[-1]
+    assert admin_client.post(
+        f"/requests/{request_id}/complete", follow_redirects=False
+    ).status_code in (200, 302)
+
+    from app.extensions import db
+    from app.models.requests.request import Request
+    from app.models.requests.request_status import RequestStatus
+
+    with app.app_context():
+        item = db.session.get(Request, request_id)
+        assert db.session.get(RequestStatus, item.status_id).code == "completed"
+        journal_id = str(item.journal_id)
+        new_id = str(db.session.scalar(db.select(RequestStatus.id).where(RequestStatus.code == "new")))
+        in_progress_id = str(
+            db.session.scalar(db.select(RequestStatus.id).where(RequestStatus.code == "in_progress"))
+        )
+
+    edit_page = admin_client.get(f"/requests/{request_id}/edit")
+    assert edit_page.status_code == 200, edit_page.get_data(as_text=True)[:2000]
+    edit_html = edit_page.get_data(as_text=True)
+    assert 'name="status_id"' in edit_html
+    assert "Новая" in edit_html
+    assert "В работе" in edit_html
+    assert "Выполнено" in edit_html
+    assert "Сохранить изменения" in edit_html
+
+    saved = admin_client.post(
+        f"/requests/{request_id}/edit",
+        data={
+            "number": number,
+            "address": "Адрес статуса",
+            "pp": "ПП 69",
+            "received_at": "2026-08-10T12:00",
+            "dispatcher_name": "Иванова А.С.",
+            "description": "Проверка статуса",
+            "applicant_name": "Тест",
+            "priority": "medium",
+            "journal_id": journal_id,
+            "status_id": new_id,
+            "submit": "Сохранить изменения",
+        },
+        follow_redirects=False,
+    )
+    assert saved.status_code == 302, saved.get_data(as_text=True)[:2000]
+    detail = admin_client.get(f"/requests/{request_id}")
+    assert "Новая" in detail.get_data(as_text=True)
+    with app.app_context():
+        item = db.session.get(Request, request_id)
+        assert db.session.get(RequestStatus, item.status_id).code == "new"
+
+    assert admin_client.post(
+        f"/requests/{request_id}/complete", follow_redirects=False
+    ).status_code in (200, 302)
+    back_to_work = admin_client.post(
+        f"/requests/{request_id}/edit",
+        data={
+            "number": number,
+            "address": "Адрес статуса",
+            "pp": "ПП 69",
+            "received_at": "2026-08-10T12:00",
+            "dispatcher_name": "Иванова А.С.",
+            "description": "Проверка статуса",
+            "applicant_name": "Тест",
+            "priority": "medium",
+            "journal_id": journal_id,
+            "status_id": in_progress_id,
+            "submit": "Сохранить изменения",
+        },
+        follow_redirects=False,
+    )
+    assert back_to_work.status_code == 302, back_to_work.get_data(as_text=True)[:2000]
+    work_page = admin_client.get(f"/requests/{request_id}")
+    assert "В работе" in work_page.get_data(as_text=True)
+    with app.app_context():
+        item = db.session.get(Request, request_id)
+        assert db.session.get(RequestStatus, item.status_id).code == "in_progress"
+
+
 def test_old_request_status_still_completes_without_master(admin_client, app):
     from app.extensions import db
     from app.models.enums import Priority

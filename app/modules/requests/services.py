@@ -33,6 +33,7 @@ from app.modules.requests.workflow import (
     HISTORY_COMPLETE,
     HISTORY_EMERGENCY_DEPARTED,
     HISTORY_START_WORK,
+    HISTORY_STATUS_CHANGE,
     STATUS_ACCEPTED_BY_MASTER,
     STATUS_CANCELLED,
     STATUS_COMPLETED,
@@ -446,10 +447,11 @@ class RequestService:
         history_comment: str,
         details: dict[str, Any] | None = None,
         audit_description: str | None = None,
+        enforce_transition: bool = True,
     ) -> uuid.UUID:
         old_status = req.status
         old_code = old_status.code if old_status else None
-        if old_code and not can_transition(old_code, new_status.code):
+        if enforce_transition and old_code and not can_transition(old_code, new_status.code):
             raise ValidationError(
                 f"Переход статуса «{old_status.name if old_status else old_code}» "
                 f"→ «{new_status.name}» недопустим."
@@ -571,8 +573,14 @@ class RequestService:
         old_snapshot = cls._snapshot(req)
         previous_status_id = req.status_id
         old_description = req.description
+        status_changed = payload.status_id != req.status_id
+        if status_changed:
+            new_status = db.session.get(RequestStatus, payload.status_id)
+            if new_status is None or new_status.deleted_at is not None:
+                raise ValidationError("Выбранный статус не найден.")
+            req.status_id = new_status.id
+            db.session.expire(req, ["status"])
 
-        # Статус меняется только через workflow-методы
         req.number = payload.number.strip()
         req.journal_id = payload.journal_id
         req.title = (payload.title.strip() or payload.address)[:500]
@@ -608,9 +616,18 @@ class RequestService:
             return req
 
         description_changed = "description" in changes
-        audit_action = AuditAction.UPDATE.value
+        audit_action = AuditAction.STATUS_CHANGE.value if status_changed else AuditAction.UPDATE.value
+        history_action = HISTORY_STATUS_CHANGE if status_changed else "update"
         history_comment = "Обновление заявки"
         history_details: dict[str, Any] = {"changes": changes}
+        if status_changed:
+            old_status = db.session.get(RequestStatus, previous_status_id)
+            history_comment = (
+                f"Статус изменён при редактировании: "
+                f"{old_status.name if old_status else '—'} → {req.status.name if req.status else '—'}"
+            )
+            history_details["from_status"] = old_status.code if old_status else None
+            history_details["to_status"] = req.status.code if req.status else None
         if description_changed:
             history_comment = "Диспетчер дополнил описание заявки"
             history_details["description"] = {
@@ -629,7 +646,7 @@ class RequestService:
         cls._log_history(
             req,
             user_id,
-            "update",
+            history_action,
             history_comment,
             history_details,
             previous_status_id=previous_status_id,

@@ -18,28 +18,18 @@
      data-defect-card-url="{{ url_for('work_orders.defect_card_json', defect_id='00000000-0000-0000-0000-000000000000') }}"
      data-request-complete-url="{{ url_for('work_orders.complete_request', request_id='00000000-0000-0000-0000-000000000000') }}"
      data-defect-complete-url="{{ url_for('work_orders.complete_defect', defect_id='00000000-0000-0000-0000-000000000000') }}"
-     data-plans-url="{{ url_for('work_orders.plans_json') }}"
-     data-draft-url="{{ url_for('work_orders.plans_draft') }}"
-     data-plan-url="{{ url_for('work_orders.plan_detail_json', plan_id='00000000-0000-0000-0000-000000000000') }}"
-     data-plan-save-url="{{ url_for('work_orders.work_plan_save', plan_id='00000000-0000-0000-0000-000000000000') }}"
-     data-plan-add-url="{{ url_for('work_orders.plan_add_item', plan_id='00000000-0000-0000-0000-000000000000') }}"
-     data-plan-remove-url="{{ url_for('work_orders.plan_remove_draft_item', plan_id='00000000-0000-0000-0000-000000000000', item_id='11111111-1111-1111-1111-111111111111') }}"
-     data-plan-complete-url="{{ url_for('work_orders.work_plan_complete_item', plan_id='00000000-0000-0000-0000-000000000000', item_id='11111111-1111-1111-1111-111111111111') }}"
-     data-plan-exclude-url="{{ url_for('work_orders.work_plan_exclude_item', plan_id='00000000-0000-0000-0000-000000000000', item_id='11111111-1111-1111-1111-111111111111') }}"
-     data-related-url="{{ url_for('work_orders.related_json') }}"
      data-can-complete="{{ 'true' if can_complete else 'false' }}"
-     data-can-complete-defect="{{ 'true' if can_complete_defect else 'false' }}"
-     data-can-manage="{{ 'true' if can_manage_plans else 'false' }}">
+     data-can-complete-defect="{{ 'true' if can_complete_defect else 'false' }}">
 
     <header class="desk__head">
         <div>
             <p class="desk__eyebrow">Рабочее место мастера</p>
-            <h1 class="desk__title" id="deskTitle">Работа с заявками</h1>
+            <h1 class="desk__title">Работа с заявками</h1>
         </div>
         <div class="desk__head-actions">
             {% if can_manage_plans %}
-            <button type="button" class="desk-btn" id="deskMyPlans">Мои планы</button>
-            <button type="button" class="desk-btn desk-btn--accent" id="deskCreatePlan">+ Создать план работ</button>
+            <a class="desk-btn" href="{{ url_for('work_orders.plans_index') }}">Мои планы</a>
+            <a class="desk-btn desk-btn--accent" href="{{ url_for('work_orders.plans_new') }}">+ Новый план работ</a>
             {% endif %}
         </div>
     </header>
@@ -68,17 +58,13 @@
 
     <p class="desk-flash" id="deskFlash" aria-live="polite"></p>
 
-    <div class="desk__workspace" id="deskWorkspace">
+    <div class="desk__workspace">
         <div class="desk__body">
             <section class="desk__queue" aria-label="Список работы">
                 <div class="desk__queue-head">
-                    <div>
-                        <h2 class="desk__queue-title" id="deskQueueTitle">Очередь работ</h2>
-                        <p class="desk__queue-sub" id="deskDraftMeta" hidden></p>
-                    </div>
+                    <h2 class="desk__queue-title">Очередь работ</h2>
                     <span class="desk__queue-meta" id="deskQueueMeta"></span>
                 </div>
-                <div id="deskDraftTray" class="desk__draft" hidden></div>
                 <div id="deskQueue" class="desk__queue-list">
                     <p class="desk__empty">Загрузка работ…</p>
                 </div>
@@ -89,72 +75,10 @@
                 <div class="desk__panel-head" id="deskPanelHead" hidden></div>
                 <div class="desk__panel-empty" id="deskPanelEmpty">
                     <i class="bi bi-ui-checks-grid"></i>
-                    <p>Выберите работу слева — справа откроются адрес, ПП, описание, фото и связанные работы.</p>
+                    <p>Выберите работу слева — справа откроются адрес, ПП, описание, фото и история.</p>
                 </div>
                 <div class="desk__panel-scroll" id="deskPanelBody" hidden></div>
             </section>
-        </div>
-    </div>
-
-    <div class="desk__plans" id="deskPlans" hidden>
-        <div class="desk__plans-head">
-            <button type="button" class="desk-btn js-desk-back">← К очереди</button>
-            <h2>Мои планы</h2>
-        </div>
-        <div class="desk__plans-grid" id="deskPlansGrid"></div>
-    </div>
-
-    <div class="desk__plan-view" id="deskPlanView" hidden>
-        <div class="desk__plan-head" id="deskPlanHead"></div>
-        <div class="desk__body">
-            <section class="desk__queue" aria-label="Состав плана">
-                <div class="desk__queue-head">
-                    <h2 class="desk__queue-title">Работы плана</h2>
-                    <span class="desk__queue-meta" id="deskPlanMeta"></span>
-                </div>
-                <div id="deskPlanItems" class="desk__queue-list"></div>
-            </section>
-            <section class="desk__panel">
-                <div class="desk__panel-head" id="deskPlanPanelHead" hidden></div>
-                <div class="desk__panel-empty" id="deskPlanPanelEmpty">
-                    <p>Выберите работу плана, чтобы выполнить или исключить её.</p>
-                </div>
-                <div class="desk__panel-scroll" id="deskPlanPanelBody" hidden></div>
-            </section>
-        </div>
-    </div>
-</div>
-
-<div class="desk-modal" id="deskCompleteModal" hidden>
-    <div class="desk-modal__card">
-        <h3>Комментарий о выполнении</h3>
-        <textarea id="deskCompleteComment" rows="4" placeholder="Что сделано"></textarea>
-        <label class="desk-modal__files">Фотографии
-            <input id="deskCompleteFiles" type="file" accept="image/*" multiple>
-        </label>
-        <div class="desk-modal__actions">
-            <button type="button" class="desk-btn" data-close-modal>Отмена</button>
-            <button type="button" class="desk-btn desk-btn--done" id="deskCompleteSubmit">Выполнить</button>
-        </div>
-    </div>
-</div>
-
-<div class="desk-modal" id="deskExcludeModal" hidden>
-    <div class="desk-modal__card">
-        <h3>Убрать из плана</h3>
-        <p class="desk-modal__hint">Работа не будет отмечена выполненной. Укажите причину.</p>
-        <label>Причина исключения
-            <select id="deskExcludeReason">
-                <option value="">Выберите причину</option>
-                {% for code, label in exclude_reasons %}
-                <option value="{{ code }}">{{ label }}</option>
-                {% endfor %}
-            </select>
-        </label>
-        <textarea id="deskExcludeComment" rows="3" placeholder="Комментарий"></textarea>
-        <div class="desk-modal__actions">
-            <button type="button" class="desk-btn" data-close-modal>Отмена</button>
-            <button type="button" class="desk-btn desk-btn--danger" id="deskExcludeSubmit">Исключить</button>
         </div>
     </div>
 </div>

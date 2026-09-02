@@ -80,11 +80,8 @@
     </div>
     {% endif %}
 
-    {% if mode == 'edit' and req and current_user.can_view_field('requests', 'status_id') %}
-    <div class="col-md-6">
-        <label class="form-label">{{ builtin_label('requests', 'status_id', 'Статус') }}</label>
-        <div class="form-control-plaintext border rounded px-3 py-2 bg-light">{{ req.status.name if req.status else "—" }}</div>
-    </div>
+    {% if mode == 'edit' %}
+    {{ modal_field(form.status_id, col=6, module='requests') }}
     {% endif %}
     {{ custom_fields_form(custom_fields|default([]), custom_field_values|default({}), custom_field_module|default('requests')) }}
 </div>

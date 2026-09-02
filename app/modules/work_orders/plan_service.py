@@ -344,6 +344,111 @@ class WorkPlanService:
         return cls.get_owned(plan.id, user)
 
     @classmethod
+    def _assert_can_add(cls, entity_type: str, entity_id: uuid.UUID, entity, *, skip_requests, skip_defects) -> None:
+        if entity_type == ENTITY_REQUEST:
+            if entity_id in skip_requests:
+                raise ValidationError("Эта заявка уже есть в плане или в другом активном плане.")
+            if entity.status and entity.status.code not in OPEN_STATUS_CODES:
+                raise ValidationError("В план можно добавить только незакрытую заявку.")
+            return
+        if entity_id in skip_defects:
+            raise ValidationError("Этот дефект уже есть в плане или в другом активном плане.")
+        code = entity.status.code if entity.status else ""
+        if code not in {DEFECT_OPEN, DEFECT_IN_PROGRESS}:
+            raise ValidationError("В план можно добавить только открытый дефект.")
+
+    @classmethod
+    def _build_item(cls, plan: WorkPlan, entity, entity_type: str, user: User, sort_order: int) -> WorkPlanItem:
+        description = (entity.description or "") if entity_type == ENTITY_DEFECT else (entity.description or entity.title or "")
+        return WorkPlanItem(
+            plan_id=plan.id,
+            sort_order=sort_order,
+            request_id=entity.id if entity_type == ENTITY_REQUEST else None,
+            defect_id=entity.id if entity_type == ENTITY_DEFECT else None,
+            result=ITEM_ACTIVE,
+            number_snapshot=entity.number,
+            address_snapshot=entity.address or "",
+            pp_snapshot=entity.pp or "",
+            description_snapshot=description,
+            street_snapshot=entity.street or "",
+            district_snapshot=entity.district or "",
+            previous_status_code=entity.status.code if entity.status else None,
+            created_by=user.id,
+            updated_by=user.id,
+        )
+
+    @classmethod
+    def create_and_start(cls, user: User, raw_items: list[dict]) -> WorkPlan:
+        """Создаёт план сразу «В работе». Черновик в БД не пишется."""
+        parsed: list[tuple[str, uuid.UUID]] = []
+        seen: set[tuple[str, uuid.UUID]] = set()
+        for row in raw_items or []:
+            entity_type = str(row.get("entity_type") or "").strip()
+            try:
+                entity_id = uuid.UUID(str(row.get("entity_id") or ""))
+            except ValueError:
+                continue
+            if entity_type not in {ENTITY_REQUEST, ENTITY_DEFECT}:
+                continue
+            key = (entity_type, entity_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            parsed.append(key)
+        if not parsed:
+            raise ValidationError("Добавьте хотя бы одну работу в план.")
+
+        busy_requests, busy_defects = cls._busy_ids()
+        entities = []
+        for entity_type, entity_id in parsed:
+            entity = cls._load_entity(entity_type, entity_id)
+            cls._assert_can_add(
+                entity_type,
+                entity_id,
+                entity,
+                skip_requests=busy_requests,
+                skip_defects=busy_defects,
+            )
+            entities.append((entity_type, entity))
+
+        plan = WorkPlan(
+            master_id=user.id,
+            status=PLAN_IN_PROGRESS,
+            number=cls.next_number(),
+            saved_at=utcnow(),
+            created_by=user.id,
+            updated_by=user.id,
+        )
+        db.session.add(plan)
+        db.session.flush()
+        cls._log(plan, user.id, "create", f"Создан план работ {plan.number}")
+        for index, (entity_type, entity) in enumerate(entities, start=1):
+            item = cls._build_item(plan, entity, entity_type, user, index)
+            db.session.add(item)
+            db.session.flush()
+            cls._log(
+                plan,
+                user.id,
+                "add_item",
+                f"В план добавлен {entity.number}",
+                item_id=item.id,
+                details={"entity_type": entity_type, "entity_id": str(entity.id), "number": entity.number},
+            )
+            if entity_type == ENTITY_REQUEST:
+                RequestService.mark_in_progress_in_session(entity.id, user.id)
+            else:
+                DefectService.mark_in_progress_in_session(entity, user.id)
+        cls._log(
+            plan,
+            user.id,
+            "save",
+            f"План {plan.number} сохранён, работы переведены «В работе»",
+            details={"count": len(entities)},
+        )
+        db.session.commit()
+        return cls.get_owned(plan.id, user)
+
+    @classmethod
     def maybe_complete_plan(cls, plan: WorkPlan, user: User) -> bool:
         items = cls._active_items(plan)
         if not items or plan.status != PLAN_IN_PROGRESS:
@@ -467,7 +572,11 @@ class WorkPlanService:
                     joinedload(WorkPlan.master),
                     selectinload(WorkPlan.items),
                 )
-                .where(WorkPlan.master_id == user.id, WorkPlan.active_filter())
+                .where(
+                    WorkPlan.master_id == user.id,
+                    WorkPlan.active_filter(),
+                    WorkPlan.status != PLAN_DRAFT,
+                )
                 .order_by(
                     case(
                         (WorkPlan.status == PLAN_DRAFT, 0),
@@ -487,7 +596,7 @@ class WorkPlanService:
         excluded = sum(1 for item in items if item.result == ITEM_EXCLUDED)
         return {
             "id": str(plan.id),
-            "number": plan.number or "Черновик",
+            "number": plan.number or "—",
             "status": plan.status,
             "status_label": PLAN_STATUS_LABELS.get(plan.status, plan.status),
             "created_at": cls._fmt_dt(plan.created_at),
@@ -499,7 +608,8 @@ class WorkPlanService:
             "done": done,
             "excluded": excluded,
             "active": sum(1 for item in items if item.result == ITEM_ACTIVE),
-            "editable": plan.status == PLAN_DRAFT,
+            "remaining": sum(1 for item in items if item.result == ITEM_ACTIVE),
+            "editable": False,
         }
 
     @classmethod
@@ -622,7 +732,15 @@ class WorkPlanService:
         return photos
 
     @classmethod
-    def related_works(cls, *, entity_type: str, entity_id: uuid.UUID, plan: WorkPlan | None) -> dict:
+    def related_works(
+        cls,
+        *,
+        entity_type: str,
+        entity_id: uuid.UUID,
+        plan: WorkPlan | None,
+        extra_skip_requests: set[uuid.UUID] | None = None,
+        extra_skip_defects: set[uuid.UUID] | None = None,
+    ) -> dict:
         source = cls._load_entity(entity_type, entity_id)
         plan_requests, plan_defects = cls._plan_ids(plan) if plan is not None else (set(), set())
         if entity_type == ENTITY_REQUEST:
@@ -630,8 +748,8 @@ class WorkPlanService:
         else:
             plan_defects.add(entity_id)
         busy_requests, busy_defects = cls._busy_ids(exclude_plan_id=plan.id if plan else None)
-        skip_requests = plan_requests | busy_requests
-        skip_defects = plan_defects | busy_defects
+        skip_requests = plan_requests | busy_requests | set(extra_skip_requests or ())
+        skip_defects = plan_defects | busy_defects | set(extra_skip_defects or ())
         pp_key = normalize_pp(getattr(source, "pp", None))
         street_key = (source.street or "").strip().casefold()
         address_key = (source.address or "").strip().casefold()
