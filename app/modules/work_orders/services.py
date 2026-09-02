@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
 
+from sqlalchemy import case
 from sqlalchemy.orm import joinedload, load_only, selectinload
 
 from app.core.nearby import NearbyHit, NearbySearchService
@@ -21,7 +22,7 @@ from app.models.waybills.waybill import Waybill
 from app.models.waybills.waybill_stop import WaybillStop
 from app.modules.waybills.repositories import WaybillRepository
 from app.modules.waybills.services import WaybillPayload, WaybillService
-from app.modules.waybills.workflow import STATUS_DRAFT
+from app.modules.waybills.workflow import STATUS_DRAFT, STATUS_IN_PROGRESS, status_label
 
 
 @dataclass
@@ -67,7 +68,7 @@ class WorkOrderService:
     """План дня мастера на базе Waybill / WaybillStop."""
 
     @staticmethod
-    def today_draft(user_id: uuid.UUID) -> Waybill | None:
+    def today_plan(user_id: uuid.UUID) -> Waybill | None:
         return db.session.scalar(
             db.select(Waybill)
             .options(
@@ -79,15 +80,22 @@ class WorkOrderService:
             .where(
                 Waybill.master_id == user_id,
                 Waybill.work_date == date.today(),
-                Waybill.status == STATUS_DRAFT,
+                Waybill.status.in_([STATUS_DRAFT, STATUS_IN_PROGRESS]),
                 Waybill.active_filter(),
             )
-            .order_by(Waybill.created_at.desc())
+            .order_by(
+                case((Waybill.status == STATUS_IN_PROGRESS, 0), else_=1),
+                Waybill.created_at.desc(),
+            )
         )
 
     @classmethod
+    def today_draft(cls, user_id: uuid.UUID) -> Waybill | None:
+        return cls.today_plan(user_id)
+
+    @classmethod
     def get_or_create_today_draft(cls, user: User) -> Waybill:
-        existing = cls.today_draft(user.id)
+        existing = cls.today_plan(user.id)
         if existing is not None:
             return existing
         return WaybillService.create(
@@ -290,14 +298,29 @@ class WorkOrderService:
     @classmethod
     def serialize_plan(cls, plan: Waybill | None) -> dict:
         if plan is None:
-            return {"id": None, "number": None, "stops": []}
+            return {
+                "id": None,
+                "number": None,
+                "work_date": None,
+                "work_date_label": "",
+                "status": None,
+                "status_label": "",
+                "title": "Мой план работ",
+                "editable": True,
+                "stops": [],
+            }
         stops = [s for s in plan.stops if s.deleted_at is None]
         stops.sort(key=lambda s: s.sort_order)
+        work_date_label = plan.work_date.strftime("%d.%m.%Y") if plan.work_date else ""
         return {
             "id": str(plan.id),
             "number": plan.number,
             "work_date": plan.work_date.isoformat() if plan.work_date else None,
+            "work_date_label": work_date_label,
             "status": plan.status,
+            "status_label": status_label(plan.status),
+            "title": f"План работ на {work_date_label}" if work_date_label else "Мой план работ",
+            "editable": plan.status in {STATUS_DRAFT, STATUS_IN_PROGRESS},
             "stops": [cls.serialize_stop(stop, index) for index, stop in enumerate(stops, start=1)],
         }
 

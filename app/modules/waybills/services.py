@@ -20,7 +20,7 @@ from app.models.waybills.waybill import Waybill
 from app.models.waybills.waybill_history import WaybillHistory
 from app.models.waybills.waybill_member import WaybillMember
 from app.models.waybills.waybill_stop import WaybillStop
-from app.modules.waybills.workflow import STATUS_DRAFT, can_transition
+from app.modules.waybills.workflow import STATUS_CANCELLED, STATUS_COMPLETED, STATUS_DRAFT, STATUS_IN_PROGRESS, can_transition
 
 
 @dataclass
@@ -122,6 +122,11 @@ class WaybillService:
                 row.deleted_at = None
                 row.updated_by = user_id
 
+    @staticmethod
+    def _ensure_open(item: Waybill) -> None:
+        if item.status in {STATUS_COMPLETED, STATUS_CANCELLED}:
+            raise ValidationError("Путевой лист уже закрыт. Изменить план нельзя.")
+
     @classmethod
     def change_status(cls, item: Waybill, status: str, user_id: uuid.UUID) -> Waybill:
         if not can_transition(item.status, status):
@@ -129,10 +134,44 @@ class WaybillService:
         old = item.status
         item.status = status
         item.updated_by = user_id
+        if status == STATUS_COMPLETED:
+            cls._mark_plan_defects_fixed(item, user_id)
         cls._log_audit(user_id, AuditAction.STATUS_CHANGE.value, item.id, f"Статус {item.number}: {old} → {status}")
         cls._log_history(item, user_id, "status_change", details={"from": old, "to": status})
         db.session.commit()
         return item
+
+    @classmethod
+    def complete(cls, item: Waybill, user_id: uuid.UUID) -> Waybill:
+        if item.status == STATUS_DRAFT:
+            item = cls.change_status(item, STATUS_IN_PROGRESS, user_id)
+        if item.status != STATUS_IN_PROGRESS:
+            raise ValidationError("Путевой лист нельзя завершить.")
+        return cls.change_status(item, STATUS_COMPLETED, user_id)
+
+    @classmethod
+    def _mark_plan_defects_fixed(cls, waybill: Waybill, user_id: uuid.UUID) -> None:
+        from sqlalchemy.orm import joinedload
+
+        from app.modules.defects.services import DefectService
+
+        stops = db.session.scalars(
+            db.select(WaybillStop)
+            .options(joinedload(WaybillStop.defect).joinedload(Defect.status))
+            .where(
+                WaybillStop.waybill_id == waybill.id,
+                WaybillStop.active_filter(),
+                WaybillStop.defect_id.isnot(None),
+            )
+        ).unique()
+        for stop in stops:
+            if stop.defect is None or stop.defect.deleted_at is not None:
+                continue
+            DefectService.mark_fixed_in_session(
+                stop.defect,
+                user_id,
+                comment=f"Закрыт по завершению путевого листа {waybill.number}",
+            )
 
     @classmethod
     def delete(cls, item: Waybill, user_id: uuid.UUID) -> None:
@@ -142,6 +181,7 @@ class WaybillService:
 
     @classmethod
     def add_stop(cls, item: Waybill, *, entity_type: str, entity_id: uuid.UUID, user_id: uuid.UUID, comment: str | None = None) -> WaybillStop:
+        cls._ensure_open(item)
         if entity_type == "request":
             target = db.session.scalar(db.select(Request).where(Request.id == entity_id, Request.active_filter()))
             if target is None:
@@ -210,6 +250,7 @@ class WaybillService:
 
     @classmethod
     def remove_stop(cls, item: Waybill, stop_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        cls._ensure_open(item)
         stop = db.session.scalar(
             db.select(WaybillStop).where(
                 WaybillStop.id == stop_id,
@@ -226,6 +267,7 @@ class WaybillService:
 
     @classmethod
     def reorder_stops(cls, item: Waybill, stop_ids: list[uuid.UUID], user_id: uuid.UUID) -> None:
+        cls._ensure_open(item)
         stops = {
             s.id: s
             for s in db.session.scalars(

@@ -715,6 +715,11 @@ body.is-opora-busy { cursor: wait; }
 .workbench-dot { font-size: 0.95rem; }
 .workbench-dot--defect { color: #DC3545; }
 .workbench-dot--request { color: #2563EB; }
+.workbench-items {
+  max-height: 280px;
+  overflow: auto;
+  border-top: 1px solid var(--opora-border);
+}
 .workbench-hit,
 .workbench-plan__item {
   display: flex;

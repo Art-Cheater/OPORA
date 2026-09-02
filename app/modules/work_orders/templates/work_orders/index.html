@@ -8,12 +8,7 @@
 {% endblock %}
 
 {% block page_header %}
-{% call page_header("Работа по заявкам", "Карта актуальных работ, ближайшие точки и план на день", "map") %}
-{% if current_user.has_permission('waybills.view') %}
-<a href="{{ url_for('waybills.index') }}" class="btn btn-outline-secondary">
-    <i class="bi bi-journal-text"></i> Сохранённые планы
-</a>
-{% endif %}
+{% call page_header("Работа по заявкам", "Выберите работы, соберите план на день, постройте маршрут", "map") %}
 {% endcall %}
 {% endblock %}
 
@@ -21,6 +16,7 @@
 <div id="workOrderRoot"
      class="workbench"
      data-can-edit="{{ 'true' if can_edit else 'false' }}"
+     data-can-complete="{{ 'true' if can_complete else 'false' }}"
      data-map-url="{{ url_for('work_orders.map_json') }}"
      data-items-url="{{ url_for('work_orders.items_json') }}"
      data-plan-url="{{ url_for('work_orders.plan_json') }}"
@@ -28,11 +24,12 @@
      data-remove-url="{{ url_for('work_orders.plan_remove') }}"
      data-reorder-url="{{ url_for('work_orders.plan_reorder') }}"
      data-save-url="{{ url_for('work_orders.plan_save') }}"
+     data-complete-url="{{ url_for('work_orders.plan_complete') }}"
      data-nearby-url="{{ url_for('work_orders.nearby_json') }}"
      data-tour="workbench">
     <section class="workbench__map-wrap card">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <span><i class="bi bi-map"></i> Карта работ</span>
+            <span><i class="bi bi-map"></i> Карта</span>
             <span class="small text-muted" id="opsMapStatus">Загрузка карты…</span>
         </div>
         <div class="card-body p-0">
@@ -40,13 +37,19 @@
                  data-src="{{ url_for('work_orders.map_json') }}"
                  data-kind="workbench"></div>
         </div>
+        <div class="card-footer small text-muted">
+            <span class="workbench-dot workbench-dot--request">●</span> заявки
+            &nbsp;
+            <span class="workbench-dot workbench-dot--defect">●</span> дефекты
+            — нажмите маркер или кнопку в списке, чтобы добавить в план.
+        </div>
     </section>
 
     <aside class="workbench__side">
-        <div class="card" data-tour="filters">
-            <div class="card-header"><i class="bi bi-funnel"></i>Что смотреть</div>
-            <div class="card-body">
-                <div class="btn-group w-100 mb-3" role="group" aria-label="Тип работ">
+        <div class="card workbench__available" data-tour="filters">
+            <div class="card-header"><i class="bi bi-collection"></i>Доступные работы</div>
+            <div class="card-body pb-2">
+                <div class="btn-group w-100 mb-2" role="group" aria-label="Тип работ">
                     <input type="radio" class="btn-check" name="woKind" id="woKindAll" value="all" checked>
                     <label class="btn btn-outline-primary" for="woKindAll">Все</label>
                     <input type="radio" class="btn-check" name="woKind" id="woKindReq" value="request">
@@ -103,19 +106,24 @@
                     </div>
                 </form>
             </div>
+            <div id="workOrderItems" class="workbench-items" data-tour="available-works">
+                <p class="text-muted small p-3 mb-0">Загрузка доступных работ…</p>
+            </div>
         </div>
 
         <div class="card" id="workOrderNearbyCard">
             <div class="card-header"><i class="bi bi-geo"></i>Рядом обнаружены другие работы</div>
             <div class="card-body" id="workOrderNearby">
-                <p class="text-muted small mb-0">Добавьте точку в план — система предложит ближайшие заявки и дефекты. Связь между ними не создаётся.</p>
+                <p class="text-muted small mb-0">Добавьте работу в план — система предложит ближайшие заявки и дефекты. Связь между ними не создаётся.</p>
             </div>
         </div>
 
         <div class="card workbench__plan" data-tour="plan">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-list-ol"></i>Мой план работ</span>
-                <span class="small text-muted" id="workOrderPlanNumber"></span>
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                    <span id="workOrderPlanTitle"><i class="bi bi-list-ol"></i> Мой план работ</span>
+                    <span class="small text-muted" id="workOrderPlanMeta"></span>
+                </div>
             </div>
             <div class="card-body p-0">
                 <div id="workOrderPlan" class="workbench-plan"></div>
@@ -127,7 +135,12 @@
                 </button>
                 {% if can_edit %}
                 <button type="button" class="btn btn-primary" id="workOrderSaveBtn">
-                    <i class="bi bi-check2-circle"></i> Сохранить план на сегодня
+                    <i class="bi bi-journal-check"></i> Создать путевой лист
+                </button>
+                {% endif %}
+                {% if can_complete %}
+                <button type="button" class="btn btn-success" id="workOrderCompleteBtn">
+                    <i class="bi bi-check2-all"></i> Завершить путевой лист
                 </button>
                 {% endif %}
             </div>

@@ -87,6 +87,8 @@ def test_work_orders_access(client):
     html = page.get_data(as_text=True)
     assert "Работа по заявкам" in html
     assert "Мой план работ" in html
+    assert "Доступные работы" in html
+    assert 'id="opsMap"' in html
     _login(client, "executor@test.local")
     assert client.get("/work-orders/").status_code == 200
     denied = client.post("/work-orders/plan/add", json={"entity_type": "defect", "entity_id": "00000000-0000-0000-0000-000000000001"})
@@ -148,6 +150,14 @@ def test_work_orders_plan_nearby_reorder_route(client, app):
     route = client.get("/work-orders/route.json").get_json()
     assert len(route["points"]) == 2
     assert [p["order"] for p in route["points"]] == [1, 2]
+    items = client.get("/work-orders/items.json").get_json()["items"]
+    by_type = {row["type"] for row in items}
+    assert "request" in by_type
+    assert "defect" in by_type
+    only_def = client.get("/work-orders/items.json?kind=defect").get_json()["items"]
+    assert all(row["type"] == "defect" for row in only_def)
+    only_req = client.get("/work-orders/items.json?kind=request").get_json()["items"]
+    assert all(row["type"] == "request" for row in only_req)
     with app.app_context():
         req = db.session.get(Request, request_id)
         defect = db.session.get(Defect, defect_id)
@@ -158,6 +168,13 @@ def test_work_orders_plan_nearby_reorder_route(client, app):
         stops = list(db.session.scalars(db.select(WaybillStop).where(WaybillStop.active_filter())))
         assert any(s.request_id is not None for s in stops)
         assert any(s.defect_id is not None for s in stops)
+    completed = client.post("/work-orders/plan/complete", json={})
+    assert completed.status_code == 200, completed.get_data(as_text=True)
+    with app.app_context():
+        req = db.session.get(Request, request_id)
+        defect = db.session.get(Defect, defect_id)
+        assert req.status_id == req_status
+        assert db.session.get(DefectStatus, defect.status_id).code == "fixed"
 
 
 def test_dispatcher_cannot_edit_work_plan(client, app):
@@ -169,3 +186,4 @@ def test_dispatcher_cannot_edit_work_plan(client, app):
         json={"entity_type": "defect", "entity_id": defect_id},
     )
     assert added.status_code == 403
+    assert client.post("/work-orders/plan/complete", json={}).status_code == 403

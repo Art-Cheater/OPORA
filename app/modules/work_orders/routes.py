@@ -10,11 +10,16 @@ from flask_login import current_user, login_required
 from app.core.decorators import permission_required
 from app.core.exceptions import ValidationError
 from app.core.http import ajax_error, ajax_ok
-from app.models.auth.constants import PERM_WAYBILLS_EDIT, PERM_WAYBILLS_VIEW
+from app.models.auth.constants import (
+    PERM_WAYBILLS_EDIT,
+    PERM_WAYBILLS_STATUS_CHANGE,
+    PERM_WAYBILLS_VIEW,
+)
 from app.modules.defects.repositories import DefectRepository
 from app.modules.requests.districts import district_choices
 from app.modules.requests.repositories import RequestRepository
 from app.modules.waybills.services import WaybillService
+from app.modules.waybills.workflow import STATUS_DRAFT, STATUS_IN_PROGRESS
 from app.modules.work_orders.blueprint import work_orders_bp
 from app.modules.work_orders.services import WorkOrderFilter, WorkOrderService
 
@@ -48,7 +53,7 @@ def _filters_from_request() -> WorkOrderFilter:
 
 
 def _current_plan():
-    return WorkOrderService.today_draft(current_user.id)
+    return WorkOrderService.today_plan(current_user.id)
 
 
 @work_orders_bp.route("/")
@@ -62,6 +67,7 @@ def index():
         defect_statuses=DefectRepository.get_statuses(),
         districts=district_choices(empty_label="Все районы"),
         can_edit=current_user.has_permission(PERM_WAYBILLS_EDIT),
+        can_complete=current_user.has_permission(PERM_WAYBILLS_STATUS_CHANGE),
     )
 
 
@@ -135,7 +141,7 @@ def plan_add():
     try:
         plan = WorkOrderService.get_or_create_today_draft(current_user)
         WaybillService.add_stop(plan, entity_type=entity_type, entity_id=entity_id, user_id=current_user.id)
-        plan = WorkOrderService.today_draft(current_user.id)
+        plan = WorkOrderService.today_plan(current_user.id)
         hits, summary = WorkOrderService.nearby_for(entity_type, entity_id, plan)
         return ajax_ok(
             "Добавлено в план.",
@@ -157,7 +163,7 @@ def plan_remove():
         return ajax_error("Точка не найдена.", status=404)
     try:
         WaybillService.remove_stop(plan, stop_id, current_user.id)
-        plan = WorkOrderService.today_draft(current_user.id)
+        plan = WorkOrderService.today_plan(current_user.id)
         return ajax_ok("Удалено из плана.", plan=WorkOrderService.serialize_plan(plan))
     except ValidationError as exc:
         return ajax_error(str(exc))
@@ -177,7 +183,7 @@ def plan_reorder():
         return ajax_error("Некорректный список.")
     try:
         WaybillService.reorder_stops(plan, parsed, current_user.id)
-        plan = WorkOrderService.today_draft(current_user.id)
+        plan = WorkOrderService.today_plan(current_user.id)
         return ajax_ok("Порядок сохранён.", plan=WorkOrderService.serialize_plan(plan))
     except ValidationError as exc:
         return ajax_error(str(exc))
@@ -190,9 +196,34 @@ def plan_save():
     plan = _current_plan()
     if plan is None or not any(s.deleted_at is None for s in plan.stops):
         return ajax_error("Добавьте хотя бы одну работу в план.")
+    if plan.status == STATUS_DRAFT and current_user.has_permission(PERM_WAYBILLS_STATUS_CHANGE):
+        try:
+            WaybillService.change_status(plan, STATUS_IN_PROGRESS, current_user.id)
+        except ValidationError as exc:
+            return ajax_error(str(exc))
+        plan = WorkOrderService.today_plan(current_user.id)
     payload = WorkOrderService.serialize_plan(plan)
+    label = payload.get("status_label") or ""
     return ajax_ok(
-        f"План сохранён как путевой лист {plan.number}.",
+        f"Путевой лист {plan.number} сохранён" + (f" · {label}." if label else "."),
         plan=payload,
-        waybill_url=f"/waybills/{plan.id}",
+    )
+
+
+@work_orders_bp.route("/plan/complete", methods=["POST"])
+@login_required
+@permission_required(PERM_WAYBILLS_STATUS_CHANGE)
+def plan_complete():
+    plan = _current_plan()
+    if plan is None or not any(s.deleted_at is None for s in plan.stops):
+        return ajax_error("Нет активного плана для завершения.")
+    try:
+        WaybillService.complete(plan, current_user.id)
+    except ValidationError as exc:
+        return ajax_error(str(exc))
+    closed = WorkOrderService.serialize_plan(None)
+    return ajax_ok(
+        "Путевой лист завершён. Входящие дефекты отмечены как выполненные.",
+        plan=closed,
+        completed=True,
     )

@@ -305,7 +305,7 @@ def _register_spa_nav(app: Flask) -> None:
         if _is_static_request(request) or request.path == "/health":
             return
         path = request.path or ""
-        if (path.startswith("/messenger") or path.startswith("/auth") or path.startswith("/work-orders")):
+        if (path.startswith("/messenger") or path.startswith("/auth")):
             return
         if "/download" in path or path.rstrip("/").endswith("/export"):
             return

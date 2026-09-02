@@ -106,6 +106,7 @@ class DefectRepository:
                 ),
                 contains_eager(Defect.status),
                 joinedload(Defect.category),
+                joinedload(Defect.responsible),
                 noload(Defect.history),
             )
         )

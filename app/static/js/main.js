@@ -327,36 +327,6 @@ function initInstantNav(sidebar, closeSidebar) {
     const SKELETON =
         '<div class="opora-loading" role="status"><div class="spinner-border text-primary"></div><div class="opora-loading__text">Загрузка…</div></div>';
     const LIST_SHELLS = {
-        "/requests/": {
-            title: "Заявки",
-            subtitle: "Диспетчеризация: АБ → мастер → исполнение",
-            icon: "clipboard-check",
-            placeholder: "№, адрес, ПП, диспетчер…",
-            loading: "Загрузка заявок…",
-            baseUrl: "/requests",
-            filterFormId: "requestFilterForm",
-            tableContainerId: "requestsTableContainer",
-            paginationContainerId: "requestsPaginationContainer",
-            resetBtnId: "requestFilterReset",
-            pageLinkClass: "request-page-link",
-            viewMode: "page",
-            createTitle: "Новая заявка",
-        },
-        "/defects/": {
-            title: "Дефекты",
-            subtitle: "Неисправности освещения, в том числе без заявки",
-            icon: "exclamation-triangle",
-            placeholder: "№, адрес, описание…",
-            loading: "Загрузка дефектов…",
-            baseUrl: "/defects",
-            filterFormId: "defectFilterForm",
-            tableContainerId: "defectsTableContainer",
-            paginationContainerId: "defectsPaginationContainer",
-            resetBtnId: "defectFilterReset",
-            pageLinkClass: "defect-page-link",
-            viewMode: "page",
-            createTitle: "Новый дефект",
-        },
         "/waybills/": {
             title: "Путевые листы",
             subtitle: "Маршрут выезда: заявки и дефекты за один день",
@@ -514,7 +484,6 @@ function initInstantNav(sidebar, closeSidebar) {
         const path = url.pathname;
         return (
             path.startsWith("/messenger") ||
-            path.startsWith("/work-orders") ||
             path.startsWith("/auth/") ||
             path.includes("/download") ||
             path.includes("/export") ||
@@ -655,11 +624,23 @@ function initInstantNav(sidebar, closeSidebar) {
             window.setTimeout(() => window.OporaRequestDetail?.init?.(), 0);
             window.setTimeout(() => window.OporaRequestDetail?.init?.(), 200);
         }
-        if (document.getElementById("workOrderRoot")) {
-            window.setTimeout(() => {
-                window.OporaOpsMap?.init?.();
-                window.OporaWorkOrders?.init?.();
-            }, 0);
+        const bootOps = () => {
+            const mapNode = document.getElementById("opsMap");
+            if (mapNode && window.OporaOpsMap?.init) {
+                window.OporaOpsMap.init();
+            }
+            const wo = document.getElementById("workOrderRoot");
+            if (wo && window.OporaWorkOrders?.init && wo.dataset.woInited !== "1") {
+                window.OporaWorkOrders.init();
+            }
+        };
+        if (document.getElementById("opsMap") || document.getElementById("workOrderRoot")) {
+            bootOps();
+            if (!window.OporaOpsMap || (document.getElementById("workOrderRoot") && !window.OporaWorkOrders)) {
+                window.setTimeout(bootOps, 50);
+                window.setTimeout(bootOps, 200);
+            }
+            window.setTimeout(() => window.OporaOpsMap?._map?.invalidateSize?.(), 300);
         }
         if (document.getElementById("inquiryForwardCard")) {
             const card = document.getElementById("inquiryForwardCard");
@@ -827,6 +808,9 @@ function initInstantNav(sidebar, closeSidebar) {
         const curConfig = content.querySelector("#oporaListConfig");
         if (nextConfig && curConfig) curConfig.replaceWith(nextConfig);
         window.OporaList?.bootPage?.();
+        if (document.getElementById("opsMap") && window.OporaOpsMap?.init) {
+            window.setTimeout(() => window.OporaOpsMap.init(), 0);
+        }
         return true;
     }
 

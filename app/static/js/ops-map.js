@@ -210,8 +210,13 @@ window.OporaOpsMap = {
   },
 };
 
-document.addEventListener("DOMContentLoaded", () => {
-  if (document.getElementById("opsMap")) {
-    window.OporaOpsMap.init();
+(function bootOpsMap() {
+  const start = () => {
+    if (document.getElementById("opsMap")) window.OporaOpsMap.init();
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
   }
-});
+})();

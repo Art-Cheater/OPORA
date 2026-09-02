@@ -64,8 +64,6 @@ def back_navigation(*, fallback: str) -> tuple[str, str]:
     path = url.split("?", 1)[0]
     if path.rstrip("/") == "/work-orders":
         return url, "Назад к работе по заявкам"
-    if path.rstrip("/") == "/defects":
-        return url, "Назад к дефектам"
     if path.rstrip("/") == "/waybills":
-        return url, "Назад к путевым листам"
+        return url, "Назад к работе по заявкам"
     return url, "Назад к заявкам"

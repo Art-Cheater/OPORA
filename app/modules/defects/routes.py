@@ -42,6 +42,7 @@ from app.modules.defects.repositories import DefectFilter, DefectRepository
 from app.modules.defects.services import DefectPayload, DefectService
 from app.modules.defects.workflow import ALLOWED_TRANSITIONS, can_transition
 from app.modules.requests.districts import normalize_request_district
+from app.modules.requests.repositories import RequestRepository
 from app.modules.requests.services import RequestService
 
 
@@ -123,7 +124,12 @@ def _prepare_filter(form: DefectFilterForm) -> None:
 def index():
     filter_form = DefectFilterForm(request.args)
     _prepare_filter(filter_form)
-    return render_template("defects/index.html", filter_form=filter_form)
+    return render_template(
+        "defects/index.html",
+        filter_form=filter_form,
+        journals=RequestRepository.get_journals(),
+        tab="defects",
+    )
 
 
 @defects_bp.route("/table")
@@ -210,7 +216,7 @@ def detail(defect_id: uuid.UUID):
         if can_transition(current_code, s.code)
     ]
     history = list(item.history)[:50]
-    back_url, back_label = back_navigation(fallback="/defects/")
+    back_url, back_label = back_navigation(fallback="/requests/?tab=defects")
     return render_template(
         "defects/detail.html",
         item=item,

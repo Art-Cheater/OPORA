@@ -4,10 +4,12 @@
         <thead>
             <tr>
                 <th>№</th>
+                <th>Дата</th>
                 <th>Адрес</th>
+                <th>Описание</th>
                 <th>Категория</th>
                 <th>Статус</th>
-                <th>Создан</th>
+                <th>Ответственный</th>
                 <th class="text-end">Действия</th>
             </tr>
         </thead>
@@ -16,13 +18,15 @@
             {% set code = item.status.code if item.status else '' %}
             <tr data-opora-id="{{ item.id }}" class="{{ table_row_tone('new' if code == 'open' else ('brigade' if code == 'in_progress' else ('done' if code == 'fixed' else 'cancelled'))) }}">
                 <td class="fw-semibold">{{ item.number }}</td>
+                <td class="text-muted">{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
                 <td>
                     <div class="fw-medium">{{ item.address }}</div>
                     {% if item.district %}<div class="small text-muted">{{ item.district }}</div>{% endif %}
                 </td>
+                <td>{{ (item.description or "—")|truncate(80) }}</td>
                 <td>{{ item.category.name if item.category else "—" }}</td>
                 <td>{{ request_status_badge(item.status) }}</td>
-                <td class="text-muted">{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                <td>{{ item.responsible.full_name if item.responsible else "—" }}</td>
                 <td class="text-end">
                     <div class="table-actions">
                         <button type="button" class="table-actions__btn" title="Просмотр"
@@ -47,7 +51,7 @@
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="6" class="table-empty"><i class="bi bi-inbox"></i> Дефекты не найдены</td></tr>
+            <tr><td colspan="8" class="table-empty"><i class="bi bi-inbox"></i> Дефекты не найдены</td></tr>
             {% endfor %}
         </tbody>
     </table>

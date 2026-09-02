@@ -32,6 +32,7 @@ from app.core.navigation import back_navigation
 from app.core.upload_utils import resolve_download_filename, resolve_storage_path
 from app.extensions import db
 from app.models.auth.constants import (
+    PERM_DEFECTS_VIEW,
     PERM_REQUESTS_APPROVE,
     PERM_REQUESTS_CREATE,
     PERM_REQUESTS_DELETE,
@@ -318,13 +319,38 @@ def _workflow_redirect(req, message: str, category: str = "success"):
 @login_required
 @permission_required(PERM_REQUESTS_VIEW)
 def index():
+    journals = RequestRepository.get_journals()
+    if (request.args.get("tab") or "").strip().lower() == "defects":
+        if not current_user.has_permission(PERM_DEFECTS_VIEW):
+            abort(403)
+        from app.modules.defects.forms import DefectFilterForm
+        from app.modules.defects.repositories import DefectRepository
+
+        filter_form = DefectFilterForm(request.args)
+        filter_form.status_id.choices = [("", "Все статусы")] + [
+            (str(s.id), s.name) for s in DefectRepository.get_statuses()
+        ]
+        filter_form.category_id.choices = [("", "Все категории")] + [
+            (str(c.id), c.name) for c in DefectRepository.get_categories()
+        ]
+        return render_template(
+            "requests/index.html",
+            filter_form=filter_form,
+            journals=journals,
+            tab="defects",
+            map_src=url_for("defects.map_json"),
+        )
     filter_form = RequestFilterForm(request.args)
     _prepare_filter_form(filter_form)
+    journal_id = request.args.get("journal_id", "")
+    map_src = url_for("requests.map_json", journal_id=journal_id) if journal_id else url_for("requests.map_json")
     return render_template(
         "requests/index.html",
         filter_form=filter_form,
         filters=_build_filters(),
-        journals=RequestRepository.get_journals(),
+        journals=journals,
+        tab="",
+        map_src=map_src,
     )
 
 
@@ -356,9 +382,15 @@ def table():
 @login_required
 @permission_required(PERM_REQUESTS_VIEW)
 def map_json():
+    journal_id = request.args.get("journal_id", "")
+    points = RequestRepository.map_points(journal_id=journal_id)
+    if not journal_id and current_user.has_permission(PERM_DEFECTS_VIEW):
+        from app.modules.defects.repositories import DefectRepository
+
+        points.extend(DefectRepository.map_points())
     return jsonify(
         {
-            "points": RequestRepository.map_points(journal_id=request.args.get("journal_id", "")),
+            "points": points,
             "remaining": 0,
         }
     )

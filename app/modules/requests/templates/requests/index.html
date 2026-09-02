@@ -10,7 +10,8 @@
 {% endblock %}
 
 {% block page_header %}
-{% call page_header("Заявки", "Диспетчеризация: АБ → мастер → исполнение", "clipboard-check") %}
+{% call page_header("Заявки", "Журналы обращений и дефектов", "clipboard-check") %}
+{% if tab != 'defects' %}
 {% if current_user.has_permission('requests.dispatch') or current_user.has_permission('requests.edit') %}
 <a href="{{ url_for('requests.dispatchers') }}" class="btn btn-outline-secondary">
     <i class="bi bi-people"></i> Диспетчеры
@@ -19,38 +20,27 @@
 {% if current_user.has_permission('requests.create') %}
 {{ create_button("Создать", "plus-lg") }}
 {% endif %}
+{% else %}
+{% if current_user.has_permission('defects.create') %}
+{{ create_button("Создать", "plus-lg") }}
+{% endif %}
+{% endif %}
 {% endcall %}
 {% endblock %}
 
 {% block content %}
-<div class="card mb-3">
-    <div class="card-body py-3">
-        <div class="d-flex flex-wrap gap-2 align-items-center">
-            <span class="text-muted small me-1">Журналы:</span>
-            <a href="{{ url_for('requests.index') }}"
-               class="btn btn-sm {% if not request.args.get('journal_id') %}btn-primary{% else %}btn-outline-primary{% endif %}">
-                Все заявки
-            </a>
-            {% for journal in journals %}
-            <a href="{{ url_for('requests.index', journal_id=journal.id) }}"
-               class="btn btn-sm {% if request.args.get('journal_id') == journal.id|string %}btn-primary{% else %}btn-outline-primary{% endif %}">
-                {{ journal.name }}
-            </a>
-            {% endfor %}
-        </div>
-    </div>
-</div>
+{% include "requests/partials/journal_tabs.html" %}
+{% if tab == "defects" %}
+{% include "defects/partials/list_body.html" %}
+{% else %}
 <div class="card mb-4 list-filters" data-tour="filters">
     <div class="card-header"><i class="bi bi-search"></i>Поиск и фильтры</div>
     <div class="card-body">
         <form id="requestFilterForm" class="row g-3">
+            <input type="hidden" name="journal_id" value="{{ request.args.get('journal_id', '') }}">
             <div class="col-lg-3">
                 <label class="form-label">{{ filter_form.q.label.text }}</label>
                 {{ filter_form.q(class="form-control", placeholder="№, адрес, диспетчер...") }}
-            </div>
-            <div class="col-lg-3">
-                <label class="form-label">{{ filter_form.journal_id.label.text }}</label>
-                {{ filter_form.journal_id(class="form-select") }}
             </div>
             <div class="col-lg-2">
                 <label class="form-label">{{ filter_form.district.label.text }}</label>
@@ -108,12 +98,11 @@
     </div>
 </div>
 
-<div class="card mb-4">
-    <div class="card-header"><i class="bi bi-map"></i>Карта заявок</div>
+<div class="card mb-4" data-list-extra="map">
+    <div class="card-header"><i class="bi bi-map"></i>Карта</div>
     <div class="card-body">
         <div id="opsMap" class="agreement-map" style="height: 320px; border-radius: 12px;"
-             data-src="{{ url_for('requests.map_json') }}{% if request.args.get('journal_id') %}?journal_id={{ request.args.get('journal_id') }}{% endif %}"
-             data-kind="request"></div>
+             data-src="{{ map_src }}" data-kind="ops"></div>
         <div id="opsMapStatus" class="small text-muted mt-2">Загрузка карты…</div>
     </div>
 </div>
@@ -137,6 +126,7 @@
      data-load-on-start="true"
      data-can-edit="{{ 'true' if current_user.has_permission('requests.edit') else 'false' }}">
 </div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}

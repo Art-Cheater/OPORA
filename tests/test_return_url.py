@@ -86,6 +86,10 @@ def test_defect_back_and_no_link_ui(admin_client, app):
     defect_id = _make_defect(app)
     page = admin_client.get(f"/defects/{defect_id}?return_url={quote('/defects/')}")
     html = page.get_data(as_text=True)
-    assert "Назад к дефектам" in html
+    assert "Назад к заявкам" in html
     assert "Связанные заявки" not in html
     assert admin_client.post(f"/defects/{defect_id}/link-request", data={"request_id": "x"}).status_code == 404
+    from_tab = admin_client.get(f"/defects/{defect_id}?return_url={quote('/requests/?tab=defects')}")
+    tab_html = from_tab.get_data(as_text=True).replace("&amp;", "&")
+    assert "Назад к заявкам" in tab_html
+    assert "tab=defects" in tab_html

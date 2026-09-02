@@ -1,0 +1,27 @@
+{% set current_tab = tab|default(request.args.get('tab', '')) %}
+{% set current_journal = request.args.get('journal_id', '') %}
+<div class="card mb-3" data-list-extra="journals">
+    <div class="card-body py-3">
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <span class="text-muted small me-1">Журналы:</span>
+            {% if current_user.has_permission('requests.view') %}
+            <a href="{{ url_for('requests.index') }}"
+               class="btn btn-sm {% if not current_journal and current_tab != 'defects' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                Все
+            </a>
+            {% for journal in journals|default([]) %}
+            <a href="{{ url_for('requests.index', journal_id=journal.id) }}"
+               class="btn btn-sm {% if current_journal == journal.id|string %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                {{ journal.name }}
+            </a>
+            {% endfor %}
+            {% endif %}
+            {% if current_user.has_permission('defects.view') %}
+            <a href="{{ url_for('requests.index', tab='defects') }}"
+               class="btn btn-sm {% if current_tab == 'defects' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                Дефекты
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>

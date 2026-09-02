@@ -21,7 +21,7 @@ from app.models.defects.defect_history import DefectHistory
 from app.models.enums import AuditAction, EntityType
 from app.models.files.attachment import Attachment
 from app.modules.defects.repositories import DefectRepository
-from app.modules.defects.workflow import STATUS_OPEN, can_transition
+from app.modules.defects.workflow import STATUS_FIXED, STATUS_OPEN, can_transition
 from app.modules.requests.services import RequestService
 
 
@@ -212,6 +212,36 @@ class DefectService:
         cls._log_history(item, user_id, "status_change", comment, {"from": current, "to": status_code}, previous_id)
         db.session.commit()
         return item
+
+    @classmethod
+    def mark_fixed_in_session(cls, item: Defect, user_id: uuid.UUID, *, comment: str | None = None) -> bool:
+        """Закрывает дефект без commit. Для завершения путевого листа."""
+        current = item.status.code if item.status else ""
+        if not can_transition(current, STATUS_FIXED):
+            return False
+        new_status = DefectRepository.get_status_by_code(STATUS_FIXED)
+        if new_status is None:
+            return False
+        previous_id = item.status_id
+        item.status_id = new_status.id
+        item.updated_by = user_id
+        cls._log_audit(
+            user_id,
+            AuditAction.STATUS_CHANGE.value,
+            item.id,
+            f"Статус дефекта {item.number}: {current} → {STATUS_FIXED}",
+            {"status": current},
+            {"status": STATUS_FIXED},
+        )
+        cls._log_history(
+            item,
+            user_id,
+            "status_change",
+            comment,
+            {"from": current, "to": STATUS_FIXED},
+            previous_id,
+        )
+        return True
 
     @classmethod
     def delete(cls, item: Defect, user_id: uuid.UUID) -> None:

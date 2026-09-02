@@ -21,20 +21,12 @@
 
         <div class="sidebar__section">
             <span class="sidebar__label">Модули</span>
-            {% if current_user.has_permission('requests.view') %}
-            <a href="{{ url_for('requests.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('requests.') %}active{% endif %}"
+            {% if current_user.has_permission('requests.view') or current_user.has_permission('defects.view') %}
+            <a href="{{ url_for('requests.index') if current_user.has_permission('requests.view') else url_for('defects.index') }}"
+               class="sidebar__link {% if request.endpoint and (request.endpoint.startswith('requests.') or request.endpoint.startswith('defects.')) %}active{% endif %}"
                data-tour="requests">
                 <i class="bi bi-clipboard-check"></i>
                 <span>Заявки</span>
-            </a>
-            {% endif %}
-            {% if current_user.has_permission('defects.view') %}
-            <a href="{{ url_for('defects.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('defects.') %}active{% endif %}"
-               data-tour="defects">
-                <i class="bi bi-exclamation-triangle"></i>
-                <span>Дефекты</span>
             </a>
             {% endif %}
             {% if current_user.has_permission('waybills.view') %}
