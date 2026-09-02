@@ -14,6 +14,7 @@ from app.models.enums import ContractStatus, Priority, ProjectStatus
 from app.models.projects.project import Project
 from app.models.requests.request import Request
 from app.models.requests.request_status import RequestStatus
+from app.modules.requests.repositories import RequestRepository
 from app.modules.requests.workflow import STATUS_EMERGENCY_DISPATCHED, STATUS_NEW
 
 
@@ -47,6 +48,7 @@ def test_dashboard_metrics_use_real_counts(admin_client, app):
         admin = db.session.execute(
             db.select(User).where(User.email == "admin@opora.ru")
         ).scalar_one()
+        journal_id = RequestRepository.get_default_journal().id
         for i, st in enumerate([st_new, st_new, st_em]):
             db.session.add(
                 Request(
@@ -57,6 +59,7 @@ def test_dashboard_metrics_use_real_counts(admin_client, app):
                     status_id=st.id,
                     priority=Priority.MEDIUM.value,
                     created_by=admin.id,
+                    journal_id=journal_id,
                 )
             )
         db.session.add(

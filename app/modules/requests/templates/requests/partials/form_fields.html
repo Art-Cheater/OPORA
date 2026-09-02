@@ -3,6 +3,7 @@
 {{ form_errors_alert(form) }}
 <div class="row g-3">
     {{ modal_field(form.number, col=4, module='requests') }}
+    {{ modal_field(form.journal_id, col=8, module='requests') }}
 
     {% if is_builtin_visible('requests', 'address') and current_user.can_view_field('requests', 'address') %}
     <div class="col-md-8">

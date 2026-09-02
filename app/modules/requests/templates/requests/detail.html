@@ -4,6 +4,10 @@
 {% from "macros/files.html" import file_gallery, file_preview_modal %}
 
 {% block title %}{{ req.number }} — {{ app_name }}{% endblock %}
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ static_url('vendor/leaflet/leaflet.css') }}">
+{% endblock %}
 
 {% block page_header %}
 {% call page_header(req.number ~ " — " ~ req.address, (req.pp or ''), "geo-alt") %}
@@ -43,6 +47,10 @@
             <div class="card-header"><i class="bi bi-card-text"></i>Основные данные</div>
             <div class="card-body">
                 <div class="row g-3">
+                    <div class="col-md-4">
+                        <small class="text-muted">Журнал</small>
+                        <div class="fw-medium">{{ req.journal.name if req.journal else "—" }}</div>
+                    </div>
                     <div class="col-md-4">
                         <small class="text-muted">Статус</small>
                         <div class="mt-1">{{ request_status_badge(req.status) }}</div>
@@ -170,7 +178,7 @@
         </div>
 
         <div class="card mb-4">
-            <div class="card-header"><i class="bi bi-map"></i>Карта (OpenStreetMap)</div>
+            <div class="card-header"><i class="bi bi-map"></i>Карта</div>
             <div class="card-body">
                 <div id="requestMap"
                      style="height: 360px; border-radius: 12px; background: #e8eef3;"
@@ -186,6 +194,48 @@
                    target="_blank" rel="noopener noreferrer">
                     <i class="bi bi-box-arrow-up-right"></i> Открыть точку на карте
                 </a>
+            </div>
+        </div>
+
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header"><i class="bi bi-exclamation-triangle"></i>Связанные дефекты</div>
+            <div class="card-body">
+                {% if defect_links %}
+                <ul class="list-unstyled mb-3">
+                    {% for link in defect_links %}
+                    <li class="d-flex justify-content-between align-items-center border-bottom py-2">
+                        <a href="{{ url_for('defects.detail', defect_id=link.defect_id) }}">
+                            {{ link.defect.number if link.defect else link.defect_id }}
+                            {% if link.defect %} — {{ link.defect.address }}{% endif %}
+                        </a>
+                        {% if current_user.has_permission('requests.edit') %}
+                        <form method="POST" action="{{ url_for('requests.unlink_defect', request_id=req.id, defect_id=link.defect_id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-sm btn-outline-secondary" type="submit">Отвязать</button>
+                        </form>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted">Нет связанных дефектов.</p>
+                {% endif %}
+                {% if current_user.has_permission('requests.edit') %}
+                <form method="POST" action="{{ url_for('requests.link_defect', request_id=req.id) }}" class="row g-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="col-md-8">
+                        <select name="defect_id" class="form-select">
+                            <option value="">Выберите дефект</option>
+                            {% for d in defects_for_link %}
+                            <option value="{{ d.id }}">{{ d.number }} — {{ d.address }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4"><button class="btn btn-outline-primary w-100" type="submit">Связать</button></div>
+                </form>
+                {% endif %}
             </div>
         </div>
 
@@ -299,5 +349,6 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ static_url('vendor/leaflet/leaflet.js') }}"></script>
 <script src="{{ static_url('js/request-detail.js') }}"></script>
 {% endblock %}

@@ -1,0 +1,78 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header, list_loading %}
+{% from "macros/crud.html" import create_button %}
+
+{% block title %}Дефекты — {{ app_name }}{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ static_url('vendor/leaflet/leaflet.css') }}">
+{% endblock %}
+
+{% block page_header %}
+{% call page_header("Дефекты", "Неисправности освещения, в том числе без заявки", "exclamation-triangle") %}
+{% if current_user.has_permission('defects.create') %}
+{{ create_button("Создать", "plus-lg") }}
+{% endif %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4 list-filters" data-tour="filters">
+    <div class="card-header"><i class="bi bi-search"></i>Поиск и фильтры</div>
+    <div class="card-body">
+        <form id="defectFilterForm" class="row g-3">
+            <div class="col-lg-3">
+                <label class="form-label">{{ filter_form.q.label.text }}</label>
+                {{ filter_form.q(class="form-control", placeholder="№, адрес, описание…") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.district.label.text }}</label>
+                {{ filter_form.district(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.status_id.label.text }}</label>
+                {{ filter_form.status_id(class="form-select") }}
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label">{{ filter_form.category_id.label.text }}</label>
+                {{ filter_form.category_id(class="form-select") }}
+            </div>
+            <div class="col-lg-3 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-grow-1"><i class="bi bi-search"></i> Поиск</button>
+                <button type="button" id="defectFilterReset" class="btn btn-outline-primary">Сброс</button>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-map"></i>Карта дефектов</div>
+    <div class="card-body">
+        <div id="opsMap" class="agreement-map" style="height: 320px; border-radius: 12px;"
+             data-src="{{ url_for('defects.map_json') }}" data-kind="defect"></div>
+        <div id="opsMapStatus" class="small text-muted mt-2">Загрузка карты…</div>
+    </div>
+</div>
+<div id="defectsTableContainer" data-tour="list-table">{{ list_loading("Загрузка дефектов…") }}</div>
+<div id="defectsPaginationContainer" class="mt-3"></div>
+<div id="oporaListConfig" class="d-none"
+     data-base-url="/defects"
+     data-filter-form-id="defectFilterForm"
+     data-table-container-id="defectsTableContainer"
+     data-pagination-container-id="defectsPaginationContainer"
+     data-reset-btn-id="defectFilterReset"
+     data-page-link-class="defect-page-link"
+     data-create-title="Новый дефект"
+     data-edit-title="Редактирование дефекта"
+     data-delete-message="Удалить дефект?"
+     data-view-mode="page"
+     data-load-on-start="true"
+     data-can-edit="{{ 'true' if current_user.has_permission('defects.edit') else 'false' }}">
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script src="{{ static_url('vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ static_url('js/ops-map.js') }}"></script>
+{% endblock %}

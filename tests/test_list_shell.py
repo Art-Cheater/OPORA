@@ -14,6 +14,8 @@ SHELL_PATHS = (
     "/inquiries/",
     "/agreements/",
     "/contractors/",
+    "/defects/",
+    "/waybills/",
 )
 
 

@@ -11,6 +11,13 @@ from app.models.auth.constants import (
     PERM_CONTRACTS_DELETE,
     PERM_CONTRACTS_EDIT,
     PERM_CONTRACTS_VIEW,
+    PERM_DEFECTS_CREATE,
+    PERM_DEFECTS_DELETE,
+    PERM_DEFECTS_EDIT,
+    PERM_DEFECTS_FILE_DELETE,
+    PERM_DEFECTS_FILE_UPLOAD,
+    PERM_DEFECTS_STATUS_CHANGE,
+    PERM_DEFECTS_VIEW,
     PERM_MESSENGER_USE,
     PERM_DOCUMENTS_USE,
     PERM_OBJECTS_CREATE,
@@ -39,6 +46,11 @@ from app.models.auth.constants import (
     PERM_USERS_DELETE,
     PERM_USERS_EDIT,
     PERM_USERS_VIEW,
+    PERM_WAYBILLS_CREATE,
+    PERM_WAYBILLS_DELETE,
+    PERM_WAYBILLS_EDIT,
+    PERM_WAYBILLS_STATUS_CHANGE,
+    PERM_WAYBILLS_VIEW,
     ROLE_ADMIN,
     ROLE_DIRECTOR,
     ROLE_DISPATCHER,
@@ -51,8 +63,13 @@ from app.models.auth.permission import Permission
 from app.models.auth.position import Position
 from app.models.auth.role import Role
 from app.models.auth.system_module import SystemModule
+from app.models.defects.defect_category import DefectCategory
+from app.models.defects.defect_status import DefectStatus
 from app.models.requests.request_status import RequestStatus
 from app.models.requests.request_dispatcher import RequestDispatcher
+from app.models.requests.request_journal import RequestJournal
+from app.modules.defects.workflow import DEFECT_CATEGORIES, DEFECT_STATUSES
+from app.modules.requests.journals import REQUEST_JOURNALS
 from app.seed.security_catalog import (
     MODULE_FIELDS,
     POSITIONS,
@@ -66,12 +83,12 @@ class ReferenceDataService:
     """Заполнение справочников (идемпотентно)."""
 
     REQUEST_STATUSES = [
-        ("new", "Новая", "Заявка создана диспетчером", "#1565C0", 10, False),
+        ("new", "Новая", "Заявка создана диспетчером", "#DC3545", 10, False),
         (
             "emergency_dispatched",
             "Выехала аварийная бригада",
             "Аварийная бригада выехала на место",
-            "#F9A825",
+            "#E6A700",
             20,
             False,
         ),
@@ -79,7 +96,7 @@ class ReferenceDataService:
             "accepted_by_master",
             "Передана мастеру",
             "Заявка передана районному мастеру",
-            "#EF6C00",
+            "#E6A700",
             30,
             False,
         ),
@@ -87,7 +104,7 @@ class ReferenceDataService:
             "in_progress",
             "В работе",
             "Мастер выполняет работы",
-            "#E65100",
+            "#E6A700",
             40,
             False,
         ),
@@ -128,6 +145,10 @@ class ReferenceDataService:
             PERM_AUTH_LOGIN_LOGS_VIEW,
             PERM_REQUESTS_VIEW, PERM_REQUESTS_CREATE, PERM_REQUESTS_EDIT,
             PERM_REQUESTS_DELETE, PERM_REQUESTS_APPROVE, PERM_REQUESTS_DISPATCH,
+            PERM_DEFECTS_VIEW, PERM_DEFECTS_CREATE, PERM_DEFECTS_EDIT, PERM_DEFECTS_DELETE,
+            PERM_DEFECTS_STATUS_CHANGE, "defects.export", "defects.print",
+            PERM_WAYBILLS_VIEW, PERM_WAYBILLS_CREATE, PERM_WAYBILLS_EDIT, PERM_WAYBILLS_DELETE,
+            PERM_WAYBILLS_STATUS_CHANGE, "waybills.export", "waybills.print",
             PERM_OBJECTS_VIEW, PERM_OBJECTS_CREATE, PERM_OBJECTS_EDIT,
             PERM_PROJECTS_VIEW, PERM_PROJECTS_CREATE, PERM_PROJECTS_EDIT,
             PERM_TENDERS_VIEW, PERM_TENDERS_CREATE, PERM_TENDERS_EDIT,
@@ -142,6 +163,9 @@ class ReferenceDataService:
             PERM_PROFILE_VIEW, PERM_PROFILE_EDIT, PERM_USERS_VIEW,
             PERM_REQUESTS_VIEW, PERM_REQUESTS_CREATE, PERM_REQUESTS_EDIT,
             PERM_REQUESTS_DISPATCH, PERM_OBJECTS_VIEW, PERM_PROJECTS_VIEW,
+            PERM_DEFECTS_VIEW, PERM_DEFECTS_CREATE, PERM_DEFECTS_EDIT,
+            PERM_DEFECTS_FILE_UPLOAD, PERM_DEFECTS_FILE_DELETE,
+            PERM_WAYBILLS_VIEW,
             PERM_TENDERS_VIEW,
             PERM_MESSENGER_USE, PERM_DOCUMENTS_USE, PERM_SEARCH_USE,
             "contractors.view",
@@ -152,6 +176,10 @@ class ReferenceDataService:
             PERM_PROFILE_VIEW, PERM_PROFILE_EDIT,
             PERM_REQUESTS_VIEW, PERM_REQUESTS_CREATE, PERM_REQUESTS_EDIT,
             PERM_REQUESTS_APPROVE, PERM_OBJECTS_VIEW, PERM_PROJECTS_VIEW,
+            PERM_DEFECTS_VIEW, PERM_DEFECTS_CREATE, PERM_DEFECTS_EDIT,
+            PERM_DEFECTS_STATUS_CHANGE, PERM_DEFECTS_FILE_UPLOAD,
+            PERM_WAYBILLS_VIEW, PERM_WAYBILLS_CREATE, PERM_WAYBILLS_EDIT,
+            PERM_WAYBILLS_STATUS_CHANGE, "waybills.file_upload", "waybills.print", "waybills.export",
             PERM_TENDERS_VIEW,
             PERM_MESSENGER_USE, PERM_DOCUMENTS_USE, PERM_SEARCH_USE,
             "contractors.view",
@@ -162,6 +190,7 @@ class ReferenceDataService:
             PERM_PROFILE_VIEW, PERM_PROFILE_EDIT,
             PERM_REQUESTS_VIEW, PERM_REQUESTS_CREATE, PERM_REQUESTS_EDIT,
             PERM_REQUESTS_DISPATCH,
+            PERM_DEFECTS_VIEW, PERM_WAYBILLS_VIEW,
             PERM_OBJECTS_VIEW, PERM_PROJECTS_VIEW, PERM_MESSENGER_USE, PERM_DOCUMENTS_USE, PERM_SEARCH_USE,
             "inquiries.view",
         ],
@@ -170,7 +199,10 @@ class ReferenceDataService:
     @classmethod
     def seed_all(cls) -> None:
         cls._seed_request_statuses()
+        cls._seed_request_journals()
         cls._seed_request_dispatchers()
+        cls._seed_defect_statuses()
+        cls._seed_defect_categories()
         cls._seed_security_catalog()
         cls._seed_roles_and_permissions()
         db.session.commit()
@@ -434,6 +466,78 @@ class ReferenceDataService:
         for code, status in existing.items():
             if code not in desired:
                 status.is_active = False
+        db.session.flush()
+
+    @classmethod
+    def _seed_request_journals(cls) -> None:
+        existing = {
+            item.code: item
+            for item in db.session.scalars(
+                db.select(RequestJournal).where(RequestJournal.active_filter())
+            )
+        }
+        for code, name, sort_order in REQUEST_JOURNALS:
+            if code in existing:
+                existing[code].name = name
+                existing[code].sort_order = sort_order
+                existing[code].is_active = True
+            else:
+                db.session.add(
+                    RequestJournal(code=code, name=name, sort_order=sort_order, is_active=True)
+                )
+        db.session.flush()
+
+    @classmethod
+    def _seed_defect_statuses(cls) -> None:
+        existing = {
+            item.code: item
+            for item in db.session.scalars(
+                db.select(DefectStatus).where(DefectStatus.active_filter())
+            )
+        }
+        desired = {row[0] for row in DEFECT_STATUSES}
+        for code, name, desc, color, order, is_final in DEFECT_STATUSES:
+            if code in existing:
+                status = existing[code]
+                status.name = name
+                status.description = desc
+                status.color = color
+                status.sort_order = order
+                status.is_final = is_final
+                status.is_active = True
+            else:
+                db.session.add(
+                    DefectStatus(
+                        code=code,
+                        name=name,
+                        description=desc,
+                        color=color,
+                        sort_order=order,
+                        is_final=is_final,
+                    )
+                )
+        for code, status in existing.items():
+            if code not in desired:
+                status.is_active = False
+        db.session.flush()
+
+    @classmethod
+    def _seed_defect_categories(cls) -> None:
+        existing = {
+            item.code: item
+            for item in db.session.scalars(
+                db.select(DefectCategory).where(DefectCategory.active_filter())
+            )
+        }
+        for code, name, sort_order in DEFECT_CATEGORIES:
+            if code in existing:
+                existing[code].name = name
+                existing[code].sort_order = sort_order
+                existing[code].is_active = True
+            else:
+                db.session.add(
+                    DefectCategory(code=code, name=name, sort_order=sort_order, is_active=True)
+                )
         db.session.flush()
 
     @classmethod

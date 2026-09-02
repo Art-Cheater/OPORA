@@ -16,10 +16,12 @@ from app.models.enums import Priority
 
 if TYPE_CHECKING:
     from app.models.auth.user import User
+    from app.models.requests.request_journal import RequestJournal
     from app.models.requests.request_material import RequestMaterial
     from app.models.projects.project import Project
     from app.models.requests.request_history import RequestHistory
     from app.models.requests.request_status import RequestStatus
+    from app.models.defects.request_defect import RequestDefect
 
 
 class Request(BaseModel):
@@ -36,8 +38,13 @@ class Request(BaseModel):
         Index("ix_requests_address", "address"),
         Index("ix_requests_district", "district"),
         Index("ix_requests_settlement", "settlement"),
-        Index("ix_requests_number", "number", unique=True),
+        Index("ix_requests_street_district", "street", "district"),
+        Index("ix_requests_normalized_address", "normalized_address"),
+        Index("ix_requests_lat_lng", "latitude", "longitude"),
+        Index("uq_requests_journal_number", "journal_id", "number", unique=True),
+        Index("ix_requests_journal_id", "journal_id"),
         Index("ix_requests_received_at", "received_at"),
+        Index("ix_requests_deleted_journal_received", "deleted_at", "journal_id", "received_at"),
         Index("ix_requests_dispatcher_name", "dispatcher_name"),
         Index("ix_requests_deleted_received", "deleted_at", "received_at"),
         Index("ix_requests_deleted_status", "deleted_at", "status_id"),
@@ -78,6 +85,11 @@ class Request(BaseModel):
         mapped_column(SearchVectorType, nullable=True)
     )
 
+    journal_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(),
+        ForeignKey("request_journals.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
     status_id: Mapped[uuid.UUID] = mapped_column(
         GUID(),
         ForeignKey("request_statuses.id", ondelete="RESTRICT"),
@@ -99,10 +111,21 @@ class Request(BaseModel):
         nullable=True,
     )
 
+    journal: Mapped[RequestJournal] = relationship(
+        "RequestJournal",
+        back_populates="requests",
+        foreign_keys=[journal_id],
+    )
     status: Mapped[RequestStatus] = relationship(
         "RequestStatus",
         back_populates="requests",
         foreign_keys=[status_id],
+    )
+    defect_links: Mapped[list[RequestDefect]] = relationship(
+        "RequestDefect",
+        back_populates="request",
+        foreign_keys="RequestDefect.request_id",
+        lazy="select",
     )
     project: Mapped[Project | None] = relationship(
         "Project",

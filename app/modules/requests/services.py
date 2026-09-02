@@ -25,6 +25,7 @@ from app.models.requests.request_history import RequestHistory
 from app.models.requests.request_material import RequestMaterial
 from app.models.requests.request_status import RequestStatus
 from app.modules.requests.districts import normalize_request_district
+from app.modules.requests.repositories import RequestRepository
 from app.modules.requests.workflow import (
     HISTORY_ACCEPT_MASTER,
     HISTORY_ASSIGN_MASTER,
@@ -68,6 +69,7 @@ class RequestPayload:
     status_id: uuid.UUID
     responsible_id: uuid.UUID | None
     executor_id: uuid.UUID | None
+    journal_id: uuid.UUID | None = None
     has_barrier: bool = False
     barrier_phone: str | None = None
     for_beresnev: bool = False
@@ -78,6 +80,7 @@ class RequestService:
 
     TRACKED_FIELDS = [
         "number",
+        "journal_id",
         "title",
         "description",
         "address",
@@ -161,6 +164,10 @@ class RequestService:
         cls._prepare_address(payload)
         if not payload.address:
             raise ValidationError("Адрес обязателен.")
+        journal = RequestRepository.get_journal(payload.journal_id)
+        if journal is None:
+            journal = RequestRepository.get_default_journal()
+        payload.journal_id = journal.id
         if payload.latitude is not None and not Decimal("-90") <= payload.latitude <= Decimal("90"):
             raise ValidationError("Широта должна быть в диапазоне от -90 до 90.")
         if payload.longitude is not None and not Decimal("-180") <= payload.longitude <= Decimal("180"):
@@ -481,10 +488,13 @@ class RequestService:
     def create_request(cls, payload: RequestPayload, user_id: uuid.UUID) -> Request:
         cls.validate_payload(payload)
         exists = db.session.scalar(
-            db.select(Request.id).where(Request.number == payload.number.strip()).limit(1)
+            db.select(Request.id).where(
+                Request.number == payload.number.strip(),
+                Request.journal_id == payload.journal_id,
+            ).limit(1)
         )
         if exists is not None:
-            raise ValidationError("Заявка с таким номером уже существует.")
+            raise ValidationError("Заявка с таким номером уже есть в этом журнале.")
 
         new_status = cls.get_status_by_code(STATUS_NEW)
 
@@ -515,6 +525,7 @@ class RequestService:
             repeat_count=0,
             repeat_dates=[],
             priority=payload.priority,
+            journal_id=payload.journal_id,
             status_id=new_status.id,
             responsible_id=payload.responsible_id,
             executor_id=payload.executor_id,
@@ -526,7 +537,8 @@ class RequestService:
             db.session.flush()
         except IntegrityError as exc:
             db.session.rollback()
-            raise ValidationError("Заявка с таким номером уже существует.") from exc
+            raise ValidationError("Заявка с таким номером уже есть в этом журнале.") from exc
+        RequestRepository.note_used_number(req.journal_id, req.number)
 
         snapshot = cls._snapshot(req)
         cls._log_audit(
@@ -561,6 +573,7 @@ class RequestService:
 
         # Статус меняется только через workflow-методы
         req.number = payload.number.strip()
+        req.journal_id = payload.journal_id
         req.title = (payload.title.strip() or payload.address)[:500]
         req.description = cls._normalize_text(payload.description)
         req.address = payload.address
@@ -1098,11 +1111,15 @@ class RequestService:
         from sqlalchemy import delete
 
         from app.models.custom_fields.custom_field_value import CustomFieldValue
+        from app.models.defects.request_defect import RequestDefect
+        from app.models.waybills.waybill_stop import WaybillStop
 
         ids = list(db.session.scalars(db.select(Request.id)))
         if not ids:
             return 0
         kind = EntityType.REQUEST.value
+        db.session.execute(delete(RequestDefect).where(RequestDefect.request_id.in_(ids)))
+        db.session.execute(delete(WaybillStop).where(WaybillStop.request_id.in_(ids)))
         db.session.execute(delete(RequestMaterial).where(RequestMaterial.request_id.in_(ids)))
         db.session.execute(delete(RequestHistory).where(RequestHistory.request_id.in_(ids)))
         db.session.execute(

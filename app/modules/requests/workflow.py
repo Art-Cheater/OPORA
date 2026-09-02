@@ -3,7 +3,7 @@
 Жизненный цикл (время жизни заявки):
   Новая
     → Выехала аварийная бригада  (строка жёлтая)
-    → Передана мастеру           (строка оранжевая)
+    → Передана мастеру           (строка жёлтая)
     → Выполнено                  (строка зелёная)
 """
 
@@ -66,10 +66,10 @@ ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
 # CSS-класс строки списка по статусу
 ROW_STATUS_CLASS = {
     STATUS_NEW: "table-row-new",
-    STATUS_EMERGENCY_DISPATCHED: "table-row-brigade",  # жёлтый
-    STATUS_ACCEPTED_BY_MASTER: "table-row-master",  # оранжевый
-    STATUS_IN_PROGRESS: "table-row-master",
-    STATUS_COMPLETED: "table-row-done",  # зелёный
+    STATUS_EMERGENCY_DISPATCHED: "table-row-brigade",
+    STATUS_ACCEPTED_BY_MASTER: "table-row-brigade",
+    STATUS_IN_PROGRESS: "table-row-brigade",
+    STATUS_COMPLETED: "table-row-done",
     STATUS_CANCELLED: "table-row-cancelled",
 }
 

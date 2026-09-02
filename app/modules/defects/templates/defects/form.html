@@ -1,0 +1,25 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}{% if mode == 'create' %}Новый дефект{% else %}Редактирование дефекта{% endif %} — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% if mode == 'create' %}
+{% call page_header("Новый дефект", "Можно создать без заявки", "plus-circle") %}{% endcall %}
+{% else %}
+{% call page_header("Редактирование дефекта", item.number, "pencil-square") %}{% endcall %}
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<form method="POST" class="card" data-requests-form="1">
+    <div class="card-body">
+        {{ form.hidden_tag() }}
+        {% include "defects/partials/form_fields.html" %}
+    </div>
+    <div class="card-footer d-flex gap-2 justify-content-end">
+        <a href="{{ url_for('defects.index') }}" class="btn btn-outline-secondary">Отмена</a>
+        {{ form.submit(class="btn btn-primary") }}
+    </div>
+</form>
+{% endblock %}

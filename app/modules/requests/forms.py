@@ -47,6 +47,7 @@ class RequestFilterForm(FlaskForm):
         validators=[Optional()],
     )
     dispatcher_name = SelectField("Диспетчер", choices=[], validators=[Optional()])
+    journal_id = SelectField("Журнал", choices=[], validators=[Optional()], validate_choice=False)
     preset = SelectField(
         "Быстрый фильтр",
         choices=[
@@ -85,6 +86,12 @@ class RequestFilterForm(FlaskForm):
 
 class RequestForm(FlaskForm):
     number = StringField("Номер заявки", validators=[DataRequired(), Length(max=50)])
+    journal_id = SelectField(
+        "Журнал",
+        choices=[],
+        validators=[Optional()],
+        validate_choice=False,
+    )
     address = StringField("Адрес", validators=[DataRequired(), Length(max=500)])
     address_selection_token = HiddenField(validators=[Optional()])
     original_address = HiddenField(validators=[Optional(), Length(max=500)])

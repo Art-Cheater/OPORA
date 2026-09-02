@@ -7,6 +7,8 @@ from app.core.permission_service import PermissionService
 
 _FALLBACK_MODULE_LABELS: dict[str, str] = {
     "requests": "Заявки",
+    "defects": "Дефекты",
+    "waybills": "Путевые листы",
     "projects": "Проекты",
     "contracts": "Договоры",
     "users": "Сотрудники",
@@ -15,6 +17,7 @@ _FALLBACK_MODULE_LABELS: dict[str, str] = {
 _FALLBACK_MODULE_FIELDS: dict[str, dict[str, str]] = {
     "requests": {
         "number": "Номер",
+        "journal_id": "Журнал",
         "title": "Название",
         "description": "Описание",
         "address": "Адрес",
@@ -39,6 +42,24 @@ _FALLBACK_MODULE_FIELDS: dict[str, dict[str, str]] = {
         "responsible_id": "Ответственный",
         "executor_id": "Исполнитель",
         "created_at": "Дата создания",
+    },
+    "defects": {
+        "number": "Номер",
+        "description": "Описание",
+        "category_id": "Категория",
+        "status_id": "Статус",
+        "address": "Адрес",
+        "district": "Район",
+        "responsible_id": "Ответственный",
+        "created_at": "Дата создания",
+    },
+    "waybills": {
+        "number": "Номер",
+        "work_date": "Дата",
+        "master_id": "Мастер",
+        "status": "Статус",
+        "comment": "Комментарий",
+        "member_ids": "Исполнители",
     },
     "projects": {
         "code": "Код",

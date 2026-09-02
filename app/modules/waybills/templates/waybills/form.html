@@ -1,0 +1,21 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}{% if mode == 'create' %}Новый путевой лист{% else %}Редактирование{% endif %} — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Путевой лист", "", "signpost-2") %}{% endcall %}
+{% endblock %}
+
+{% block content %}
+<form method="POST" class="card">
+    <div class="card-body">
+        {{ form.hidden_tag() }}
+        {% include "waybills/partials/form_fields.html" %}
+    </div>
+    <div class="card-footer d-flex gap-2 justify-content-end">
+        <a href="{{ url_for('waybills.index') }}" class="btn btn-outline-secondary">Отмена</a>
+        {{ form.submit(class="btn btn-primary") }}
+    </div>
+</form>
+{% endblock %}

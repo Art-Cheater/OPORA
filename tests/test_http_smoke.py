@@ -25,6 +25,8 @@ def test_admin_pages(admin_client):
         "/audit/",
         "/search/api?q=test",
         "/messenger/",
+        "/defects/",
+        "/waybills/",
     ):
         resp = admin_client.get(path)
         assert resp.status_code == 200, path
@@ -233,6 +235,7 @@ def test_list_rows_use_status_tones(admin_client):
     requests_page = admin_client.get("/requests/table")
     assert requests_page.status_code == 200
     assert "table-row-lifecycle" in requests_page.get_json()["table_html"]
+    assert "table-row-new" in requests_page.get_json()["table_html"]
 
     employees_page = admin_client.get("/employees/table")
     assert employees_page.status_code == 200

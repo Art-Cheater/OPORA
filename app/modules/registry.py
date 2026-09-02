@@ -6,6 +6,7 @@ from app.modules.agreements import agreements_bp
 from app.modules.auth import auth_bp
 from app.modules.contracts import contracts_bp
 from app.modules.contractors import contractors_bp
+from app.modules.defects import defects_bp
 from app.modules.documents import documents_bp
 from app.modules.eis import eis_bp
 from app.modules.employees import employees_bp
@@ -20,6 +21,7 @@ from app.modules.notifications import notifications_bp
 from app.modules.projects import projects_bp
 from app.modules.requests import requests_bp
 from app.modules.reports import reports_bp
+from app.modules.waybills import waybills_bp
 from app.modules.search import search_bp
 from app.modules.tenders import tenders_bp
 from app.modules.wallpapers import wallpapers_bp
@@ -30,6 +32,8 @@ ALL_BLUEPRINTS = [
     main_bp,
     auth_bp,
     requests_bp,
+    defects_bp,
+    waybills_bp,
     objects_bp,
     projects_bp,
     tenders_bp,

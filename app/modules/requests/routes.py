@@ -30,6 +30,7 @@ from app.core.forms_utils import form_errors_message
 from app.core.http import ajax_error, ajax_ok, is_ajax
 from app.core.upload_utils import resolve_download_filename, resolve_storage_path
 from app.extensions import db
+from sqlalchemy.orm import joinedload
 from app.models.auth.constants import (
     PERM_REQUESTS_APPROVE,
     PERM_REQUESTS_CREATE,
@@ -204,6 +205,7 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
         status_id=status_id,
         responsible_id=responsible_id,
         executor_id=executor_id,
+        journal_id=_uuid_or_none(str(field("journal_id", form.journal_id.data, default="") or "")),
         has_barrier=bool(field("has_barrier", form.has_barrier.data, default=False)),
         barrier_phone=field("barrier_phone", form.barrier_phone.data, default=None),
         for_beresnev=bool(field("for_beresnev", form.for_beresnev.data, default=False)),
@@ -213,11 +215,15 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
 def _prepare_filter_form(form: RequestFilterForm) -> None:
     statuses = RequestRepository.get_statuses()
     dispatchers = RequestRepository.get_dispatchers()
+    journals = RequestRepository.get_journals()
 
     form.status_id.choices = [("", "Все статусы")] + [
         (str(item.id), item.name) for item in statuses
     ]
     form.dispatcher_name.choices = [("", "Любой")] + [(d.name, d.name) for d in dispatchers]
+    form.journal_id.choices = [("", "Все журналы")] + [
+        (str(item.id), item.name) for item in journals
+    ]
 
 
 def _prepare_request_form(form: RequestForm) -> None:
@@ -233,6 +239,9 @@ def _prepare_request_form(form: RequestForm) -> None:
     ]
     form.dispatcher_name.choices = [("", "Выберите диспетчера")] + [
         (d.name, d.name) for d in dispatchers
+    ]
+    form.journal_id.choices = [
+        (str(item.id), item.name) for item in RequestRepository.get_journals()
     ]
     form.executor_id.choices = [("", "Не назначен")]
     BuiltinFieldService.apply_to_form(form, "requests")
@@ -251,6 +260,8 @@ def _apply_request_create_defaults(form: RequestForm) -> None:
     if request.method != "GET":
         return
     form.number.data = RequestRepository.next_number()
+    default_journal = RequestRepository.get_default_journal()
+    form.journal_id.data = str(default_journal.id)
     form.description.data = ""
     form.address.data = ""
     form.original_address.data = ""
@@ -286,6 +297,7 @@ def _build_filters() -> RequestFilter:
         district=request.args.get("district", ""),
         pp=request.args.get("pp", ""),
         for_beresnev=for_beresnev_raw in {"1", "true", "on", "yes", "y"},
+        journal_id=request.args.get("journal_id", ""),
         status_id=request.args.get("status_id", ""),
         priority=request.args.get("priority", ""),
         responsible_id=request.args.get("responsible_id", ""),
@@ -312,6 +324,7 @@ def index():
         "requests/index.html",
         filter_form=filter_form,
         filters=_build_filters(),
+        journals=RequestRepository.get_journals(),
     )
 
 
@@ -337,6 +350,18 @@ def table():
         requests_pagination=pagination,
     )
     return jsonify({"table_html": html, "pagination_html": pager})
+
+
+@requests_bp.route("/map.json")
+@login_required
+@permission_required(PERM_REQUESTS_VIEW)
+def map_json():
+    return jsonify(
+        {
+            "points": RequestRepository.map_points(journal_id=request.args.get("journal_id", "")),
+            "remaining": 0,
+        }
+    )
 
 
 @requests_bp.route("/dispatchers", methods=["GET", "POST"])
@@ -676,6 +701,27 @@ def detail(request_id: uuid.UUID):
     actions = available_actions(req, current_user)
     dispatcher = db.session.get(User, req.created_by) if req.created_by else None
     lifecycle = lifecycle_progress(req.status.code if req.status else None)
+    from app.models.defects.defect import Defect
+    from app.models.defects.request_defect import RequestDefect
+
+    defect_links = list(
+        db.session.scalars(
+            db.select(RequestDefect)
+            .options(joinedload(RequestDefect.defect))
+            .where(RequestDefect.request_id == req.id, RequestDefect.active_filter())
+            .order_by(RequestDefect.created_at.desc())
+        )
+    )
+    linked_ids = {link.defect_id for link in defect_links}
+    defects_stmt = db.select(Defect).where(Defect.active_filter()).order_by(Defect.created_at.desc()).limit(40)
+    if linked_ids:
+        defects_stmt = (
+            db.select(Defect)
+            .where(Defect.active_filter(), Defect.id.notin_(linked_ids))
+            .order_by(Defect.created_at.desc())
+            .limit(40)
+        )
+    defects_for_link = list(db.session.scalars(defects_stmt))
 
     photos = [f for f in attachments if (f.mime_type or "").startswith("image/")]
     documents = [f for f in attachments if not (f.mime_type or "").startswith("image/")]
@@ -737,6 +783,8 @@ def detail(request_id: uuid.UUID):
         actions=actions,
         dispatcher=dispatcher,
         lifecycle=lifecycle,
+        defect_links=defect_links,
+        defects_for_link=defects_for_link,
         **custom_field_detail_context(_CF, req.id, current_user),
     )
 
@@ -757,6 +805,7 @@ def edit(request_id: uuid.UUID):
         form.responsible_id.data = str(req.responsible_id) if req.responsible_id else ""
         form.executor_id.data = str(req.executor_id) if req.executor_id else ""
         form.dispatcher_name.data = req.dispatcher_name or ""
+        form.journal_id.data = str(req.journal_id) if req.journal_id else ""
         form.pp.data = req.pp or ""
         form.has_barrier.data = bool(req.has_barrier)
         form.barrier_phone.data = req.barrier_phone or ""
@@ -1051,5 +1100,55 @@ def delete_attachment(request_id: uuid.UUID, attachment_id: uuid.UUID):
         RequestService.delete_attachment(req, attachment_id, current_user.id)
         flash("Файл удалён.", "success")
     except (ValidationError, NotFoundError) as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("requests.detail", request_id=req.id))
+
+
+@requests_bp.route("/<uuid:request_id>/defects", methods=["POST"])
+@login_required
+@permission_required(PERM_REQUESTS_EDIT)
+def link_defect(request_id: uuid.UUID):
+    from app.modules.defects.repositories import DefectRepository
+    from app.modules.defects.services import DefectService
+
+    req = RequestRepository.get_by_id(request_id)
+    if req is None:
+        flash("Заявка не найдена.", "danger")
+        return redirect(url_for("requests.index"))
+    defect_id = _uuid_or_none(request.form.get("defect_id") or "")
+    if defect_id is None:
+        flash("Выберите дефект.", "danger")
+        return redirect(url_for("requests.detail", request_id=req.id))
+    item = DefectRepository.get_by_id(defect_id)
+    if item is None:
+        flash("Дефект не найден.", "danger")
+        return redirect(url_for("requests.detail", request_id=req.id))
+    try:
+        DefectService.link_request(item, req.id, current_user.id)
+        flash("Дефект связан с заявкой.", "success")
+    except ValidationError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("requests.detail", request_id=req.id))
+
+
+@requests_bp.route("/<uuid:request_id>/defects/<uuid:defect_id>/unlink", methods=["POST"])
+@login_required
+@permission_required(PERM_REQUESTS_EDIT)
+def unlink_defect(request_id: uuid.UUID, defect_id: uuid.UUID):
+    from app.modules.defects.repositories import DefectRepository
+    from app.modules.defects.services import DefectService
+
+    req = RequestRepository.get_by_id(request_id)
+    if req is None:
+        flash("Заявка не найдена.", "danger")
+        return redirect(url_for("requests.index"))
+    item = DefectRepository.get_by_id(defect_id)
+    if item is None:
+        flash("Дефект не найден.", "danger")
+        return redirect(url_for("requests.detail", request_id=req.id))
+    try:
+        DefectService.unlink_request(item, req.id, current_user.id)
+        flash("Связь с дефектом снята.", "success")
+    except ValidationError as exc:
         flash(str(exc), "danger")
     return redirect(url_for("requests.detail", request_id=req.id))

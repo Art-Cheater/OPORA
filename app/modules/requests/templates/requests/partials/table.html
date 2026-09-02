@@ -7,6 +7,7 @@
         <thead>
             <tr>
                 {{ sortable_th("№", "number", sort_by, sort_dir) }}
+                <th>Журнал</th>
                 {{ sortable_th("Адрес", "address", sort_by, sort_dir) }}
                 {{ sortable_th("ПП (пункт питания)", "pp", sort_by, sort_dir) }}
                 {{ sortable_th("Статус", "status_id", sort_by, sort_dir) }}
@@ -38,6 +39,7 @@
                         </span>
                     </div>
                 </td>
+                <td class="small">{{ req.journal.name if req.journal else "—" }}</td>
                 <td>
                     <div class="fw-medium {% if req.repeat_count and req.repeat_count > 0 %}text-danger{% endif %}">{{ req.address }}</div>
                     {% if req.applicant_name and req.applicant_name != '—' %}
@@ -93,7 +95,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="7" class="table-empty">
+                <td colspan="8" class="table-empty">
                     <i class="bi bi-inbox"></i> Заявки не найдены
                 </td>
             </tr>

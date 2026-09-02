@@ -1,0 +1,54 @@
+{% from "macros/badges.html" import request_status_badge, table_row_tone %}
+<div class="table-card">
+    <table class="table table-opora">
+        <thead>
+            <tr>
+                <th>№</th>
+                <th>Адрес</th>
+                <th>Категория</th>
+                <th>Статус</th>
+                <th>Создан</th>
+                <th class="text-end">Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in pagination.items %}
+            {% set code = item.status.code if item.status else '' %}
+            <tr data-opora-id="{{ item.id }}" class="{{ table_row_tone('new' if code == 'open' else ('brigade' if code == 'in_progress' else ('done' if code == 'fixed' else 'cancelled'))) }}">
+                <td class="fw-semibold">{{ item.number }}</td>
+                <td>
+                    <div class="fw-medium">{{ item.address }}</div>
+                    {% if item.district %}<div class="small text-muted">{{ item.district }}</div>{% endif %}
+                </td>
+                <td>{{ item.category.name if item.category else "—" }}</td>
+                <td>{{ request_status_badge(item.status) }}</td>
+                <td class="text-muted">{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                <td class="text-end">
+                    <div class="table-actions">
+                        <button type="button" class="table-actions__btn" title="Просмотр"
+                                data-opora-action="view" data-id="{{ item.id }}"
+                                data-url="{{ url_for('defects.detail', defect_id=item.id) }}">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                        {% if current_user.has_permission('defects.edit') %}
+                        <button type="button" class="table-actions__btn" title="Редактировать"
+                                data-opora-action="edit" data-id="{{ item.id }}"
+                                data-url="{{ url_for('defects.edit', defect_id=item.id) }}">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        {% endif %}
+                        {% if current_user.has_permission('defects.delete') %}
+                        <button type="button" class="table-actions__btn table-actions__btn--danger" title="Удалить"
+                                data-opora-action="delete" data-id="{{ item.id }}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="table-empty"><i class="bi bi-inbox"></i> Дефекты не найдены</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

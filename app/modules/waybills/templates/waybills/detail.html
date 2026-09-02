@@ -1,0 +1,176 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}{{ item.number }} — {{ app_name }}{% endblock %}
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ static_url('vendor/leaflet/leaflet.css') }}">
+{% endblock %}
+
+{% block page_header %}
+{% call page_header(item.number, status_label, "signpost-2") %}
+{% if current_user.has_permission('waybills.edit') %}
+<a class="btn btn-outline-primary" href="{{ url_for('waybills.edit', waybill_id=item.id) }}">Редактировать</a>
+{% endif %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-xl-7">
+        <div class="card mb-4">
+            <div class="card-header">Маршрут</div>
+            <div class="card-body">
+                <ol id="waybillStops" class="list-group list-group-numbered mb-3">
+                    {% for stop in stops %}
+                    <li class="list-group-item d-flex justify-content-between align-items-start" data-stop-id="{{ stop.id }}">
+                        <div>
+                            <div class="fw-medium">{{ stop.address }}</div>
+                            <div class="small text-muted">
+                                {% if stop.request_id %}Заявка {{ stop.request.number if stop.request else "" }}
+                                {% else %}Дефект {{ stop.defect.number if stop.defect else "" }}{% endif %}
+                            </div>
+                        </div>
+                        {% if current_user.has_permission('waybills.edit') %}
+                        <form method="POST" action="{{ url_for('waybills.remove_stop', waybill_id=item.id, stop_id=stop.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-sm btn-outline-secondary" type="submit">Убрать</button>
+                        </form>
+                        {% endif %}
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-muted">Точек пока нет. Добавьте заявки или дефекты.</li>
+                    {% endfor %}
+                </ol>
+                {% if current_user.has_permission('waybills.edit') and stops|length > 1 %}
+                <button type="button" class="btn btn-outline-primary btn-sm mb-3" id="waybillReorderBtn">Сохранить порядок сверху вниз</button>
+                {% endif %}
+                {% if current_user.has_permission('waybills.edit') %}
+                <form method="POST" action="{{ url_for('waybills.add_stop', waybill_id=item.id) }}" class="row g-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="col-md-3">
+                        <select name="entity_type" class="form-select" id="stopEntityType">
+                            <option value="request">Заявка</option>
+                            <option value="defect">Дефект</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <select name="entity_id" class="form-select" id="stopEntityId">
+                            {% for req in open_requests %}
+                            <option value="{{ req.id }}" data-kind="request">{{ req.number }} — {{ req.address }}</option>
+                            {% endfor %}
+                            {% for d in open_defects %}
+                            <option value="{{ d.id }}" data-kind="defect">{{ d.number }} — {{ d.address }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3"><button class="btn btn-primary w-100" type="submit">Добавить</button></div>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% if nearby_text %}
+        <div class="card mb-4">
+            <div class="card-header">Рядом</div>
+            <div class="card-body">
+                <p class="fw-medium">{{ nearby_text }}</p>
+                <p class="small text-muted">Мастер сам решает, добавлять точки или нет. Статусы найденных заявок и дефектов не меняются.</p>
+                <ul class="list-unstyled mb-0">
+                    {% for hit in nearby_hits %}
+                    <li class="d-flex justify-content-between align-items-center border-bottom py-2">
+                        <div>
+                            <a href="{{ hit.url }}">{{ hit.number }}</a>
+                            <div class="small text-muted">{{ hit.address }}</div>
+                        </div>
+                        {% if current_user.has_permission('waybills.edit') %}
+                        <form method="POST" action="{{ url_for('waybills.add_stop', waybill_id=item.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="entity_type" value="{{ hit.entity_type }}">
+                            <input type="hidden" name="entity_id" value="{{ hit.entity_id }}">
+                            <button class="btn btn-sm btn-outline-primary" type="submit">Добавить</button>
+                        </form>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+        {% if current_user.has_permission('waybills.status_change') and status_form.status.choices %}
+        <div class="card mb-4">
+            <div class="card-header">Статус</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('waybills.change_status', waybill_id=item.id) }}" class="d-flex gap-2">
+                    {{ status_form.hidden_tag() }}
+                    {{ status_form.status(class="form-select") }}
+                    {{ status_form.submit(class="btn btn-primary") }}
+                </form>
+            </div>
+        </div>
+        {% endif %}
+        <div class="card">
+            <div class="card-header">Состав</div>
+            <div class="card-body">
+                <div><strong>Мастер:</strong> {{ item.master.full_name if item.master else "—" }}</div>
+                <div class="mt-2"><strong>Дата:</strong> {{ item.work_date.strftime('%d.%m.%Y') }}</div>
+                <div class="mt-2"><strong>Исполнители:</strong>
+                    {% for m in members %}{{ m.user.full_name if m.user else "" }}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %}
+                </div>
+                {% if item.comment %}<div class="mt-2">{{ item.comment }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-5">
+        <div class="card">
+            <div class="card-header">Карта маршрута</div>
+            <div class="card-body">
+                <div id="opsMap" class="agreement-map" style="height: 420px; border-radius: 12px;"
+                     data-src="{{ url_for('waybills.map_json', waybill_id=item.id) }}" data-kind="route"></div>
+                <div id="opsMapStatus" class="small text-muted mt-2"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script src="{{ static_url('vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ static_url('js/ops-map.js') }}"></script>
+<script>
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
+  document.getElementById("waybillReorderBtn")?.addEventListener("click", async () => {
+    const ids = [...document.querySelectorAll("#waybillStops [data-stop-id]")].map((n) => n.getAttribute("data-stop-id"));
+    const resp = await fetch({{ url_for('waybills.reorder', waybill_id=item.id)|tojson }}, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+        ...(csrf ? { "X-CSRFToken": csrf } : {}),
+      },
+      body: JSON.stringify({stop_ids: ids}),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || data.ok === false) {
+      alert(data.message || "Не удалось сохранить порядок");
+      return;
+    }
+    window.location.reload();
+  });
+  const typeSelect = document.getElementById("stopEntityType");
+  const idSelect = document.getElementById("stopEntityId");
+  function filterStopOptions() {
+    if (!typeSelect || !idSelect) return;
+    const kind = typeSelect.value;
+    [...idSelect.options].forEach((opt) => {
+      const match = !opt.dataset.kind || opt.dataset.kind === kind;
+      opt.hidden = !match;
+      opt.disabled = !match;
+    });
+    const visible = [...idSelect.options].find((opt) => !opt.hidden && opt.value);
+    if (visible) idSelect.value = visible.value;
+  }
+  typeSelect?.addEventListener("change", filterStopOptions);
+  filterStopOptions();
+</script>
+{% endblock %}

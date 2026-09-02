@@ -1,0 +1,161 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+{% from "macros/badges.html" import request_status_badge %}
+{% from "macros/files.html" import file_gallery %}
+
+{% block title %}{{ item.number }} — {{ app_name }}{% endblock %}
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ static_url('vendor/leaflet/leaflet.css') }}">
+{% endblock %}
+
+{% block page_header %}
+{% call page_header(item.number ~ " — " ~ item.address, item.category.name if item.category else "", "exclamation-triangle") %}
+{% if current_user.has_permission('defects.edit') %}
+<a href="{{ url_for('defects.edit', defect_id=item.id) }}" class="btn btn-outline-primary"><i class="bi bi-pencil-square"></i> Редактировать</a>
+{% endif %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-xl-8">
+        <div class="card mb-4">
+            <div class="card-header">Основные данные</div>
+            <div class="card-body row g-3">
+                <div class="col-md-4"><small class="text-muted">Статус</small><div class="mt-1">{{ request_status_badge(item.status) }}</div></div>
+                <div class="col-md-4"><small class="text-muted">Категория</small><div class="fw-medium">{{ item.category.name if item.category else "—" }}</div></div>
+                <div class="col-md-4"><small class="text-muted">Район</small><div>{{ item.district or "—" }}</div></div>
+                <div class="col-md-6"><small class="text-muted">Адрес</small><div>{{ item.address }}</div></div>
+                <div class="col-md-6"><small class="text-muted">Ответственный</small><div>{{ item.responsible.full_name if item.responsible else "—" }}</div></div>
+                <div class="col-12"><small class="text-muted">Описание</small><div>{{ item.description }}</div></div>
+            </div>
+        </div>
+        {% if current_user.has_permission('defects.status_change') and status_form.status_code.choices %}
+        <div class="card mb-4">
+            <div class="card-header">Смена статуса</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('defects.change_status', defect_id=item.id) }}" class="row g-2">
+                    {{ status_form.hidden_tag() }}
+                    <div class="col-md-4">{{ status_form.status_code(class="form-select") }}</div>
+                    <div class="col-md-5">{{ status_form.comment(class="form-control", placeholder="Комментарий") }}</div>
+                    <div class="col-md-3">{{ status_form.submit(class="btn btn-primary w-100") }}</div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+        <div class="card mb-4">
+            <div class="card-header">Связанные заявки</div>
+            <div class="card-body">
+                {% if links %}
+                <ul class="list-unstyled mb-3">
+                    {% for link in links %}
+                    <li class="d-flex justify-content-between align-items-center border-bottom py-2">
+                        <a href="{{ url_for('requests.detail', request_id=link.request_id) }}">Заявка {{ link.request.number if link.request else link.request_id }}</a>
+                        {% if current_user.has_permission('defects.edit') %}
+                        <form method="POST" action="{{ url_for('defects.unlink_request', defect_id=item.id, request_id=link.request_id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-sm btn-outline-secondary" type="submit">Отвязать</button>
+                        </form>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted">Нет связанных заявок. Дефект может существовать самостоятельно.</p>
+                {% endif %}
+                {% if current_user.has_permission('defects.edit') %}
+                <form method="POST" action="{{ url_for('defects.link_request', defect_id=item.id) }}" class="row g-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="col-md-8">
+                        <select name="request_id" class="form-select">
+                            <option value="">Выберите заявку</option>
+                            {% for req in requests_for_link %}
+                            <option value="{{ req.id }}">{{ req.number }} — {{ req.address }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4"><button class="btn btn-outline-primary w-100" type="submit">Связать</button></div>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card mb-4">
+            <div class="card-header">Комментарии</div>
+            <div class="card-body">
+                {% if current_user.has_permission('defects.edit') %}
+                <form method="POST" action="{{ url_for('defects.add_comment', defect_id=item.id) }}" class="mb-3">
+                    {{ comment_form.hidden_tag() }}
+                    {{ comment_form.body(class="form-control mb-2", rows=3) }}
+                    {{ comment_form.submit(class="btn btn-primary btn-sm") }}
+                </form>
+                {% endif %}
+                {% for c in comments %}
+                <div class="border-bottom py-2"><div class="small text-muted">{{ c.created_at.strftime('%d.%m.%Y %H:%M') }}</div>{{ c.body }}</div>
+                {% else %}
+                <p class="text-muted mb-0">Комментариев нет.</p>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="card mb-4">
+            <div class="card-header">Файлы</div>
+            <div class="card-body">
+                {% if current_user.has_permission('defects.file_upload') %}
+                <form method="POST" action="{{ url_for('defects.add_attachment', defect_id=item.id) }}" enctype="multipart/form-data" class="mb-3">
+                    {{ attachment_form.hidden_tag() }}
+                    {{ attachment_form.files(class="form-control mb-2") }}
+                    {{ attachment_form.submit(class="btn btn-primary btn-sm") }}
+                </form>
+                {% endif %}
+                {% if attachments %}
+                <ul class="list-unstyled mb-0">
+                    {% for f in attachments %}
+                    <li class="d-flex justify-content-between py-1">
+                        <a href="{{ url_for('defects.download_attachment', defect_id=item.id, attachment_id=f.id) }}">{{ f.file_name }}</a>
+                        {% if current_user.has_permission('defects.file_delete') %}
+                        <form method="POST" action="{{ url_for('defects.delete_attachment', defect_id=item.id, attachment_id=f.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-sm btn-outline-danger" type="submit">Удалить</button>
+                        </form>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-4">
+        <div class="card mb-4">
+            <div class="card-header">Карта</div>
+            <div class="card-body">
+                <div id="requestMap" style="height: 280px; border-radius: 12px;"
+                     data-lat="{{ item.latitude if item.latitude is not none else '' }}"
+                     data-lng="{{ item.longitude if item.longitude is not none else '' }}"
+                     data-address="{{ item.address|e }}"
+                     data-coords-url="{{ url_for('defects.ensure_coords', defect_id=item.id) }}"></div>
+                <div id="requestMapStatus" class="small text-muted mt-2"></div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">История</div>
+            <div class="card-body">
+                {% for h in history %}
+                <div class="small border-bottom py-2">
+                    <div class="text-muted">{{ h.created_at.strftime('%d.%m.%Y %H:%M') }} · {{ h.action }}</div>
+                    <div>{{ h.comment or "" }}</div>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">Пока нет записей.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script src="{{ static_url('vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ static_url('js/request-detail.js') }}"></script>
+{% endblock %}

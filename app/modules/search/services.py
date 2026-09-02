@@ -11,9 +11,11 @@ from flask_login import AnonymousUserMixin
 from app.core.search import DEFAULT_LIMIT, is_valid_query, normalize_query
 from app.models.auth.constants import (
     PERM_CONTRACTS_VIEW,
+    PERM_DEFECTS_VIEW,
     PERM_PROJECTS_VIEW,
     PERM_REQUESTS_VIEW,
     PERM_USERS_VIEW,
+    PERM_WAYBILLS_VIEW,
 )
 from app.modules.search.repositories import SearchHit, SearchRepository
 
@@ -40,6 +42,8 @@ class SearchService:
 
     CATEGORIES = (
         ("requests", "Заявки", "clipboard-check", PERM_REQUESTS_VIEW, SearchRepository.search_requests),
+        ("defects", "Дефекты", "exclamation-triangle", PERM_DEFECTS_VIEW, SearchRepository.search_defects),
+        ("waybills", "Путевые листы", "signpost-2", PERM_WAYBILLS_VIEW, SearchRepository.search_waybills),
         ("projects", "Проекты", "folder2-open", PERM_PROJECTS_VIEW, SearchRepository.search_projects),
         ("contracts", "Контракты", "file-earmark-text", PERM_CONTRACTS_VIEW, SearchRepository.search_contracts),
         ("users", "Пользователи", "people", PERM_USERS_VIEW, SearchRepository.search_users),

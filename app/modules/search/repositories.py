@@ -19,9 +19,11 @@ from app.core.search import (
 from app.extensions import db
 from app.models.auth.user import User
 from app.models.contracts.contract import Contract
+from app.models.defects.defect import Defect
 from app.models.projects.project import Project
 from app.models.projects.project_member import ProjectMember
 from app.models.requests.request import Request
+from app.models.waybills.waybill import Waybill
 
 
 @dataclass
@@ -93,6 +95,94 @@ class SearchRepository:
                 meta={"number": req.number, "address": req.address},
             )
             for req in db.session.scalars(stmt)
+        ]
+
+    @classmethod
+    def search_defects(cls, query: str, *, limit: int = DEFAULT_LIMIT) -> list[SearchHit]:
+        if is_postgres():
+            tsquery = build_tsquery(query)
+            rank_expr = ts_rank(Defect.search_vector, tsquery).label("rank")
+            stmt = (
+                select(Defect, rank_expr)
+                .where(Defect.active_filter(), cls._fts_filter(Defect, tsquery))
+                .order_by(rank_expr.desc(), Defect.updated_at.desc())
+                .limit(limit)
+            )
+            return [
+                SearchHit(
+                    id=item.id,
+                    title=item.number,
+                    subtitle=item.address,
+                    url=f"/defects/{item.id}",
+                    rank=float(rank or 0),
+                    meta={"number": item.number, "address": item.address},
+                )
+                for item, rank in db.session.execute(stmt)
+            ]
+        patterns = like_patterns(query)
+        stmt = (
+            select(Defect)
+            .where(
+                Defect.active_filter(),
+                like_or(Defect.number, Defect.address, Defect.description, patterns=patterns),
+            )
+            .order_by(Defect.updated_at.desc())
+            .limit(limit)
+        )
+        return [
+            SearchHit(
+                id=item.id,
+                title=item.number,
+                subtitle=item.address,
+                url=f"/defects/{item.id}",
+                rank=1.0,
+                meta={"number": item.number, "address": item.address},
+            )
+            for item in db.session.scalars(stmt)
+        ]
+
+    @classmethod
+    def search_waybills(cls, query: str, *, limit: int = DEFAULT_LIMIT) -> list[SearchHit]:
+        if is_postgres():
+            tsquery = build_tsquery(query)
+            rank_expr = ts_rank(Waybill.search_vector, tsquery).label("rank")
+            stmt = (
+                select(Waybill, rank_expr)
+                .where(Waybill.active_filter(), cls._fts_filter(Waybill, tsquery))
+                .order_by(rank_expr.desc(), Waybill.updated_at.desc())
+                .limit(limit)
+            )
+            return [
+                SearchHit(
+                    id=item.id,
+                    title=item.number,
+                    subtitle=item.comment or item.work_date.isoformat(),
+                    url=f"/waybills/{item.id}",
+                    rank=float(rank or 0),
+                    meta={"number": item.number},
+                )
+                for item, rank in db.session.execute(stmt)
+            ]
+        patterns = like_patterns(query)
+        stmt = (
+            select(Waybill)
+            .where(
+                Waybill.active_filter(),
+                like_or(Waybill.number, Waybill.comment, patterns=patterns),
+            )
+            .order_by(Waybill.updated_at.desc())
+            .limit(limit)
+        )
+        return [
+            SearchHit(
+                id=item.id,
+                title=item.number,
+                subtitle=item.comment or item.work_date.isoformat(),
+                url=f"/waybills/{item.id}",
+                rank=1.0,
+                meta={"number": item.number},
+            )
+            for item in db.session.scalars(stmt)
         ]
 
     @classmethod
@@ -522,6 +612,50 @@ class SearchRepository:
                         meta={"type": "contract"},
                     )
                 )
+            for row, rank in db.session.execute(
+                select(Defect, ts_rank(Defect.search_vector, tsquery).label("rank"))
+                .where(
+                    Defect.active_filter(),
+                    or_(
+                        cls._fts_filter(Defect, tsquery),
+                        like_or(Defect.number, patterns=patterns),
+                    ),
+                )
+                .order_by(ts_rank(Defect.search_vector, tsquery).desc())
+                .limit(limit)
+            ):
+                hits.append(
+                    SearchHit(
+                        id=row.id,
+                        title=row.number,
+                        subtitle=f"Дефект: {row.address}",
+                        url=f"/defects/{row.id}",
+                        rank=float(rank or 0),
+                        meta={"type": "defect"},
+                    )
+                )
+            for row, rank in db.session.execute(
+                select(Waybill, ts_rank(Waybill.search_vector, tsquery).label("rank"))
+                .where(
+                    Waybill.active_filter(),
+                    or_(
+                        cls._fts_filter(Waybill, tsquery),
+                        like_or(Waybill.number, patterns=patterns),
+                    ),
+                )
+                .order_by(ts_rank(Waybill.search_vector, tsquery).desc())
+                .limit(limit)
+            ):
+                hits.append(
+                    SearchHit(
+                        id=row.id,
+                        title=row.number,
+                        subtitle="Путевой лист",
+                        url=f"/waybills/{row.id}",
+                        rank=float(rank or 0),
+                        meta={"type": "waybill"},
+                    )
+                )
         else:
             for row in db.session.scalars(
                 select(Request)
@@ -568,8 +702,36 @@ class SearchRepository:
                         meta={"type": "contract"},
                     )
                 )
-
-            hits.sort(key=lambda h: h.rank, reverse=True)
+            for row in db.session.scalars(
+                select(Defect)
+                .where(Defect.active_filter(), like_or(Defect.number, patterns=patterns))
+                .limit(limit)
+            ):
+                hits.append(
+                    SearchHit(
+                        id=row.id,
+                        title=row.number,
+                        subtitle=f"Дефект: {row.address}",
+                        url=f"/defects/{row.id}",
+                        rank=1.0,
+                        meta={"type": "defect"},
+                    )
+                )
+            for row in db.session.scalars(
+                select(Waybill)
+                .where(Waybill.active_filter(), like_or(Waybill.number, patterns=patterns))
+                .limit(limit)
+            ):
+                hits.append(
+                    SearchHit(
+                        id=row.id,
+                        title=row.number,
+                        subtitle="Путевой лист",
+                        url=f"/waybills/{row.id}",
+                        rank=1.0,
+                        meta={"type": "waybill"},
+                    )
+                )
         return hits[:limit]
 
     @classmethod

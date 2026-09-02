@@ -1,0 +1,34 @@
+{% from "macros/forms.html" import modal_field, form_errors_alert with context %}
+{{ form_errors_alert(form) }}
+<div class="row g-3">
+    {{ modal_field(form.number, col=4, module='defects') }}
+    {{ modal_field(form.category_id, col=4, module='defects') }}
+    {{ modal_field(form.responsible_id, col=4, module='defects') }}
+    {% if current_user.can_view_field('defects', 'address') %}
+    <div class="col-md-8">
+        {{ form.address.label(class="form-label") }}
+        {% if current_user.can_edit_field('defects', 'address') %}
+        <div class="position-relative" style="overflow: visible;">
+            {{ form.address(class="form-control", placeholder="Начните вводить улицу и дом", autocomplete="off", **{'data-address-input': '1'}) }}
+            <div class="list-group position-absolute start-0 end-0 shadow d-none" style="z-index: 1060; max-height: 18rem; overflow-y: auto;" data-address-suggestions></div>
+        </div>
+        <div class="form-text" data-address-status>Выберите адрес из подсказок.</div>
+        {{ form.address_selection_token() }}
+        {{ form.original_address() }}
+        {{ form.normalized_address() }}
+        {{ form.region() }}
+        {{ form.settlement() }}
+        {{ form.street() }}
+        {{ form.house() }}
+        {{ form.address_source() }}
+        {{ form.address_external_id() }}
+        {{ form.latitude() }}
+        {{ form.longitude() }}
+        {% else %}
+        <div class="form-control-plaintext border rounded px-3 py-2">{{ form.address.data or "—" }}</div>
+        {% endif %}
+    </div>
+    {% endif %}
+    {{ modal_field(form.district, col=4, module='defects') }}
+    {{ modal_field(form.description, col=12, rows=4, module='defects') }}
+</div>

@@ -416,9 +416,9 @@ body.is-opora-busy { cursor: wait; }
 .badge-neutral { background: var(--opora-surface-hover); color: var(--opora-text-muted); }
 .badge-role { background: rgba(245,124,0,0.1); color: var(--opora-primary); font-size: 0.75rem; padding: 0.3em 0.65em; border-radius: 6px; }
 
-.table-row-new { background: rgba(21, 101, 192, 0.12) !important; box-shadow: inset 4px 0 0 #1565C0; }
-.table-row-brigade { background: rgba(249, 168, 37, 0.22) !important; box-shadow: inset 4px 0 0 #F9A825; }
-.table-row-master { background: rgba(239, 108, 0, 0.16) !important; box-shadow: inset 4px 0 0 #EF6C00; }
+.table-row-new { background: rgba(220, 53, 69, 0.12) !important; box-shadow: inset 4px 0 0 #DC3545; }
+.table-row-brigade { background: rgba(230, 167, 0, 0.22) !important; box-shadow: inset 4px 0 0 #E6A700; }
+.table-row-master { background: rgba(230, 167, 0, 0.16) !important; box-shadow: inset 4px 0 0 #E6A700; }
 .table-row-done { background: rgba(46, 125, 50, 0.14) !important; box-shadow: inset 4px 0 0 #2E7D32; }
 .table-row-cancelled { background: rgba(120, 144, 156, 0.14) !important; box-shadow: inset 4px 0 0 #78909C; }
 .table-row-draft { background: rgba(84, 110, 122, 0.08) !important; box-shadow: inset 4px 0 0 #90A4AE; }
@@ -434,9 +434,9 @@ body.is-opora-busy { cursor: wait; }
     transform: translateY(-3px) scale(1.008);
     filter: saturate(1.08) brightness(1.02);
 }
-.table-row-new:hover { box-shadow: inset 4px 0 0 #1565C0, 0 8px 18px rgba(21, 101, 192, 0.22) !important; }
-.table-row-brigade:hover { box-shadow: inset 4px 0 0 #F9A825, 0 8px 18px rgba(249, 168, 37, 0.28) !important; }
-.table-row-master:hover { box-shadow: inset 4px 0 0 #EF6C00, 0 8px 18px rgba(239, 108, 0, 0.25) !important; }
+.table-row-new:hover { box-shadow: inset 4px 0 0 #DC3545, 0 8px 18px rgba(220, 53, 69, 0.22) !important; }
+.table-row-brigade:hover { box-shadow: inset 4px 0 0 #E6A700, 0 8px 18px rgba(230, 167, 0, 0.28) !important; }
+.table-row-master:hover { box-shadow: inset 4px 0 0 #E6A700, 0 8px 18px rgba(230, 167, 0, 0.25) !important; }
 .table-row-done:hover { box-shadow: inset 4px 0 0 #2E7D32, 0 8px 18px rgba(46, 125, 50, 0.22) !important; }
 .table-row-cancelled:hover { box-shadow: inset 4px 0 0 #78909C, 0 8px 18px rgba(120, 144, 156, 0.2) !important; }
 .table-row-draft:hover { box-shadow: inset 4px 0 0 #90A4AE, 0 8px 18px rgba(84, 110, 122, 0.18) !important; }
@@ -535,9 +535,9 @@ body.is-opora-busy { cursor: wait; }
     text-align: center;
 }
 .request-lifecycle__step.is-done { background: rgba(46, 125, 50, 0.12); color: #2E7D32; }
-.request-lifecycle__step.is-current-new { background: rgba(21, 101, 192, 0.2); color: #0D47A1; }
-.request-lifecycle__step.is-current-brigade { background: rgba(249, 168, 37, 0.32); color: #F57F17; }
-.request-lifecycle__step.is-current-master { background: rgba(239, 108, 0, 0.24); color: #E65100; }
+.request-lifecycle__step.is-current-new { background: rgba(220, 53, 69, 0.2); color: #B02A37; }
+.request-lifecycle__step.is-current-brigade { background: rgba(230, 167, 0, 0.32); color: #9A7000; }
+.request-lifecycle__step.is-current-master { background: rgba(230, 167, 0, 0.24); color: #9A7000; }
 .request-lifecycle__step.is-current-done { background: rgba(46, 125, 50, 0.22); color: #1B5E20; }
 
 /* Buttons */
@@ -946,9 +946,9 @@ hr { border-color: var(--opora-border); opacity: 1; }
 html[data-theme="dark"] .badge-in-progress { color: var(--status-in-progress); }
 html[data-theme="dark"] .request-lifecycle__step { background: var(--opora-surface-hover); color: var(--opora-text-muted); }
 html[data-theme="dark"] .agreement-map { background: #1a222c; }
-html[data-theme="dark"] .table-row-new { background: rgba(21, 101, 192, 0.18) !important; }
-html[data-theme="dark"] .table-row-brigade { background: rgba(249, 168, 37, 0.16) !important; }
-html[data-theme="dark"] .table-row-master { background: rgba(239, 108, 0, 0.14) !important; }
+html[data-theme="dark"] .table-row-new { background: rgba(220, 53, 69, 0.18) !important; }
+html[data-theme="dark"] .table-row-brigade { background: rgba(230, 167, 0, 0.16) !important; }
+html[data-theme="dark"] .table-row-master { background: rgba(230, 167, 0, 0.14) !important; }
 html[data-theme="dark"] .table-row-done { background: rgba(46, 125, 50, 0.14) !important; }
 
 @media (max-width: 575.98px) {

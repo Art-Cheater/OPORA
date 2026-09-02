@@ -16,8 +16,11 @@ from app.models.auth.role import Role
 from app.models.auth.user import User
 from app.models.requests.request import Request
 from app.models.requests.request_dispatcher import RequestDispatcher
+from app.models.requests.request_journal import RequestJournal
+from app.models.requests.request_journal_counter import RequestJournalCounter
 from app.models.requests.request_status import RequestStatus
 from app.modules.requests.address_format import normalize_address
+from app.modules.requests.journals import JOURNAL_MAIN
 from app.modules.requests.workflow import (
     PRESET_AWAITING_MASTER,
     PRESET_COMPLETED,
@@ -38,6 +41,7 @@ class RequestFilter:
     district: str = ""
     pp: str = ""
     for_beresnev: bool = False
+    journal_id: str = ""
     status_id: str = ""
     priority: str = ""
     responsible_id: str = ""
@@ -73,7 +77,7 @@ class RequestRepository:
                 return None
         return db.session.scalar(
             db.select(Request)
-            .options(joinedload(Request.status))
+            .options(joinedload(Request.status), joinedload(Request.journal))
             .where(Request.id == request_id, Request.active_filter())
         )
 
@@ -293,25 +297,113 @@ class RequestRepository:
         db.session.commit()
 
     @staticmethod
-    def next_number() -> str:
-        """Номер вида YY-N: 25-1, 25-149, 26-1…"""
+    def get_journals() -> list[RequestJournal]:
+        return list(
+            db.session.scalars(
+                db.select(RequestJournal)
+                .where(RequestJournal.active_filter(), RequestJournal.is_active.is_(True))
+                .order_by(RequestJournal.sort_order.asc(), RequestJournal.name.asc())
+            )
+        )
+
+    @staticmethod
+    def get_journal(journal_id: uuid.UUID | str | None) -> RequestJournal | None:
+        if journal_id is None or journal_id == "":
+            return None
+        if isinstance(journal_id, str):
+            try:
+                journal_id = uuid.UUID(journal_id)
+            except ValueError:
+                return None
+        return db.session.scalar(
+            db.select(RequestJournal).where(
+                RequestJournal.id == journal_id,
+                RequestJournal.active_filter(),
+                RequestJournal.is_active.is_(True),
+            )
+        )
+
+    @staticmethod
+    def get_journal_by_code(code: str) -> RequestJournal | None:
+        return db.session.scalar(
+            db.select(RequestJournal).where(
+                RequestJournal.code == code,
+                RequestJournal.active_filter(),
+                RequestJournal.is_active.is_(True),
+            )
+        )
+
+    @classmethod
+    def get_default_journal(cls) -> RequestJournal:
+        journal = cls.get_journal_by_code(JOURNAL_MAIN)
+        if journal is None:
+            journals = cls.get_journals()
+            if not journals:
+                raise RuntimeError("Справочник журналов заявок пуст. Выполните seed.")
+            return journals[0]
+        return journal
+
+    @staticmethod
+    def next_number(journal_id: uuid.UUID | None = None) -> str:
+        """Номер вида YY-N внутри журнала: 25-1, 25-149, 26-1…"""
         from datetime import datetime
 
-        year_yy = datetime.now().year % 100
+        if journal_id is None:
+            journal_id = RequestRepository.get_default_journal().id
+        year_full = datetime.now().year
+        year_yy = year_full % 100
         prefix = f"{year_yy}-"
         pattern = re.compile(rf"^{year_yy}-(\d+)$")
+
+        counter = db.session.scalar(
+            db.select(RequestJournalCounter).where(
+                RequestJournalCounter.journal_id == journal_id,
+                RequestJournalCounter.year == year_full,
+                RequestJournalCounter.active_filter(),
+            )
+        )
+        max_seq = counter.last_value if counter is not None else 0
         numbers = db.session.scalars(
             db.select(Request.number).where(
+                Request.journal_id == journal_id,
                 Request.number.like(f"{prefix}%"),
-                Request.active_filter(),
             )
         ).all()
-        max_seq = 0
         for raw in numbers:
             match = pattern.fullmatch((raw or "").strip())
             if match:
                 max_seq = max(max_seq, int(match.group(1)))
         return f"{prefix}{max_seq + 1}"
+
+    @staticmethod
+    def note_used_number(journal_id: uuid.UUID, number: str) -> None:
+        """Поднимает счётчик журнала, если использован YY-N текущего года."""
+        from datetime import datetime
+
+        year_full = datetime.now().year
+        year_yy = year_full % 100
+        match = re.fullmatch(rf"{year_yy}-(\d+)", (number or "").strip())
+        if not match:
+            return
+        seq = int(match.group(1))
+        counter = db.session.scalar(
+            db.select(RequestJournalCounter).where(
+                RequestJournalCounter.journal_id == journal_id,
+                RequestJournalCounter.year == year_full,
+                RequestJournalCounter.active_filter(),
+            )
+        )
+        if counter is None:
+            db.session.add(
+                RequestJournalCounter(
+                    journal_id=journal_id,
+                    year=year_full,
+                    last_value=seq,
+                )
+            )
+            return
+        if seq > counter.last_value:
+            counter.last_value = seq
 
     @classmethod
     def _number_sort_keys(cls):
@@ -414,6 +506,7 @@ class RequestRepository:
                 load_only(
                     Request.id,
                     Request.number,
+                    Request.journal_id,
                     Request.address,
                     Request.district,
                     Request.pp,
@@ -431,11 +524,13 @@ class RequestRepository:
                     Request.title,
                 ),
                 contains_eager(Request.status),
+                joinedload(Request.journal),
                 noload(Request.responsible),
                 noload(Request.executor),
                 noload(Request.history),
                 noload(Request.materials),
                 noload(Request.project),
+                noload(Request.defect_links),
             )
         )
 
@@ -461,6 +556,12 @@ class RequestRepository:
 
         if filters.for_beresnev:
             stmt = stmt.where(Request.for_beresnev.is_(True))
+
+        if filters.journal_id:
+            try:
+                stmt = stmt.where(Request.journal_id == uuid.UUID(filters.journal_id))
+            except ValueError:
+                pass
 
         if filters.status_id:
             try:
@@ -500,6 +601,46 @@ class RequestRepository:
             stmt = stmt.order_by(sort_expr, Request.created_at.desc())
 
         return db.paginate(stmt, page=page, per_page=per_page, error_out=False)
+
+    @staticmethod
+    def map_points(*, journal_id: str = "", limit: int = 500) -> list[dict]:
+        stmt = (
+            db.select(Request)
+            .options(
+                load_only(
+                    Request.id,
+                    Request.number,
+                    Request.address,
+                    Request.latitude,
+                    Request.longitude,
+                )
+            )
+            .where(
+                Request.active_filter(),
+                Request.latitude.isnot(None),
+                Request.longitude.isnot(None),
+            )
+            .limit(limit)
+        )
+        if journal_id:
+            try:
+                stmt = stmt.where(Request.journal_id == uuid.UUID(journal_id))
+            except ValueError:
+                pass
+        points = []
+        for item in db.session.scalars(stmt):
+            points.append(
+                {
+                    "id": str(item.id),
+                    "type": "request",
+                    "number": item.number,
+                    "address": item.address,
+                    "lat": float(item.latitude),
+                    "lng": float(item.longitude),
+                    "url": f"/requests/{item.id}",
+                }
+            )
+        return points
 
 
 def sa_false():

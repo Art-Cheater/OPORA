@@ -38,11 +38,22 @@ from app.models.projects.project_member import ProjectMember
 from app.models.custom_fields.custom_field import CustomField
 from app.models.custom_fields.custom_field_value import CustomFieldValue
 from app.models.custom_fields.field_option import FieldOption
+from app.models.defects.defect import Defect
+from app.models.defects.defect_category import DefectCategory
+from app.models.defects.defect_history import DefectHistory
+from app.models.defects.defect_status import DefectStatus
+from app.models.defects.request_defect import RequestDefect
 from app.models.requests.request import Request
 from app.models.requests.request_dispatcher import RequestDispatcher
 from app.models.requests.request_history import RequestHistory
+from app.models.requests.request_journal import RequestJournal
+from app.models.requests.request_journal_counter import RequestJournalCounter
 from app.models.requests.request_material import RequestMaterial
 from app.models.requests.request_status import RequestStatus
+from app.models.waybills.waybill import Waybill
+from app.models.waybills.waybill_history import WaybillHistory
+from app.models.waybills.waybill_member import WaybillMember
+from app.models.waybills.waybill_stop import WaybillStop
 from app.models.tenders.tender_application import TenderApplication
 from app.models.tenders.tender_document import TenderDocument
 from app.models.tenders.tender_project import TenderProject
@@ -65,9 +76,20 @@ __all__ = [
     "LoginLog",
     "Request",
     "RequestDispatcher",
+    "RequestJournal",
+    "RequestJournalCounter",
     "RequestStatus",
     "RequestHistory",
     "RequestMaterial",
+    "Defect",
+    "DefectCategory",
+    "DefectHistory",
+    "DefectStatus",
+    "RequestDefect",
+    "Waybill",
+    "WaybillHistory",
+    "WaybillMember",
+    "WaybillStop",
     "WorkObject",
     "Project",
     "ProjectMember",

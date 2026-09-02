@@ -1,0 +1,51 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header, list_loading %}
+{% from "macros/crud.html" import create_button %}
+
+{% block title %}Путевые листы — {{ app_name }}{% endblock %}
+
+{% block page_header %}
+{% call page_header("Путевые листы", "Маршрут выезда: заявки и дефекты за один день", "signpost-2") %}
+{% if current_user.has_permission('waybills.create') %}
+{{ create_button("Создать", "plus-lg") }}
+{% endif %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4 list-filters" data-tour="filters">
+    <div class="card-header"><i class="bi bi-search"></i>Поиск</div>
+    <div class="card-body">
+        <form id="waybillFilterForm" class="row g-3">
+            <div class="col-lg-4">
+                <label class="form-label">{{ filter_form.q.label.text }}</label>
+                {{ filter_form.q(class="form-control", placeholder="Номер…") }}
+            </div>
+            <div class="col-lg-3">
+                <label class="form-label">{{ filter_form.status.label.text }}</label>
+                {{ filter_form.status(class="form-select") }}
+            </div>
+            <div class="col-lg-3 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-grow-1">Поиск</button>
+                <button type="button" id="waybillFilterReset" class="btn btn-outline-primary">Сброс</button>
+            </div>
+        </form>
+    </div>
+</div>
+<div id="waybillsTableContainer" data-tour="list-table">{{ list_loading("Загрузка путевых листов…") }}</div>
+<div id="waybillsPaginationContainer" class="mt-3"></div>
+<div id="oporaListConfig" class="d-none"
+     data-base-url="/waybills"
+     data-filter-form-id="waybillFilterForm"
+     data-table-container-id="waybillsTableContainer"
+     data-pagination-container-id="waybillsPaginationContainer"
+     data-reset-btn-id="waybillFilterReset"
+     data-page-link-class="waybill-page-link"
+     data-create-title="Новый путевой лист"
+     data-edit-title="Редактирование путевого листа"
+     data-delete-message="Удалить путевой лист?"
+     data-view-mode="page"
+     data-load-on-start="true"
+     data-can-edit="{{ 'true' if current_user.has_permission('waybills.edit') else 'false' }}">
+</div>
+{% endblock %}

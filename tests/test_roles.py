@@ -79,6 +79,8 @@ def test_roles_editor_shows_all_modules(admin_client, app):
         "Мессенджер",
         "Отчёты",
         "Роли",
+        "Дефекты",
+        "Путевые листы",
     ):
         assert label in html
     for field_code in ("assigned_to", "customer_inn", "sites"):

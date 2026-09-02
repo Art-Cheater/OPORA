@@ -1,0 +1,8 @@
+<form method="POST" action="{{ form_action }}" class="opora-modal-form" data-requests-form="1">
+    {{ form.hidden_tag() }}
+    {% include "defects/partials/form_fields.html" %}
+    <div class="modal-form-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+        {{ form.submit(class="btn btn-primary") }}
+    </div>
+</form>

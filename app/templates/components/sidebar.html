@@ -29,6 +29,22 @@
                 <span>Заявки</span>
             </a>
             {% endif %}
+            {% if current_user.has_permission('defects.view') %}
+            <a href="{{ url_for('defects.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('defects.') %}active{% endif %}"
+               data-tour="defects">
+                <i class="bi bi-exclamation-triangle"></i>
+                <span>Дефекты</span>
+            </a>
+            {% endif %}
+            {% if current_user.has_permission('waybills.view') %}
+            <a href="{{ url_for('waybills.index') }}"
+               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('waybills.') %}active{% endif %}"
+               data-tour="waybills">
+                <i class="bi bi-signpost-2"></i>
+                <span>Путевые листы</span>
+            </a>
+            {% endif %}
             {% if current_user.has_permission('objects.view') %}
             <a href="{{ url_for('objects.index') }}"
                class="sidebar__link {% if request.endpoint and request.endpoint.startswith('objects.') %}active{% endif %}"

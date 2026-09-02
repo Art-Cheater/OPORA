@@ -93,6 +93,7 @@ def test_search_by_surname_includes_related(admin_client, app):
     from app.models.requests.request import Request
     from app.models.requests.request_status import RequestStatus
     from app.modules.auth.services import AuthService
+    from app.modules.requests.repositories import RequestRepository
 
     with app.app_context():
         try:
@@ -114,6 +115,7 @@ def test_search_by_surname_includes_related(admin_client, app):
             priority=Priority.MEDIUM.value,
             status_id=status.id,
             responsible_id=user.id,
+            journal_id=RequestRepository.get_default_journal().id,
         )
         db.session.add(req)
         db.session.commit()

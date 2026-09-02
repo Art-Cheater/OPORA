@@ -1,5 +1,6 @@
 window.OporaRequestDetail = (() => {
   let inflight = null;
+  let leafletMap = null;
 
   function showStatus(text, isError) {
     const el = document.getElementById("requestMapStatus");
@@ -16,18 +17,38 @@ window.OporaRequestDetail = (() => {
     link.classList.remove("d-none");
   }
 
-  function paintIframe(lat, lng, address) {
+  function paintLeaflet(lat, lng, address) {
     const mapNode = document.getElementById("requestMap");
     if (!mapNode) return;
-    const delta = 0.012;
-    const bbox = `${lng - delta}%2C${lat - delta}%2C${lng + delta}%2C${lat + delta}`;
-    const src =
-      `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik` +
-      `&marker=${lat}%2C${lng}`;
-    mapNode.innerHTML =
-      `<iframe title="Карта заявки" src="${src}" ` +
-      `style="width:100%;height:360px;border:0;border-radius:12px;" loading="lazy" ` +
-      `referrerpolicy="no-referrer-when-downgrade"></iframe>`;
+    if (typeof L === "undefined") {
+      showStatus("Карта недоступна: не загружен Leaflet.", true);
+      return;
+    }
+    if (leafletMap) {
+      leafletMap.remove();
+      leafletMap = null;
+    }
+    mapNode.innerHTML = "";
+    const map = L.map(mapNode, { zoomControl: true });
+    leafletMap = map;
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+      maxZoom: 19,
+      subdomains: "abcd",
+      attribution: "&copy; OpenStreetMap &copy; CARTO",
+    }).addTo(map);
+    const pos = [lat, lng];
+    map.setView(pos, 16);
+    L.circleMarker(pos, {
+      radius: 9,
+      color: "#fff",
+      weight: 1,
+      fillColor: "#DC3545",
+      fillOpacity: 0.95,
+    })
+      .addTo(map)
+      .bindPopup(address || "Точка")
+      .openPopup();
+    setTimeout(() => map.invalidateSize(), 200);
     setExternalLink(lat, lng);
     showStatus(address ? `Точка: ${address}` : "");
   }
@@ -66,7 +87,7 @@ window.OporaRequestDetail = (() => {
     const address = mapNode.dataset.address || "";
     const existing = readCoords(mapNode);
     if (existing) {
-      paintIframe(existing.lat, existing.lng, address);
+      paintLeaflet(existing.lat, existing.lng, address);
       return;
     }
 
@@ -84,7 +105,7 @@ window.OporaRequestDetail = (() => {
         }
         mapNode.dataset.lat = String(coords.lat);
         mapNode.dataset.lng = String(coords.lng);
-        paintIframe(coords.lat, coords.lng, coords.address || address);
+        paintLeaflet(coords.lat, coords.lng, coords.address || address);
       })
       .catch((err) => {
         showStatus(err.message || "Не удалось показать карту по адресу.", true);
@@ -96,6 +117,10 @@ window.OporaRequestDetail = (() => {
   }
 
   function destroy() {
+    if (leafletMap) {
+      leafletMap.remove();
+      leafletMap = null;
+    }
     const mapNode = document.getElementById("requestMap");
     if (mapNode) mapNode.innerHTML = "";
   }

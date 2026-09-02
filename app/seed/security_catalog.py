@@ -5,6 +5,8 @@ from __future__ import annotations
 # (code, name, icon, sort_order, description)
 SYSTEM_MODULES = [
     ("requests", "Заявки", "clipboard-check", 10, "Управление заявками"),
+    ("defects", "Дефекты", "exclamation-triangle", 12, "Журнал дефектов освещения"),
+    ("waybills", "Путевые листы", "signpost-2", 13, "Маршруты выезда мастера"),
     ("objects", "Объекты", "geo-alt", 15, "Адресные объекты работ"),
     ("projects", "Проекты", "folder2-open", 20, "Управление проектами"),
     ("tenders", "Заявки на торги", "hammer", 25, "Заявки на торги / закупки по объектам"),
@@ -30,6 +32,7 @@ SYSTEM_MODULES = [
 MODULE_FIELDS: dict[str, list[tuple[str, str, int]]] = {
     "requests": [
         ("number", "Номер", 10),
+        ("journal_id", "Журнал", 12),
         ("address", "Адрес", 20),
         ("district", "Район", 22),
         ("pp", "ПП (пункт питания)", 30),
@@ -58,6 +61,34 @@ MODULE_FIELDS: dict[str, list[tuple[str, str, int]]] = {
         ("house", "Дом", 1000),
         ("address_source", "Источник адреса", 1010),
         ("address_external_id", "Внешний ID адреса", 1020),
+    ],
+    "defects": [
+        ("number", "Номер", 10),
+        ("description", "Описание", 20),
+        ("category_id", "Категория", 30),
+        ("status_id", "Статус", 40),
+        ("address", "Адрес", 50),
+        ("district", "Район", 60),
+        ("responsible_id", "Ответственный", 70),
+        ("created_at", "Дата создания", 80),
+        ("latitude", "Широта", 920),
+        ("longitude", "Долгота", 930),
+        ("original_address", "Исходный адрес", 940),
+        ("normalized_address", "Нормализованный адрес", 950),
+        ("region", "Регион адреса", 960),
+        ("settlement", "Населённый пункт", 980),
+        ("street", "Улица", 990),
+        ("house", "Дом", 1000),
+        ("address_source", "Источник адреса", 1010),
+        ("address_external_id", "Внешний ID адреса", 1020),
+    ],
+    "waybills": [
+        ("number", "Номер", 10),
+        ("work_date", "Дата", 20),
+        ("master_id", "Мастер", 30),
+        ("status", "Статус", 40),
+        ("comment", "Комментарий", 50),
+        ("member_ids", "Исполнители", 60),
     ],
     "objects": [
         ("name", "Наименование", 10),
@@ -225,6 +256,8 @@ REQUEST_DISPATCHERS: list[tuple[str, int]] = [
 # Модули с полным набором действий
 FULL_ACTION_MODULES = (
     "requests",
+    "defects",
+    "waybills",
     "objects",
     "projects",
     "tenders",

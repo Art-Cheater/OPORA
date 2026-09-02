@@ -98,6 +98,32 @@
       steps: LIST_STEPS("Заявки", "Создать заявку"),
     },
     {
+      id: "defects",
+      title: "Дефекты",
+      icon: "exclamation-triangle",
+      permission: "defects.view",
+      route: "/defects/",
+      roleTips: {
+        dispatcher: "Фиксируете неисправности даже без заявки, привязываете к заявке при необходимости.",
+        master: "Берёте дефект в работу, меняете статус, добавляете в путевой лист.",
+        executor: "Смотрите открытые дефекты по адресам выезда.",
+      },
+      steps: LIST_STEPS("Дефекты", "Создать дефект"),
+    },
+    {
+      id: "waybills",
+      title: "Путевые листы",
+      icon: "signpost-2",
+      permission: "waybills.view",
+      route: "/waybills/",
+      roleTips: {
+        dispatcher: "Смотрите маршруты мастеров, точки не назначаете.",
+        master: "Собираете маршрут из заявок и дефектов, меняете порядок точек.",
+        executor: "Видите свой выезд и адреса точек.",
+      },
+      steps: LIST_STEPS("Путевые листы", "Создать путевой лист"),
+    },
+    {
       id: "objects",
       title: "Объекты",
       icon: "geo-alt",
