@@ -33,8 +33,8 @@
             <a href="{{ url_for('work_orders.index') }}"
                class="sidebar__link {% if request.endpoint and (request.endpoint.startswith('work_orders.') or request.endpoint.startswith('waybills.')) %}active{% endif %}"
                data-tour="work-orders">
-                <i class="bi bi-map"></i>
-                <span>Работа по заявкам</span>
+                <i class="bi bi-ui-checks-grid"></i>
+                <span>Работа с заявками</span>
             </a>
             {% endif %}
             {% if current_user.has_permission('objects.view') %}

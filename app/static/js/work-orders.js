@@ -1,61 +1,29 @@
 window.OporaWorkOrders = {
   init() {
-    const root = document.getElementById("workOrderRoot");
+    const root = document.getElementById("workDesk");
     if (!root) return;
     if (root.dataset.woInited === "1") return;
     root.dataset.woInited = "1";
 
-    const canEdit = root.dataset.canEdit === "true";
-    const canComplete = root.dataset.canComplete === "true";
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
-    const nearbyBox = document.getElementById("workOrderNearby");
-    const planBox = document.getElementById("workOrderPlan");
-    const itemsBox = document.getElementById("workOrderItems");
-    const planTitle = document.getElementById("workOrderPlanTitle");
-    const planMeta = document.getElementById("workOrderPlanMeta");
-    const filterForm = document.getElementById("workOrderFilters");
-    const journalWrap = document.getElementById("woJournalWrap");
-    let plan = { id: null, number: null, stops: [], editable: true };
-    let routeOn = false;
-    let dragId = null;
+    const queueBox = document.getElementById("deskQueue");
+    const pagerBox = document.getElementById("deskPager");
+    const metaBox = document.getElementById("deskQueueMeta");
+    const panelEmpty = document.getElementById("deskPanelEmpty");
+    const panelBody = document.getElementById("deskPanelBody");
+    const searchForm = document.getElementById("deskSearch");
+    const canCompleteDesk = root.dataset.canComplete === "true";
+    let preset = "all";
+    let page = 1;
+    let selectedId = "";
+    let queueAbort = null;
+    let cardAbort = null;
 
     function headers(json) {
-      const result = { "X-Requested-With": "XMLHttpRequest" };
+      const result = { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" };
       if (csrf) result["X-CSRFToken"] = csrf;
       if (json) result["Content-Type"] = "application/json";
-      result.Accept = "application/json";
       return result;
-    }
-
-    function kindValue() {
-      return root.querySelector('input[name="woKind"]:checked')?.value || "all";
-    }
-
-    function syncJournalFilter() {
-      if (!journalWrap) return;
-      journalWrap.hidden = kindValue() !== "request";
-    }
-
-    function query() {
-      const params = new URLSearchParams();
-      const kind = kindValue();
-      params.set("kind", kind);
-      if (!filterForm) return params;
-      const data = new FormData(filterForm);
-      for (const [key, value] of data.entries()) {
-        if (!value) continue;
-        if (key === "journal_id" && kind !== "request") continue;
-        params.set(key, value);
-      }
-      return params;
-    }
-
-    function mapUrl() {
-      return `${root.dataset.mapUrl}?${query().toString()}`;
-    }
-
-    function itemsUrl() {
-      return `${root.dataset.itemsUrl}?${query().toString()}`;
     }
 
     function escapeHtml(value) {
@@ -66,313 +34,284 @@ window.OporaWorkOrders = {
         .replace(/"/g, "&quot;");
     }
 
-    function typeMark(type) {
-      return type === "defect"
-        ? '<span class="workbench-dot workbench-dot--defect" title="Дефект">●</span>'
-        : '<span class="workbench-dot workbench-dot--request" title="Заявка">●</span>';
+    function withId(template, id) {
+      return String(template || "").replace("00000000-0000-0000-0000-000000000000", id);
     }
 
-    function itemLabel(type, number) {
-      return type === "defect" ? number : `Заявка №${number}`;
+    function query() {
+      const params = new URLSearchParams();
+      params.set("preset", preset);
+      params.set("page", String(page));
+      const q = searchForm?.querySelector('[name="q"]')?.value?.trim();
+      if (q) params.set("q", q);
+      return params;
+    }
+
+    function statusTone(code) {
+      return escapeHtml(code || "");
+    }
+
+    function renderQueue(data) {
+      const items = data.items || [];
+      if (metaBox) {
+        metaBox.textContent = data.total ? `${data.total} заявок` : "";
+      }
+      if (!items.length) {
+        queueBox.innerHTML = '<p class="desk__empty">По текущему фильтру заявок нет.</p>';
+        if (pagerBox) pagerBox.hidden = true;
+        return;
+      }
+      queueBox.innerHTML = items
+        .map((item) => {
+          const active = item.id === selectedId ? " is-active" : "";
+          const complete = canCompleteDesk && item.can_complete
+            ? `<button type="button" class="desk-btn desk-btn--done js-desk-complete" data-id="${escapeHtml(item.id)}">Выполнено</button>`
+            : "";
+          return `<article class="desk-item${active}" data-id="${escapeHtml(item.id)}" tabindex="0">
+            <div class="desk-item__top">
+              <div class="desk-item__number">№ ${escapeHtml(item.number)}</div>
+              <span class="desk-item__status" data-code="${statusTone(item.status_code)}">${escapeHtml(item.status || "—")}</span>
+            </div>
+            <p class="desk-item__address">${escapeHtml(item.address || "Адрес не указан")}</p>
+            <p class="desk-item__district">${escapeHtml(item.district || "Район не указан")}</p>
+            <p class="desk-item__meta">Поступила: ${escapeHtml(item.received_at || "—")}<br>Диспетчер: ${escapeHtml(item.dispatcher_name || "—")}</p>
+            <div class="desk-item__actions">
+              <button type="button" class="desk-btn js-desk-open" data-id="${escapeHtml(item.id)}">Открыть</button>
+              ${complete}
+            </div>
+          </article>`;
+        })
+        .join("");
+      const pages = Number(data.pages || 1);
+      if (!pagerBox) return;
+      if (pages <= 1) {
+        pagerBox.hidden = true;
+        pagerBox.innerHTML = "";
+        return;
+      }
+      pagerBox.hidden = false;
+      const buttons = [];
+      for (let i = 1; i <= pages && i <= 12; i += 1) {
+        buttons.push(
+          `<button type="button" class="desk__pager-btn${i === data.page ? " is-active" : ""}" data-page="${i}">${i}</button>`
+        );
+      }
+      pagerBox.innerHTML = buttons.join("");
+    }
+
+    function field(label, value) {
+      const text = (value || "").toString().trim();
+      if (!text) return "";
+      return `<div class="desk-card__block">
+        <p class="desk-card__label">${escapeHtml(label)}</p>
+        <p class="desk-card__value">${escapeHtml(text)}</p>
+      </div>`;
+    }
+
+    function renderCard(card) {
+      if (!card) {
+        panelBody.hidden = true;
+        panelEmpty.hidden = false;
+        return;
+      }
+      panelEmpty.hidden = true;
+      panelBody.hidden = false;
+      const photos = (card.photos || [])
+        .map(
+          (photo) =>
+            `<a href="${escapeHtml(photo.preview_url)}" class="js-desk-photo" data-src="${escapeHtml(photo.preview_url)}" title="${escapeHtml(photo.name)}">
+              <img src="${escapeHtml(photo.preview_url)}" alt="${escapeHtml(photo.name)}" loading="lazy">
+            </a>`
+        )
+        .join("");
+      const docs = (card.documents || [])
+        .map((doc) => `<a href="${escapeHtml(doc.download_url)}" target="_blank" rel="noopener">${escapeHtml(doc.name)}</a>`)
+        .join("");
+      const history = (card.history || [])
+        .map(
+          (row) => `<li>
+            <strong>${escapeHtml(row.comment || row.status || row.action)}</strong>
+            <span>${escapeHtml(row.created_at)}${row.user ? " · " + escapeHtml(row.user) : ""}</span>
+          </li>`
+        )
+        .join("");
+      const complete = canCompleteDesk && card.can_complete
+        ? `<button type="button" class="desk-btn desk-btn--done js-desk-complete" data-id="${escapeHtml(card.id)}">Выполнено</button>`
+        : "";
+      panelBody.innerHTML = `
+        <div class="desk-card__top">
+          <h2 class="desk-card__number">Заявка №${escapeHtml(card.number)}</h2>
+          <span class="desk-item__status" data-code="${statusTone(card.status_code)}">${escapeHtml(card.status || "—")}</span>
+        </div>
+        <p class="desk-flash" id="deskFlash"></p>
+        ${field("Адрес", card.address)}
+        ${field("Район", card.district)}
+        ${field("Пункт питания", card.pp)}
+        ${field("Описание", card.description || card.title)}
+        <div class="desk-card__grid">
+          ${field("Журнал", card.journal)}
+          ${field("Приоритет", card.priority)}
+          ${field("Заявитель", card.applicant_name)}
+          ${field("Телефон", card.phone)}
+          ${field("Поступила", card.received_at)}
+          ${field("Диспетчер", card.dispatcher_name)}
+        </div>
+        <div class="desk-card__block">
+          <p class="desk-card__label">Фото</p>
+          ${photos ? `<div class="desk-photos">${photos}</div>` : '<p class="desk-card__value">Нет фотографий</p>'}
+        </div>
+        ${docs ? `<div class="desk-card__block"><p class="desk-card__label">Файлы</p><div class="desk-docs">${docs}</div></div>` : ""}
+        <div class="desk-card__block">
+          <p class="desk-card__label">История</p>
+          ${history ? `<ul class="desk-history">${history}</ul>` : '<p class="desk-card__value">Записей пока нет</p>'}
+        </div>
+        <div class="desk-card__block">
+          <p class="desk-card__label">Действия</p>
+          <div class="desk-card__actions">${complete || '<span class="text-muted">Нет доступных действий</span>'}</div>
+        </div>`;
     }
 
     function toast(message, ok) {
-      const box = document.getElementById("workOrderFlash");
+      const box = document.getElementById("deskFlash");
       if (!box || !message) return;
-      box.className = `small mb-0 ${ok ? "text-success" : "text-danger"}`;
+      box.style.color = ok ? "var(--status-done, #2E7D32)" : "#DC3545";
       box.textContent = message;
     }
 
-    function addButton(type, id, inPlan) {
-      if (!canEdit || plan.editable === false) return "";
-      if (inPlan) {
-        return '<span class="badge text-bg-secondary">В плане</span>';
-      }
-      return `<button type="button" class="btn btn-sm btn-primary js-add-to-plan" data-type="${escapeHtml(type)}" data-id="${escapeHtml(id)}">Добавить</button>`;
-    }
-
-    function renderNearby(payload) {
-      if (!nearbyBox) return;
-      const hits = payload?.hits || [];
-      if (!hits.length) {
-        nearbyBox.innerHTML = `<p class="text-muted small mb-0">${escapeHtml(payload?.summary || "Добавьте работу в план — система предложит ближайшие заявки и дефекты.")}</p>`;
-        return;
-      }
-      nearbyBox.innerHTML = hits
-        .map((hit) => {
-          const dist = hit.distance_m != null ? `${hit.distance_m} м` : "";
-          return `<div class="workbench-hit">
-          <div>
-            ${typeMark(hit.entity_type)}
-            <strong>${escapeHtml(itemLabel(hit.entity_type, hit.number))}</strong>
-            <div class="small">${escapeHtml(hit.address || "")}${dist ? " — " + escapeHtml(dist) : ""}</div>
-          </div>
-          ${addButton(hit.entity_type, hit.entity_id, false)}
-        </div>`;
-        })
-        .join("");
-    }
-
-    function renderItems(items) {
-      if (!itemsBox) return;
-      const rows = items || [];
-      if (!rows.length) {
-        itemsBox.innerHTML = '<p class="text-muted small p-3 mb-0">Нет доступных работ по текущим фильтрам.</p>';
-        return;
-      }
-      itemsBox.innerHTML = rows
-        .map((item) => {
-          return `<div class="workbench-hit">
-          <div>
-            ${typeMark(item.type)}
-            <strong>${escapeHtml(itemLabel(item.type, item.number))}</strong>
-            <div class="fw-medium">${escapeHtml(item.address || "")}</div>
-            <div class="small text-muted">${escapeHtml(item.description || "")}</div>
-          </div>
-          ${addButton(item.type, item.id, Boolean(item.in_plan))}
-        </div>`;
-        })
-        .join("");
-    }
-
-    function renderPlan() {
-      if (!planBox) return;
-      if (planTitle) {
-        planTitle.innerHTML = `<i class="bi bi-list-ol"></i> ${escapeHtml(plan.title || "Мой план работ")}`;
-      }
-      if (planMeta) {
-        const bits = [plan.status_label].filter(Boolean);
-        planMeta.textContent = bits.join(" · ");
-      }
-      const stops = plan.stops || [];
-      if (!stops.length) {
-        planBox.innerHTML = '<p class="text-muted small p-3 mb-0">План пуст. Добавьте работу из списка справа от карты.</p>';
-        return;
-      }
-      planBox.innerHTML = stops
-        .map((stop) => {
-          const label = itemLabel(stop.entity_type, stop.number);
-          const remove = canEdit && plan.editable !== false
-            ? `<button type="button" class="btn btn-sm btn-outline-secondary js-remove-stop" data-stop-id="${escapeHtml(stop.id)}" title="Удалить из плана" aria-label="Удалить из плана">×</button>`
-            : "";
-          return `<div class="workbench-plan__item" draggable="${canEdit && plan.editable !== false ? "true" : "false"}" data-stop-id="${escapeHtml(stop.id)}">
-          <span class="workbench-plan__order">${escapeHtml(stop.order)}</span>
-          ${typeMark(stop.entity_type)}
-          <div class="workbench-plan__body">
-            <strong>${escapeHtml(label)}</strong>
-            <div class="small">${escapeHtml(stop.address || "")}</div>
-          </div>
-          ${remove}
-        </div>`;
-        })
-        .join("");
-    }
-
-    function reloadMap() {
-      if (window.OporaOpsMap?.reload) {
-        window.OporaOpsMap.reload(mapUrl());
-      }
-    }
-
-    function reloadItems() {
-      return fetch(itemsUrl(), { headers: headers(false) })
-        .then((r) => r.json())
-        .then((data) => renderItems(data.items || []))
-        .catch(() => {
-          if (itemsBox) itemsBox.innerHTML = '<p class="text-danger small p-3 mb-0">Не удалось загрузить список работ.</p>';
-        });
-    }
-
-    function applyRoute() {
-      if (!routeOn || !window.OporaOpsMap?.setRoute) return;
-      window.OporaOpsMap.setRoute(plan.stops || []);
-    }
-
-    function refreshLists() {
-      renderPlan();
-      reloadMap();
-      reloadItems();
-      applyRoute();
-    }
-
-    function loadPlan() {
-      return fetch(root.dataset.planUrl, { headers: headers(false) })
+    function loadQueue() {
+      queueAbort?.abort();
+      queueAbort = new AbortController();
+      return fetch(`${root.dataset.queueUrl}?${query().toString()}`, {
+        headers: headers(false),
+        cache: "no-store",
+        signal: queueAbort.signal,
+      })
         .then((r) => r.json())
         .then((data) => {
-          plan = data;
-          renderPlan();
-          applyRoute();
-        });
-    }
-
-    function addToPlan(type, id) {
-      if (!canEdit) return;
-      fetch(root.dataset.addUrl, {
-        method: "POST",
-        headers: headers(true),
-        body: JSON.stringify({ entity_type: type, entity_id: id }),
-      })
-        .then((r) => r.json().then((body) => ({ ok: r.ok, body })))
-        .then(({ ok, body }) => {
-          if (!ok || !body.ok) {
-            toast(body.message || "Не удалось добавить.", false);
-            return;
+          renderQueue(data);
+          if (selectedId && !(data.items || []).some((item) => item.id === selectedId)) {
+            selectedId = "";
+            renderCard(null);
           }
-          plan = body.plan;
-          renderPlan();
-          renderNearby(body.nearby);
-          reloadMap();
-          reloadItems();
-          applyRoute();
         })
-        .catch(() => toast("Не удалось добавить.", false));
+        .catch((err) => {
+          if (err?.name === "AbortError") return;
+          queueBox.innerHTML = '<p class="desk__empty">Не удалось загрузить список заявок.</p>';
+        });
     }
 
-    function removeStop(stopId) {
-      fetch(root.dataset.removeUrl, {
+    function loadCard(id) {
+      if (!id) return;
+      selectedId = id;
+      queueBox.querySelectorAll(".desk-item").forEach((el) => {
+        el.classList.toggle("is-active", el.dataset.id === id);
+      });
+      cardAbort?.abort();
+      cardAbort = new AbortController();
+      panelEmpty.hidden = true;
+      panelBody.hidden = false;
+      panelBody.innerHTML = '<p class="desk__empty">Загрузка карточки…</p>';
+      return fetch(withId(root.dataset.cardUrl, id), {
+        headers: headers(false),
+        cache: "no-store",
+        signal: cardAbort.signal,
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.success === false) {
+            panelBody.innerHTML = `<p class="desk__empty">${escapeHtml(data.message || "Заявка не найдена.")}</p>`;
+            return;
+          }
+          renderCard(data);
+        })
+        .catch((err) => {
+          if (err?.name === "AbortError") return;
+          panelBody.innerHTML = '<p class="desk__empty">Не удалось открыть заявку.</p>';
+        });
+    }
+
+    function complete(id) {
+      if (!id || !canCompleteDesk) return;
+      if (!window.confirm("Отметить заявку как выполненную?")) return;
+      fetch(withId(root.dataset.completeUrl, id), {
         method: "POST",
         headers: headers(true),
-        body: JSON.stringify({ stop_id: stopId }),
+        body: "{}",
       })
         .then((r) => r.json().then((body) => ({ ok: r.ok, body })))
         .then(({ ok, body }) => {
           if (!ok || !body.ok) {
-            toast(body.message || "Не удалось удалить.", false);
+            toast(body.message || "Не удалось отметить заявку.", false);
             return;
           }
-          plan = body.plan;
-          refreshLists();
-        });
+          if (body.card) renderCard(body.card);
+          loadQueue().then(() => toast(body.message || "Заявка выполнена.", true));
+        })
+        .catch(() => toast("Не удалось отметить заявку.", false));
     }
 
-    function saveOrder() {
-      const ids = [...planBox.querySelectorAll(".workbench-plan__item")].map((el) => el.dataset.stopId);
-      fetch(root.dataset.reorderUrl, {
-        method: "POST",
-        headers: headers(true),
-        body: JSON.stringify({ stop_ids: ids }),
-      })
-        .then((r) => r.json().then((body) => ({ ok: r.ok, body })))
-        .then(({ ok, body }) => {
-          if (!ok || !body.ok) {
-            toast(body.message || "Не удалось сохранить порядок.", false);
-            loadPlan();
-            return;
-          }
-          plan = body.plan;
-          renderPlan();
-          applyRoute();
-        });
+    function openLightbox(src) {
+      const overlay = document.createElement("div");
+      overlay.className = "desk-lightbox";
+      overlay.innerHTML = `<img src="${escapeHtml(src)}" alt="">`;
+      overlay.addEventListener("click", () => overlay.remove());
+      document.body.appendChild(overlay);
     }
 
-    root.addEventListener("opora:add-to-plan", (event) => {
-      addToPlan(event.detail.type, event.detail.id);
-    });
-
-    root.addEventListener("change", (event) => {
-      if (event.target.name === "woKind" || filterForm?.contains(event.target)) {
-        syncJournalFilter();
-        reloadMap();
-        reloadItems();
-      }
-    });
-    filterForm?.addEventListener("submit", (event) => {
+    searchForm?.addEventListener("submit", (event) => {
       event.preventDefault();
-      reloadMap();
-      reloadItems();
+      page = 1;
+      loadQueue();
     });
 
-    itemsBox?.addEventListener("click", (event) => {
-      const btn = event.target.closest(".js-add-to-plan");
-      if (!btn) return;
-      addToPlan(btn.dataset.type, btn.dataset.id);
+    root.querySelectorAll("[data-preset]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        preset = btn.dataset.preset || "all";
+        root.querySelectorAll("[data-preset]").forEach((el) => el.classList.toggle("is-active", el === btn));
+        page = 1;
+        loadQueue();
+      });
     });
 
-    nearbyBox?.addEventListener("click", (event) => {
-      const btn = event.target.closest(".js-add-to-plan");
-      if (!btn) return;
-      addToPlan(btn.dataset.type, btn.dataset.id);
-    });
-
-    planBox?.addEventListener("click", (event) => {
-      const btn = event.target.closest(".js-remove-stop");
-      if (!btn) return;
-      removeStop(btn.dataset.stopId);
-    });
-
-    planBox?.addEventListener("dragstart", (event) => {
-      const item = event.target.closest(".workbench-plan__item");
-      if (!item || !canEdit) return;
-      dragId = item.dataset.stopId;
-      event.dataTransfer.effectAllowed = "move";
-    });
-    planBox?.addEventListener("dragover", (event) => {
-      event.preventDefault();
-      const item = event.target.closest(".workbench-plan__item");
-      if (!item || item.dataset.stopId === dragId) return;
-      const rect = item.getBoundingClientRect();
-      const before = event.clientY < rect.top + rect.height / 2;
-      planBox.insertBefore(
-        planBox.querySelector(`[data-stop-id="${dragId}"]`),
-        before ? item : item.nextSibling
-      );
-    });
-    planBox?.addEventListener("drop", (event) => {
-      event.preventDefault();
-      dragId = null;
-      saveOrder();
-    });
-    planBox?.addEventListener("dragend", () => {
-      dragId = null;
-    });
-
-    document.getElementById("workOrderRouteBtn")?.addEventListener("click", () => {
-      routeOn = !routeOn;
-      const btn = document.getElementById("workOrderRouteBtn");
-      if (routeOn) {
-        applyRoute();
-        if (btn) btn.classList.add("active");
-      } else if (window.OporaOpsMap?.clearRoute) {
-        window.OporaOpsMap.clearRoute();
-        if (btn) btn.classList.remove("active");
-      }
-    });
-
-    document.getElementById("workOrderSaveBtn")?.addEventListener("click", () => {
-      fetch(root.dataset.saveUrl, { method: "POST", headers: headers(true), body: "{}" })
-        .then((r) => r.json().then((body) => ({ ok: r.ok, body })))
-        .then(({ ok, body }) => {
-          toast(body.message || (ok ? "Сохранено." : "Не удалось сохранить."), Boolean(ok && body.ok));
-          if (body.plan) {
-            plan = body.plan;
-            renderPlan();
-          }
-        });
-    });
-
-    document.getElementById("workOrderCompleteBtn")?.addEventListener("click", () => {
-      if (!canComplete) return;
-      if (!window.confirm("Завершить путевой лист? Входящие дефекты будут отмечены как выполненные. Статусы заявок не изменятся.")) {
+    queueBox.addEventListener("click", (event) => {
+      const completeBtn = event.target.closest(".js-desk-complete");
+      if (completeBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        complete(completeBtn.dataset.id);
         return;
       }
-      fetch(root.dataset.completeUrl, { method: "POST", headers: headers(true), body: "{}" })
-        .then((r) => r.json().then((body) => ({ ok: r.ok, body })))
-        .then(({ ok, body }) => {
-          toast(body.message || (ok ? "Завершено." : "Не удалось завершить."), Boolean(ok && body.ok));
-          if (body.plan) {
-            plan = body.plan;
-            renderNearby({});
-            refreshLists();
-          }
-        });
+      const openBtn = event.target.closest(".js-desk-open");
+      const item = event.target.closest(".desk-item");
+      const id = openBtn?.dataset.id || item?.dataset.id;
+      if (id) loadCard(id);
     });
 
-    syncJournalFilter();
-    renderNearby({});
-    loadPlan().then(() => {
-      reloadMap();
-      reloadItems();
+    queueBox.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      const item = event.target.closest(".desk-item");
+      if (item?.dataset.id) loadCard(item.dataset.id);
     });
+
+    pagerBox?.addEventListener("click", (event) => {
+      const btn = event.target.closest("[data-page]");
+      if (!btn) return;
+      page = Number(btn.dataset.page || "1");
+      loadQueue();
+    });
+
+    panelBody.addEventListener("click", (event) => {
+      const photo = event.target.closest(".js-desk-photo");
+      if (photo) {
+        event.preventDefault();
+        openLightbox(photo.dataset.src || photo.getAttribute("href"));
+        return;
+      }
+      const completeBtn = event.target.closest(".js-desk-complete");
+      if (completeBtn) complete(completeBtn.dataset.id);
+    });
+
+    loadQueue();
   },
 };
 
@@ -380,6 +319,8 @@ window.OporaWorkOrders = {
   const boot = () => window.OporaWorkOrders.init();
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
   }
   window.addEventListener("opora:navigated", boot);
 })();

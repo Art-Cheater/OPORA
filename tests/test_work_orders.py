@@ -1,4 +1,4 @@
-"""Рабочее место мастера: карта, nearby, план, маршрут, RBAC."""
+"""Рабочее место мастера: список работ, nearby, план, RBAC."""
 
 from __future__ import annotations
 
@@ -85,17 +85,60 @@ def test_work_orders_access(client):
     page = client.get("/work-orders/")
     assert page.status_code == 200
     html = page.get_data(as_text=True)
-    assert "Работа по заявкам" in html
-    assert "Мой план работ" in html
-    assert "Доступные работы" in html
-    assert 'id="opsMap"' in html
-    assert "workbench__top" in html
-    assert "workbench__available" in html
-    assert "Рядом обнаружены другие работы" in html
+    assert "Работа с заявками" in html
+    assert 'id="workDesk"' in html
+    assert "Список работы" in html
+    assert "css/work-desk.css" in html
+    assert "js/work-orders.js" in html
+    assert "Мой план работ" not in html
+    assert "Доступные работы" not in html
+    assert "workbench__top" not in html
+    assert "table-opora" not in html
+    assert 'id="opsMap"' not in html
+    assert "js/ops-map.js" not in html
+    assert "vendor/leaflet/leaflet.js" not in html
     _login(client, "executor@test.local")
     assert client.get("/work-orders/").status_code == 200
     denied = client.post("/work-orders/plan/add", json={"entity_type": "defect", "entity_id": "00000000-0000-0000-0000-000000000001"})
     assert denied.status_code == 403
+
+
+def test_work_desk_queue_card_and_complete(client, app):
+    _login(client, "master@test.local")
+    request_id, extra_id, defect_id, _, _ = _seed_work(app, suffix="91")
+    queue = client.get("/work-orders/queue.json").get_json()
+    ids = {row["id"] for row in queue["items"]}
+    assert request_id in ids
+    assert extra_id in ids
+    assert defect_id not in ids
+    row = next(item for item in queue["items"] if item["id"] == request_id)
+    assert row["number"].startswith("26-")
+    assert row["address"]
+    assert "status" in row
+    assert row["can_complete"] is True
+    found = client.get(f"/work-orders/queue.json?q=Ленина, 27").get_json()
+    found_ids = {item["id"] for item in found["items"]}
+    assert request_id in found_ids
+    assert extra_id not in found_ids
+    card = client.get(f"/work-orders/requests/{request_id}.json").get_json()
+    assert card["id"] == request_id
+    assert "photos" in card
+    assert "history" in card
+    assert "description" in card
+    assert card["pp"] == "" or card["pp"] is not None
+    completed = client.post(f"/work-orders/requests/{request_id}/complete", json={})
+    assert completed.status_code == 200, completed.get_data(as_text=True)
+    body = completed.get_json()
+    assert body["ok"] is True
+    assert body["item"]["status_code"] == "completed"
+    assert body["card"]["can_complete"] is False
+    with app.app_context():
+        req = db.session.get(Request, request_id)
+        assert db.session.get(RequestStatus, req.status_id).code == "completed"
+    done = client.get("/work-orders/queue.json?preset=completed").get_json()
+    assert request_id in {item["id"] for item in done["items"]}
+    fresh = client.get("/work-orders/queue.json?preset=new").get_json()
+    assert request_id not in {item["id"] for item in fresh["items"]}
 
 
 def test_work_orders_map_colors_and_types(admin_client, app):

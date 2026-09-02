@@ -25,7 +25,9 @@ def test_requests_journals_include_defects_tab(admin_client):
     assert "Заявки в деревнях Нововятского района" in html
     assert "Заявки в деревнях Ленинского района" in html
     assert "Дефекты" in html
-    assert 'id="opsMap"' in html
+    assert 'id="opsMap"' not in html
+    assert "js/ops-map.js" not in html
+    assert "vendor/leaflet/leaflet.js" not in html
     assert 'data-tour="defects"' not in html
     assert ">Путевые листы</span>" not in html
 
@@ -46,15 +48,20 @@ def test_requests_defects_tab_looks_like_journal(admin_client, app):
     page = admin_client.get("/requests/?tab=defects")
     assert page.status_code == 200
     html = page.get_data(as_text=True)
-    assert 'id="opsMap"' in html
+    assert 'id="opsMap"' not in html
+    assert "js/ops-map.js" not in html
+    assert "vendor/leaflet/leaflet.js" not in html
     assert 'id="defectFilterForm"' in html
     assert 'id="defectsTableContainer"' in html
     assert "Журналы:" in html
     table = admin_client.get("/defects/table")
     payload = table.get_json()
+    assert payload["entity"] == "defect"
     assert "Описание" in payload["table_html"]
     assert "Ответственный" in payload["table_html"]
     assert "DF-26-91" in payload["table_html"]
+    assert 'id="requestFilterForm"' not in html
+    assert "ПП (пункт питания)" not in payload["table_html"]
 
 
 def test_requests_all_map_includes_requests_and_defects(admin_client, app):
@@ -96,17 +103,82 @@ def test_requests_all_map_includes_requests_and_defects(admin_client, app):
     assert defect_id not in {p["id"] for p in journal_points}
 
 
-def test_spa_nav_requests_keeps_map_and_journals(admin_client):
+def test_spa_nav_requests_keeps_journals_without_map(admin_client):
     page = admin_client.get("/requests/", headers={"X-Opora-Nav": "1"})
     assert page.status_code == 200
     html = page.get_data(as_text=True)
     assert 'id="appContent"' in html
-    assert 'id="opsMap"' in html
+    assert 'id="opsMap"' not in html
     assert "Журналы:" in html
     assert "Дефекты" in html
-    assert "js/ops-map.js" in html
+    assert "js/ops-map.js" not in html
+    assert "vendor/leaflet/leaflet.js" not in html
     assert 'id="appShell"' not in html
     assert page.headers.get("X-Opora-Partial") == "1"
+
+
+def test_defects_journal_never_returns_requests(admin_client, app):
+    with app.app_context():
+        journal_id = RequestRepository.get_default_journal().id
+        st_new = db.session.scalar(db.select(RequestStatus).where(RequestStatus.code == "new"))
+        d_open = db.session.scalar(db.select(DefectStatus).where(DefectStatus.code == "open"))
+        category = db.session.scalar(db.select(DefectCategory).where(DefectCategory.code == "lighting"))
+        req = Request(
+            number="25-9501",
+            title="Заявка не должна попасть в дефекты",
+            address="ул. Ленина, 1",
+            normalized_address=normalize_address("ул. Ленина, 1"),
+            applicant_name="QA",
+            priority=Priority.MEDIUM.value,
+            status_id=st_new.id,
+            journal_id=journal_id,
+        )
+        defect = Defect(
+            number="DF-26-9501",
+            description="Не горит светильник на опоре",
+            address="ул. Мира, 10",
+            status_id=d_open.id,
+            category_id=category.id,
+        )
+        db.session.add_all([req, defect])
+        db.session.commit()
+
+    page = admin_client.get("/requests/?tab=defects")
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert 'id="defectFilterForm"' in html
+    assert 'id="defectsTableContainer"' in html
+    assert 'data-base-url="/defects"' in html
+    assert 'data-list-kind="defects"' in html
+    assert 'id="requestFilterForm"' not in html
+    assert 'id="requestsTableContainer"' not in html
+    assert 'data-opora-journal="defects"' in html
+
+    spa = admin_client.get("/requests/?tab=defects", headers={"X-Opora-Nav": "1"})
+    spa_html = spa.get_data(as_text=True)
+    assert 'data-base-url="/defects"' in spa_html
+    assert 'id="defectFilterForm"' in spa_html
+    assert 'id="requestFilterForm"' not in spa_html
+
+    defects_table = admin_client.get("/defects/table").get_json()
+    assert defects_table["entity"] == "defect"
+    assert "DF-26-9501" in defects_table["table_html"]
+    assert "25-9501" not in defects_table["table_html"]
+    assert "Не горит светильник на опоре" in defects_table["table_html"]
+    assert "ул. Мира, 10" in defects_table["table_html"]
+    assert "ПП (пункт питания)" not in defects_table["table_html"]
+    assert "Диспетчер" not in defects_table["table_html"]
+
+    via_requests = admin_client.get("/requests/table?tab=defects").get_json()
+    assert via_requests["entity"] == "defect"
+    assert "DF-26-9501" in via_requests["table_html"]
+    assert "25-9501" not in via_requests["table_html"]
+    assert "Описание" in via_requests["table_html"]
+
+    requests_table = admin_client.get("/requests/table").get_json()
+    assert requests_table["entity"] == "request"
+    assert "25-9501" in requests_table["table_html"]
+    assert "DF-26-9501" not in requests_table["table_html"]
 
 
 def test_spa_nav_work_orders_keeps_available_list(admin_client):
@@ -114,26 +186,33 @@ def test_spa_nav_work_orders_keeps_available_list(admin_client):
     assert page.status_code == 200
     html = page.get_data(as_text=True)
     assert 'id="appContent"' in html
-    assert 'id="opsMap"' in html
-    assert "Доступные работы" in html
-    assert "Мой план работ" in html
+    assert 'id="opsMap"' not in html
+    assert "Работа с заявками" in html
+    assert "Список работы" in html
+    assert 'id="workDesk"' in html
+    assert "css/work-desk.css" in html
     assert "js/work-orders.js" in html
-    assert "js/ops-map.js" in html
-    assert "workbench__top" in html
-    assert "workbench__available" in html
+    assert "Мой план работ" not in html
+    assert "Доступные работы" not in html
+    assert "workbench__top" not in html
     assert 'id="appShell"' not in html
     assert page.headers.get("X-Opora-Partial") == "1"
 
 
-def test_spa_map_scripts_bind_navigation_without_reload():
+def test_spa_list_scripts_bind_navigation_without_reload():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
     ops = (root / "app/static/js/ops-map.js").read_text(encoding="utf-8")
     main = (root / "app/static/js/main.js").read_text(encoding="utf-8")
     work = (root / "app/static/js/work-orders.js").read_text(encoding="utf-8")
-    assert "opora:navigated" in ops
+    opora_list = (root / "app/static/js/opora-list.js").read_text(encoding="utf-8")
+    assert "OporaOpsMap" not in work
     assert "opora:navigated" in work
+    assert 'path === "/requests/" || path === "/defects/"' in main
+    assert 'data-opora-journal' in main
+    assert 'listKindFromLocation' in opora_list
+    assert 'baseUrl: defects ? "/defects"' in opora_list
     assert "ResizeObserver" in ops
     assert "destroy()" in ops
     assert "location.reload" not in ops

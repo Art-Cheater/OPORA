@@ -717,6 +717,7 @@ function initInstantNav(sidebar, closeSidebar) {
     function listShellFor(href) {
         const url = new URL(href, window.location.href);
         const path = url.pathname.endsWith("/") ? url.pathname : `${url.pathname}/`;
+        if (path === "/requests/" || path === "/defects/") return null;
         return LIST_SHELLS[path] || null;
     }
 
@@ -770,6 +771,13 @@ function initInstantNav(sidebar, closeSidebar) {
         const doc = new DOMParser().parseFromString(html, "text/html");
         const content = document.getElementById("appContent");
         if (!content || !content.querySelector("#oporaListConfig")) return false;
+        const nextConfig = doc.querySelector("#oporaListConfig");
+        const curConfig = content.querySelector("#oporaListConfig");
+        const nextTableId = nextConfig?.getAttribute("data-table-container-id") || "";
+        const curTableId = curConfig?.getAttribute("data-table-container-id") || "";
+        if (nextTableId && curTableId && nextTableId !== curTableId) {
+            return false;
+        }
         document.title = doc.title || document.title;
         const nextHeader = doc.querySelector(".page-header");
         const curHeader = content.querySelector(".page-header");
@@ -787,9 +795,14 @@ function initInstantNav(sidebar, closeSidebar) {
         } else if (!nextExtra && curExtra) {
             curExtra.remove();
         }
-        const nextConfig = doc.querySelector("#oporaListConfig");
-        const curConfig = content.querySelector("#oporaListConfig");
+        if (nextTableId) {
+            const nextTable = doc.querySelector(`#${nextTableId}`);
+            const curTable = content.querySelector(`#${nextTableId}`);
+            if (nextTable && curTable) curTable.replaceWith(nextTable);
+        }
         if (nextConfig && curConfig) curConfig.replaceWith(nextConfig);
+        else if (nextConfig && !curConfig) content.append(nextConfig);
+        window.OporaList?.reset?.();
         window.OporaList?.bootPage?.();
         window.OporaOpsMap?.init?.();
         return true;
@@ -813,17 +826,20 @@ function initInstantNav(sidebar, closeSidebar) {
         closeSidebar();
 
         const spec = listShellFor(href);
-        const cached = spec ? null : cacheGet(href);
+        const dest = new URL(href, window.location.href);
+        const destPath = (dest.pathname.replace(/\/+$/, "") || "/");
+        const skipCache = destPath === "/requests" || destPath === "/defects";
+        const cached = spec || skipCache ? null : cacheGet(href);
 
         if (cached) {
             hideLoading();
+            if (push) history.pushState({ oporaNav: true }, "", href);
             const ok = await applyHtml(cached);
             if (token !== navToken) return;
             if (!ok) {
                 window.location.href = href;
                 return;
             }
-            if (push) history.pushState({ oporaNav: true }, "", href);
             emitNavigated(href);
             return;
         }
@@ -832,12 +848,14 @@ function initInstantNav(sidebar, closeSidebar) {
             hideLoading();
             window.OporaList?.reset?.();
             paintListShell(spec);
-            window.OporaList?.bootPage?.();
             if (push) history.pushState({ oporaNav: true }, "", href);
+            window.OporaList?.bootPage?.();
             emitNavigated(href);
-            loadPageHtml(href).then((html) => {
+            loadPageHtml(href).then(async (html) => {
                 if (token !== navToken || !html) return;
-                mergeListChrome(html);
+                if (!mergeListChrome(html)) {
+                    await applyHtml(html);
+                }
                 emitNavigated(href);
             });
             return;
@@ -851,13 +869,13 @@ function initInstantNav(sidebar, closeSidebar) {
                 window.location.href = href;
                 return;
             }
+            if (push) history.pushState({ oporaNav: true }, "", href);
             const ok = await applyHtml(html);
             if (token !== navToken) return;
             if (!ok) {
                 window.location.href = href;
                 return;
             }
-            if (push) history.pushState({ oporaNav: true }, "", href);
             hideLoading();
             emitNavigated(href);
         } catch (err) {
@@ -905,12 +923,20 @@ function initInstantNav(sidebar, closeSidebar) {
         const link = event.target.closest("a[href]");
         const next = spaTarget(link, event);
         if (!next) return;
+        const journalKind = link.getAttribute("data-opora-journal");
+        if (journalKind === "defects") {
+            next.searchParams.set("tab", "defects");
+            next.searchParams.delete("journal_id");
+        } else if (journalKind === "requests") {
+            next.searchParams.delete("tab");
+        }
         if (window.OporaBusy?.isBusy()) {
             event.preventDefault();
             return;
         }
         if (samePath(next, window.location)) {
             event.preventDefault();
+            window.OporaList?.reset?.();
             window.OporaList?.bootPage?.();
             window.OporaRolesAdmin?.init?.();
             return;

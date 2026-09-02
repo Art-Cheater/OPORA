@@ -34,17 +34,10 @@
         </form>
     </div>
 </div>
-<div class="card mb-4" data-list-extra="map">
-    <div class="card-header"><i class="bi bi-map"></i>Карта дефектов</div>
-    <div class="card-body">
-        <div id="opsMap" class="agreement-map" style="height: 320px; border-radius: 12px;"
-             data-src="{{ url_for('defects.map_json') }}" data-kind="ops"></div>
-        <div id="opsMapStatus" class="small text-muted mt-2">Загрузка карты…</div>
-    </div>
-</div>
 <div id="defectsTableContainer" data-tour="list-table">{{ list_loading("Загрузка дефектов…") }}</div>
 <div id="defectsPaginationContainer" class="mt-3"></div>
 <div id="oporaListConfig" class="d-none"
+     data-list-kind="defects"
      data-base-url="/defects"
      data-filter-form-id="defectFilterForm"
      data-table-container-id="defectsTableContainer"

@@ -700,22 +700,14 @@ body.is-opora-busy { cursor: wait; }
 }
 .workbench__top {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr);
+  grid-template-columns: 1fr;
   gap: 1rem;
   align-items: stretch;
 }
-.workbench__map-wrap,
 .workbench__available {
   display: flex;
   flex-direction: column;
   min-height: 0;
-}
-.workbench__map {
-  height: 520px;
-  min-height: 420px;
-  border-radius: 0;
-}
-.workbench__available {
   max-height: 620px;
 }
 .workbench-dot { font-size: 0.95rem; }
@@ -770,10 +762,6 @@ body.is-opora-busy { cursor: wait; }
   border: 2px solid #fff;
 }
 @media (max-width: 991.98px) {
-  .workbench__top {
-    grid-template-columns: 1fr;
-  }
-  .workbench__map { height: 360px; min-height: 280px; }
   .workbench__available { max-height: none; }
 }
 

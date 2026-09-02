@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
 
-from sqlalchemy import case
+from flask import url_for
+from sqlalchemy import case, or_
 from sqlalchemy.orm import joinedload, load_only, selectinload
 
 from app.core.nearby import NearbyHit, NearbySearchService
@@ -15,11 +16,20 @@ from app.extensions import db
 from app.models.auth.user import User
 from app.models.defects.defect import Defect
 from app.models.defects.defect_status import DefectStatus
+from app.models.enums import EntityType, Priority
+from app.models.files.attachment import Attachment
 from app.models.requests.request import Request
+from app.models.requests.request_history import RequestHistory
 from app.models.requests.request_journal import RequestJournal
 from app.models.requests.request_status import RequestStatus
 from app.models.waybills.waybill import Waybill
 from app.models.waybills.waybill_stop import WaybillStop
+from app.modules.requests.workflow import (
+    OPEN_STATUS_CODES,
+    STATUS_COMPLETED,
+    STATUS_NEW,
+    available_actions,
+)
 from app.modules.waybills.repositories import WaybillRepository
 from app.modules.waybills.services import WaybillPayload, WaybillService
 from app.modules.waybills.workflow import STATUS_DRAFT, STATUS_IN_PROGRESS, status_label
@@ -426,3 +436,157 @@ class WorkOrderService:
                 db.select(RequestJournal).where(RequestJournal.active_filter()).order_by(RequestJournal.sort_order)
             )
         )
+
+    QUEUE_PAGE = 30
+    QUEUE_PRESETS = {
+        "all": None,
+        "new": (STATUS_NEW,),
+        "in_progress": tuple(code for code in OPEN_STATUS_CODES if code != STATUS_NEW),
+        "completed": (STATUS_COMPLETED,),
+    }
+    PRIORITY_LABELS = {
+        Priority.LOW.value: "Низкий",
+        Priority.MEDIUM.value: "Средний",
+        Priority.HIGH.value: "Высокий",
+        Priority.CRITICAL.value: "Критичный",
+    }
+
+    @staticmethod
+    def _fmt_dt(value) -> str:
+        if value is None:
+            return ""
+        try:
+            return value.strftime("%d.%m.%Y %H:%M")
+        except (AttributeError, TypeError, ValueError):
+            return str(value)
+
+    @classmethod
+    def queue(cls, *, preset: str, q: str, page: int, user: User) -> dict:
+        codes = cls.QUEUE_PRESETS.get((preset or "all").strip().lower(), cls.QUEUE_PRESETS["all"])
+        stmt = (
+            db.select(Request)
+            .options(joinedload(Request.status), joinedload(Request.journal))
+            .join(RequestStatus, Request.status_id == RequestStatus.id)
+            .where(Request.active_filter())
+        )
+        if codes:
+            stmt = stmt.where(RequestStatus.code.in_(codes))
+        needle = (q or "").strip()
+        if needle:
+            like = f"%{needle}%"
+            stmt = stmt.where(
+                or_(
+                    Request.number.ilike(like),
+                    Request.address.ilike(like),
+                    Request.description.ilike(like),
+                    Request.dispatcher_name.ilike(like),
+                    Request.applicant_name.ilike(like),
+                    Request.pp.ilike(like),
+                )
+            )
+        stmt = stmt.order_by(Request.received_at.desc().nullslast(), Request.created_at.desc())
+        pagination = db.paginate(stmt, page=max(page, 1), per_page=cls.QUEUE_PAGE, error_out=False)
+        return {
+            "items": [cls.serialize_queue_item(item, user) for item in pagination.items],
+            "page": pagination.page,
+            "pages": pagination.pages,
+            "total": pagination.total,
+        }
+
+    @classmethod
+    def serialize_queue_item(cls, item: Request, user: User) -> dict:
+        actions = available_actions(item, user)
+        return {
+            "id": str(item.id),
+            "number": item.number,
+            "status": item.status.name if item.status else "",
+            "status_code": item.status.code if item.status else "",
+            "address": item.address or "",
+            "district": item.district or "",
+            "received_at": cls._fmt_dt(item.received_at or item.created_at),
+            "dispatcher_name": item.dispatcher_name or "",
+            "can_complete": any(action.code == "complete" for action in actions),
+        }
+
+    @classmethod
+    def card(cls, request_id: uuid.UUID, user: User) -> dict | None:
+        item = db.session.scalar(
+            db.select(Request)
+            .options(
+                joinedload(Request.status),
+                joinedload(Request.journal),
+                selectinload(Request.history).joinedload(RequestHistory.status),
+                selectinload(Request.history).joinedload(RequestHistory.changed_by_user),
+            )
+            .where(Request.id == request_id, Request.active_filter())
+        )
+        if item is None:
+            return None
+        attachments = list(
+            db.session.scalars(
+                db.select(Attachment)
+                .where(
+                    Attachment.entity_type == EntityType.REQUEST.value,
+                    Attachment.entity_id == item.id,
+                    Attachment.active_filter(),
+                )
+                .order_by(Attachment.created_at.desc())
+            )
+        )
+        photos = []
+        documents = []
+        for file in attachments:
+            payload = {
+                "id": str(file.id),
+                "name": file.file_name,
+                "mime": file.mime_type or "",
+                "created_at": cls._fmt_dt(file.created_at),
+                "preview_url": url_for(
+                    "requests.download_attachment",
+                    request_id=item.id,
+                    attachment_id=file.id,
+                    inline=1,
+                ),
+                "download_url": url_for(
+                    "requests.download_attachment",
+                    request_id=item.id,
+                    attachment_id=file.id,
+                ),
+            }
+            if (file.mime_type or "").startswith("image/"):
+                photos.append(payload)
+            else:
+                documents.append(payload)
+        history = []
+        for entry in sorted(item.history or [], key=lambda row: row.created_at or row.id, reverse=True):
+            history.append(
+                {
+                    "id": str(entry.id),
+                    "action": entry.action or "",
+                    "comment": entry.comment or "",
+                    "status": entry.status.name if entry.status else "",
+                    "user": entry.changed_by_user.full_name if entry.changed_by_user else "",
+                    "created_at": cls._fmt_dt(entry.created_at),
+                }
+            )
+        queue = cls.serialize_queue_item(item, user)
+        queue.update(
+            {
+                "title": item.title or "",
+                "description": item.description or "",
+                "pp": item.pp or "",
+                "journal": item.journal.name if item.journal else "",
+                "priority": cls.PRIORITY_LABELS.get(item.priority or "", item.priority or ""),
+                "applicant_name": item.applicant_name or "",
+                "phone": item.phone or "",
+                "settlement": item.settlement or "",
+                "street": item.street or "",
+                "house": item.house or "",
+                "has_barrier": bool(item.has_barrier),
+                "barrier_phone": item.barrier_phone or "",
+                "photos": photos,
+                "documents": documents,
+                "history": history,
+            }
+        )
+        return queue

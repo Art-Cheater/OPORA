@@ -6,11 +6,13 @@
             <span class="text-muted small me-1">Журналы:</span>
             {% if current_user.has_permission('requests.view') %}
             <a href="{{ url_for('requests.index') }}"
+               data-opora-journal="requests"
                class="btn btn-sm {% if not current_journal and current_tab != 'defects' %}btn-primary{% else %}btn-outline-primary{% endif %}">
                 Все
             </a>
             {% for journal in journals|default([]) %}
             <a href="{{ url_for('requests.index', journal_id=journal.id) }}"
+               data-opora-journal="requests"
                class="btn btn-sm {% if current_journal == journal.id|string %}btn-primary{% else %}btn-outline-primary{% endif %}">
                 {{ journal.name }}
             </a>
@@ -18,6 +20,7 @@
             {% endif %}
             {% if current_user.has_permission('defects.view') %}
             <a href="{{ url_for('requests.index', tab='defects') }}"
+               data-opora-journal="defects"
                class="btn btn-sm {% if current_tab == 'defects' %}btn-primary{% else %}btn-outline-primary{% endif %}">
                 Дефекты
             </a>

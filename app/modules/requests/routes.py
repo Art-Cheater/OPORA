@@ -338,19 +338,15 @@ def index():
             filter_form=filter_form,
             journals=journals,
             tab="defects",
-            map_src=url_for("defects.map_json"),
         )
     filter_form = RequestFilterForm(request.args)
     _prepare_filter_form(filter_form)
-    journal_id = request.args.get("journal_id", "")
-    map_src = url_for("requests.map_json", journal_id=journal_id) if journal_id else url_for("requests.map_json")
     return render_template(
         "requests/index.html",
         filter_form=filter_form,
         filters=_build_filters(),
         journals=journals,
         tab="",
-        map_src=map_src,
     )
 
 
@@ -358,6 +354,33 @@ def index():
 @login_required
 @permission_required(PERM_REQUESTS_VIEW)
 def table():
+    if (request.args.get("tab") or "").strip().lower() == "defects":
+        if not current_user.has_permission(PERM_DEFECTS_VIEW):
+            abort(403)
+        from app.modules.defects.repositories import DefectFilter, DefectRepository
+
+        pagination = DefectRepository.paginated_list(
+            DefectFilter(
+                q=request.args.get("q", ""),
+                district=request.args.get("district", ""),
+                status_id=request.args.get("status_id", ""),
+                category_id=request.args.get("category_id", ""),
+                sort_by=request.args.get("sort_by", "created_at"),
+                sort_dir=request.args.get("sort_dir", "desc"),
+            ),
+            page=request.args.get("page", 1, type=int),
+            per_page=request.args.get("per_page", 20, type=int),
+        )
+        return jsonify(
+            {
+                "entity": "defect",
+                "table_html": render_template("defects/partials/table.html", pagination=pagination),
+                "pagination_html": render_template(
+                    "defects/partials/pagination.html",
+                    pagination=pagination,
+                ),
+            }
+        )
     filters = _build_filters()
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 20, type=int)
@@ -375,7 +398,7 @@ def table():
         "requests/partials/pagination.html",
         requests_pagination=pagination,
     )
-    return jsonify({"table_html": html, "pagination_html": pager})
+    return jsonify({"entity": "request", "table_html": html, "pagination_html": pager})
 
 
 @requests_bp.route("/map.json")
@@ -955,8 +978,12 @@ def start_work(request_id: uuid.UUID):
 def complete_request(request_id: uuid.UUID):
     try:
         req = RequestService.complete_request(request_id, current_user.id)
+        if is_ajax():
+            return ajax_ok("Заявка завершена.", id=str(req.id), status_code=req.status.code if req.status else "")
         return _workflow_redirect(req, "Заявка завершена.")
     except (ValidationError, NotFoundError) as exc:
+        if is_ajax():
+            return ajax_error(str(exc), status=400)
         flash(str(exc), "danger")
         return redirect(url_for("requests.detail", request_id=request_id))
 

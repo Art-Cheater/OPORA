@@ -66,14 +66,36 @@ window.OporaList = (() => {
     return data;
   }
 
+  function listKindFromLocation() {
+    try {
+      const url = new URL(window.location.href);
+      const path = (url.pathname || "").replace(/\/+$/, "");
+      if (path === "/defects") return "defects";
+      if (path === "/requests") {
+        if ((url.searchParams.get("tab") || "").toLowerCase() === "defects") return "defects";
+        return "requests";
+      }
+    } catch {
+      /* ignore */
+    }
+    return "";
+  }
+
   function queryParams() {
     const form = document.getElementById(config.filterFormId);
-    if (!form) return new URLSearchParams();
-    const data = new FormData(form);
-    data.set("page", String(currentPage));
     const params = new URLSearchParams();
-    for (const [k, v] of data.entries()) {
-      if (v !== "") params.append(k, String(v));
+    if (form) {
+      const data = new FormData(form);
+      data.set("page", String(currentPage));
+      for (const [k, v] of data.entries()) {
+        if (v !== "") params.append(k, String(v));
+      }
+    } else {
+      params.set("page", String(currentPage));
+    }
+    if (listKindFromLocation() === "defects") {
+      params.delete("journal_id");
+      if (!params.has("tab")) params.set("tab", "defects");
     }
     return params;
   }
@@ -98,25 +120,41 @@ window.OporaList = (() => {
   }
 
   async function loadTable() {
-    const tableContainer = document.getElementById(config.tableContainerId);
-    const paginationContainer = document.getElementById(config.paginationContainerId);
-    if (!tableContainer || !config.baseUrl) return;
+    const defects = listKindFromLocation() === "defects" || config.listKind === "defects";
+    const baseUrl = defects ? "/defects" : config.baseUrl;
+    const tableContainerId =
+      defects && document.getElementById("defectsTableContainer")
+        ? "defectsTableContainer"
+        : config.tableContainerId;
+    const paginationContainerId =
+      defects && document.getElementById("defectsPaginationContainer")
+        ? "defectsPaginationContainer"
+        : config.paginationContainerId;
+    const tableContainer = document.getElementById(tableContainerId);
+    const paginationContainer = document.getElementById(paginationContainerId);
+    if (!tableContainer || !baseUrl) return;
 
     tableAbort?.abort();
     tableAbort = new AbortController();
     const token = ++tableToken;
-    const url = `${config.baseUrl}/table?${queryParams().toString()}`;
+    const url = `${baseUrl}/table?${queryParams().toString()}`;
     tableContainer.innerHTML = TABLE_LOADING_HTML;
     if (paginationContainer) paginationContainer.innerHTML = "";
 
     try {
       const data = await fetchTable(url, tableAbort.signal);
       if (token !== tableToken) return;
-      const liveTable = document.getElementById(config.tableContainerId);
-      const livePager = document.getElementById(config.paginationContainerId);
+      const liveTable = document.getElementById(tableContainerId);
+      const livePager = document.getElementById(paginationContainerId);
       if (!liveTable) return;
       liveTable.innerHTML = data.table_html;
       if (livePager) livePager.innerHTML = data.pagination_html;
+      config.tableContainerId = tableContainerId;
+      config.paginationContainerId = paginationContainerId;
+      if (defects) {
+        config.baseUrl = "/defects";
+        config.pageLinkClass = "defect-page-link";
+      }
       bindTableEvents();
       bindPagination();
     } catch (err) {
@@ -823,13 +861,28 @@ window.OporaList = (() => {
       reset();
       return;
     }
+    const fromUrl = listKindFromLocation();
+    const defects = fromUrl === "defects" || (!fromUrl && cfg.dataset.listKind === "defects");
     init({
-      baseUrl: cfg.dataset.baseUrl,
-      filterFormId: cfg.dataset.filterFormId,
-      tableContainerId: cfg.dataset.tableContainerId,
-      paginationContainerId: cfg.dataset.paginationContainerId,
-      resetBtnId: cfg.dataset.resetBtnId,
-      pageLinkClass: cfg.dataset.pageLinkClass,
+      listKind: defects ? "defects" : cfg.dataset.listKind || "",
+      baseUrl: defects ? "/defects" : cfg.dataset.baseUrl,
+      filterFormId:
+        defects && document.getElementById("defectFilterForm")
+          ? "defectFilterForm"
+          : cfg.dataset.filterFormId,
+      tableContainerId:
+        defects && document.getElementById("defectsTableContainer")
+          ? "defectsTableContainer"
+          : cfg.dataset.tableContainerId,
+      paginationContainerId:
+        defects && document.getElementById("defectsPaginationContainer")
+          ? "defectsPaginationContainer"
+          : cfg.dataset.paginationContainerId,
+      resetBtnId:
+        defects && document.getElementById("defectFilterReset")
+          ? "defectFilterReset"
+          : cfg.dataset.resetBtnId,
+      pageLinkClass: defects ? "defect-page-link" : cfg.dataset.pageLinkClass,
       createTitle: cfg.dataset.createTitle,
       editTitle: cfg.dataset.editTitle,
       deleteMessage: cfg.dataset.deleteMessage,

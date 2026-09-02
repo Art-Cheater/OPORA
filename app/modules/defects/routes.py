@@ -151,6 +151,7 @@ def table():
     )
     return jsonify(
         {
+            "entity": "defect",
             "table_html": render_template("defects/partials/table.html", pagination=pagination),
             "pagination_html": render_template("defects/partials/pagination.html", pagination=pagination),
         }

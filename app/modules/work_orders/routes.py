@@ -7,17 +7,18 @@ import uuid
 from flask import jsonify, render_template, request
 from flask_login import current_user, login_required
 
-from app.core.decorators import permission_required
-from app.core.exceptions import ValidationError
+from app.core.decorators import any_permission_required, permission_required
+from app.core.exceptions import NotFoundError, ValidationError
 from app.core.http import ajax_error, ajax_ok
 from app.models.auth.constants import (
+    PERM_REQUESTS_APPROVE,
+    PERM_REQUESTS_DISPATCH,
+    PERM_REQUESTS_EDIT,
     PERM_WAYBILLS_EDIT,
     PERM_WAYBILLS_STATUS_CHANGE,
     PERM_WAYBILLS_VIEW,
 )
-from app.modules.defects.repositories import DefectRepository
-from app.modules.requests.districts import district_choices
-from app.modules.requests.repositories import RequestRepository
+from app.modules.requests.services import RequestService
 from app.modules.waybills.services import WaybillService
 from app.modules.waybills.workflow import STATUS_DRAFT, STATUS_IN_PROGRESS
 from app.modules.work_orders.blueprint import work_orders_bp
@@ -60,15 +61,60 @@ def _current_plan():
 @login_required
 @permission_required(PERM_WAYBILLS_VIEW)
 def index():
+    can_complete = (
+        current_user.has_permission(PERM_REQUESTS_EDIT)
+        or current_user.has_permission(PERM_REQUESTS_APPROVE)
+        or current_user.has_permission(PERM_REQUESTS_DISPATCH)
+    )
     return render_template(
         "work_orders/index.html",
-        journals=WorkOrderService.journals(),
-        request_statuses=RequestRepository.get_statuses(),
-        defect_statuses=DefectRepository.get_statuses(),
-        districts=district_choices(empty_label="Все районы"),
-        can_edit=current_user.has_permission(PERM_WAYBILLS_EDIT),
-        can_complete=current_user.has_permission(PERM_WAYBILLS_STATUS_CHANGE),
+        can_complete=can_complete,
     )
+
+
+@work_orders_bp.route("/queue.json")
+@login_required
+@permission_required(PERM_WAYBILLS_VIEW)
+def queue_json():
+    preset = (request.args.get("preset") or "all").strip().lower()
+    if preset not in WorkOrderService.QUEUE_PRESETS:
+        preset = "all"
+    page = request.args.get("page", 1, type=int)
+    return jsonify(
+        WorkOrderService.queue(
+            preset=preset,
+            q=request.args.get("q") or "",
+            page=page,
+            user=current_user,
+        )
+    )
+
+
+@work_orders_bp.route("/requests/<uuid:request_id>.json")
+@login_required
+@permission_required(PERM_WAYBILLS_VIEW)
+def request_card_json(request_id: uuid.UUID):
+    card = WorkOrderService.card(request_id, current_user)
+    if card is None:
+        return ajax_error("Заявка не найдена.", status=404)
+    return jsonify(card)
+
+
+@work_orders_bp.route("/requests/<uuid:request_id>/complete", methods=["POST"])
+@login_required
+@any_permission_required(PERM_REQUESTS_EDIT, PERM_REQUESTS_APPROVE, PERM_REQUESTS_DISPATCH)
+def complete_request(request_id: uuid.UUID):
+    try:
+        req = RequestService.complete_request(request_id, current_user.id)
+        return ajax_ok(
+            "Заявка отмечена выполненной.",
+            item=WorkOrderService.serialize_queue_item(req, current_user),
+            card=WorkOrderService.card(req.id, current_user),
+        )
+    except NotFoundError as exc:
+        return ajax_error(str(exc), status=404)
+    except ValidationError as exc:
+        return ajax_error(str(exc))
 
 
 @work_orders_bp.route("/map.json")
