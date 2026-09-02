@@ -64,24 +64,6 @@ def test_request_lifecycle_and_upload(admin_client, app):
     location = resp.headers["Location"]
     request_id = location.rstrip("/").split("/")[-1]
 
-    assert admin_client.post(
-        f"/requests/{request_id}/emergency-departed", follow_redirects=False
-    ).status_code in (200, 302)
-
-    from app.extensions import db
-    from app.models.auth.user import User
-
-    with app.app_context():
-        mid = str(
-            db.session.scalar(db.select(User.id).where(User.email == "master@test.local"))
-        )
-
-    assert admin_client.post(
-        f"/requests/{request_id}/assign-master",
-        data={"master_id": mid, "submit": "x"},
-        follow_redirects=False,
-    ).status_code in (200, 302)
-
     upload = admin_client.post(
         f"/requests/{request_id}/attachment",
         data={
@@ -93,9 +75,61 @@ def test_request_lifecycle_and_upload(admin_client, app):
     )
     assert upload.status_code in (200, 302)
 
+    detail = admin_client.get(f"/requests/{request_id}")
+    html = detail.get_data(as_text=True)
+    assert "Выполнено" in html
+    assert "Передать мастеру" not in html
+    assert "Выехала аварийная бригада" not in html
+    assert "Принята мастером" not in html
+
     assert admin_client.post(
         f"/requests/{request_id}/complete", follow_redirects=False
     ).status_code in (200, 302)
+
+    from app.extensions import db
+    from app.models.requests.request import Request
+    from app.models.requests.request_status import RequestStatus
+
+    with app.app_context():
+        item = db.session.get(Request, request_id)
+        status = db.session.get(RequestStatus, item.status_id)
+        assert status.code == "completed"
+
+
+def test_old_request_status_still_completes_without_master(admin_client, app):
+    from app.extensions import db
+    from app.models.enums import Priority
+    from app.models.requests.request import Request
+    from app.models.requests.request_status import RequestStatus
+    from app.modules.requests.repositories import RequestRepository
+
+    with app.app_context():
+        st = db.session.scalar(
+            db.select(RequestStatus).where(RequestStatus.code == "emergency_dispatched")
+        )
+        journal = RequestRepository.get_default_journal()
+        item = Request(
+            number="26-OLD1",
+            title="Старая заявка",
+            address="Адрес старый",
+            applicant_name="QA",
+            priority=Priority.MEDIUM.value,
+            status_id=st.id,
+            journal_id=journal.id,
+            responsible_id=None,
+        )
+        db.session.add(item)
+        db.session.commit()
+        rid = str(item.id)
+    html = admin_client.get(f"/requests/{rid}").get_data(as_text=True)
+    assert "Выполнено" in html
+    assert "Передать мастеру" not in html
+    assert admin_client.post(f"/requests/{rid}/complete", follow_redirects=False).status_code in (200, 302)
+    with app.app_context():
+        item = db.session.get(Request, uuid.UUID(rid))
+        status = db.session.get(RequestStatus, item.status_id)
+        assert item.responsible_id is None
+        assert status.code == "completed"
 
 
 def test_reports_export_requires_permission(admin_client):

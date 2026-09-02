@@ -33,8 +33,6 @@
                     <div class="request-lifecycle__step
                         {% if step.state == 'done' %}is-done
                         {% elif step.state == 'current' and step.code == 'new' %}is-current-new
-                        {% elif step.state == 'current' and step.code == 'emergency_dispatched' %}is-current-brigade
-                        {% elif step.state == 'current' and step.code == 'accepted_by_master' %}is-current-master
                         {% elif step.state == 'current' and step.code == 'completed' %}is-current-done
                         {% endif %}">
                         {{ step.label }}

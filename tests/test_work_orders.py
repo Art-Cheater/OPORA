@@ -89,6 +89,9 @@ def test_work_orders_access(client):
     assert "Мой план работ" in html
     assert "Доступные работы" in html
     assert 'id="opsMap"' in html
+    assert "workbench__top" in html
+    assert "workbench__available" in html
+    assert "Рядом обнаружены другие работы" in html
     _login(client, "executor@test.local")
     assert client.get("/work-orders/").status_code == 200
     denied = client.post("/work-orders/plan/add", json={"entity_type": "defect", "entity_id": "00000000-0000-0000-0000-000000000001"})

@@ -119,5 +119,25 @@ def test_spa_nav_work_orders_keeps_available_list(admin_client):
     assert "Мой план работ" in html
     assert "js/work-orders.js" in html
     assert "js/ops-map.js" in html
+    assert "workbench__top" in html
+    assert "workbench__available" in html
     assert 'id="appShell"' not in html
     assert page.headers.get("X-Opora-Partial") == "1"
+
+
+def test_spa_map_scripts_bind_navigation_without_reload():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    ops = (root / "app/static/js/ops-map.js").read_text(encoding="utf-8")
+    main = (root / "app/static/js/main.js").read_text(encoding="utf-8")
+    work = (root / "app/static/js/work-orders.js").read_text(encoding="utf-8")
+    assert "opora:navigated" in ops
+    assert "opora:navigated" in work
+    assert "ResizeObserver" in ops
+    assert "destroy()" in ops
+    assert "location.reload" not in ops
+    assert "location.reload" not in main
+    assert "location.reload" not in work
+    assert "setTimeout(bootOps" not in main
+    assert "script.async = false" in main

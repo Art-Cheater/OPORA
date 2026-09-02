@@ -39,6 +39,7 @@ from app.modules.requests.workflow import (
     STATUS_EMERGENCY_DISPATCHED,
     STATUS_IN_PROGRESS,
     STATUS_NEW,
+    OPEN_STATUS_CODES,
     can_transition,
 )
 
@@ -824,19 +825,17 @@ class RequestService:
 
     @classmethod
     def complete_request(cls, request_id: uuid.UUID, user_id: uuid.UUID) -> Request:
-        """Мастер отмечает заявку выполненной (строка становится зелёной)."""
+        """Отметить заявку выполненной: текущий открытый статус → completed."""
         req = cls._lock_request(request_id)
-        if req.status.code not in (STATUS_ACCEPTED_BY_MASTER, STATUS_IN_PROGRESS):
-            raise ValidationError(
-                "Завершить можно заявку, переданную мастеру или находящуюся в работе."
-            )
+        if req.status.code not in OPEN_STATUS_CODES:
+            raise ValidationError("Заявку в этом статусе нельзя отметить выполненной.")
         new_status = cls.get_status_by_code(STATUS_COMPLETED)
         cls._apply_status(
             req,
             new_status,
             user_id,
             history_action=HISTORY_COMPLETE,
-            history_comment="Мастер отметил заявку выполненной",
+            history_comment="Заявка отмечена выполненной",
             audit_description=f"Заявка {req.number} выполнена",
         )
         db.session.commit()

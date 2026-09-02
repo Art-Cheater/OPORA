@@ -53,9 +53,6 @@ class RequestFilterForm(FlaskForm):
         choices=[
             ("", "Все заявки"),
             ("for_emergency", "Новые"),
-            ("awaiting_master", "Выехала бригада"),
-            ("my", "Мои заявки"),
-            ("in_progress", "У мастера"),
             ("completed", "Выполненные"),
         ],
         validators=[Optional()],

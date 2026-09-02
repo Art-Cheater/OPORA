@@ -583,6 +583,7 @@ function initInstantNav(sidebar, closeSidebar) {
                 return;
             }
             const script = document.createElement("script");
+            script.async = false;
             script.src = src;
             script.onload = () => resolve();
             script.onerror = () => resolve();
@@ -620,28 +621,10 @@ function initInstantNav(sidebar, closeSidebar) {
             window.OporaAudit?.init?.();
         }
         if (document.getElementById("requestMap")) {
-            // Leaflet/скрипт детали могли только что подгрузиться через SPA
-            window.setTimeout(() => window.OporaRequestDetail?.init?.(), 0);
-            window.setTimeout(() => window.OporaRequestDetail?.init?.(), 200);
+            window.OporaRequestDetail?.init?.();
         }
-        const bootOps = () => {
-            const mapNode = document.getElementById("opsMap");
-            if (mapNode && window.OporaOpsMap?.init) {
-                window.OporaOpsMap.init();
-            }
-            const wo = document.getElementById("workOrderRoot");
-            if (wo && window.OporaWorkOrders?.init && wo.dataset.woInited !== "1") {
-                window.OporaWorkOrders.init();
-            }
-        };
-        if (document.getElementById("opsMap") || document.getElementById("workOrderRoot")) {
-            bootOps();
-            if (!window.OporaOpsMap || (document.getElementById("workOrderRoot") && !window.OporaWorkOrders)) {
-                window.setTimeout(bootOps, 50);
-                window.setTimeout(bootOps, 200);
-            }
-            window.setTimeout(() => window.OporaOpsMap?._map?.invalidateSize?.(), 300);
-        }
+        window.OporaOpsMap?.init?.();
+        window.OporaWorkOrders?.init?.();
         if (document.getElementById("inquiryForwardCard")) {
             const card = document.getElementById("inquiryForwardCard");
             if (card) delete card.dataset.bound;
@@ -808,9 +791,7 @@ function initInstantNav(sidebar, closeSidebar) {
         const curConfig = content.querySelector("#oporaListConfig");
         if (nextConfig && curConfig) curConfig.replaceWith(nextConfig);
         window.OporaList?.bootPage?.();
-        if (document.getElementById("opsMap") && window.OporaOpsMap?.init) {
-            window.setTimeout(() => window.OporaOpsMap.init(), 0);
-        }
+        window.OporaOpsMap?.init?.();
         return true;
     }
 

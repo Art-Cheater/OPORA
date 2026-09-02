@@ -1,7 +1,8 @@
 window.OporaWorkOrders = {
   init() {
     const root = document.getElementById("workOrderRoot");
-    if (!root || root.dataset.woInited === "1") return;
+    if (!root) return;
+    if (root.dataset.woInited === "1") return;
     root.dataset.woInited = "1";
 
     const canEdit = root.dataset.canEdit === "true";
@@ -13,6 +14,7 @@ window.OporaWorkOrders = {
     const planTitle = document.getElementById("workOrderPlanTitle");
     const planMeta = document.getElementById("workOrderPlanMeta");
     const filterForm = document.getElementById("workOrderFilters");
+    const journalWrap = document.getElementById("woJournalWrap");
     let plan = { id: null, number: null, stops: [], editable: true };
     let routeOn = false;
     let dragId = null;
@@ -25,14 +27,25 @@ window.OporaWorkOrders = {
       return result;
     }
 
+    function kindValue() {
+      return root.querySelector('input[name="woKind"]:checked')?.value || "all";
+    }
+
+    function syncJournalFilter() {
+      if (!journalWrap) return;
+      journalWrap.hidden = kindValue() !== "request";
+    }
+
     function query() {
       const params = new URLSearchParams();
-      const kind = root.querySelector('input[name="woKind"]:checked')?.value || "all";
+      const kind = kindValue();
       params.set("kind", kind);
       if (!filterForm) return params;
       const data = new FormData(filterForm);
       for (const [key, value] of data.entries()) {
-        if (value) params.set(key, value);
+        if (!value) continue;
+        if (key === "journal_id" && kind !== "request") continue;
+        params.set(key, value);
       }
       return params;
     }
@@ -70,6 +83,14 @@ window.OporaWorkOrders = {
       box.textContent = message;
     }
 
+    function addButton(type, id, inPlan) {
+      if (!canEdit || plan.editable === false) return "";
+      if (inPlan) {
+        return '<span class="badge text-bg-secondary">В плане</span>';
+      }
+      return `<button type="button" class="btn btn-sm btn-primary js-add-to-plan" data-type="${escapeHtml(type)}" data-id="${escapeHtml(id)}">Добавить</button>`;
+    }
+
     function renderNearby(payload) {
       if (!nearbyBox) return;
       const hits = payload?.hits || [];
@@ -77,46 +98,38 @@ window.OporaWorkOrders = {
         nearbyBox.innerHTML = `<p class="text-muted small mb-0">${escapeHtml(payload?.summary || "Добавьте работу в план — система предложит ближайшие заявки и дефекты.")}</p>`;
         return;
       }
-      const rows = hits
+      nearbyBox.innerHTML = hits
         .map((hit) => {
-          const dist = hit.distance_m != null ? `~${hit.distance_m} м` : "";
-          const add = canEdit && plan.editable !== false
-            ? `<button type="button" class="btn btn-sm btn-outline-primary js-add-to-plan" data-type="${escapeHtml(hit.entity_type)}" data-id="${escapeHtml(hit.entity_id)}">Добавить в план</button>`
-            : "";
+          const dist = hit.distance_m != null ? `${hit.distance_m} м` : "";
           return `<div class="workbench-hit">
           <div>
             ${typeMark(hit.entity_type)}
             <strong>${escapeHtml(itemLabel(hit.entity_type, hit.number))}</strong>
-            <div class="small">${escapeHtml(hit.address || "")}</div>
-            <div class="small text-muted">${escapeHtml(dist)}${hit.description ? " · " + escapeHtml(hit.description) : ""}</div>
+            <div class="small">${escapeHtml(hit.address || "")}${dist ? " — " + escapeHtml(dist) : ""}</div>
           </div>
-          ${add}
+          ${addButton(hit.entity_type, hit.entity_id, false)}
         </div>`;
         })
         .join("");
-      nearbyBox.innerHTML = rows;
     }
 
     function renderItems(items) {
       if (!itemsBox) return;
-      const rows = (items || []).filter((item) => !item.in_plan);
+      const rows = items || [];
       if (!rows.length) {
         itemsBox.innerHTML = '<p class="text-muted small p-3 mb-0">Нет доступных работ по текущим фильтрам.</p>';
         return;
       }
       itemsBox.innerHTML = rows
         .map((item) => {
-          const add = canEdit && plan.editable !== false
-            ? `<button type="button" class="btn btn-sm btn-primary js-add-to-plan" data-type="${escapeHtml(item.type)}" data-id="${escapeHtml(item.id)}">Добавить</button>`
-            : "";
           return `<div class="workbench-hit">
           <div>
             ${typeMark(item.type)}
             <strong>${escapeHtml(itemLabel(item.type, item.number))}</strong>
             <div class="fw-medium">${escapeHtml(item.address || "")}</div>
-            <div class="small text-muted">${escapeHtml(item.description || item.status || "")}</div>
+            <div class="small text-muted">${escapeHtml(item.description || "")}</div>
           </div>
-          ${add}
+          ${addButton(item.type, item.id, Boolean(item.in_plan))}
         </div>`;
         })
         .join("");
@@ -128,27 +141,26 @@ window.OporaWorkOrders = {
         planTitle.innerHTML = `<i class="bi bi-list-ol"></i> ${escapeHtml(plan.title || "Мой план работ")}`;
       }
       if (planMeta) {
-        const bits = [plan.number, plan.status_label].filter(Boolean);
+        const bits = [plan.status_label].filter(Boolean);
         planMeta.textContent = bits.join(" · ");
       }
       const stops = plan.stops || [];
       if (!stops.length) {
-        planBox.innerHTML = '<p class="text-muted small p-3 mb-0">План пуст. Выберите работу в списке «Доступные работы» или на карте.</p>';
+        planBox.innerHTML = '<p class="text-muted small p-3 mb-0">План пуст. Добавьте работу из списка справа от карты.</p>';
         return;
       }
       planBox.innerHTML = stops
         .map((stop) => {
           const label = itemLabel(stop.entity_type, stop.number);
           const remove = canEdit && plan.editable !== false
-            ? `<button type="button" class="btn btn-sm btn-outline-secondary js-remove-stop" data-stop-id="${escapeHtml(stop.id)}">Удалить из плана</button>`
+            ? `<button type="button" class="btn btn-sm btn-outline-secondary js-remove-stop" data-stop-id="${escapeHtml(stop.id)}" title="Удалить из плана" aria-label="Удалить из плана">×</button>`
             : "";
           return `<div class="workbench-plan__item" draggable="${canEdit && plan.editable !== false ? "true" : "false"}" data-stop-id="${escapeHtml(stop.id)}">
           <span class="workbench-plan__order">${escapeHtml(stop.order)}</span>
           ${typeMark(stop.entity_type)}
           <div class="workbench-plan__body">
-            <a href="${escapeHtml(stop.url)}">${escapeHtml(label)}</a>
+            <strong>${escapeHtml(label)}</strong>
             <div class="small">${escapeHtml(stop.address || "")}</div>
-            <div class="small text-muted">${escapeHtml(stop.status || "")}${stop.description ? " · " + escapeHtml(stop.description) : ""}</div>
           </div>
           ${remove}
         </div>`;
@@ -259,6 +271,7 @@ window.OporaWorkOrders = {
 
     root.addEventListener("change", (event) => {
       if (event.target.name === "woKind" || filterForm?.contains(event.target)) {
+        syncJournalFilter();
         reloadMap();
         reloadItems();
       }
@@ -354,6 +367,7 @@ window.OporaWorkOrders = {
         });
     });
 
+    syncJournalFilter();
     renderNearby({});
     loadPlan().then(() => {
       reloadMap();
@@ -362,11 +376,10 @@ window.OporaWorkOrders = {
   },
 };
 
-(function bootWorkOrders() {
-  const start = () => window.OporaWorkOrders.init();
+(function bindWorkOrdersLifecycle() {
+  const boot = () => window.OporaWorkOrders.init();
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", start);
-  } else {
-    start();
+    document.addEventListener("DOMContentLoaded", boot);
   }
+  window.addEventListener("opora:navigated", boot);
 })();

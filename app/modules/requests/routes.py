@@ -951,7 +951,7 @@ def start_work(request_id: uuid.UUID):
 
 @requests_bp.route("/<uuid:request_id>/complete", methods=["POST"])
 @login_required
-@any_permission_required(PERM_REQUESTS_EDIT, PERM_REQUESTS_APPROVE)
+@any_permission_required(PERM_REQUESTS_EDIT, PERM_REQUESTS_APPROVE, PERM_REQUESTS_DISPATCH)
 def complete_request(request_id: uuid.UUID):
     try:
         req = RequestService.complete_request(request_id, current_user.id)
