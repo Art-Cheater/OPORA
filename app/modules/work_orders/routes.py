@@ -11,6 +11,8 @@ from app.core.decorators import any_permission_required, permission_required
 from app.core.exceptions import NotFoundError, ValidationError
 from app.core.http import ajax_error, ajax_ok
 from app.models.auth.constants import (
+    PERM_DEFECTS_EDIT,
+    PERM_DEFECTS_STATUS_CHANGE,
     PERM_REQUESTS_APPROVE,
     PERM_REQUESTS_DISPATCH,
     PERM_REQUESTS_EDIT,
@@ -18,10 +20,14 @@ from app.models.auth.constants import (
     PERM_WAYBILLS_STATUS_CHANGE,
     PERM_WAYBILLS_VIEW,
 )
+from app.modules.defects.services import DefectService
+from app.modules.defects.workflow import STATUS_FIXED
+from app.modules.requests.repositories import RequestRepository
 from app.modules.requests.services import RequestService
 from app.modules.waybills.services import WaybillService
 from app.modules.waybills.workflow import STATUS_DRAFT, STATUS_IN_PROGRESS
 from app.modules.work_orders.blueprint import work_orders_bp
+from app.modules.work_orders.plan_service import EXCLUDE_REASONS, WorkPlanService
 from app.modules.work_orders.services import WorkOrderFilter, WorkOrderService
 
 
@@ -66,9 +72,17 @@ def index():
         or current_user.has_permission(PERM_REQUESTS_APPROVE)
         or current_user.has_permission(PERM_REQUESTS_DISPATCH)
     )
+    can_complete_defect = (
+        current_user.has_permission(PERM_DEFECTS_EDIT)
+        or current_user.has_permission(PERM_DEFECTS_STATUS_CHANGE)
+    )
     return render_template(
         "work_orders/index.html",
         can_complete=can_complete,
+        can_complete_defect=can_complete_defect,
+        can_manage_plans=current_user.has_permission(PERM_WAYBILLS_EDIT),
+        journals=RequestRepository.get_journals(),
+        exclude_reasons=EXCLUDE_REASONS,
     )
 
 
@@ -86,6 +100,7 @@ def queue_json():
             q=request.args.get("q") or "",
             page=page,
             user=current_user,
+            journal=request.args.get("journal") or "all",
         )
     )
 
@@ -115,6 +130,196 @@ def complete_request(request_id: uuid.UUID):
         return ajax_error(str(exc), status=404)
     except ValidationError as exc:
         return ajax_error(str(exc))
+
+
+@work_orders_bp.route("/defects/<uuid:defect_id>.json")
+@login_required
+@permission_required(PERM_WAYBILLS_VIEW)
+def defect_card_json(defect_id: uuid.UUID):
+    card = WorkOrderService.defect_card(defect_id, current_user)
+    if card is None:
+        return ajax_error("Дефект не найден.", status=404)
+    return jsonify(card)
+
+
+@work_orders_bp.route("/defects/<uuid:defect_id>/complete", methods=["POST"])
+@login_required
+@any_permission_required(PERM_DEFECTS_EDIT, PERM_DEFECTS_STATUS_CHANGE)
+def complete_defect(defect_id: uuid.UUID):
+    from app.extensions import db
+    from app.models.defects.defect import Defect
+
+    item = db.session.get(Defect, defect_id)
+    if item is None or item.deleted_at is not None:
+        return ajax_error("Дефект не найден.", status=404)
+    try:
+        DefectService.change_status(item, STATUS_FIXED, current_user.id, comment="Дефект отмечен выполненным")
+        return ajax_ok(
+            "Дефект отмечен выполненным.",
+            item=WorkOrderService.serialize_defect_queue_item(item, current_user),
+            card=WorkOrderService.defect_card(item.id, current_user),
+        )
+    except ValidationError as exc:
+        return ajax_error(str(exc))
+
+
+@work_orders_bp.route("/plans.json")
+@login_required
+@permission_required(PERM_WAYBILLS_VIEW)
+def plans_json():
+    return jsonify({"plans": WorkPlanService.my_plans(current_user)})
+
+
+@work_orders_bp.route("/plans/draft", methods=["POST"])
+@login_required
+@permission_required(PERM_WAYBILLS_EDIT)
+def plans_draft():
+    try:
+        plan = WorkPlanService.get_or_create_draft(current_user)
+        return ajax_ok("Черновик плана открыт.", plan=WorkPlanService.serialize_plan(plan, current_user))
+    except ValidationError as exc:
+        return ajax_error(str(exc))
+
+
+@work_orders_bp.route("/plans/<uuid:plan_id>.json")
+@login_required
+@permission_required(PERM_WAYBILLS_VIEW)
+def plan_detail_json(plan_id: uuid.UUID):
+    try:
+        plan = WorkPlanService.get_owned(plan_id, current_user)
+        return jsonify(WorkPlanService.serialize_plan(plan, current_user))
+    except NotFoundError as exc:
+        return ajax_error(str(exc), status=404)
+    except ValidationError as exc:
+        return ajax_error(str(exc), status=403)
+
+
+@work_orders_bp.route("/plans/<uuid:plan_id>/items", methods=["POST"])
+@login_required
+@permission_required(PERM_WAYBILLS_EDIT)
+def plan_add_item(plan_id: uuid.UUID):
+    payload = request.get_json(silent=True) or request.form
+    entity_type = (payload.get("entity_type") or "").strip()
+    entity_id = _uuid_or_none(payload.get("entity_id"))
+    if entity_id is None or entity_type not in {"request", "defect"}:
+        return ajax_error("Выберите заявку или дефект.")
+    try:
+        plan = WorkPlanService.get_owned(plan_id, current_user)
+        WorkPlanService.add_item(plan, entity_type=entity_type, entity_id=entity_id, user=current_user)
+        plan = WorkPlanService.get_owned(plan_id, current_user)
+        related = WorkPlanService.related_works(entity_type=entity_type, entity_id=entity_id, plan=plan)
+        return ajax_ok(
+            "Добавлено в план.",
+            plan=WorkPlanService.serialize_plan(plan, current_user),
+            related=related,
+        )
+    except NotFoundError as exc:
+        return ajax_error(str(exc), status=404)
+    except ValidationError as exc:
+        return ajax_error(str(exc))
+
+
+@work_orders_bp.route("/plans/<uuid:plan_id>/items/<uuid:item_id>", methods=["DELETE", "POST"])
+@login_required
+@permission_required(PERM_WAYBILLS_EDIT)
+def plan_remove_draft_item(plan_id: uuid.UUID, item_id: uuid.UUID):
+    payload = request.get_json(silent=True) or request.form or {}
+    if request.method == "POST" and (payload.get("action") or request.args.get("action") or "") != "remove":
+        return ajax_error("Некорректное действие.")
+    try:
+        plan = WorkPlanService.get_owned(plan_id, current_user)
+        WorkPlanService.remove_draft_item(plan, item_id, current_user)
+        plan = WorkPlanService.get_owned(plan_id, current_user)
+        return ajax_ok("Удалено из черновика.", plan=WorkPlanService.serialize_plan(plan, current_user))
+    except NotFoundError as exc:
+        return ajax_error(str(exc), status=404)
+    except ValidationError as exc:
+        return ajax_error(str(exc))
+
+
+@work_orders_bp.route("/plans/<uuid:plan_id>/save", methods=["POST"])
+@login_required
+@permission_required(PERM_WAYBILLS_EDIT)
+def work_plan_save(plan_id: uuid.UUID):
+    try:
+        plan = WorkPlanService.get_owned(plan_id, current_user)
+        plan = WorkPlanService.save_plan(plan, current_user)
+        return ajax_ok(
+            f"План {plan.number} сохранён. Работы переведены «В работе».",
+            plan=WorkPlanService.serialize_plan(plan, current_user),
+        )
+    except NotFoundError as exc:
+        return ajax_error(str(exc), status=404)
+    except ValidationError as exc:
+        return ajax_error(str(exc))
+
+
+@work_orders_bp.route("/plans/<uuid:plan_id>/items/<uuid:item_id>/complete", methods=["POST"])
+@login_required
+@permission_required(PERM_WAYBILLS_EDIT)
+def work_plan_complete_item(plan_id: uuid.UUID, item_id: uuid.UUID):
+    payload = request.get_json(silent=True) or {}
+    comment = request.form.get("comment") if request.form else None
+    if comment is None:
+        comment = payload.get("comment") or ""
+    files = request.files.getlist("files") if request.files else []
+    try:
+        plan = WorkPlanService.get_owned(plan_id, current_user)
+        plan = WorkPlanService.complete_item(
+            plan,
+            item_id,
+            current_user,
+            comment=comment or "",
+            files=files,
+        )
+        return ajax_ok("Работа выполнена.", plan=WorkPlanService.serialize_plan(plan, current_user))
+    except NotFoundError as exc:
+        return ajax_error(str(exc), status=404)
+    except ValidationError as exc:
+        return ajax_error(str(exc))
+
+
+@work_orders_bp.route("/plans/<uuid:plan_id>/items/<uuid:item_id>/exclude", methods=["POST"])
+@login_required
+@permission_required(PERM_WAYBILLS_EDIT)
+def work_plan_exclude_item(plan_id: uuid.UUID, item_id: uuid.UUID):
+    payload = request.get_json(silent=True) or request.form
+    try:
+        plan = WorkPlanService.get_owned(plan_id, current_user)
+        plan = WorkPlanService.exclude_item(
+            plan,
+            item_id,
+            current_user,
+            reason=payload.get("reason") or "",
+            comment=payload.get("comment") or "",
+        )
+        return ajax_ok("Работа исключена из плана.", plan=WorkPlanService.serialize_plan(plan, current_user))
+    except NotFoundError as exc:
+        return ajax_error(str(exc), status=404)
+    except ValidationError as exc:
+        return ajax_error(str(exc))
+
+
+@work_orders_bp.route("/related.json")
+@login_required
+@permission_required(PERM_WAYBILLS_VIEW)
+def related_json():
+    entity_type = (request.args.get("entity_type") or "").strip()
+    entity_id = _uuid_or_none(request.args.get("entity_id"))
+    plan_id = _uuid_or_none(request.args.get("plan_id"))
+    empty = {"pp": "", "by_pp": [], "by_address": [], "by_district": []}
+    if entity_id is None or entity_type not in {"request", "defect"}:
+        return jsonify(empty)
+    plan = None
+    if plan_id is not None:
+        try:
+            plan = WorkPlanService.get_owned(plan_id, current_user)
+        except (NotFoundError, ValidationError):
+            plan = None
+    try:
+        return jsonify(WorkPlanService.related_works(entity_type=entity_type, entity_id=entity_id, plan=plan))
+    except (NotFoundError, ValidationError):
+        return jsonify(empty)
 
 
 @work_orders_bp.route("/map.json")

@@ -824,21 +824,49 @@ class RequestService:
         return req
 
     @classmethod
-    def complete_request(cls, request_id: uuid.UUID, user_id: uuid.UUID) -> Request:
+    def mark_in_progress_in_session(cls, request_id: uuid.UUID, user_id: uuid.UUID) -> Request:
+        """Перевести заявку «В работе» без commit. Для сохранения плана работ."""
+        req = cls._lock_request(request_id)
+        if req.status.code == STATUS_IN_PROGRESS:
+            return req
+        if req.status.code not in OPEN_STATUS_CODES:
+            raise ValidationError("Заявку в этом статусе нельзя взять в работу.")
+        new_status = cls.get_status_by_code(STATUS_IN_PROGRESS)
+        cls._apply_status(
+            req,
+            new_status,
+            user_id,
+            history_action=HISTORY_START_WORK,
+            history_comment="Заявка включена в план работ",
+            audit_description=f"Заявка {req.number} включена в план работ",
+        )
+        return req
+
+    @classmethod
+    def complete_request(
+        cls,
+        request_id: uuid.UUID,
+        user_id: uuid.UUID,
+        *,
+        comment: str | None = None,
+        commit: bool = True,
+    ) -> Request:
         """Отметить заявку выполненной: текущий открытый статус → completed."""
         req = cls._lock_request(request_id)
         if req.status.code not in OPEN_STATUS_CODES:
             raise ValidationError("Заявку в этом статусе нельзя отметить выполненной.")
         new_status = cls.get_status_by_code(STATUS_COMPLETED)
+        history_comment = (comment or "").strip() or "Заявка отмечена выполненной"
         cls._apply_status(
             req,
             new_status,
             user_id,
             history_action=HISTORY_COMPLETE,
-            history_comment="Заявка отмечена выполненной",
+            history_comment=history_comment,
             audit_description=f"Заявка {req.number} выполнена",
         )
-        db.session.commit()
+        if commit:
+            db.session.commit()
         return req
 
     @classmethod

@@ -128,6 +128,7 @@ class EntityType(str, Enum):
   REQUEST_JOURNAL = "request_journal"
   DEFECT = "defect"
   WAYBILL = "waybill"
+  WORK_PLAN = "work_plan"
   WORK_OBJECT = "work_object"
   PROJECT = "project"
   TENDER_APPLICATION = "tender_application"

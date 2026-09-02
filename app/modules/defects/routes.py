@@ -103,6 +103,7 @@ def _payload_from_form(form: DefectForm, entity=None) -> DefectPayload:
         latitude=coord("latitude"),
         longitude=coord("longitude"),
         responsible_id=_uuid_or_none(str(field("responsible_id", form.responsible_id.data, default="") or "")),
+        pp=(field("pp", form.pp.data, default="") or "").strip() or None,
     )
 
 

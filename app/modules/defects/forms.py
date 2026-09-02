@@ -60,6 +60,7 @@ class DefectForm(FlaskForm):
     settlement = HiddenField(validators=[Optional(), Length(max=255)])
     street = HiddenField(validators=[Optional(), Length(max=500)])
     house = HiddenField(validators=[Optional(), Length(max=100)])
+    pp = StringField("ПП (пункт питания)", validators=[Optional(), Length(max=255)])
     address_source = HiddenField(validators=[Optional(), Length(max=50)])
     address_external_id = HiddenField(validators=[Optional(), Length(max=255)])
     latitude = HiddenField(validators=[Optional()])

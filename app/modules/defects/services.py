@@ -21,7 +21,7 @@ from app.models.defects.defect_history import DefectHistory
 from app.models.enums import AuditAction, EntityType
 from app.models.files.attachment import Attachment
 from app.modules.defects.repositories import DefectRepository
-from app.modules.defects.workflow import STATUS_FIXED, STATUS_OPEN, can_transition
+from app.modules.defects.workflow import STATUS_FIXED, STATUS_IN_PROGRESS, STATUS_OPEN, can_transition
 from app.modules.requests.services import RequestService
 
 
@@ -43,6 +43,7 @@ class DefectPayload:
     latitude: Decimal | None
     longitude: Decimal | None
     responsible_id: uuid.UUID | None
+    pp: str | None = None
 
 
 class DefectService:
@@ -54,6 +55,7 @@ class DefectService:
         "district",
         "responsible_id",
         "status_id",
+        "pp",
     ]
 
     @staticmethod
@@ -107,6 +109,7 @@ class DefectService:
             "status_id": str(item.status_id),
             "category_id": str(item.category_id),
             "responsible_id": str(item.responsible_id) if item.responsible_id else None,
+            "pp": item.pp,
         }
 
     @classmethod
@@ -149,6 +152,7 @@ class DefectService:
             longitude=payload.longitude,
             category_id=payload.category_id,
             responsible_id=payload.responsible_id,
+            pp=(payload.pp or "").strip() or None,
             status_id=status.id,
             created_by=user_id,
             updated_by=user_id,
@@ -184,6 +188,7 @@ class DefectService:
         item.longitude = payload.longitude
         item.category_id = payload.category_id
         item.responsible_id = payload.responsible_id
+        item.pp = (payload.pp or "").strip() or None
         item.updated_by = user_id
         cls._log_audit(user_id, AuditAction.UPDATE.value, item.id, f"Изменён дефект {item.number}", old, cls._snapshot(item))
         cls._log_history(item, user_id, "update", "Изменение дефекта", {"old": old, "new": cls._snapshot(item)})
@@ -191,7 +196,15 @@ class DefectService:
         return item
 
     @classmethod
-    def change_status(cls, item: Defect, status_code: str, user_id: uuid.UUID, comment: str | None = None) -> Defect:
+    def change_status(
+        cls,
+        item: Defect,
+        status_code: str,
+        user_id: uuid.UUID,
+        comment: str | None = None,
+        *,
+        commit: bool = True,
+    ) -> Defect:
         new_status = DefectRepository.get_status_by_code(status_code)
         if new_status is None:
             raise ValidationError("Статус не найден.")
@@ -210,8 +223,17 @@ class DefectService:
             {"status": status_code},
         )
         cls._log_history(item, user_id, "status_change", comment, {"from": current, "to": status_code}, previous_id)
-        db.session.commit()
+        if commit:
+            db.session.commit()
         return item
+
+    @classmethod
+    def mark_in_progress_in_session(cls, item: Defect, user_id: uuid.UUID) -> Defect:
+        """Перевести дефект «В работе» без commit. Для сохранения плана работ."""
+        current = item.status.code if item.status else ""
+        if current == STATUS_IN_PROGRESS:
+            return item
+        return cls.change_status(item, STATUS_IN_PROGRESS, user_id, comment="Дефект включён в план работ", commit=False)
 
     @classmethod
     def mark_fixed_in_session(cls, item: Defect, user_id: uuid.UUID, *, comment: str | None = None) -> bool:

@@ -32,6 +32,7 @@ class Defect(BaseModel):
         Index("ix_defects_district", "district"),
         Index("ix_defects_settlement", "settlement"),
         Index("ix_defects_street_district", "street", "district"),
+        Index("ix_defects_pp", "pp"),
         Index("ix_defects_normalized_address", "normalized_address"),
         Index("ix_defects_lat_lng", "latitude", "longitude"),
         Index("ix_defects_deleted_created", "deleted_at", "created_at"),
@@ -48,6 +49,7 @@ class Defect(BaseModel):
     settlement: Mapped[str | None] = mapped_column(String(255), nullable=True)
     street: Mapped[str | None] = mapped_column(String(500), nullable=True)
     house: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    pp: Mapped[str | None] = mapped_column(String(255), nullable=True)
     address_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
     address_external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)

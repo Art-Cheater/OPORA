@@ -87,7 +87,9 @@ def test_work_orders_access(client):
     html = page.get_data(as_text=True)
     assert "Работа с заявками" in html
     assert 'id="workDesk"' in html
-    assert "Список работы" in html
+    assert "Очередь работ" in html
+    assert "Мои планы" in html
+    assert "Создать план работ" in html
     assert "css/work-desk.css" in html
     assert "js/work-orders.js" in html
     assert "Мой план работ" not in html
@@ -110,7 +112,19 @@ def test_work_desk_queue_card_and_complete(client, app):
     ids = {row["id"] for row in queue["items"]}
     assert request_id in ids
     assert extra_id in ids
-    assert defect_id not in ids
+    assert defect_id in ids
+    assert all(item["entity_type"] in {"request", "defect"} for item in queue["items"])
+    requests_only = client.get("/work-orders/queue.json?journal=requests").get_json()
+    req_ids = {item["id"] for item in requests_only["items"]}
+    assert request_id in req_ids
+    assert extra_id in req_ids
+    assert defect_id not in req_ids
+    defects_only = client.get("/work-orders/queue.json?journal=defects").get_json()
+    def_ids = {item["id"] for item in defects_only["items"]}
+    assert defect_id in def_ids
+    assert request_id not in def_ids
+    assert extra_id not in def_ids
+    assert all(item["entity_type"] == "defect" for item in defects_only["items"])
     row = next(item for item in queue["items"] if item["id"] == request_id)
     assert row["number"].startswith("26-")
     assert row["address"]
@@ -233,3 +247,184 @@ def test_dispatcher_cannot_edit_work_plan(client, app):
     )
     assert added.status_code == 403
     assert client.post("/work-orders/plan/complete", json={}).status_code == 403
+    assert client.post("/work-orders/plans/draft", json={}).status_code == 403
+
+
+def test_work_plans_journals_related_complete_and_auto_close(client, app):
+    from app.models.work_plans.work_plan import WorkPlan
+    from app.modules.requests.journals import JOURNAL_OKTYABRSKY_VILLAGES
+    from app.modules.requests.repositories import RequestRepository
+
+    _login(client, "master@test.local")
+    with app.app_context():
+        main = RequestRepository.get_default_journal()
+        villages = RequestRepository.get_journal_by_code(JOURNAL_OKTYABRSKY_VILLAGES)
+        st_new = db.session.scalar(db.select(RequestStatus).where(RequestStatus.code == "new"))
+        d_open = db.session.scalar(db.select(DefectStatus).where(DefectStatus.code == "open"))
+        category = db.session.scalar(db.select(DefectCategory).where(DefectCategory.code == "lighting"))
+        first = Request(
+            number="25-501",
+            title="Опора",
+            description="Не горит светильник",
+            address="ул. Ленина, 10",
+            street="ул. Ленина",
+            district="Ленинский",
+            pp="69",
+            applicant_name="QA",
+            priority=Priority.MEDIUM.value,
+            status_id=st_new.id,
+            journal_id=main.id,
+        )
+        same_pp = Request(
+            number="25-512",
+            title="Кабель",
+            description="Обрыв",
+            address="ул. Ленина, 12",
+            street="ул. Ленина",
+            district="Ленинский",
+            pp="ПП 69",
+            applicant_name="QA",
+            priority=Priority.MEDIUM.value,
+            status_id=st_new.id,
+            journal_id=main.id,
+        )
+        other_pp = Request(
+            number="25-530",
+            title="Другой ПП",
+            description="Другой фидер",
+            address="ул. Мира, 1",
+            street="ул. Мира",
+            district="Ленинский",
+            pp="70",
+            applicant_name="QA",
+            priority=Priority.MEDIUM.value,
+            status_id=st_new.id,
+            journal_id=main.id,
+        )
+        village = Request(
+            number="25-601",
+            title="Деревня",
+            description="Деревенская заявка",
+            address="д. Широковцы, 2",
+            street="Центральная",
+            district="Октябрьский",
+            pp="12",
+            applicant_name="QA",
+            priority=Priority.MEDIUM.value,
+            status_id=st_new.id,
+            journal_id=villages.id,
+        )
+        defect = Defect(
+            number="DF-26-14",
+            description="Не работает светильник",
+            address="ул. Ленина, 8",
+            street="ул. Ленина",
+            district="Ленинский",
+            pp="69",
+            status_id=d_open.id,
+            category_id=category.id,
+        )
+        db.session.add_all([first, same_pp, other_pp, village, defect])
+        db.session.commit()
+        first_id, same_id, other_id, village_id, defect_id = (
+            str(first.id),
+            str(same_pp.id),
+            str(other_pp.id),
+            str(village.id),
+            str(defect.id),
+        )
+
+    html = client.get("/work-orders/").get_data(as_text=True)
+    assert "leaflet" not in html.lower()
+    assert 'id="opsMap"' not in html
+
+    defects_only = client.get("/work-orders/queue.json?journal=defects").get_json()["items"]
+    assert {row["id"] for row in defects_only} == {defect_id}
+    assert all(row["number"].startswith("DF-") for row in defects_only)
+
+    village_only = client.get("/work-orders/queue.json?journal=oktyabrsky_villages").get_json()["items"]
+    assert {row["id"] for row in village_only} == {village_id}
+
+    draft = client.post("/work-orders/plans/draft", json={})
+    assert draft.status_code == 200, draft.get_data(as_text=True)
+    plan = draft.get_json()["plan"]
+    plan_id = plan["id"]
+    assert plan["status"] == "draft"
+
+    added = client.post(
+        f"/work-orders/plans/{plan_id}/items",
+        json={"entity_type": "request", "entity_id": first_id},
+    )
+    assert added.status_code == 200, added.get_data(as_text=True)
+    related = added.get_json()["related"]
+    related_ids = {row["entity_id"] for row in related["by_pp"]}
+    assert same_id in related_ids
+    assert defect_id in related_ids
+    assert first_id not in related_ids
+    assert other_id not in related_ids
+
+    assert client.post(
+        f"/work-orders/plans/{plan_id}/items",
+        json={"entity_type": "request", "entity_id": same_id},
+    ).status_code == 200
+    assert client.post(
+        f"/work-orders/plans/{plan_id}/items",
+        json={"entity_type": "defect", "entity_id": defect_id},
+    ).status_code == 200
+
+    saved = client.post(f"/work-orders/plans/{plan_id}/save", json={})
+    assert saved.status_code == 200, saved.get_data(as_text=True)
+    saved_plan = saved.get_json()["plan"]
+    assert saved_plan["number"].startswith("ПР-")
+    assert saved_plan["status"] == "in_progress"
+    with app.app_context():
+        for entity_id, model in ((first_id, Request), (same_id, Request)):
+            row = db.session.get(model, entity_id)
+            assert db.session.get(RequestStatus, row.status_id).code == "in_progress"
+        defect_row = db.session.get(Defect, defect_id)
+        assert db.session.get(DefectStatus, defect_row.status_id).code == "in_progress"
+
+    mine = client.get("/work-orders/plans.json").get_json()["plans"]
+    assert any(row["id"] == plan_id for row in mine)
+
+    opened = client.get(f"/work-orders/plans/{plan_id}.json").get_json()
+    assert opened["number"] == saved_plan["number"]
+    assert len(opened["items"]) == 3
+    by_number = {item["number"]: item for item in opened["items"]}
+    complete_id = by_number["25-501"]["id"]
+    exclude_id = by_number["25-512"]["id"]
+    last_id = by_number["DF-26-14"]["id"]
+
+    done = client.post(
+        f"/work-orders/plans/{plan_id}/items/{complete_id}/complete",
+        data={"comment": "Заменил светильник"},
+    )
+    assert done.status_code == 200, done.get_data(as_text=True)
+    excluded = client.post(
+        f"/work-orders/plans/{plan_id}/items/{exclude_id}/exclude",
+        json={"reason": "no_access", "comment": "Калитка закрыта"},
+    )
+    assert excluded.status_code == 200, excluded.get_data(as_text=True)
+    still_open = excluded.get_json()["plan"]
+    assert still_open["status"] == "in_progress"
+
+    last = client.post(
+        f"/work-orders/plans/{plan_id}/items/{last_id}/complete",
+        data={"comment": "Устранён дефект"},
+    )
+    assert last.status_code == 200, last.get_data(as_text=True)
+    finished = last.get_json()["plan"]
+    assert finished["status"] == "completed"
+    assert finished["completed_at"]
+    assert finished["done"] == 2
+    assert finished["excluded"] == 1
+    history = client.get("/work-orders/plans.json").get_json()["plans"]
+    row = next(item for item in history if item["id"] == plan_id)
+    assert row["status"] == "completed"
+    with app.app_context():
+        plan_row = db.session.get(WorkPlan, plan_id)
+        assert plan_row.status == "completed"
+        assert db.session.get(RequestStatus, db.session.get(Request, first_id).status_id).code == "completed"
+        assert db.session.get(RequestStatus, db.session.get(Request, same_id).status_id).code == "in_progress"
+        assert db.session.get(DefectStatus, db.session.get(Defect, defect_id).status_id).code == "fixed"
+

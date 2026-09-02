@@ -53,6 +53,9 @@ from app.models.waybills.waybill import Waybill
 from app.models.waybills.waybill_history import WaybillHistory
 from app.models.waybills.waybill_member import WaybillMember
 from app.models.waybills.waybill_stop import WaybillStop
+from app.models.work_plans.work_plan import WorkPlan
+from app.models.work_plans.work_plan_history import WorkPlanHistory
+from app.models.work_plans.work_plan_item import WorkPlanItem
 from app.models.tenders.tender_application import TenderApplication
 from app.models.tenders.tender_document import TenderDocument
 from app.models.tenders.tender_project import TenderProject
@@ -88,6 +91,9 @@ __all__ = [
     "WaybillHistory",
     "WaybillMember",
     "WaybillStop",
+    "WorkPlan",
+    "WorkPlanHistory",
+    "WorkPlanItem",
     "WorkObject",
     "Project",
     "ProjectMember",

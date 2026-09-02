@@ -8,13 +8,18 @@ from datetime import date, datetime, time
 from decimal import Decimal
 
 from flask import url_for
-from sqlalchemy import case, or_
+from sqlalchemy import case, func, literal, or_, select, union_all
 from sqlalchemy.orm import joinedload, load_only, selectinload
 
 from app.core.nearby import NearbyHit, NearbySearchService
 from app.extensions import db
+from app.models.auth.constants import (
+    PERM_DEFECTS_EDIT,
+    PERM_DEFECTS_STATUS_CHANGE,
+)
 from app.models.auth.user import User
 from app.models.defects.defect import Defect
+from app.models.defects.defect_history import DefectHistory
 from app.models.defects.defect_status import DefectStatus
 from app.models.enums import EntityType, Priority
 from app.models.files.attachment import Attachment
@@ -24,6 +29,10 @@ from app.models.requests.request_journal import RequestJournal
 from app.models.requests.request_status import RequestStatus
 from app.models.waybills.waybill import Waybill
 from app.models.waybills.waybill_stop import WaybillStop
+from app.modules.defects.workflow import STATUS_FIXED as DEFECT_FIXED
+from app.modules.defects.workflow import STATUS_IN_PROGRESS as DEFECT_IN_PROGRESS
+from app.modules.defects.workflow import STATUS_OPEN as DEFECT_OPEN
+from app.modules.requests.repositories import RequestRepository
 from app.modules.requests.workflow import (
     OPEN_STATUS_CODES,
     STATUS_COMPLETED,
@@ -444,6 +453,12 @@ class WorkOrderService:
         "in_progress": tuple(code for code in OPEN_STATUS_CODES if code != STATUS_NEW),
         "completed": (STATUS_COMPLETED,),
     }
+    DEFECT_PRESETS = {
+        "all": None,
+        "new": (DEFECT_OPEN,),
+        "in_progress": (DEFECT_IN_PROGRESS,),
+        "completed": (DEFECT_FIXED,),
+    }
     PRIORITY_LABELS = {
         Priority.LOW.value: "Низкий",
         Priority.MEDIUM.value: "Средний",
@@ -460,53 +475,171 @@ class WorkOrderService:
         except (AttributeError, TypeError, ValueError):
             return str(value)
 
+    @staticmethod
+    def _can_complete_defect(item: Defect, user: User) -> bool:
+        code = item.status.code if item.status else ""
+        if code not in {DEFECT_OPEN, DEFECT_IN_PROGRESS}:
+            return False
+        return user.has_permission(PERM_DEFECTS_EDIT) or user.has_permission(PERM_DEFECTS_STATUS_CHANGE)
+
     @classmethod
-    def queue(cls, *, preset: str, q: str, page: int, user: User) -> dict:
+    def queue(cls, *, preset: str, q: str, page: int, user: User, journal: str = "all") -> dict:
+        journal_key = (journal or "all").strip().lower()
         codes = cls.QUEUE_PRESETS.get((preset or "all").strip().lower(), cls.QUEUE_PRESETS["all"])
-        stmt = (
-            db.select(Request)
-            .options(joinedload(Request.status), joinedload(Request.journal))
-            .join(RequestStatus, Request.status_id == RequestStatus.id)
-            .where(Request.active_filter())
-        )
-        if codes:
-            stmt = stmt.where(RequestStatus.code.in_(codes))
+        defect_codes = cls.DEFECT_PRESETS.get((preset or "all").strip().lower(), cls.DEFECT_PRESETS["all"])
         needle = (q or "").strip()
-        if needle:
-            like = f"%{needle}%"
-            stmt = stmt.where(
-                or_(
-                    Request.number.ilike(like),
-                    Request.address.ilike(like),
-                    Request.description.ilike(like),
-                    Request.dispatcher_name.ilike(like),
-                    Request.applicant_name.ilike(like),
-                    Request.pp.ilike(like),
+        like = f"%{needle}%" if needle else None
+        include_requests = journal_key != "defects"
+        include_defects = journal_key in {"all", "defects"}
+        journal_id = None
+        if include_requests and journal_key not in {"all", "defects"}:
+            found = RequestRepository.get_journal_by_code(journal_key)
+            if found is None:
+                include_requests = False
+            else:
+                journal_id = found.id
+
+        parts = []
+        if include_requests:
+            req_stmt = (
+                db.select(
+                    Request.id.label("eid"),
+                    literal("request").label("kind"),
+                    func.coalesce(Request.received_at, Request.created_at).label("sort_at"),
                 )
+                .join(RequestStatus, Request.status_id == RequestStatus.id)
+                .where(Request.active_filter())
             )
-        stmt = stmt.order_by(Request.received_at.desc().nullslast(), Request.created_at.desc())
-        pagination = db.paginate(stmt, page=max(page, 1), per_page=cls.QUEUE_PAGE, error_out=False)
-        return {
-            "items": [cls.serialize_queue_item(item, user) for item in pagination.items],
-            "page": pagination.page,
-            "pages": pagination.pages,
-            "total": pagination.total,
-        }
+            if codes:
+                req_stmt = req_stmt.where(RequestStatus.code.in_(codes))
+            if journal_id is not None:
+                req_stmt = req_stmt.where(Request.journal_id == journal_id)
+            if like:
+                req_stmt = req_stmt.where(
+                    or_(
+                        Request.number.ilike(like),
+                        Request.address.ilike(like),
+                        Request.description.ilike(like),
+                        Request.dispatcher_name.ilike(like),
+                        Request.applicant_name.ilike(like),
+                        Request.pp.ilike(like),
+                        Request.street.ilike(like),
+                    )
+                )
+            parts.append(req_stmt)
+        if include_defects:
+            def_stmt = (
+                db.select(
+                    Defect.id.label("eid"),
+                    literal("defect").label("kind"),
+                    Defect.created_at.label("sort_at"),
+                )
+                .join(DefectStatus, Defect.status_id == DefectStatus.id)
+                .where(Defect.active_filter())
+            )
+            if defect_codes:
+                def_stmt = def_stmt.where(DefectStatus.code.in_(defect_codes))
+            if like:
+                def_stmt = def_stmt.where(
+                    or_(
+                        Defect.number.ilike(like),
+                        Defect.address.ilike(like),
+                        Defect.description.ilike(like),
+                        Defect.pp.ilike(like),
+                        Defect.street.ilike(like),
+                    )
+                )
+            parts.append(def_stmt)
+
+        page_num = max(page, 1)
+        if not parts:
+            return {"items": [], "page": page_num, "pages": 1, "total": 0}
+
+        unioned = union_all(*parts).subquery()
+        total = db.session.scalar(select(func.count()).select_from(unioned)) or 0
+        pages = max((total + cls.QUEUE_PAGE - 1) // cls.QUEUE_PAGE, 1)
+        rows = db.session.execute(
+            select(unioned.c.eid, unioned.c.kind)
+            .order_by(unioned.c.sort_at.desc())
+            .offset((page_num - 1) * cls.QUEUE_PAGE)
+            .limit(cls.QUEUE_PAGE)
+        ).all()
+        request_ids = [row.eid for row in rows if row.kind == "request"]
+        defect_ids = [row.eid for row in rows if row.kind == "defect"]
+        requests = {}
+        defects = {}
+        if request_ids:
+            requests = {
+                item.id: item
+                for item in db.session.scalars(
+                    db.select(Request)
+                    .options(joinedload(Request.status), joinedload(Request.journal))
+                    .where(Request.id.in_(request_ids))
+                ).unique()
+            }
+        if defect_ids:
+            defects = {
+                item.id: item
+                for item in db.session.scalars(
+                    db.select(Defect)
+                    .options(joinedload(Defect.status))
+                    .where(Defect.id.in_(defect_ids))
+                ).unique()
+            }
+        items = []
+        for row in rows:
+            if row.kind == "request" and row.eid in requests:
+                items.append(cls.serialize_queue_item(requests[row.eid], user))
+            elif row.kind == "defect" and row.eid in defects:
+                items.append(cls.serialize_defect_queue_item(defects[row.eid], user))
+        return {"items": items, "page": page_num, "pages": pages, "total": total}
 
     @classmethod
     def serialize_queue_item(cls, item: Request, user: User) -> dict:
         actions = available_actions(item, user)
         return {
             "id": str(item.id),
+            "entity_type": "request",
+            "type": "request",
+            "type_label": "Заявка",
             "number": item.number,
             "status": item.status.name if item.status else "",
             "status_code": item.status.code if item.status else "",
             "address": item.address or "",
             "district": item.district or "",
+            "pp": item.pp or "",
+            "journal": item.journal.name if item.journal else "",
+            "description": (item.description or item.title or "")[:180],
             "received_at": cls._fmt_dt(item.received_at or item.created_at),
             "dispatcher_name": item.dispatcher_name or "",
             "can_complete": any(action.code == "complete" for action in actions),
         }
+
+    @classmethod
+    def serialize_defect_queue_item(cls, item: Defect, user: User) -> dict:
+        return {
+            "id": str(item.id),
+            "entity_type": "defect",
+            "type": "defect",
+            "type_label": "Дефект",
+            "number": item.number,
+            "status": item.status.name if item.status else "",
+            "status_code": item.status.code if item.status else "",
+            "address": item.address or "",
+            "district": item.district or "",
+            "pp": item.pp or "",
+            "journal": "Дефекты",
+            "description": (item.description or "")[:180],
+            "received_at": cls._fmt_dt(item.created_at),
+            "dispatcher_name": "",
+            "can_complete": cls._can_complete_defect(item, user),
+        }
+
+    @classmethod
+    def entity_card(cls, entity_type: str, entity_id: uuid.UUID, user: User) -> dict | None:
+        if entity_type == "defect":
+            return cls.defect_card(entity_id, user)
+        return cls.card(entity_id, user)
 
     @classmethod
     def card(cls, request_id: uuid.UUID, user: User) -> dict | None:
@@ -584,6 +717,90 @@ class WorkOrderService:
                 "house": item.house or "",
                 "has_barrier": bool(item.has_barrier),
                 "barrier_phone": item.barrier_phone or "",
+                "photos": photos,
+                "documents": documents,
+                "history": history,
+            }
+        )
+        return queue
+
+    @classmethod
+    def defect_card(cls, defect_id: uuid.UUID, user: User) -> dict | None:
+        item = db.session.scalar(
+            db.select(Defect)
+            .options(
+                joinedload(Defect.status),
+                joinedload(Defect.category),
+                selectinload(Defect.history).joinedload(DefectHistory.status),
+                selectinload(Defect.history).joinedload(DefectHistory.changed_by_user),
+            )
+            .where(Defect.id == defect_id, Defect.active_filter())
+        )
+        if item is None:
+            return None
+        attachments = list(
+            db.session.scalars(
+                db.select(Attachment)
+                .where(
+                    Attachment.entity_type == EntityType.DEFECT.value,
+                    Attachment.entity_id == item.id,
+                    Attachment.active_filter(),
+                )
+                .order_by(Attachment.created_at.desc())
+            )
+        )
+        photos = []
+        documents = []
+        for file in attachments:
+            payload = {
+                "id": str(file.id),
+                "name": file.file_name,
+                "mime": file.mime_type or "",
+                "created_at": cls._fmt_dt(file.created_at),
+                "preview_url": url_for(
+                    "defects.download_attachment",
+                    defect_id=item.id,
+                    attachment_id=file.id,
+                    inline=1,
+                ),
+                "download_url": url_for(
+                    "defects.download_attachment",
+                    defect_id=item.id,
+                    attachment_id=file.id,
+                ),
+            }
+            if (file.mime_type or "").startswith("image/"):
+                photos.append(payload)
+            else:
+                documents.append(payload)
+        history = []
+        for entry in sorted(item.history or [], key=lambda row: row.created_at or row.id, reverse=True):
+            history.append(
+                {
+                    "id": str(entry.id),
+                    "action": entry.action or "",
+                    "comment": entry.comment or "",
+                    "status": entry.status.name if entry.status else "",
+                    "user": entry.changed_by_user.full_name if entry.changed_by_user else "",
+                    "created_at": cls._fmt_dt(entry.created_at),
+                }
+            )
+        queue = cls.serialize_defect_queue_item(item, user)
+        queue.update(
+            {
+                "title": "",
+                "description": item.description or "",
+                "pp": item.pp or "",
+                "journal": "Дефекты",
+                "priority": "",
+                "applicant_name": "",
+                "phone": "",
+                "settlement": item.settlement or "",
+                "street": item.street or "",
+                "house": item.house or "",
+                "has_barrier": False,
+                "barrier_phone": "",
+                "category": item.category.name if item.category else "",
                 "photos": photos,
                 "documents": documents,
                 "history": history,

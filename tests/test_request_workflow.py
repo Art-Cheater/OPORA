@@ -34,7 +34,9 @@ class _Request:
 
 def test_happy_path_transitions():
     assert can_transition(STATUS_NEW, STATUS_COMPLETED)
+    assert can_transition(STATUS_NEW, STATUS_IN_PROGRESS)
     assert can_transition(STATUS_EMERGENCY_DISPATCHED, STATUS_COMPLETED)
+    assert can_transition(STATUS_EMERGENCY_DISPATCHED, STATUS_IN_PROGRESS)
     assert can_transition(STATUS_ACCEPTED_BY_MASTER, STATUS_COMPLETED)
     assert can_transition(STATUS_IN_PROGRESS, STATUS_COMPLETED)
 
