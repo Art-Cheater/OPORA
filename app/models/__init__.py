@@ -42,7 +42,6 @@ from app.models.defects.defect import Defect
 from app.models.defects.defect_category import DefectCategory
 from app.models.defects.defect_history import DefectHistory
 from app.models.defects.defect_status import DefectStatus
-from app.models.defects.request_defect import RequestDefect
 from app.models.requests.request import Request
 from app.models.requests.request_dispatcher import RequestDispatcher
 from app.models.requests.request_history import RequestHistory
@@ -85,7 +84,6 @@ __all__ = [
     "DefectCategory",
     "DefectHistory",
     "DefectStatus",
-    "RequestDefect",
     "Waybill",
     "WaybillHistory",
     "WaybillMember",

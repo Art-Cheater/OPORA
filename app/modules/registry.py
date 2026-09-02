@@ -22,6 +22,7 @@ from app.modules.projects import projects_bp
 from app.modules.requests import requests_bp
 from app.modules.reports import reports_bp
 from app.modules.waybills import waybills_bp
+from app.modules.work_orders import work_orders_bp
 from app.modules.search import search_bp
 from app.modules.tenders import tenders_bp
 from app.modules.wallpapers import wallpapers_bp
@@ -33,6 +34,7 @@ ALL_BLUEPRINTS = [
     auth_bp,
     requests_bp,
     defects_bp,
+    work_orders_bp,
     waybills_bp,
     objects_bp,
     projects_bp,

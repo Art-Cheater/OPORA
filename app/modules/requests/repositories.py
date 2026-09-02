@@ -530,7 +530,6 @@ class RequestRepository:
                 noload(Request.history),
                 noload(Request.materials),
                 noload(Request.project),
-                noload(Request.defect_links),
             )
         )
 

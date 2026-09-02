@@ -514,6 +514,7 @@ function initInstantNav(sidebar, closeSidebar) {
         const path = url.pathname;
         return (
             path.startsWith("/messenger") ||
+            path.startsWith("/work-orders") ||
             path.startsWith("/auth/") ||
             path.includes("/download") ||
             path.includes("/export") ||
@@ -653,6 +654,12 @@ function initInstantNav(sidebar, closeSidebar) {
             // Leaflet/скрипт детали могли только что подгрузиться через SPA
             window.setTimeout(() => window.OporaRequestDetail?.init?.(), 0);
             window.setTimeout(() => window.OporaRequestDetail?.init?.(), 200);
+        }
+        if (document.getElementById("workOrderRoot")) {
+            window.setTimeout(() => {
+                window.OporaOpsMap?.init?.();
+                window.OporaWorkOrders?.init?.();
+            }, 0);
         }
         if (document.getElementById("inquiryForwardCard")) {
             const card = document.getElementById("inquiryForwardCard");

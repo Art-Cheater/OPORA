@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from app.models.projects.project import Project
     from app.models.requests.request_history import RequestHistory
     from app.models.requests.request_status import RequestStatus
-    from app.models.defects.request_defect import RequestDefect
 
 
 class Request(BaseModel):
@@ -120,12 +119,6 @@ class Request(BaseModel):
         "RequestStatus",
         back_populates="requests",
         foreign_keys=[status_id],
-    )
-    defect_links: Mapped[list[RequestDefect]] = relationship(
-        "RequestDefect",
-        back_populates="request",
-        foreign_keys="RequestDefect.request_id",
-        lazy="select",
     )
     project: Mapped[Project | None] = relationship(
         "Project",

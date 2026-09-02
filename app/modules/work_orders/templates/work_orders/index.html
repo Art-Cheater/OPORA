@@ -1,0 +1,144 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}Работа по заявкам — {{ app_name }}{% endblock %}
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ static_url('vendor/leaflet/leaflet.css') }}">
+{% endblock %}
+
+{% block page_header %}
+{% call page_header("Работа по заявкам", "Карта актуальных работ, ближайшие точки и план на день", "map") %}
+{% if current_user.has_permission('waybills.view') %}
+<a href="{{ url_for('waybills.index') }}" class="btn btn-outline-secondary">
+    <i class="bi bi-journal-text"></i> Сохранённые планы
+</a>
+{% endif %}
+{% endcall %}
+{% endblock %}
+
+{% block content %}
+<div id="workOrderRoot"
+     class="workbench"
+     data-can-edit="{{ 'true' if can_edit else 'false' }}"
+     data-map-url="{{ url_for('work_orders.map_json') }}"
+     data-items-url="{{ url_for('work_orders.items_json') }}"
+     data-plan-url="{{ url_for('work_orders.plan_json') }}"
+     data-add-url="{{ url_for('work_orders.plan_add') }}"
+     data-remove-url="{{ url_for('work_orders.plan_remove') }}"
+     data-reorder-url="{{ url_for('work_orders.plan_reorder') }}"
+     data-save-url="{{ url_for('work_orders.plan_save') }}"
+     data-nearby-url="{{ url_for('work_orders.nearby_json') }}"
+     data-tour="workbench">
+    <section class="workbench__map-wrap card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span><i class="bi bi-map"></i> Карта работ</span>
+            <span class="small text-muted" id="opsMapStatus">Загрузка карты…</span>
+        </div>
+        <div class="card-body p-0">
+            <div id="opsMap" class="agreement-map workbench__map"
+                 data-src="{{ url_for('work_orders.map_json') }}"
+                 data-kind="workbench"></div>
+        </div>
+    </section>
+
+    <aside class="workbench__side">
+        <div class="card" data-tour="filters">
+            <div class="card-header"><i class="bi bi-funnel"></i>Что смотреть</div>
+            <div class="card-body">
+                <div class="btn-group w-100 mb-3" role="group" aria-label="Тип работ">
+                    <input type="radio" class="btn-check" name="woKind" id="woKindAll" value="all" checked>
+                    <label class="btn btn-outline-primary" for="woKindAll">Все</label>
+                    <input type="radio" class="btn-check" name="woKind" id="woKindReq" value="request">
+                    <label class="btn btn-outline-primary" for="woKindReq">Заявки</label>
+                    <input type="radio" class="btn-check" name="woKind" id="woKindDef" value="defect">
+                    <label class="btn btn-outline-primary" for="woKindDef">Дефекты</label>
+                </div>
+                <form id="workOrderFilters" class="row g-2">
+                    <div class="col-12">
+                        <input type="search" name="q" class="form-control form-control-sm" placeholder="№ или адрес">
+                    </div>
+                    <div class="col-6">
+                        <select name="district" class="form-select form-select-sm">
+                            {% for value, label in districts %}
+                            <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <select name="journal_id" class="form-select form-select-sm">
+                            <option value="">Все журналы</option>
+                            {% for journal in journals %}
+                            <option value="{{ journal.id }}">{{ journal.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <select name="status_id" class="form-select form-select-sm">
+                            <option value="">Любой статус</option>
+                            <optgroup label="Заявки">
+                                {% for st in request_statuses %}
+                                {% if not st.is_final %}
+                                <option value="{{ st.id }}">{{ st.name }}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </optgroup>
+                            <optgroup label="Дефекты">
+                                {% for st in defect_statuses %}
+                                {% if not st.is_final %}
+                                <option value="{{ st.id }}">{{ st.name }}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <input type="date" name="date" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="mine" id="woMine" value="1">
+                            <label class="form-check-label" for="woMine">Только мои</label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card" id="workOrderNearbyCard">
+            <div class="card-header"><i class="bi bi-geo"></i>Рядом обнаружены другие работы</div>
+            <div class="card-body" id="workOrderNearby">
+                <p class="text-muted small mb-0">Добавьте точку в план — система предложит ближайшие заявки и дефекты. Связь между ними не создаётся.</p>
+            </div>
+        </div>
+
+        <div class="card workbench__plan" data-tour="plan">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-list-ol"></i>Мой план работ</span>
+                <span class="small text-muted" id="workOrderPlanNumber"></span>
+            </div>
+            <div class="card-body p-0">
+                <div id="workOrderPlan" class="workbench-plan"></div>
+            </div>
+            <div class="card-footer d-grid gap-2">
+                <div id="workOrderFlash" class="small mb-0"></div>
+                <button type="button" class="btn btn-outline-primary" id="workOrderRouteBtn">
+                    <i class="bi bi-signpost-2"></i> Построить маршрут
+                </button>
+                {% if can_edit %}
+                <button type="button" class="btn btn-primary" id="workOrderSaveBtn">
+                    <i class="bi bi-check2-circle"></i> Сохранить план на сегодня
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </aside>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script src="{{ static_url('vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ static_url('js/ops-map.js') }}"></script>
+<script src="{{ static_url('js/work-orders.js') }}"></script>
+{% endblock %}

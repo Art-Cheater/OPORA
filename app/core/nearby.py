@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import math
 import uuid
 from dataclasses import dataclass
 from decimal import Decimal
 
-from sqlalchemy import and_, func, literal, or_, select, union_all
+from sqlalchemy import and_, func, literal, select, union_all
 
 from app.extensions import db
 from app.models.defects.defect import Defect
 from app.models.defects.defect_status import DefectStatus
 from app.models.requests.request import Request
+from app.models.requests.request_journal import RequestJournal
 from app.models.requests.request_status import RequestStatus
 from app.modules.requests.address_format import normalize_address
 
@@ -21,6 +23,18 @@ PRIORITY_DISTRICT = 3
 PRIORITY_GEO = 4
 GEO_DELTA = Decimal("0.007")
 NEARBY_LIMIT = 20
+
+
+def haversine_m(lat1, lon1, lat2, lon2) -> int | None:
+    try:
+        p1 = math.radians(float(lat1))
+        p2 = math.radians(float(lat2))
+        dphi = math.radians(float(lat2) - float(lat1))
+        dlmb = math.radians(float(lon2) - float(lon1))
+    except (TypeError, ValueError):
+        return None
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
+    return int(2 * 6371000 * math.asin(min(1.0, math.sqrt(a))))
 
 
 @dataclass
@@ -33,10 +47,16 @@ class NearbyHit:
     street: str | None
     priority: int
     url: str
+    description: str = ""
+    status: str = ""
+    journal: str = ""
+    distance_m: int | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 class NearbySearchService:
-    """Предложения ближайших открытых заявок и дефектов."""
+    """Предложения ближайших открытых заявок и дефектов. Не создаёт связей и не меняет статусы."""
 
     @classmethod
     def suggest(
@@ -98,6 +118,8 @@ class NearbySearchService:
             select(stmt).order_by(stmt.c.priority.asc(), stmt.c.number.asc()).limit(limit * 3)
         ).all()
 
+        origin_lat = float(latitude) if latitude is not None else None
+        origin_lng = float(longitude) if longitude is not None else None
         seen: set[tuple[str, uuid.UUID]] = set()
         hits: list[NearbyHit] = []
         for row in rows:
@@ -105,6 +127,11 @@ class NearbySearchService:
             if key in seen:
                 continue
             seen.add(key)
+            lat = float(row.latitude) if row.latitude is not None else None
+            lng = float(row.longitude) if row.longitude is not None else None
+            distance = None
+            if origin_lat is not None and origin_lng is not None and lat is not None and lng is not None:
+                distance = haversine_m(origin_lat, origin_lng, lat, lng)
             hits.append(
                 NearbyHit(
                     entity_type=row.entity_type,
@@ -119,6 +146,12 @@ class NearbySearchService:
                         if row.entity_type == "request"
                         else f"/defects/{row.entity_id}"
                     ),
+                    description=(row.description or "")[:160],
+                    status=row.status_name or "",
+                    journal=row.journal_name or "",
+                    distance_m=distance,
+                    latitude=lat,
+                    longitude=lng,
                 )
             )
             if len(hits) >= limit:
@@ -136,8 +169,14 @@ class NearbySearchService:
                 Request.district.label("district"),
                 Request.street.label("street"),
                 literal(priority).label("priority"),
+                func.coalesce(Request.description, Request.title).label("description"),
+                RequestStatus.name.label("status_name"),
+                RequestJournal.name.label("journal_name"),
+                Request.latitude.label("latitude"),
+                Request.longitude.label("longitude"),
             )
             .join(RequestStatus, Request.status_id == RequestStatus.id)
+            .join(RequestJournal, Request.journal_id == RequestJournal.id)
             .where(
                 Request.active_filter(),
                 RequestStatus.active_filter(),
@@ -160,6 +199,11 @@ class NearbySearchService:
                 Defect.district.label("district"),
                 Defect.street.label("street"),
                 literal(priority).label("priority"),
+                Defect.description.label("description"),
+                DefectStatus.name.label("status_name"),
+                literal("Дефекты").label("journal_name"),
+                Defect.latitude.label("latitude"),
+                Defect.longitude.label("longitude"),
             )
             .join(DefectStatus, Defect.status_id == DefectStatus.id)
             .where(

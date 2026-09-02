@@ -17,7 +17,6 @@ if TYPE_CHECKING:
     from app.models.defects.defect_category import DefectCategory
     from app.models.defects.defect_history import DefectHistory
     from app.models.defects.defect_status import DefectStatus
-    from app.models.defects.request_defect import RequestDefect
 
 
 class Defect(BaseModel):
@@ -93,12 +92,6 @@ class Defect(BaseModel):
         foreign_keys="DefectHistory.defect_id",
         lazy="select",
         order_by="DefectHistory.created_at.desc()",
-    )
-    request_links: Mapped[list[RequestDefect]] = relationship(
-        "RequestDefect",
-        back_populates="defect",
-        foreign_keys="RequestDefect.defect_id",
-        lazy="select",
     )
 
     def __repr__(self) -> str:

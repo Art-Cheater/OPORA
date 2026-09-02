@@ -1111,14 +1111,12 @@ class RequestService:
         from sqlalchemy import delete
 
         from app.models.custom_fields.custom_field_value import CustomFieldValue
-        from app.models.defects.request_defect import RequestDefect
         from app.models.waybills.waybill_stop import WaybillStop
 
         ids = list(db.session.scalars(db.select(Request.id)))
         if not ids:
             return 0
         kind = EntityType.REQUEST.value
-        db.session.execute(delete(RequestDefect).where(RequestDefect.request_id.in_(ids)))
         db.session.execute(delete(WaybillStop).where(WaybillStop.request_id.in_(ids)))
         db.session.execute(delete(RequestMaterial).where(RequestMaterial.request_id.in_(ids)))
         db.session.execute(delete(RequestHistory).where(RequestHistory.request_id.in_(ids)))

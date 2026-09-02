@@ -1,5 +1,10 @@
 window.OporaOpsMap = {
   _map: null,
+  _layer: null,
+  _routeLayer: null,
+  _kind: "point",
+  _points: [],
+
   init() {
     const mapNode = document.getElementById("opsMap");
     if (!mapNode || typeof L === "undefined") return;
@@ -11,14 +16,18 @@ window.OporaOpsMap = {
 
     const src = mapNode.getAttribute("data-src");
     if (!src) return;
-    const kind = mapNode.getAttribute("data-kind") || "point";
+    this._kind = mapNode.getAttribute("data-kind") || "point";
     const statusNode = document.getElementById("opsMapStatus");
     const KIROV = [58.6035, 49.668];
-    const COLORS = { request: "#DC3545", defect: "#E6A700", route: "#c45c26" };
+    const COLORS = { request: "#2563EB", defect: "#DC3545", route: "#c45c26" };
+    const dark = document.documentElement.getAttribute("data-theme") === "dark";
+    const tiles = dark
+      ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+      : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
 
     const map = L.map(mapNode, { zoomControl: true });
     this._map = map;
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+    L.tileLayer(tiles, {
       maxZoom: 19,
       subdomains: "abcd",
       attribution: "&copy; OpenStreetMap &copy; CARTO",
@@ -29,7 +38,10 @@ window.OporaOpsMap = {
     window.addEventListener("resize", refreshSize);
     setTimeout(refreshSize, 250);
 
-    const layer = L.layerGroup().addTo(map);
+    this._layer = L.layerGroup().addTo(map);
+    this._routeLayer = L.layerGroup().addTo(map);
+
+    const self = this;
 
     function escapeHtml(value) {
       return String(value ?? "")
@@ -49,7 +61,28 @@ window.OporaOpsMap = {
       return type || "";
     }
 
+    function workbenchPopup(point) {
+      const canAdd = mapNode.closest("#workOrderRoot")?.dataset.canEdit === "true";
+      const inPlan = Boolean(point.in_plan);
+      const addBtn = canAdd && !inPlan
+        ? `<button type="button" class="btn btn-sm btn-primary mt-2 js-add-to-plan" data-type="${escapeHtml(point.type)}" data-id="${escapeHtml(point.id)}">Добавить в план работ</button>`
+        : inPlan
+          ? `<div class="small text-muted mt-2">Уже в плане работ</div>`
+          : "";
+      const journal = point.journal ? `<div class="small text-muted">${escapeHtml(point.journal)}</div>` : "";
+      const status = point.status ? `<div class="small">${escapeHtml(point.status)}</div>` : "";
+      const desc = point.description ? `<div class="mt-1">${escapeHtml(point.description)}</div>` : "";
+      return `<div class="ops-map-popup">
+        <div class="fw-semibold">${escapeHtml(typeLabel(point.type))} ${escapeHtml(point.number || "")}</div>
+        ${journal}${status}
+        <div class="mt-1">${escapeHtml(point.address || "")}</div>
+        ${desc}
+        ${addBtn}
+      </div>`;
+    }
+
     function popupHtml(point) {
+      if (self._kind === "workbench") return workbenchPopup(point);
       const number = point.number ? escapeHtml(point.number) : "";
       const address = escapeHtml(point.address || "");
       const type = escapeHtml(typeLabel(point.type));
@@ -59,43 +92,48 @@ window.OporaOpsMap = {
       return `<div><div>${title}</div><div class="small text-muted mt-1">${type}</div><div class="mt-1">${address}</div></div>`;
     }
 
-    function paint(data) {
-      layer.clearLayers();
+    function markerColor(point) {
+      return COLORS[point.type] || COLORS.request;
+    }
+
+    this._paint = function paint(data) {
+      self._layer.clearLayers();
+      self._points = data.points || [];
       const bounds = [];
       const line = [];
-      (data.points || []).forEach((point) => {
+      self._points.forEach((point) => {
         const lat = Number(point.lat);
         const lng = Number(point.lng);
         if (Number.isNaN(lat) || Number.isNaN(lng)) return;
         const pos = [lat, lng];
         bounds.push(pos);
-        if (kind === "route") {
+        if (self._kind === "route") {
           line.push(pos);
           const order = point.order || bounds.length;
           L.marker(pos, {
             icon: L.divIcon({
               className: "ops-map-num",
-              html: `<span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:#c45c26;color:#fff;font-size:12px;font-weight:700;border:2px solid #fff;">${order}</span>`,
+              html: `<span class="ops-map-num__badge">${order}</span>`,
               iconSize: [26, 26],
               iconAnchor: [13, 13],
             }),
           })
-            .addTo(layer)
+            .addTo(self._layer)
             .bindPopup(popupHtml(point), { maxWidth: 280 });
         } else {
           L.circleMarker(pos, {
-            radius: 8,
+            radius: point.in_plan ? 10 : 8,
             color: "#fff",
-            weight: 1,
-            fillColor: COLORS[point.type] || COLORS.request,
+            weight: point.in_plan ? 2 : 1,
+            fillColor: markerColor(point),
             fillOpacity: 0.92,
           })
-            .addTo(layer)
-            .bindPopup(popupHtml(point), { maxWidth: 280 });
+            .addTo(self._layer)
+            .bindPopup(popupHtml(point), { maxWidth: 300 });
         }
       });
-      if (kind === "route" && line.length > 1) {
-        L.polyline(line, { color: "#c45c26", weight: 3, opacity: 0.85 }).addTo(layer);
+      if (self._kind === "route" && line.length > 1) {
+        L.polyline(line, { color: COLORS.route, weight: 3, opacity: 0.85 }).addTo(self._layer);
       }
       if (bounds.length === 1) {
         map.setView(bounds[0], 16);
@@ -106,20 +144,69 @@ window.OporaOpsMap = {
       }
       map.invalidateSize();
       const count = bounds.length;
-      if (kind === "route") {
+      if (self._kind === "route") {
         setStatus(count ? `Точек маршрута: ${count}.` : "Добавьте точки с координатами — появится линия маршрута.");
+      } else if (self._kind === "workbench") {
+        setStatus(count ? `На карте: ${count}. Красные — дефекты, синие — заявки.` : "Нет точек с координатами.");
       } else {
         setStatus(count ? `Отметок: ${count}. Нажмите точку — номер и адрес.` : "Пока нет точек с координатами.");
       }
-    }
+    };
 
-    fetch(src, { headers: { Accept: "application/json" } })
-      .then((response) => {
-        if (!response.ok) throw new Error("map");
-        return response.json();
-      })
-      .then(paint)
-      .catch(() => setStatus("Не удалось загрузить карту."));
+    this.reload = function reload(nextSrc) {
+      const url = nextSrc || mapNode.getAttribute("data-src");
+      if (!url) return Promise.resolve();
+      mapNode.setAttribute("data-src", url);
+      return fetch(url, { headers: { Accept: "application/json" } })
+        .then((response) => {
+          if (!response.ok) throw new Error("map");
+          return response.json();
+        })
+        .then((data) => self._paint(data))
+        .catch(() => setStatus("Не удалось загрузить карту."));
+    };
+
+    this.setRoute = function setRoute(points) {
+      self._routeLayer.clearLayers();
+      const line = [];
+      (points || []).forEach((point) => {
+        const lat = Number(point.lat);
+        const lng = Number(point.lng);
+        if (Number.isNaN(lat) || Number.isNaN(lng)) return;
+        const pos = [lat, lng];
+        line.push(pos);
+        L.marker(pos, {
+          icon: L.divIcon({
+            className: "ops-map-num",
+            html: `<span class="ops-map-num__badge">${point.order || line.length}</span>`,
+            iconSize: [26, 26],
+            iconAnchor: [13, 13],
+          }),
+        }).addTo(self._routeLayer);
+      });
+      if (line.length > 1) {
+        L.polyline(line, { color: COLORS.route, weight: 4, opacity: 0.9 }).addTo(self._routeLayer);
+        map.fitBounds(line, { padding: [36, 36], maxZoom: 16 });
+      }
+      map.invalidateSize();
+    };
+
+    this.clearRoute = function clearRoute() {
+      self._routeLayer.clearLayers();
+    };
+
+    mapNode.addEventListener("click", (event) => {
+      const btn = event.target.closest(".js-add-to-plan");
+      if (!btn) return;
+      mapNode.dispatchEvent(
+        new CustomEvent("opora:add-to-plan", {
+          bubbles: true,
+          detail: { type: btn.getAttribute("data-type"), id: btn.getAttribute("data-id") },
+        })
+      );
+    });
+
+    this.reload(src);
   },
 };
 

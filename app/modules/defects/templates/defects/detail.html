@@ -11,6 +11,9 @@
 
 {% block page_header %}
 {% call page_header(item.number ~ " — " ~ item.address, item.category.name if item.category else "", "exclamation-triangle") %}
+<a href="{{ back_url }}" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i> {{ back_label }}
+</a>
 {% if current_user.has_permission('defects.edit') %}
 <a href="{{ url_for('defects.edit', defect_id=item.id) }}" class="btn btn-outline-primary"><i class="bi bi-pencil-square"></i> Редактировать</a>
 {% endif %}
@@ -44,42 +47,6 @@
             </div>
         </div>
         {% endif %}
-        <div class="card mb-4">
-            <div class="card-header">Связанные заявки</div>
-            <div class="card-body">
-                {% if links %}
-                <ul class="list-unstyled mb-3">
-                    {% for link in links %}
-                    <li class="d-flex justify-content-between align-items-center border-bottom py-2">
-                        <a href="{{ url_for('requests.detail', request_id=link.request_id) }}">Заявка {{ link.request.number if link.request else link.request_id }}</a>
-                        {% if current_user.has_permission('defects.edit') %}
-                        <form method="POST" action="{{ url_for('defects.unlink_request', defect_id=item.id, request_id=link.request_id) }}">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button class="btn btn-sm btn-outline-secondary" type="submit">Отвязать</button>
-                        </form>
-                        {% endif %}
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% else %}
-                <p class="text-muted">Нет связанных заявок. Дефект может существовать самостоятельно.</p>
-                {% endif %}
-                {% if current_user.has_permission('defects.edit') %}
-                <form method="POST" action="{{ url_for('defects.link_request', defect_id=item.id) }}" class="row g-2">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="col-md-8">
-                        <select name="request_id" class="form-select">
-                            <option value="">Выберите заявку</option>
-                            {% for req in requests_for_link %}
-                            <option value="{{ req.id }}">{{ req.number }} — {{ req.address }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-4"><button class="btn btn-outline-primary w-100" type="submit">Связать</button></div>
-                </form>
-                {% endif %}
-            </div>
-        </div>
         <div class="card mb-4">
             <div class="card-header">Комментарии</div>
             <div class="card-body">

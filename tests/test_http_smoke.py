@@ -27,6 +27,7 @@ def test_admin_pages(admin_client):
         "/messenger/",
         "/defects/",
         "/waybills/",
+        "/work-orders/",
     ):
         resp = admin_client.get(path)
         assert resp.status_code == 200, path

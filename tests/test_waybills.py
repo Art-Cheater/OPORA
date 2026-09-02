@@ -131,4 +131,4 @@ def test_master_can_open_waybills(client):
     page = client.get("/waybills/")
     assert page.status_code == 200
     html = page.get_data(as_text=True)
-    assert "Путевые листы" in html or "opora-loading" in html
+    assert "Путевые листы" in html or "opora-loading" in html or "план" in html.lower()

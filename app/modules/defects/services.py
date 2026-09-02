@@ -18,10 +18,8 @@ from app.extensions import db
 from app.models.communication.comment import Comment
 from app.models.defects.defect import Defect
 from app.models.defects.defect_history import DefectHistory
-from app.models.defects.request_defect import RequestDefect
 from app.models.enums import AuditAction, EntityType
 from app.models.files.attachment import Attachment
-from app.models.requests.request import Request
 from app.modules.defects.repositories import DefectRepository
 from app.modules.defects.workflow import STATUS_OPEN, can_transition
 from app.modules.requests.services import RequestService
@@ -272,82 +270,4 @@ class DefectService:
         attachment.soft_delete(deleted_by=user_id)
         cls._log_audit(user_id, AuditAction.SOFT_DELETE.value, item.id, f"Удалён файл дефекта {item.number}")
         cls._log_history(item, user_id, "attachment_delete", attachment.file_name)
-        db.session.commit()
-
-    @classmethod
-    def link_request(cls, item: Defect, request_id: uuid.UUID, user_id: uuid.UUID) -> RequestDefect:
-        req = db.session.scalar(
-            db.select(Request).where(Request.id == request_id, Request.active_filter())
-        )
-        if req is None:
-            raise ValidationError("Заявка не найдена.")
-        existing = db.session.scalar(
-            db.select(RequestDefect).where(
-                RequestDefect.request_id == req.id,
-                RequestDefect.defect_id == item.id,
-            )
-        )
-        if existing is not None:
-            if existing.deleted_at is None:
-                return existing
-            existing.deleted_at = None
-            existing.updated_by = user_id
-            link = existing
-        else:
-            link = RequestDefect(
-                request_id=req.id,
-                defect_id=item.id,
-                created_by=user_id,
-                updated_by=user_id,
-            )
-            db.session.add(link)
-        cls._log_audit(
-            user_id,
-            AuditAction.UPDATE.value,
-            item.id,
-            f"Связан дефект {item.number} с заявкой {req.number}",
-            None,
-            {"linked_request_id": str(req.id)},
-        )
-        AuditService.log(
-            user_id=user_id,
-            action=AuditAction.UPDATE.value,
-            entity_type=EntityType.REQUEST.value,
-            entity_id=req.id,
-            description=f"К заявке {req.number} привязан дефект {item.number}",
-            new_values={"linked_defect_id": str(item.id)},
-        )
-        cls._log_history(item, user_id, "link_request", req.number, {"request_id": str(req.id)})
-        db.session.commit()
-        return link
-
-    @classmethod
-    def unlink_request(cls, item: Defect, request_id: uuid.UUID, user_id: uuid.UUID) -> None:
-        link = db.session.scalar(
-            db.select(RequestDefect).where(
-                RequestDefect.request_id == request_id,
-                RequestDefect.defect_id == item.id,
-                RequestDefect.active_filter(),
-            )
-        )
-        if link is None:
-            raise ValidationError("Связь не найдена.")
-        link.soft_delete(deleted_by=user_id)
-        cls._log_audit(
-            user_id,
-            AuditAction.UPDATE.value,
-            item.id,
-            f"Отвязан дефект {item.number} от заявки",
-            {"unlinked_request_id": str(request_id)},
-            None,
-        )
-        AuditService.log(
-            user_id=user_id,
-            action=AuditAction.UPDATE.value,
-            entity_type=EntityType.REQUEST.value,
-            entity_id=request_id,
-            description=f"От заявки отвязан дефект {item.number}",
-            old_values={"unlinked_defect_id": str(item.id)},
-        )
-        cls._log_history(item, user_id, "unlink_request", details={"request_id": str(request_id)})
         db.session.commit()

@@ -1,22 +1,21 @@
-"""Связь заявка ↔ дефект."""
+"""Ручная связь заявка ↔ дефект удалена: nearby не создаёт M2M."""
 
 from __future__ import annotations
 
 from app.extensions import db
-from app.models.audit.audit_log import AuditLog
 from app.models.defects.defect import Defect
 from app.models.defects.defect_category import DefectCategory
-from app.models.defects.request_defect import RequestDefect
-from app.models.enums import EntityType
+from app.models.requests.request import Request
+from app.modules.requests.repositories import RequestRepository
 
 
-def test_link_and_unlink_request_defect(admin_client, app):
-    req_resp = admin_client.post(
+def test_manual_request_defect_link_removed(admin_client, app):
+    created = admin_client.post(
         "/requests/new",
         data={
-            "number": "26-4101",
-            "address": "Молодой Гвардии 12",
-            "received_at": "2026-09-02T11:00",
+            "number": "26-8501",
+            "address": "Связь не нужна, 1",
+            "received_at": "2026-09-02T12:00",
             "dispatcher_name": "Иванова А.С.",
             "applicant_name": "Тест",
             "priority": "medium",
@@ -24,76 +23,28 @@ def test_link_and_unlink_request_defect(admin_client, app):
         },
         follow_redirects=False,
     )
-    assert req_resp.status_code == 302
-    request_id = req_resp.headers["Location"].rstrip("/").split("/")[-1]
+    request_id = created.headers["Location"].rstrip("/").split("/")[-1]
     with app.app_context():
-        category_id = str(db.session.scalar(db.select(DefectCategory.id).where(DefectCategory.code == "pole")))
-    def_resp = admin_client.post(
+        category_id = str(db.session.scalar(db.select(DefectCategory.id).where(DefectCategory.code == "other")))
+    defect = admin_client.post(
         "/defects/new",
         data={
-            "number": "DF-26-41",
-            "description": "Треснула опора",
+            "number": "DF-26-85",
+            "description": "Без связи",
             "category_id": category_id,
-            "address": "Молодой Гвардии 12",
+            "address": "Связь не нужна, 2",
             "submit": "Сохранить",
         },
         follow_redirects=False,
     )
-    assert def_resp.status_code == 302
-    defect_id = def_resp.headers["Location"].rstrip("/").split("/")[-1]
-
-    linked = admin_client.post(
-        f"/requests/{request_id}/defects",
-        data={"defect_id": defect_id},
-        follow_redirects=False,
-    )
-    assert linked.status_code in (200, 302)
+    defect_id = defect.headers["Location"].rstrip("/").split("/")[-1]
+    assert admin_client.post(f"/requests/{request_id}/defects", data={"defect_id": defect_id}).status_code == 404
+    req_page = admin_client.get(f"/requests/{request_id}").get_data(as_text=True)
+    def_page = admin_client.get(f"/defects/{defect_id}").get_data(as_text=True)
+    assert "Связанные дефекты" not in req_page
+    assert "Связанные заявки" not in def_page
     with app.app_context():
-        pair = db.session.scalar(
-            db.select(RequestDefect).where(
-                RequestDefect.request_id == request_id,
-                RequestDefect.defect_id == defect_id,
-                RequestDefect.active_filter(),
-            )
-        )
-        assert pair is not None
-        logs = list(
-            db.session.scalars(
-                db.select(AuditLog).where(
-                    AuditLog.action == "update",
-                    AuditLog.entity_type.in_([EntityType.REQUEST.value, EntityType.DEFECT.value]),
-                )
-            )
-        )
-        assert any("дефект" in (log.description or "").lower() or "заявк" in (log.description or "").lower() for log in logs)
-
-    unlinked = admin_client.post(
-        f"/requests/{request_id}/defects/{defect_id}/unlink",
-        follow_redirects=False,
-    )
-    assert unlinked.status_code in (200, 302)
-    with app.app_context():
-        pair = db.session.scalar(
-            db.select(RequestDefect).where(
-                RequestDefect.request_id == request_id,
-                RequestDefect.defect_id == defect_id,
-                RequestDefect.active_filter(),
-            )
-        )
-        assert pair is None
-        relink = admin_client.post(
-            f"/defects/{defect_id}/link-request",
-            data={"request_id": request_id},
-            follow_redirects=False,
-        )
-    assert relink.status_code in (200, 302)
-    with app.app_context():
-        restored = db.session.scalar(
-            db.select(RequestDefect).where(
-                RequestDefect.request_id == request_id,
-                RequestDefect.defect_id == defect_id,
-                RequestDefect.active_filter(),
-            )
-        )
-        assert restored is not None
+        assert db.session.get(Request, request_id) is not None
         assert db.session.get(Defect, defect_id) is not None
+        assert RequestRepository.get_default_journal() is not None
+        assert "RequestDefect" not in {mapper.class_.__name__ for mapper in db.Model.registry.mappers}

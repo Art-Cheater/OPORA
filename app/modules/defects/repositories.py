@@ -107,7 +107,6 @@ class DefectRepository:
                 contains_eager(Defect.status),
                 joinedload(Defect.category),
                 noload(Defect.history),
-                noload(Defect.request_links),
             )
         )
         if filters.q:

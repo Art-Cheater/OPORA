@@ -43,7 +43,7 @@ class SearchService:
     CATEGORIES = (
         ("requests", "Заявки", "clipboard-check", PERM_REQUESTS_VIEW, SearchRepository.search_requests),
         ("defects", "Дефекты", "exclamation-triangle", PERM_DEFECTS_VIEW, SearchRepository.search_defects),
-        ("waybills", "Путевые листы", "signpost-2", PERM_WAYBILLS_VIEW, SearchRepository.search_waybills),
+        ("waybills", "Планы работ", "map", PERM_WAYBILLS_VIEW, SearchRepository.search_waybills),
         ("projects", "Проекты", "folder2-open", PERM_PROJECTS_VIEW, SearchRepository.search_projects),
         ("contracts", "Контракты", "file-earmark-text", PERM_CONTRACTS_VIEW, SearchRepository.search_contracts),
         ("users", "Пользователи", "people", PERM_USERS_VIEW, SearchRepository.search_users),

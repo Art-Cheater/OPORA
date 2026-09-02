@@ -28,9 +28,9 @@ from app.core.exceptions import NotFoundError, ValidationError
 from app.core.field_permissions import FieldPermissionService
 from app.core.forms_utils import form_errors_message
 from app.core.http import ajax_error, ajax_ok, is_ajax
+from app.core.navigation import back_navigation
 from app.core.upload_utils import resolve_download_filename, resolve_storage_path
 from app.extensions import db
-from sqlalchemy.orm import joinedload
 from app.models.auth.constants import (
     PERM_REQUESTS_APPROVE,
     PERM_REQUESTS_CREATE,
@@ -701,27 +701,7 @@ def detail(request_id: uuid.UUID):
     actions = available_actions(req, current_user)
     dispatcher = db.session.get(User, req.created_by) if req.created_by else None
     lifecycle = lifecycle_progress(req.status.code if req.status else None)
-    from app.models.defects.defect import Defect
-    from app.models.defects.request_defect import RequestDefect
-
-    defect_links = list(
-        db.session.scalars(
-            db.select(RequestDefect)
-            .options(joinedload(RequestDefect.defect))
-            .where(RequestDefect.request_id == req.id, RequestDefect.active_filter())
-            .order_by(RequestDefect.created_at.desc())
-        )
-    )
-    linked_ids = {link.defect_id for link in defect_links}
-    defects_stmt = db.select(Defect).where(Defect.active_filter()).order_by(Defect.created_at.desc()).limit(40)
-    if linked_ids:
-        defects_stmt = (
-            db.select(Defect)
-            .where(Defect.active_filter(), Defect.id.notin_(linked_ids))
-            .order_by(Defect.created_at.desc())
-            .limit(40)
-        )
-    defects_for_link = list(db.session.scalars(defects_stmt))
+    back_url, back_label = back_navigation(fallback="/requests/")
 
     photos = [f for f in attachments if (f.mime_type or "").startswith("image/")]
     documents = [f for f in attachments if not (f.mime_type or "").startswith("image/")]
@@ -783,8 +763,8 @@ def detail(request_id: uuid.UUID):
         actions=actions,
         dispatcher=dispatcher,
         lifecycle=lifecycle,
-        defect_links=defect_links,
-        defects_for_link=defects_for_link,
+        back_url=back_url,
+        back_label=back_label,
         **custom_field_detail_context(_CF, req.id, current_user),
     )
 
@@ -1100,55 +1080,5 @@ def delete_attachment(request_id: uuid.UUID, attachment_id: uuid.UUID):
         RequestService.delete_attachment(req, attachment_id, current_user.id)
         flash("Файл удалён.", "success")
     except (ValidationError, NotFoundError) as exc:
-        flash(str(exc), "danger")
-    return redirect(url_for("requests.detail", request_id=req.id))
-
-
-@requests_bp.route("/<uuid:request_id>/defects", methods=["POST"])
-@login_required
-@permission_required(PERM_REQUESTS_EDIT)
-def link_defect(request_id: uuid.UUID):
-    from app.modules.defects.repositories import DefectRepository
-    from app.modules.defects.services import DefectService
-
-    req = RequestRepository.get_by_id(request_id)
-    if req is None:
-        flash("Заявка не найдена.", "danger")
-        return redirect(url_for("requests.index"))
-    defect_id = _uuid_or_none(request.form.get("defect_id") or "")
-    if defect_id is None:
-        flash("Выберите дефект.", "danger")
-        return redirect(url_for("requests.detail", request_id=req.id))
-    item = DefectRepository.get_by_id(defect_id)
-    if item is None:
-        flash("Дефект не найден.", "danger")
-        return redirect(url_for("requests.detail", request_id=req.id))
-    try:
-        DefectService.link_request(item, req.id, current_user.id)
-        flash("Дефект связан с заявкой.", "success")
-    except ValidationError as exc:
-        flash(str(exc), "danger")
-    return redirect(url_for("requests.detail", request_id=req.id))
-
-
-@requests_bp.route("/<uuid:request_id>/defects/<uuid:defect_id>/unlink", methods=["POST"])
-@login_required
-@permission_required(PERM_REQUESTS_EDIT)
-def unlink_defect(request_id: uuid.UUID, defect_id: uuid.UUID):
-    from app.modules.defects.repositories import DefectRepository
-    from app.modules.defects.services import DefectService
-
-    req = RequestRepository.get_by_id(request_id)
-    if req is None:
-        flash("Заявка не найдена.", "danger")
-        return redirect(url_for("requests.index"))
-    item = DefectRepository.get_by_id(defect_id)
-    if item is None:
-        flash("Дефект не найден.", "danger")
-        return redirect(url_for("requests.detail", request_id=req.id))
-    try:
-        DefectService.unlink_request(item, req.id, current_user.id)
-        flash("Связь с дефектом снята.", "success")
-    except ValidationError as exc:
         flash(str(exc), "danger")
     return redirect(url_for("requests.detail", request_id=req.id))

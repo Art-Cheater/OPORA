@@ -38,11 +38,11 @@
             </a>
             {% endif %}
             {% if current_user.has_permission('waybills.view') %}
-            <a href="{{ url_for('waybills.index') }}"
-               class="sidebar__link {% if request.endpoint and request.endpoint.startswith('waybills.') %}active{% endif %}"
-               data-tour="waybills">
-                <i class="bi bi-signpost-2"></i>
-                <span>Путевые листы</span>
+            <a href="{{ url_for('work_orders.index') }}"
+               class="sidebar__link {% if request.endpoint and (request.endpoint.startswith('work_orders.') or request.endpoint.startswith('waybills.')) %}active{% endif %}"
+               data-tour="work-orders">
+                <i class="bi bi-map"></i>
+                <span>Работа по заявкам</span>
             </a>
             {% endif %}
             {% if current_user.has_permission('objects.view') %}

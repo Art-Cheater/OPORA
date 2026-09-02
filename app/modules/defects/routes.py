@@ -12,12 +12,12 @@ from flask_login import current_user, login_required
 from app.core.address import load_address_selection_token
 from app.core.decorators import permission_required
 from app.core.exceptions import NotFoundError, ValidationError
+from app.core.navigation import back_navigation
 from app.core.field_permissions import FieldPermissionService
 from app.core.forms_utils import form_errors_message
 from app.core.http import ajax_error, ajax_ok, is_ajax
 from app.core.upload_utils import resolve_download_filename, resolve_storage_path
 from app.extensions import db
-from sqlalchemy.orm import joinedload
 from app.models.auth.constants import (
     PERM_DEFECTS_CREATE,
     PERM_DEFECTS_DELETE,
@@ -28,10 +28,8 @@ from app.models.auth.constants import (
     PERM_DEFECTS_VIEW,
 )
 from app.models.communication.comment import Comment
-from app.models.defects.request_defect import RequestDefect
 from app.models.enums import EntityType
 from app.models.files.attachment import Attachment
-from app.models.requests.request import Request
 from app.modules.defects.blueprint import defects_bp
 from app.modules.defects.forms import (
     DefectAttachmentForm,
@@ -204,13 +202,6 @@ def detail(defect_id: uuid.UUID):
         .order_by(Attachment.created_at.desc())
         .all()
     )
-    links = list(
-        db.session.scalars(
-            db.select(RequestDefect)
-            .options(joinedload(RequestDefect.request))
-            .where(RequestDefect.defect_id == item.id, RequestDefect.active_filter())
-        )
-    )
     status_form = DefectStatusForm()
     current_code = item.status.code if item.status else ""
     status_form.status_code.choices = [
@@ -219,21 +210,18 @@ def detail(defect_id: uuid.UUID):
         if can_transition(current_code, s.code)
     ]
     history = list(item.history)[:50]
+    back_url, back_label = back_navigation(fallback="/defects/")
     return render_template(
         "defects/detail.html",
         item=item,
         comments=comments,
         attachments=attachments,
-        links=links,
         comment_form=DefectCommentForm(),
         attachment_form=DefectAttachmentForm(),
         status_form=status_form,
         history=history,
-        requests_for_link=list(
-            db.session.scalars(
-                db.select(Request).where(Request.active_filter()).order_by(Request.created_at.desc()).limit(50)
-            )
-        ),
+        back_url=back_url,
+        back_label=back_label,
     )
 
 
@@ -361,42 +349,6 @@ def delete_attachment(defect_id: uuid.UUID, attachment_id: uuid.UUID):
         DefectService.delete_attachment(item, attachment, current_user.id)
         flash("Файл удалён.", "success")
     except (NotFoundError, ValidationError) as exc:
-        flash(str(exc), "danger")
-    return redirect(url_for("defects.detail", defect_id=item.id))
-
-
-@defects_bp.route("/<uuid:defect_id>/link-request", methods=["POST"])
-@login_required
-@permission_required(PERM_DEFECTS_EDIT)
-def link_request(defect_id: uuid.UUID):
-    item = DefectRepository.get_by_id(defect_id)
-    if item is None:
-        flash("Дефект не найден.", "danger")
-        return redirect(url_for("defects.index"))
-    request_id = _uuid_or_none(request.form.get("request_id"))
-    if request_id is None:
-        flash("Выберите заявку.", "danger")
-        return redirect(url_for("defects.detail", defect_id=item.id))
-    try:
-        DefectService.link_request(item, request_id, current_user.id)
-        flash("Заявка связана с дефектом.", "success")
-    except ValidationError as exc:
-        flash(str(exc), "danger")
-    return redirect(url_for("defects.detail", defect_id=item.id))
-
-
-@defects_bp.route("/<uuid:defect_id>/unlink-request/<uuid:request_id>", methods=["POST"])
-@login_required
-@permission_required(PERM_DEFECTS_EDIT)
-def unlink_request(defect_id: uuid.UUID, request_id: uuid.UUID):
-    item = DefectRepository.get_by_id(defect_id)
-    if item is None:
-        flash("Дефект не найден.", "danger")
-        return redirect(url_for("defects.index"))
-    try:
-        DefectService.unlink_request(item, request_id, current_user.id)
-        flash("Связь удалена.", "success")
-    except ValidationError as exc:
         flash(str(exc), "danger")
     return redirect(url_for("defects.detail", defect_id=item.id))
 

@@ -8,7 +8,7 @@ from app.core.permission_service import PermissionService
 _FALLBACK_MODULE_LABELS: dict[str, str] = {
     "requests": "Заявки",
     "defects": "Дефекты",
-    "waybills": "Путевые листы",
+    "waybills": "Работа по заявкам",
     "projects": "Проекты",
     "contracts": "Договоры",
     "users": "Сотрудники",
