@@ -1,30 +1,25 @@
 {% set current_tab = tab|default(request.args.get('tab', '')) %}
 {% set current_journal = request.args.get('journal_id', '') %}
-<div class="card mb-3" data-list-extra="journals">
-    <div class="card-body py-3">
-        <div class="d-flex flex-wrap gap-2 align-items-center">
-            <span class="text-muted small me-1">Журналы:</span>
-            {% if current_user.has_permission('requests.view') %}
-            <a href="{{ url_for('requests.index') }}"
-               data-opora-journal="requests"
-               class="btn btn-sm {% if not current_journal and current_tab != 'defects' %}btn-primary{% else %}btn-outline-primary{% endif %}">
-                Все
-            </a>
-            {% for journal in journals|default([]) %}
-            <a href="{{ url_for('requests.index', journal_id=journal.id) }}"
-               data-opora-journal="requests"
-               class="btn btn-sm {% if current_journal == journal.id|string %}btn-primary{% else %}btn-outline-primary{% endif %}">
-                {{ journal.name }}
-            </a>
-            {% endfor %}
-            {% endif %}
-            {% if current_user.has_permission('defects.view') %}
-            <a href="{{ url_for('requests.index', tab='defects') }}"
-               data-opora-journal="defects"
-               class="btn btn-sm {% if current_tab == 'defects' %}btn-primary{% else %}btn-outline-primary{% endif %}">
-                Дефекты
-            </a>
-            {% endif %}
-        </div>
-    </div>
-</div>
+<nav class="journal-tabs" data-list-extra="journals" aria-label="Журналы">
+    {% if current_user.has_permission('requests.view') %}
+    <a href="{{ url_for('requests.index') }}"
+       data-opora-journal="requests"
+       class="{% if not current_journal and current_tab != 'defects' %}is-active{% endif %}">
+        <i class="bi bi-collection"></i> Все
+    </a>
+    {% for journal in journals|default([]) %}
+    <a href="{{ url_for('requests.index', journal_id=journal.id) }}"
+       data-opora-journal="requests"
+       class="{% if current_journal == journal.id|string %}is-active{% endif %}">
+        <i class="bi bi-journal-text"></i> {{ journal.name }}
+    </a>
+    {% endfor %}
+    {% endif %}
+    {% if current_user.has_permission('defects.view') %}
+    <a href="{{ url_for('requests.index', tab='defects') }}"
+       data-opora-journal="defects"
+       class="{% if current_tab == 'defects' %}is-active{% endif %}">
+        <i class="bi bi-exclamation-triangle"></i> Дефекты
+    </a>
+    {% endif %}
+</nav>

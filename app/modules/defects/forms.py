@@ -16,6 +16,7 @@ from app.modules.requests.districts import district_choices
 
 class DefectFilterForm(FlaskForm):
     q = StringField("Поиск", validators=[Optional(), Length(max=255)])
+    number = StringField("Номер", validators=[Optional(), Length(max=50)])
     district = SelectField(
         "Район",
         choices=district_choices(empty_label="Любой"),

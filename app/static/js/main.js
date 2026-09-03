@@ -624,6 +624,7 @@ function initInstantNav(sidebar, closeSidebar) {
             window.OporaRequestDetail?.init?.();
         }
         window.OporaOpsMap?.init?.();
+        window.OporaRequestsJournal?.init?.();
         window.OporaWorkOrders?.init?.();
         if (document.getElementById("inquiryForwardCard")) {
             const card = document.getElementById("inquiryForwardCard");
@@ -805,6 +806,7 @@ function initInstantNav(sidebar, closeSidebar) {
         window.OporaList?.reset?.();
         window.OporaList?.bootPage?.();
         window.OporaOpsMap?.init?.();
+        window.OporaRequestsJournal?.init?.();
         return true;
     }
 

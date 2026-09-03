@@ -294,9 +294,19 @@ def test_request_open_list_detail_and_forms(admin_client):
 
     list_resp = admin_client.get("/requests/")
     assert list_resp.status_code == 200, list_resp.get_data(as_text=True)[:2000]
+    list_html = list_resp.get_data(as_text=True)
+    assert "journal-tabs" in list_html
+    assert "Найти" in list_html
+    assert 'id="opsMap"' in list_html
     table = admin_client.get("/requests/table")
     assert table.status_code == 200
-    assert "Лепсе" in table.get_json()["table_html"]
+    payload = table.get_json()
+    assert "Лепсе" in payload["table_html"]
+    assert "Выполнено" in payload["table_html"]
+    assert "Передать мастеру" not in payload["table_html"]
+    assert "Выехала аварийная" not in payload["table_html"]
+    assert "Показано" in payload["pagination_html"]
+    assert "на странице" in payload["pagination_html"]
 
     page = admin_client.get(f"/requests/{request_id}")
     assert page.status_code == 200, page.get_data(as_text=True)[:2000]

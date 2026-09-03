@@ -157,6 +157,8 @@ window.OporaList = (() => {
       }
       bindTableEvents();
       bindPagination();
+      reloadListMap();
+      syncListUrl();
     } catch (err) {
       if (err?.name === "AbortError" || token !== tableToken) return;
       renderTableError(err?.message || "Не удалось обновить список");
@@ -177,6 +179,50 @@ window.OporaList = (() => {
         }
       });
     });
+    paginationContainer.querySelector("[data-opora-per-page]")?.addEventListener("change", (event) => {
+      const form = document.getElementById(config.filterFormId);
+      if (form) ensureSortField(form, "per_page", event.target.value);
+      currentPage = 1;
+      loadTable();
+    });
+  }
+
+  function listReturnUrl() {
+    try {
+      return window.location.pathname + window.location.search;
+    } catch {
+      return config.baseUrl || "/requests/";
+    }
+  }
+
+  function syncListUrl() {
+    if (config.syncUrl !== true) return;
+    try {
+      const path = window.location.pathname;
+      if (!path.startsWith("/requests") && !path.startsWith("/defects")) return;
+      const params = queryParams();
+      const qs = params.toString();
+      const next = qs ? `${path}?${qs}` : path;
+      const current = `${path}${window.location.search || ""}`;
+      if (next !== current) history.replaceState(history.state, "", next);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function reloadListMap() {
+    const mapNode = document.getElementById("opsMap");
+    if (!mapNode || !window.OporaOpsMap) return;
+    const params = queryParams();
+    params.delete("page");
+    params.delete("per_page");
+    params.delete("sort_by");
+    params.delete("sort_dir");
+    const base = mapNode.getAttribute("data-map-base") || "/requests/map.json";
+    const url = `${base}?${params.toString()}`;
+    mapNode.setAttribute("data-src", url);
+    if (!window.OporaOpsMap.init()) return;
+    if (typeof window.OporaOpsMap.reload === "function") window.OporaOpsMap.reload(url);
   }
 
   function ensureSortField(form, name, value) {
@@ -219,7 +265,7 @@ window.OporaList = (() => {
         applySort(sortBtn.dataset.oporaSort, sortBtn.dataset.oporaSortDefault || "asc");
         return;
       }
-      if (e.target.closest("[data-opora-action], [data-opora-repeat], .table-actions")) return;
+      if (e.target.closest("[data-opora-action], [data-opora-repeat], .table-actions, .dropdown, .dropdown-menu")) return;
       const row = e.target.closest("tr[data-opora-id]");
       if (row) openView(row.dataset.oporaId);
     });
@@ -228,7 +274,8 @@ window.OporaList = (() => {
   function openView(id) {
     if (!id) return;
     if (config.viewMode === "page") {
-      const href = `${config.baseUrl}/${id}`;
+      const returnTo = encodeURIComponent(listReturnUrl());
+      const href = `${config.baseUrl}/${id}?return_url=${returnTo}`;
       if (window.OporaNav?.go) {
         window.OporaNav.go(href);
         return;
@@ -297,6 +344,7 @@ window.OporaList = (() => {
         if (action === "view") openView(id);
         else if (action === "edit") openEdit(id);
         else if (action === "delete") openDeleteConfirm(id);
+        else if (action === "complete") completeFromList(id);
         return;
       }
 
@@ -801,6 +849,31 @@ window.OporaList = (() => {
     }
   }
 
+  async function completeFromList(id) {
+    if (!id) return;
+    if (!window.confirm("Отметить заявку выполненной?")) return;
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
+    try {
+      const response = await fetch(`${config.baseUrl}/${id}/complete`, {
+        method: "POST",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          Accept: "application/json",
+          ...(csrf ? { "X-CSRFToken": csrf } : {}),
+        },
+        body: csrf ? new URLSearchParams({ csrf_token: csrf }) : undefined,
+      });
+      const data = await parseJsonResponse(response, "Не удалось отметить заявку выполненной");
+      if (!response.ok || data.ok === false) {
+        throw new Error(data.message || "Не удалось отметить заявку выполненной");
+      }
+      showToast(data.message || "Заявка завершена.");
+      loadTable();
+    } catch (err) {
+      showToast(err?.message || "Не удалось отметить заявку выполненной", "danger");
+    }
+  }
+
   function initFilter() {
     const form = document.getElementById(config.filterFormId);
     const resetBtn = document.getElementById(config.resetBtnId);
@@ -838,6 +911,8 @@ window.OporaList = (() => {
 
   function init(options) {
     config = options;
+    const pageFromUrl = Number(new URLSearchParams(window.location.search).get("page") || "1");
+    currentPage = pageFromUrl > 0 ? pageFromUrl : 1;
     initFilter();
     bindTableEvents();
     bindPagination();
@@ -889,6 +964,7 @@ window.OporaList = (() => {
       canEdit: cfg.dataset.canEdit === "true",
       viewMode: cfg.dataset.viewMode || "modal",
       loadOnStart: cfg.dataset.loadOnStart === "true",
+      syncUrl: cfg.dataset.syncUrl === "true",
     });
   }
 

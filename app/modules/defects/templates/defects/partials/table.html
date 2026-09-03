@@ -1,16 +1,20 @@
 {% from "macros/badges.html" import request_status_badge, table_row_tone %}
-<div class="table-card">
+{% from "macros/ui.html" import sortable_th %}
+{% set sort_by = sort_by|default(request.args.get('sort_by', 'created_at'), true) %}
+{% set sort_dir = sort_dir|default(request.args.get('sort_dir', 'desc'), true) %}
+<div class="table-card table-responsive">
     <table class="table table-opora">
         <thead>
             <tr>
-                <th>№</th>
-                <th>Дата</th>
-                <th>Адрес</th>
+                {{ sortable_th("Номер", "number", sort_by, sort_dir) }}
+                {{ sortable_th("Дата", "created_at", sort_by, sort_dir) }}
+                {{ sortable_th("Адрес", "address", sort_by, sort_dir) }}
+                {{ sortable_th("Район", "district", sort_by, sort_dir) }}
                 <th>Описание</th>
                 <th>Категория</th>
-                <th>Статус</th>
+                {{ sortable_th("Статус", "status_id", sort_by, sort_dir) }}
                 <th>Ответственный</th>
-                <th class="text-end">Действия</th>
+                <th class="text-end"><i class="bi bi-three-dots"></i></th>
             </tr>
         </thead>
         <tbody>
@@ -18,40 +22,44 @@
             {% set code = item.status.code if item.status else '' %}
             <tr data-opora-id="{{ item.id }}" class="{{ table_row_tone('new' if code == 'open' else ('brigade' if code == 'in_progress' else ('done' if code == 'fixed' else 'cancelled'))) }}">
                 <td class="fw-semibold">{{ item.number }}</td>
-                <td class="text-muted">{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                <td class="text-muted text-nowrap">{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
                 <td>
                     <div class="fw-medium">{{ item.address }}</div>
-                    {% if item.district %}<div class="small text-muted">{{ item.district }}</div>{% endif %}
+                    {% if item.pp %}<div class="small text-muted">ПП {{ item.pp }}</div>{% endif %}
                 </td>
-                <td>{{ (item.description or "—")|truncate(80) }}</td>
+                <td>{{ item.district or "—" }}</td>
+                <td class="small">{{ (item.description or "—")|truncate(90) }}</td>
                 <td>{{ item.category.name if item.category else "—" }}</td>
                 <td>{{ request_status_badge(item.status) }}</td>
                 <td>{{ item.responsible.full_name if item.responsible else "—" }}</td>
                 <td class="text-end">
-                    <div class="table-actions">
-                        <button type="button" class="table-actions__btn" title="Просмотр"
-                                data-opora-action="view" data-id="{{ item.id }}"
-                                data-url="{{ url_for('defects.detail', defect_id=item.id) }}">
-                            <i class="bi bi-eye"></i>
+                    <div class="dropdown table-row-menu" data-tour="row-actions">
+                        <button type="button" class="table-actions__btn" data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-expanded="false" title="Действия">
+                            <i class="bi bi-three-dots"></i>
                         </button>
-                        {% if current_user.has_permission('defects.edit') %}
-                        <button type="button" class="table-actions__btn" title="Редактировать"
-                                data-opora-action="edit" data-id="{{ item.id }}"
-                                data-url="{{ url_for('defects.edit', defect_id=item.id) }}">
-                            <i class="bi bi-pencil"></i>
-                        </button>
-                        {% endif %}
-                        {% if current_user.has_permission('defects.delete') %}
-                        <button type="button" class="table-actions__btn table-actions__btn--danger" title="Удалить"
-                                data-opora-action="delete" data-id="{{ item.id }}">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                        {% endif %}
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li>
+                                <button type="button" class="dropdown-item" data-opora-action="view" data-id="{{ item.id }}"
+                                        data-url="{{ url_for('defects.detail', defect_id=item.id) }}">Открыть</button>
+                            </li>
+                            {% if current_user.has_permission('defects.edit') %}
+                            <li>
+                                <button type="button" class="dropdown-item" data-opora-action="edit" data-id="{{ item.id }}"
+                                        data-url="{{ url_for('defects.edit', defect_id=item.id) }}">Редактировать</button>
+                            </li>
+                            {% endif %}
+                            {% if current_user.has_permission('defects.delete') %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button type="button" class="dropdown-item text-danger" data-opora-action="delete" data-id="{{ item.id }}">Удалить</button>
+                            </li>
+                            {% endif %}
+                        </ul>
                     </div>
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="8" class="table-empty"><i class="bi bi-inbox"></i> Дефекты не найдены</td></tr>
+            <tr><td colspan="9" class="table-empty"><i class="bi bi-inbox"></i> Дефекты не найдены</td></tr>
             {% endfor %}
         </tbody>
     </table>

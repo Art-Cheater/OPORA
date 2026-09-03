@@ -139,16 +139,20 @@ def index():
 def table():
     filters = DefectFilter(
         q=request.args.get("q", ""),
+        number=request.args.get("number", ""),
         district=request.args.get("district", ""),
         status_id=request.args.get("status_id", ""),
         category_id=request.args.get("category_id", ""),
         sort_by=request.args.get("sort_by", "created_at"),
         sort_dir=request.args.get("sort_dir", "desc"),
     )
+    per_page = request.args.get("per_page", 10, type=int)
+    if per_page not in {10, 25, 50, 100}:
+        per_page = 10
     pagination = DefectRepository.paginated_list(
         filters,
         page=request.args.get("page", 1, type=int),
-        per_page=request.args.get("per_page", 20, type=int),
+        per_page=per_page,
     )
     return jsonify(
         {

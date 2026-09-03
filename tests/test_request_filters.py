@@ -67,7 +67,10 @@ def test_request_filters_district_pp_beresnev(admin_client, app):
     assert "Поиск" in html
     assert 'name="district"' in html
     assert 'name="pp"' in html
+    assert 'name="number"' in html
+    assert 'name="date_from"' in html
     assert "Для Береснева" in html
+    assert "Найти" in html
 
     by_district = admin_client.get("/requests/table?district=Ленинский")
     assert by_district.status_code == 200

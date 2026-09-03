@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import contains_eager, joinedload, load_only, noload
@@ -38,6 +39,9 @@ from app.modules.requests.workflow import (
 @dataclass
 class RequestFilter:
     q: str = ""
+    number: str = ""
+    date_from: str = ""
+    date_to: str = ""
     district: str = ""
     pp: str = ""
     for_beresnev: bool = False
@@ -66,6 +70,7 @@ class RequestRepository:
         "pp": Request.pp,
         "dispatcher_name": Request.dispatcher_name,
         "status_id": Request.status_id,
+        "district": Request.district,
     }
 
     @staticmethod
@@ -490,6 +495,73 @@ class RequestRepository:
 
         return stmt
 
+    @staticmethod
+    def _parse_day(value: str):
+        raw = (value or "").strip()[:10]
+        if not raw:
+            return None
+        try:
+            return datetime.strptime(raw, "%Y-%m-%d").date()
+        except ValueError:
+            return None
+
+    @classmethod
+    def apply_filters(cls, stmt, filters: RequestFilter, current_user_id: uuid.UUID | None = None):
+        if filters.q:
+            q = f"%{filters.q.strip()}%"
+            stmt = stmt.where(
+                or_(
+                    Request.number.ilike(q),
+                    Request.title.ilike(q),
+                    Request.address.ilike(q),
+                    Request.description.ilike(q),
+                    Request.pp.ilike(q),
+                    Request.dispatcher_name.ilike(q),
+                    Request.applicant_name.ilike(q),
+                    Request.phone.ilike(q),
+                )
+            )
+        if filters.number:
+            stmt = stmt.where(Request.number.ilike(f"%{filters.number.strip()}%"))
+        date_from = cls._parse_day(filters.date_from)
+        date_to = cls._parse_day(filters.date_to)
+        stamp = func.coalesce(Request.received_at, Request.created_at)
+        if date_from:
+            stmt = stmt.where(func.date(stamp) >= date_from.isoformat())
+        if date_to:
+            stmt = stmt.where(func.date(stamp) <= date_to.isoformat())
+        if filters.district:
+            stmt = stmt.where(Request.district.ilike(f"%{filters.district.strip()}%"))
+        if filters.pp:
+            stmt = stmt.where(Request.pp.ilike(f"%{filters.pp.strip()}%"))
+        if filters.for_beresnev:
+            stmt = stmt.where(Request.for_beresnev.is_(True))
+        if filters.journal_id:
+            try:
+                stmt = stmt.where(Request.journal_id == uuid.UUID(filters.journal_id))
+            except ValueError:
+                pass
+        if filters.status_id:
+            try:
+                stmt = stmt.where(Request.status_id == uuid.UUID(filters.status_id))
+            except ValueError:
+                pass
+        if filters.priority:
+            stmt = stmt.where(Request.priority == filters.priority)
+        if filters.responsible_id:
+            try:
+                stmt = stmt.where(Request.responsible_id == uuid.UUID(filters.responsible_id))
+            except ValueError:
+                pass
+        if filters.dispatcher_name:
+            stmt = stmt.where(Request.dispatcher_name == filters.dispatcher_name)
+        if filters.executor_id:
+            try:
+                stmt = stmt.where(Request.executor_id == uuid.UUID(filters.executor_id))
+            except ValueError:
+                pass
+        return cls._apply_preset(stmt, filters.preset, current_user_id)
+
     @classmethod
     def paginated_list(
         cls,
@@ -522,6 +594,7 @@ class RequestRepository:
                     Request.status_id,
                     Request.priority,
                     Request.title,
+                    Request.description,
                 ),
                 contains_eager(Request.status),
                 joinedload(Request.journal),
@@ -532,61 +605,7 @@ class RequestRepository:
                 noload(Request.project),
             )
         )
-
-        if filters.q:
-            q = f"%{filters.q.strip()}%"
-            stmt = stmt.where(
-                or_(
-                    Request.number.ilike(q),
-                    Request.title.ilike(q),
-                    Request.address.ilike(q),
-                    Request.pp.ilike(q),
-                    Request.dispatcher_name.ilike(q),
-                    Request.applicant_name.ilike(q),
-                    Request.phone.ilike(q),
-                )
-            )
-
-        if filters.district:
-            stmt = stmt.where(Request.district.ilike(f"%{filters.district.strip()}%"))
-
-        if filters.pp:
-            stmt = stmt.where(Request.pp.ilike(f"%{filters.pp.strip()}%"))
-
-        if filters.for_beresnev:
-            stmt = stmt.where(Request.for_beresnev.is_(True))
-
-        if filters.journal_id:
-            try:
-                stmt = stmt.where(Request.journal_id == uuid.UUID(filters.journal_id))
-            except ValueError:
-                pass
-
-        if filters.status_id:
-            try:
-                stmt = stmt.where(Request.status_id == uuid.UUID(filters.status_id))
-            except ValueError:
-                pass
-
-        if filters.priority:
-            stmt = stmt.where(Request.priority == filters.priority)
-
-        if filters.responsible_id:
-            try:
-                stmt = stmt.where(Request.responsible_id == uuid.UUID(filters.responsible_id))
-            except ValueError:
-                pass
-
-        if filters.dispatcher_name:
-            stmt = stmt.where(Request.dispatcher_name == filters.dispatcher_name)
-
-        if filters.executor_id:
-            try:
-                stmt = stmt.where(Request.executor_id == uuid.UUID(filters.executor_id))
-            except ValueError:
-                pass
-
-        stmt = cls._apply_preset(stmt, filters.preset, current_user_id)
+        stmt = cls.apply_filters(stmt, filters, current_user_id)
 
         if filters.sort_by == "number":
             year_key, seq_key, number_key = cls._number_sort_keys()
@@ -601,8 +620,11 @@ class RequestRepository:
 
         return db.paginate(stmt, page=page, per_page=per_page, error_out=False)
 
-    @staticmethod
-    def map_points(*, journal_id: str = "", limit: int = 500) -> list[dict]:
+    @classmethod
+    def map_points(cls, filters: RequestFilter | None = None, *, journal_id: str = "", limit: int = 500) -> list[dict]:
+        flt = filters or RequestFilter(journal_id=journal_id)
+        if journal_id and not flt.journal_id:
+            flt.journal_id = journal_id
         stmt = (
             db.select(Request)
             .options(
@@ -619,13 +641,9 @@ class RequestRepository:
                 Request.latitude.isnot(None),
                 Request.longitude.isnot(None),
             )
-            .limit(limit)
         )
-        if journal_id:
-            try:
-                stmt = stmt.where(Request.journal_id == uuid.UUID(journal_id))
-            except ValueError:
-                pass
+        stmt = cls.apply_filters(stmt, flt)
+        stmt = stmt.limit(limit)
         points = []
         for item in db.session.scalars(stmt):
             points.append(

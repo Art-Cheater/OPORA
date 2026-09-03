@@ -26,6 +26,9 @@ from app.modules.requests.districts import district_choices
 
 class RequestFilterForm(FlaskForm):
     q = StringField("Поиск", validators=[Optional(), Length(max=255)])
+    number = StringField("Номер", validators=[Optional(), Length(max=50)])
+    date_from = StringField("С", validators=[Optional(), Length(max=10)])
+    date_to = StringField("По", validators=[Optional(), Length(max=10)])
     district = SelectField(
         "Район",
         choices=district_choices(empty_label="Любой"),

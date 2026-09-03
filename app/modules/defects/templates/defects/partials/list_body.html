@@ -1,41 +1,49 @@
 {% from "macros/ui.html" import list_loading %}
-<div class="card mb-4 list-filters" data-tour="filters">
-    <div class="card-header"><i class="bi bi-search"></i>Поиск и фильтры</div>
-    <div class="card-body">
-        <form id="defectFilterForm" class="row g-3">
-            <div class="col-lg-3">
-                <label class="form-label">{{ filter_form.q.label.text }}</label>
-                {{ filter_form.q(class="form-control", placeholder="№, адрес, описание…") }}
-            </div>
-            <div class="col-lg-2">
-                <label class="form-label">{{ filter_form.district.label.text }}</label>
-                {{ filter_form.district(class="form-select") }}
-            </div>
-            <div class="col-lg-2">
-                <label class="form-label">{{ filter_form.status_id.label.text }}</label>
-                {{ filter_form.status_id(class="form-select") }}
-            </div>
-            <div class="col-lg-2">
-                <label class="form-label">{{ filter_form.category_id.label.text }}</label>
-                {{ filter_form.category_id(class="form-select") }}
-            </div>
-            <div class="col-lg-2">
-                <label class="form-label">{{ filter_form.sort_by.label.text }}</label>
-                {{ filter_form.sort_by(class="form-select") }}
-            </div>
-            <div class="col-lg-2">
-                <label class="form-label">{{ filter_form.sort_dir.label.text }}</label>
-                {{ filter_form.sort_dir(class="form-select") }}
-            </div>
-            <div class="col-lg-3 d-flex align-items-end gap-2">
-                <button type="submit" class="btn btn-primary flex-grow-1"><i class="bi bi-search"></i> Поиск</button>
-                <button type="button" id="defectFilterReset" class="btn btn-outline-primary">Сброс</button>
-            </div>
-        </form>
+<form id="defectFilterForm" class="journal-filters" data-tour="filters">
+    <input type="hidden" name="tab" value="defects">
+    <input type="hidden" name="sort_by" value="{{ request.args.get('sort_by', 'created_at') }}">
+    <input type="hidden" name="sort_dir" value="{{ request.args.get('sort_dir', 'desc') }}">
+    <input type="hidden" name="per_page" value="{{ request.args.get('per_page', '10') }}">
+    <div class="journal-filters__row">
+        <div class="journal-filters__field journal-filters__field--search">
+            <label class="form-label" for="{{ filter_form.q.id }}">Поиск</label>
+            {{ filter_form.q(class="form-control", placeholder="Поиск по номеру, адресу, описанию...") }}
+        </div>
+        <div class="journal-filters__field">
+            <label class="form-label" for="{{ filter_form.number.id }}">Номер</label>
+            {{ filter_form.number(class="form-control", placeholder="№") }}
+        </div>
+        <div class="journal-filters__field">
+            <label class="form-label" for="{{ filter_form.district.id }}">Район</label>
+            {{ filter_form.district(class="form-select") }}
+        </div>
+        <div class="journal-filters__field">
+            <label class="form-label" for="{{ filter_form.status_id.id }}">Статус</label>
+            {{ filter_form.status_id(class="form-select") }}
+        </div>
+        <div class="journal-filters__actions">
+            <button type="button" class="btn btn-outline-secondary journal-filters__more" id="defectFilterExtra" title="Дополнительные фильтры">
+                <i class="bi bi-sliders"></i>
+            </button>
+            <button type="submit" class="btn btn-primary journal-filters__find">
+                <i class="bi bi-search"></i> Найти
+            </button>
+        </div>
     </div>
-</div>
+    <div class="journal-filters__extra" id="defectFilterExtraPanel">
+        <div class="journal-filters__field">
+            <label class="form-label" for="{{ filter_form.category_id.id }}">Категория</label>
+            {{ filter_form.category_id(class="form-select") }}
+        </div>
+        <button type="button" id="defectFilterReset" class="btn btn-outline-secondary">Сброс</button>
+    </div>
+</form>
+
+{% set map_src = url_for('requests.map_json', tab='defects') %}
+{% include "requests/partials/journal_map.html" %}
+
 <div id="defectsTableContainer" data-tour="list-table">{{ list_loading("Загрузка дефектов…") }}</div>
-<div id="defectsPaginationContainer" class="mt-3"></div>
+<div id="defectsPaginationContainer"></div>
 <div id="oporaListConfig" class="d-none"
      data-list-kind="defects"
      data-base-url="/defects"
@@ -49,5 +57,6 @@
      data-delete-message="Удалить дефект?"
      data-view-mode="page"
      data-load-on-start="true"
+     data-sync-url="true"
      data-can-edit="{{ 'true' if current_user.has_permission('defects.edit') else 'false' }}">
 </div>

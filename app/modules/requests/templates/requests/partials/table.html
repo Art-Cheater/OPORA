@@ -2,94 +2,81 @@
 {% from "macros/ui.html" import sortable_th %}
 {% set sort_by = sort_by|default(request.args.get('sort_by', 'received_at'), true) %}
 {% set sort_dir = sort_dir|default(request.args.get('sort_dir', 'desc'), true) %}
-<div class="table-card">
+{% set can_complete = current_user.has_permission('requests.edit') or current_user.has_permission('requests.approve') or current_user.has_permission('requests.dispatch') %}
+<div class="table-card table-responsive">
     <table class="table table-opora">
         <thead>
             <tr>
-                {{ sortable_th("№", "number", sort_by, sort_dir) }}
+                {{ sortable_th("Номер", "number", sort_by, sort_dir) }}
+                {{ sortable_th("Дата", "received_at", sort_by, sort_dir) }}
                 <th>Журнал</th>
                 {{ sortable_th("Адрес", "address", sort_by, sort_dir) }}
-                {{ sortable_th("ПП (пункт питания)", "pp", sort_by, sort_dir) }}
+                {{ sortable_th("Район", "district", sort_by, sort_dir) }}
                 {{ sortable_th("Статус", "status_id", sort_by, sort_dir) }}
-                {{ sortable_th("Диспетчер", "dispatcher_name", sort_by, sort_dir) }}
-                {{ sortable_th("Получена", "received_at", sort_by, sort_dir) }}
-                <th class="text-end">Действия</th>
+                <th>Описание</th>
+                <th class="text-end"><i class="bi bi-three-dots"></i></th>
             </tr>
         </thead>
         <tbody>
             {% for req in requests_pagination.items %}
+            {% set open_status = req.status and not req.status.is_final %}
             <tr data-opora-id="{{ req.id }}" class="{{ request_row_class(req) }}">
                 <td class="fw-semibold">
-                    <div class="d-flex align-items-center gap-2">
-                        {% if current_user.has_permission('requests.edit') and req.status and not req.status.is_final %}
-                        <button type="button"
-                                class="table-actions__btn"
-                                title="Повторное обращение"
-                                data-opora-repeat
-                                data-id="{{ req.id }}"
-                                data-number="{{ req.number }}">
-                            <i class="bi bi-plus-lg"></i>
-                        </button>
+                    <span class="request-number {% if req.repeat_count and req.repeat_count > 0 %}request-number--repeat{% endif %}">
+                        {{ req.number }}
+                        {% if req.repeat_count and req.repeat_count > 0 %}
+                        <span class="badge text-bg-danger" title="Повторные обращения">×{{ req.repeat_count }}</span>
                         {% endif %}
-                        <span class="request-number {% if req.repeat_count and req.repeat_count > 0 %}request-number--repeat{% endif %}">
-                            {{ req.number }}
-                            {% if req.repeat_count and req.repeat_count > 0 %}
-                            <span class="badge text-bg-danger" title="Повторные обращения">×{{ req.repeat_count }}</span>
-                            {% endif %}
-                        </span>
-                    </div>
+                    </span>
+                </td>
+                <td class="text-muted text-nowrap">
+                    {% if req.received_at %}
+                        {{ req.received_at.strftime('%d.%m.%Y %H:%M') }}
+                    {% else %}
+                        {{ req.created_at.strftime('%d.%m.%Y %H:%M') }}
+                    {% endif %}
                 </td>
                 <td class="small">{{ req.journal.name if req.journal else "—" }}</td>
                 <td>
                     <div class="fw-medium {% if req.repeat_count and req.repeat_count > 0 %}text-danger{% endif %}">{{ req.address }}</div>
-                    {% if req.applicant_name and req.applicant_name != '—' %}
-                    <div class="small text-muted">{{ req.applicant_name }}</div>
-                    {% endif %}
-                    {% if req.has_barrier %}
-                    <div class="small text-muted"><i class="bi bi-p-square"></i> Шлагбаум{% if req.barrier_phone %}: {{ req.barrier_phone }}{% endif %}</div>
-                    {% endif %}
-                    {% if req.for_beresnev %}
-                    <div class="small text-muted"><i class="bi bi-person-check"></i> Для Береснева</div>
-                    {% endif %}
-                    {% if req.district %}
-                    <div class="small text-muted">{{ req.district }}</div>
-                    {% endif %}
+                    {% if req.pp %}<div class="small text-muted">ПП {{ req.pp }}</div>{% endif %}
                 </td>
-                <td>{{ req.pp or '—' }}</td>
+                <td>{{ req.district or "—" }}</td>
                 <td>{{ request_status_badge(req.status) }}</td>
-                <td>{{ req.dispatcher_name or '—' }}</td>
-                <td class="text-muted">
-                    {% if req.received_at %}
-                        <div>{{ req.received_at.strftime('%d.%m.%Y %H:%M') }}</div>
-                    {% else %}
-                        <div>{{ req.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
-                    {% endif %}
-                    {% if req.repeat_dates %}
-                        {% for d in req.repeat_dates %}
-                        <div class="small text-danger">повтор: {{ d.replace('T', ' ')[:16] }}</div>
-                        {% endfor %}
-                    {% endif %}
-                </td>
+                <td class="small">{{ (req.description or req.title or "—")|truncate(90) }}</td>
                 <td class="text-end">
-                    <div class="table-actions" data-tour="row-actions">
-                        <button type="button" class="table-actions__btn" title="Просмотр"
-                                data-opora-action="view" data-id="{{ req.id }}"
-                                data-url="{{ url_for('requests.detail', request_id=req.id) }}">
-                            <i class="bi bi-eye"></i>
+                    <div class="dropdown table-row-menu" data-tour="row-actions">
+                        <button type="button" class="table-actions__btn" data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-expanded="false" title="Действия">
+                            <i class="bi bi-three-dots"></i>
                         </button>
-                        {% if current_user.has_permission('requests.edit') %}
-                        <button type="button" class="table-actions__btn" title="Редактировать"
-                                data-opora-action="edit" data-id="{{ req.id }}"
-                                data-url="{{ url_for('requests.edit', request_id=req.id) }}">
-                            <i class="bi bi-pencil"></i>
-                        </button>
-                        {% endif %}
-                        {% if current_user.has_permission('requests.delete') %}
-                        <button type="button" class="table-actions__btn table-actions__btn--danger" title="Удалить"
-                                data-opora-action="delete" data-id="{{ req.id }}">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                        {% endif %}
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            {% if can_complete and open_status %}
+                            <li>
+                                <button type="button" class="dropdown-item" data-opora-action="complete" data-id="{{ req.id }}">Выполнено</button>
+                            </li>
+                            {% endif %}
+                            <li>
+                                <button type="button" class="dropdown-item" data-opora-action="view" data-id="{{ req.id }}"
+                                        data-url="{{ url_for('requests.detail', request_id=req.id) }}">Открыть</button>
+                            </li>
+                            {% if current_user.has_permission('requests.edit') %}
+                            <li>
+                                <button type="button" class="dropdown-item" data-opora-action="edit" data-id="{{ req.id }}"
+                                        data-url="{{ url_for('requests.edit', request_id=req.id) }}">Редактировать</button>
+                            </li>
+                            {% if open_status %}
+                            <li>
+                                <button type="button" class="dropdown-item" data-opora-repeat data-id="{{ req.id }}" data-number="{{ req.number }}">Повторное обращение</button>
+                            </li>
+                            {% endif %}
+                            {% endif %}
+                            {% if current_user.has_permission('requests.delete') %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button type="button" class="dropdown-item text-danger" data-opora-action="delete" data-id="{{ req.id }}">Удалить</button>
+                            </li>
+                            {% endif %}
+                        </ul>
                     </div>
                 </td>
             </tr>

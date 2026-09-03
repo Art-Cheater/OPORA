@@ -19,6 +19,7 @@ from app.modules.requests.repositories import RequestRepository
 @dataclass
 class DefectFilter:
     q: str = ""
+    number: str = ""
     district: str = ""
     status_id: str = ""
     category_id: str = ""
@@ -33,6 +34,7 @@ class DefectRepository:
         "number": Defect.number,
         "address": Defect.address,
         "status_id": Defect.status_id,
+        "district": Defect.district,
     }
 
     @staticmethod
@@ -98,6 +100,7 @@ class DefectRepository:
                     Defect.number,
                     Defect.address,
                     Defect.district,
+                    Defect.pp,
                     Defect.description,
                     Defect.status_id,
                     Defect.category_id,
@@ -119,6 +122,8 @@ class DefectRepository:
                     Defect.description.ilike(q),
                 )
             )
+        if filters.number:
+            stmt = stmt.where(Defect.number.ilike(f"%{filters.number.strip()}%"))
         if filters.district:
             stmt = stmt.where(Defect.district.ilike(f"%{filters.district.strip()}%"))
         if filters.status_id:
@@ -140,9 +145,10 @@ class DefectRepository:
     def get_masters():
         return RequestRepository.get_masters()
 
-    @staticmethod
-    def map_points(*, limit: int = 500) -> list[dict]:
-        rows = db.session.scalars(
+    @classmethod
+    def map_points(cls, filters: DefectFilter | None = None, *, limit: int = 500) -> list[dict]:
+        flt = filters or DefectFilter()
+        stmt = (
             db.select(Defect)
             .options(load_only(Defect.id, Defect.number, Defect.address, Defect.latitude, Defect.longitude, Defect.status_id))
             .join(DefectStatus, Defect.status_id == DefectStatus.id)
@@ -151,8 +157,31 @@ class DefectRepository:
                 Defect.latitude.isnot(None),
                 Defect.longitude.isnot(None),
             )
-            .limit(limit)
         )
+        if flt.q:
+            q = f"%{flt.q.strip()}%"
+            stmt = stmt.where(
+                or_(
+                    Defect.number.ilike(q),
+                    Defect.address.ilike(q),
+                    Defect.description.ilike(q),
+                )
+            )
+        if flt.number:
+            stmt = stmt.where(Defect.number.ilike(f"%{flt.number.strip()}%"))
+        if flt.district:
+            stmt = stmt.where(Defect.district.ilike(f"%{flt.district.strip()}%"))
+        if flt.status_id:
+            try:
+                stmt = stmt.where(Defect.status_id == uuid.UUID(flt.status_id))
+            except ValueError:
+                pass
+        if flt.category_id:
+            try:
+                stmt = stmt.where(Defect.category_id == uuid.UUID(flt.category_id))
+            except ValueError:
+                pass
+        rows = db.session.scalars(stmt.limit(limit))
         points = []
         for item in rows:
             points.append(

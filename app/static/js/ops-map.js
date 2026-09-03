@@ -43,7 +43,14 @@ window.OporaOpsMap = {
       this.destroy();
       return false;
     }
-    if (typeof L === "undefined") return false;
+    if (typeof L === "undefined") {
+      const leaflet = document.querySelector('script[src*="leaflet"]');
+      if (leaflet && !leaflet.dataset.oporaMapWait) {
+        leaflet.dataset.oporaMapWait = "1";
+        leaflet.addEventListener("load", () => this.init(), { once: true });
+      }
+      return false;
+    }
 
     if (this._map && this._container === mapNode) {
       this._map.invalidateSize();
@@ -203,6 +210,8 @@ window.OporaOpsMap = {
         setStatus(count ? `Точек маршрута: ${count}.` : "Добавьте точки с координатами — появится линия маршрута.");
       } else if (self._kind === "workbench") {
         setStatus(count ? `На карте: ${count}. Красные — дефекты, синие — заявки.` : "Нет точек с координатами.");
+      } else if (self._kind === "journal") {
+        setStatus(count ? `На карте: ${count}. Синие — заявки, красные — дефекты.` : "Нет точек с координатами по текущим фильтрам.");
       } else {
         setStatus(count ? `Отметок: ${count}. Нажмите точку — номер и адрес.` : "Пока нет точек с координатами.");
       }

@@ -294,10 +294,18 @@ def _apply_request_create_defaults(form: RequestForm) -> None:
     form.for_beresnev.data = False
 
 
+def _per_page() -> int:
+    value = request.args.get("per_page", 10, type=int)
+    return value if value in {10, 25, 50, 100} else 10
+
+
 def _build_filters() -> RequestFilter:
     for_beresnev_raw = (request.args.get("for_beresnev") or "").strip().lower()
     return RequestFilter(
         q=request.args.get("q", ""),
+        number=request.args.get("number", ""),
+        date_from=request.args.get("date_from", ""),
+        date_to=request.args.get("date_to", ""),
         district=request.args.get("district", ""),
         pp=request.args.get("pp", ""),
         for_beresnev=for_beresnev_raw in {"1", "true", "on", "yes", "y"},
@@ -365,6 +373,7 @@ def table():
         pagination = DefectRepository.paginated_list(
             DefectFilter(
                 q=request.args.get("q", ""),
+                number=request.args.get("number", ""),
                 district=request.args.get("district", ""),
                 status_id=request.args.get("status_id", ""),
                 category_id=request.args.get("category_id", ""),
@@ -372,7 +381,7 @@ def table():
                 sort_dir=request.args.get("sort_dir", "desc"),
             ),
             page=request.args.get("page", 1, type=int),
-            per_page=request.args.get("per_page", 20, type=int),
+            per_page=_per_page(),
         )
         return jsonify(
             {
@@ -386,7 +395,7 @@ def table():
         )
     filters = _build_filters()
     page = request.args.get("page", 1, type=int)
-    per_page = request.args.get("per_page", 20, type=int)
+    per_page = _per_page()
     pagination = RequestRepository.paginated_list(
         filters,
         page=page,
@@ -408,12 +417,42 @@ def table():
 @login_required
 @permission_required(PERM_REQUESTS_VIEW)
 def map_json():
-    journal_id = request.args.get("journal_id", "")
-    points = RequestRepository.map_points(journal_id=journal_id)
-    if not journal_id and current_user.has_permission(PERM_DEFECTS_VIEW):
-        from app.modules.defects.repositories import DefectRepository
+    tab = (request.args.get("tab") or "").strip().lower()
+    if tab == "defects":
+        if not current_user.has_permission(PERM_DEFECTS_VIEW):
+            abort(403)
+        from app.modules.defects.repositories import DefectFilter, DefectRepository
 
-        points.extend(DefectRepository.map_points())
+        points = DefectRepository.map_points(
+            DefectFilter(
+                q=request.args.get("q", ""),
+                number=request.args.get("number", ""),
+                district=request.args.get("district", ""),
+                status_id=request.args.get("status_id", ""),
+                category_id=request.args.get("category_id", ""),
+            )
+        )
+        return jsonify({"points": points, "remaining": 0})
+
+    filters = _build_filters()
+    points = RequestRepository.map_points(filters)
+    include_defects = (
+        not filters.journal_id
+        and not filters.status_id
+        and current_user.has_permission(PERM_DEFECTS_VIEW)
+    )
+    if include_defects:
+        from app.modules.defects.repositories import DefectFilter, DefectRepository
+
+        points.extend(
+            DefectRepository.map_points(
+                DefectFilter(
+                    q=filters.q,
+                    number=filters.number,
+                    district=filters.district,
+                )
+            )
+        )
     return jsonify(
         {
             "points": points,

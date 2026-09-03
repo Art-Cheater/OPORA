@@ -4,15 +4,30 @@
 
 {% block title %}Заявки — {{ app_name }}{% endblock %}
 
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ static_url('vendor/leaflet/leaflet.css') }}">
+<link rel="stylesheet" href="{{ static_url('css/requests-journal.css') }}">
+{% endblock %}
+
 {% block page_header %}
-{% call page_header("Заявки", "Журналы обращений и дефектов", "clipboard-check") %}
+{% call page_header("Заявки", "Рабочий журнал диспетчера", "clipboard-check") %}
 {% if current_user.has_permission('defects.create') %}
-{{ create_button("Создать", "plus-lg") }}
+{{ create_button("+ Новый дефект", "plus-lg") }}
 {% endif %}
 {% endcall %}
 {% endblock %}
 
 {% block content %}
+<div class="journal-page">
 {% include "requests/partials/journal_tabs.html" %}
 {% include "defects/partials/list_body.html" %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script src="{{ static_url('vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ static_url('js/ops-map.js') }}"></script>
+<script src="{{ static_url('js/requests-journal.js') }}"></script>
 {% endblock %}
