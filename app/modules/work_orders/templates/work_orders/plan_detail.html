@@ -15,7 +15,10 @@
      class="plan-page"
      data-complete-url="{{ url_for('work_orders.work_plan_complete_item', plan_id=plan.id, item_id='11111111-1111-1111-1111-111111111111') }}"
      data-exclude-url="{{ url_for('work_orders.work_plan_exclude_item', plan_id=plan.id, item_id='11111111-1111-1111-1111-111111111111') }}"
-     {% if can_send_report %}data-report-url="{{ url_for('work_orders.send_plan_report', plan_id=plan.id) }}"{% endif %}>
+     {% if can_manage_plans %}data-search-url="{{ url_for('work_orders.plan_available_items', plan_id=plan.id) }}"
+     data-add-url="{{ url_for('work_orders.plan_add_item', plan_id=plan.id) }}"
+     data-related-url="{{ url_for('work_orders.related_json', plan_id=plan.id) }}"{% endif %}
+     {% if can_use_report %}data-report-url="{{ url_for('work_orders.send_plan_report', plan_id=plan.id) }}"{% endif %}>
 
     <a class="plan-page__back" href="{{ url_for('work_orders.plans_index') }}">← Мои планы</a>
 
@@ -27,13 +30,18 @@
             · Создан: <strong>{{ plan.created_at }}</strong>
             · Статус: <strong>{{ plan.status_label }}</strong>
         </p>
-        {% if can_send_report %}
         <div class="plan-page__hero-actions">
-            <button type="button" class="plan-btn plan-btn--save" id="planReportOpen">
+            {% if can_manage_plans %}
+            <button type="button" class="plan-btn plan-btn--ghost" id="planAddOpen">
+                <i class="bi bi-plus-lg"></i> Добавить работы
+            </button>
+            {% endif %}
+            {% if can_use_report %}
+            <button type="button" class="plan-btn plan-btn--save" id="planReportOpen" {% if plan.status != 'completed' %}hidden{% endif %}>
                 <i class="bi bi-file-earmark-word"></i> Сформировать отчёт
             </button>
+            {% endif %}
         </div>
-        {% endif %}
         <div class="plan-progress">
             <div class="plan-progress__bar"><span style="width: {{ percent }}%"></span></div>
             <p>{{ plan.done }} выполнено · {{ plan.excluded }} исключено · {{ plan.remaining }} осталось · {{ plan.done + plan.excluded }} / {{ plan.total }}</p>
@@ -41,6 +49,37 @@
     </header>
 
     <p class="plan-page__flash" id="planFlash" aria-live="polite"></p>
+
+    {% if can_manage_plans %}
+    <section class="plan-card plan-card--wide plan-add" id="planAddPanel" hidden>
+        <div class="plan-card__head">
+            <h2>Добавить заявки и дефекты</h2>
+            <button type="button" class="plan-btn plan-btn--ghost" id="planAddClose">Закрыть</button>
+        </div>
+        <form id="planAddSearch" class="plan-search plan-search--filters">
+            <input type="search" name="pp" placeholder="Номер ПП" autocomplete="off">
+            <select name="district">
+                {% for value, label in districts %}
+                <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+            <select name="kind">
+                <option value="all">Все</option>
+                <option value="request">Заявки</option>
+                <option value="defect">Дефекты</option>
+                <option value="villages">Из деревень</option>
+            </select>
+            <button type="submit">Поиск</button>
+        </form>
+        <div id="planAddResults" class="plan-list">
+            <p class="plan-empty">Выберите работы для добавления.</p>
+        </div>
+        <div id="planAddRelatedWrap" hidden>
+            <h3>Работы рядом</h3>
+            <div id="planAddRelated" class="plan-related"></div>
+        </div>
+    </section>
+    {% endif %}
 
     <div class="plan-detail-list">
         {% for item in works %}
@@ -75,7 +114,7 @@
     </div>
 </div>
 
-{% if can_send_report %}
+{% if can_use_report %}
 <div class="desk-modal" id="planReportModal" hidden>
     <div class="desk-modal__card">
         <h3>Отправка отчёта</h3>
@@ -90,8 +129,9 @@
         </label>
         <div class="desk-modal__actions">
             <button type="button" class="desk-btn" data-close-modal>Отмена</button>
-            <button type="button" class="desk-btn desk-btn--done" id="planReportSend">Сформировать и отправить</button>
+            <button type="button" class="desk-btn desk-btn--done" id="planReportSend" {% if not report_recipients %}disabled{% endif %}>Сформировать и отправить</button>
         </div>
+        {% if not report_recipients %}<p class="desk-modal__hint">Нет доступных адресатов с доступом к мессенджеру.</p>{% endif %}
     </div>
 </div>
 {% endif %}

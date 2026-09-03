@@ -249,8 +249,8 @@ class WorkPlanService:
 
     @classmethod
     def add_item(cls, plan: WorkPlan, *, entity_type: str, entity_id: uuid.UUID, user: User) -> WorkPlanItem:
-        if plan.status != PLAN_DRAFT:
-            raise ValidationError("Добавлять работы можно только в черновик плана.")
+        if plan.status not in {PLAN_DRAFT, PLAN_IN_PROGRESS}:
+            raise ValidationError("В завершённый план нельзя добавлять работы.")
         entity = cls._load_entity(entity_type, entity_id)
         plan_requests, plan_defects = cls._plan_ids(plan)
         busy_requests, busy_defects = cls._busy_ids(exclude_plan_id=plan.id)
@@ -298,8 +298,32 @@ class WorkPlanService:
             details={"entity_type": entity_type, "entity_id": str(entity.id), "number": entity.number},
         )
         plan.updated_by = user.id
+        if plan.status == PLAN_IN_PROGRESS:
+            item.previous_status_code = entity.status.code if entity.status else None
+            if entity_type == ENTITY_REQUEST:
+                RequestService.mark_in_progress_in_session(entity.id, user.id)
+            else:
+                DefectService.mark_in_progress_in_session(entity, user.id)
         db.session.commit()
         return item
+
+    @classmethod
+    def available_rows(cls, plan: WorkPlan, rows: list[dict]) -> list[dict]:
+        """Убрать из выбора работы текущего и других активных WorkPlan."""
+        plan_requests, plan_defects = cls._plan_ids(plan)
+        busy_requests, busy_defects = cls._busy_ids(exclude_plan_id=plan.id)
+        result = []
+        for row in rows:
+            entity_type = row.get("entity_type") or row.get("type")
+            try:
+                entity_id = uuid.UUID(str(row.get("entity_id") or row.get("id") or ""))
+            except ValueError:
+                continue
+            if entity_type == ENTITY_REQUEST and entity_id not in plan_requests | busy_requests:
+                result.append(row)
+            elif entity_type == ENTITY_DEFECT and entity_id not in plan_defects | busy_defects:
+                result.append(row)
+        return result
 
     @classmethod
     def remove_draft_item(cls, plan: WorkPlan, item_id: uuid.UUID, user: User) -> None:

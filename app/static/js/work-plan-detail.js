@@ -6,6 +6,12 @@ window.OporaWorkPlanDetail = {
     root.dataset.planDetailInited = "1";
 
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
+    const planList = root.querySelector(".plan-detail-list");
+    const addPanel = document.getElementById("planAddPanel");
+    const addForm = document.getElementById("planAddSearch");
+    const addResults = document.getElementById("planAddResults");
+    const addRelatedWrap = document.getElementById("planAddRelatedWrap");
+    const addRelated = document.getElementById("planAddRelated");
     let pendingId = "";
 
     function headers(json) {
@@ -17,6 +23,42 @@ window.OporaWorkPlanDetail = {
 
     function withItem(template, itemId) {
       return String(template || "").replace("11111111-1111-1111-1111-111111111111", itemId);
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function workMarkup(item) {
+      const number = item.entity_type === "defect" ? escapeHtml(item.number) : `№ ${escapeHtml(item.number)}`;
+      const actions = item.can_complete
+        ? `<div class="plan-work__actions">
+            <button type="button" class="desk-btn desk-btn--done js-plan-complete" data-item-id="${escapeHtml(item.id)}">Выполнить</button>
+            <button type="button" class="desk-btn desk-btn--danger js-plan-exclude" data-item-id="${escapeHtml(item.id)}">Убрать из плана</button>
+          </div>`
+        : "";
+      return `<article class="plan-work" data-result="${escapeHtml(item.result)}" data-item-id="${escapeHtml(item.id)}">
+        <div class="plan-work__top"><div><span class="plan-work__kind">${escapeHtml(item.type_label)}</span><h2>${number}</h2></div>
+        <span class="desk-item__status" data-code="${escapeHtml(item.result)}">${escapeHtml(item.result_label)}</span></div>
+        <p class="plan-work__addr">${escapeHtml(item.address || "Адрес не указан")}</p>
+        <p class="plan-work__meta">${item.pp ? `ПП ${escapeHtml(item.pp)}` : "ПП не указан"}${item.status ? ` · ${escapeHtml(item.status)}` : ""}</p>
+        ${item.description ? `<p class="plan-work__desc">${escapeHtml(item.description)}</p>` : ""}
+        ${actions}</article>`;
+    }
+
+    function choiceMarkup(item) {
+      const type = item.entity_type || item.type;
+      const id = item.entity_id || item.id;
+      const label = item.type_label || (type === "defect" ? "Дефект" : "Заявка");
+      return `<article class="plan-row">
+        <div><strong>${type === "defect" ? "" : "№ "}${escapeHtml(item.number)}</strong>
+        <small>${escapeHtml(label)} · ${escapeHtml(item.address || "")}${item.pp ? ` · ПП ${escapeHtml(item.pp)}` : ""}</small></div>
+        <button type="button" class="js-plan-add" data-type="${escapeHtml(type)}" data-id="${escapeHtml(id)}">Добавить</button>
+      </article>`;
     }
 
     function toast(message, ok) {
@@ -38,6 +80,11 @@ window.OporaWorkPlanDetail = {
 
     function applyPlan(plan) {
       if (!plan) return;
+      (plan.items || []).forEach((item) => {
+        if (planList && !root.querySelector(`[data-item-id="${item.id}"]`)) {
+          planList.insertAdjacentHTML("beforeend", workMarkup(item));
+        }
+      });
       const meta = root.querySelector(".plan-page__meta");
       if (meta && plan.status_label) {
         const statusNode = meta.querySelector("strong:last-child");
@@ -63,6 +110,74 @@ window.OporaWorkPlanDetail = {
         const actions = article.querySelector(".plan-work__actions");
         if (actions && !item.can_complete) actions.remove();
       });
+      const reportButton = document.getElementById("planReportOpen");
+      if (reportButton) reportButton.hidden = plan.status !== "completed";
+      if (plan.status === "completed") {
+        const addButton = document.getElementById("planAddOpen");
+        if (addButton) addButton.hidden = true;
+        if (addPanel) addPanel.hidden = true;
+      }
+    }
+
+    function searchAvailable() {
+      if (!root.dataset.searchUrl || !addResults) return Promise.resolve();
+      const params = new URLSearchParams({ active_only: "1" });
+      const pp = addForm?.pp?.value?.trim();
+      const district = addForm?.district?.value || "";
+      const kind = addForm?.kind?.value || "all";
+      if (pp) params.set("pp", pp);
+      if (district) params.set("district", district);
+      if (kind !== "all") params.set("kind", kind);
+      addResults.innerHTML = '<p class="plan-empty">Загрузка работ…</p>';
+      return fetch(`${root.dataset.searchUrl}?${params}`, { headers: headers() })
+        .then((res) => res.json())
+        .then((body) => {
+          const rows = body.items || [];
+          addResults.innerHTML = rows.length
+            ? rows.map(choiceMarkup).join("")
+            : '<p class="plan-empty">Доступных работ по текущему фильтру нет.</p>';
+        })
+        .catch(() => {
+          addResults.innerHTML = '<p class="plan-empty">Не удалось загрузить доступные работы.</p>';
+        });
+    }
+
+    function renderRelated(related) {
+      if (!addRelated || !addRelatedWrap) return;
+      const seen = new Set();
+      const rows = ["by_pp", "by_address", "by_district"].flatMap((key) => related?.[key] || []).filter((item) => {
+        const identity = `${item.entity_type}:${item.entity_id}`;
+        if (seen.has(identity)) return false;
+        seen.add(identity);
+        return true;
+      });
+      addRelatedWrap.hidden = !rows.length;
+      addRelated.innerHTML = rows.map(choiceMarkup).join("");
+    }
+
+    function addWork(type, id, button) {
+      if (!root.dataset.addUrl) return;
+      if (button) button.disabled = true;
+      fetch(root.dataset.addUrl, {
+        method: "POST",
+        headers: headers(true),
+        body: JSON.stringify({ entity_type: type, entity_id: id }),
+      })
+        .then((res) => res.json())
+        .then((body) => {
+          if (!body.ok) {
+            toast(body.message || "Не удалось добавить работу.", false);
+            return;
+          }
+          applyPlan(body.plan);
+          renderRelated(body.related || {});
+          toast(body.message || "Работа добавлена в план.");
+          searchAvailable();
+        })
+        .catch(() => toast("Не удалось добавить работу.", false))
+        .finally(() => {
+          if (button?.isConnected) button.disabled = false;
+        });
     }
 
     root.addEventListener("click", (event) => {
@@ -93,8 +208,26 @@ window.OporaWorkPlanDetail = {
       }
     });
 
+    document.getElementById("planAddOpen")?.addEventListener("click", () => {
+      addPanel.hidden = false;
+      searchAvailable();
+      addPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    document.getElementById("planAddClose")?.addEventListener("click", () => {
+      addPanel.hidden = true;
+    });
+    addForm?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      searchAvailable();
+    });
+    [addResults, addRelated].forEach((box) => box?.addEventListener("click", (event) => {
+      const button = event.target.closest(".js-plan-add");
+      if (button) addWork(button.dataset.type, button.dataset.id, button);
+    }));
+
     document.getElementById("planReportOpen")?.addEventListener("click", () => {
-      document.getElementById("planReportModal").hidden = false;
+      const modal = document.getElementById("planReportModal");
+      if (modal) modal.hidden = false;
     });
 
     document.getElementById("planReportSend")?.addEventListener("click", () => {

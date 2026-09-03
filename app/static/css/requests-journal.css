@@ -156,18 +156,31 @@
 }
 
 .journal-page .table-card { margin: 0; }
-.journal-page .table-opora { font-size: 0.8125rem; }
+.journal-page .table-opora {
+  font-size: 0.8125rem;
+  table-layout: fixed;
+}
 .journal-page .table-opora thead th {
   padding: 0.5rem 0.75rem;
   font-size: 0.7rem;
 }
 .journal-page .table-opora tbody td {
   padding: 0.48rem 0.75rem;
+  overflow-wrap: anywhere;
+  overflow: hidden;
 }
+.journal-page .journal-date-cell { line-height: 1.25; }
 .journal-page .table-responsive {
-  overflow-x: auto;
+  overflow-x: hidden;
   max-width: 100%;
 }
+.journal-page .journal-number-col { width: 6rem; }
+.journal-page .journal-date-col { width: 7.25rem; }
+.journal-page .journal-source-col { width: 8.5rem; }
+.journal-page .journal-address-col { width: 19%; }
+.journal-page .journal-district-col { width: 6.75rem; }
+.journal-page .journal-status-col { width: 7.5rem; }
+.journal-page .journal-actions-col { width: 2.75rem; }
 .journal-repeat-col {
   width: 2.25rem;
   padding-left: 0.4rem !important;

@@ -730,6 +730,7 @@ body.is-opora-busy { cursor: wait; }
 .workbench__map #opsMap {
   height: 480px;
   width: 100%;
+  background: #edf2f5;
 }
 .workbench__map-status {
   padding: 0.45rem 0.85rem 0.7rem;

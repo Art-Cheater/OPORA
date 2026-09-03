@@ -137,8 +137,12 @@ body:has(#planCreate) .app-content {
 .plan-page__hero-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.65rem;
   margin-top: 0.9rem;
 }
+.plan-add { margin-bottom: 1rem; }
+.plan-add h3 { margin: 1rem 0 0.65rem; font-size: 1rem; }
 .plan-list {
   display: flex;
   flex-direction: column;

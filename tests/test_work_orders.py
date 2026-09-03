@@ -405,8 +405,11 @@ def test_work_plans_journals_related_complete_and_auto_close(client, app):
     assert body["redirect"].endswith(f"/work-orders/plans/{plan_id}")
     page = client.get(body["redirect"])
     assert page.status_code == 200
-    assert saved_plan["number"] in page.get_data(as_text=True)
-    assert "В работе" in page.get_data(as_text=True)
+    page_html = page.get_data(as_text=True)
+    assert saved_plan["number"] in page_html
+    assert "В работе" in page_html
+    assert "Добавить работы" in page_html
+    assert f"/work-orders/plans/{plan_id}/available.json" in page_html
     with app.app_context():
         for entity_id, model in ((first_id, Request), (same_id, Request)):
             row = db.session.get(model, entity_id)
@@ -421,6 +424,24 @@ def test_work_plans_journals_related_complete_and_auto_close(client, app):
     assert mine_row["total"] == 3
     assert "черновик" not in mine_row["status_label"].lower()
 
+    available = client.get(f"/work-orders/plans/{plan_id}/available.json?kind=request").get_json()["items"]
+    available_ids = {row["id"] for row in available}
+    assert other_id in available_ids
+    assert first_id not in available_ids
+    assert same_id not in available_ids
+    added_later = client.post(
+        f"/work-orders/plans/{plan_id}/items",
+        json={"entity_type": "request", "entity_id": other_id},
+    )
+    assert added_later.status_code == 200, added_later.get_data(as_text=True)
+    added_plan = added_later.get_json()["plan"]
+    assert added_plan["status"] == "in_progress"
+    assert len(added_plan["items"]) == 4
+    assert "by_district" in added_later.get_json()["related"]
+    with app.app_context():
+        added_request = db.session.get(Request, other_id)
+        assert db.session.get(RequestStatus, added_request.status_id).code == "in_progress"
+
     plans_page = client.get("/work-orders/plans/")
     assert plans_page.status_code == 200
     plans_html = plans_page.get_data(as_text=True)
@@ -429,11 +450,12 @@ def test_work_plans_journals_related_complete_and_auto_close(client, app):
 
     opened = client.get(f"/work-orders/plans/{plan_id}.json").get_json()
     assert opened["number"] == saved_plan["number"]
-    assert len(opened["items"]) == 3
+    assert len(opened["items"]) == 4
     by_number = {item["number"]: item for item in opened["items"]}
     complete_id = by_number["25-501"]["id"]
     exclude_id = by_number["25-512"]["id"]
     last_id = by_number["DF-26-14"]["id"]
+    added_id = by_number["25-530"]["id"]
 
     done = client.post(
         f"/work-orders/plans/{plan_id}/items/{complete_id}/complete",
@@ -447,6 +469,12 @@ def test_work_plans_journals_related_complete_and_auto_close(client, app):
     assert excluded.status_code == 200, excluded.get_data(as_text=True)
     still_open = excluded.get_json()["plan"]
     assert still_open["status"] == "in_progress"
+    excluded_later = client.post(
+        f"/work-orders/plans/{plan_id}/items/{added_id}/exclude",
+        json={"reason": "other", "comment": "Перенесено на следующий выезд"},
+    )
+    assert excluded_later.status_code == 200, excluded_later.get_data(as_text=True)
+    assert excluded_later.get_json()["plan"]["status"] == "in_progress"
 
     last = client.post(
         f"/work-orders/plans/{plan_id}/items/{last_id}/complete",
@@ -457,7 +485,7 @@ def test_work_plans_journals_related_complete_and_auto_close(client, app):
     assert finished["status"] == "completed"
     assert finished["completed_at"]
     assert finished["done"] == 2
-    assert finished["excluded"] == 1
+    assert finished["excluded"] == 2
     history = client.get("/work-orders/plans.json").get_json()["plans"]
     row = next(item for item in history if item["id"] == plan_id)
     assert row["status"] == "completed"
@@ -471,6 +499,7 @@ def test_work_plans_journals_related_complete_and_auto_close(client, app):
         assert plan_row.status == "completed"
         assert db.session.get(RequestStatus, db.session.get(Request, first_id).status_id).code == "completed"
         assert db.session.get(RequestStatus, db.session.get(Request, same_id).status_id).code == "new"
+        assert db.session.get(RequestStatus, db.session.get(Request, other_id).status_id).code == "new"
         assert db.session.get(DefectStatus, db.session.get(Defect, defect_id).status_id).code == "fixed"
 
         from app.models.auth.user import User
@@ -485,6 +514,9 @@ def test_work_plans_journals_related_complete_and_auto_close(client, app):
     )
     assert report.status_code == 200, report.get_data(as_text=True)
     assert report.get_json()["ok"] is True
+    completed_page = client.get(f"/work-orders/plans/{plan_id}").get_data(as_text=True)
+    assert 'id="planReportOpen"' in completed_page
+    assert 'id="planReportModal"' in completed_page
     with app.app_context():
         from app.core.upload_utils import resolve_storage_path
         from app.models.messenger.messenger_message import MessengerMessage

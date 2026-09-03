@@ -8,14 +8,14 @@
         <thead>
             <tr>
                 <th class="journal-repeat-col" title="Повторная запись"></th>
-                {{ sortable_th("Номер", "number", sort_by, sort_dir) }}
-                {{ sortable_th("Дата", "received_at", sort_by, sort_dir) }}
-                <th>Журнал</th>
-                {{ sortable_th("Адрес", "address", sort_by, sort_dir) }}
-                {{ sortable_th("Район", "district", sort_by, sort_dir) }}
-                {{ sortable_th("Статус", "status_id", sort_by, sort_dir) }}
+                {{ sortable_th("Номер", "number", sort_by, sort_dir, "journal-number-col") }}
+                {{ sortable_th("Дата", "received_at", sort_by, sort_dir, "journal-date-col") }}
+                <th class="journal-source-col">Журнал</th>
+                {{ sortable_th("Адрес", "address", sort_by, sort_dir, "journal-address-col") }}
+                {{ sortable_th("Район", "district", sort_by, sort_dir, "journal-district-col") }}
+                {{ sortable_th("Статус", "status_id", sort_by, sort_dir, "journal-status-col") }}
                 <th>Описание</th>
-                <th class="text-end"><i class="bi bi-three-dots"></i></th>
+                <th class="text-end journal-actions-col"><i class="bi bi-three-dots"></i></th>
             </tr>
         </thead>
         <tbody>
@@ -35,7 +35,7 @@
                         {% endif %}
                     </span>
                 </td>
-                <td class="text-muted text-nowrap">
+                <td class="text-muted journal-date-cell">
                     {% if req.received_at %}
                         {{ req.received_at.strftime('%d.%m.%Y %H:%M') }}
                     {% else %}

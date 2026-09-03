@@ -75,6 +75,47 @@ def _current_plan():
     return WorkOrderService.today_plan(current_user.id)
 
 
+def _selection_related(entity_type: str, entity_id: uuid.UUID, selection) -> dict:
+    """Рекомендации для временной подборки: ПП, адрес/улица и район."""
+    skip_requests = {
+        stop.request_id
+        for stop in (selection.stops if selection else [])
+        if stop.deleted_at is None and stop.request_id
+    }
+    skip_defects = {
+        stop.defect_id
+        for stop in (selection.stops if selection else [])
+        if stop.deleted_at is None and stop.defect_id
+    }
+    related = WorkPlanService.related_works(
+        entity_type=entity_type,
+        entity_id=entity_id,
+        plan=None,
+        extra_skip_requests=skip_requests,
+        extra_skip_defects=skip_defects,
+    )
+    hits = []
+    seen = set()
+    for key in ("by_pp", "by_address", "by_district"):
+        for row in related.get(key, []):
+            identity = (row.get("entity_type"), row.get("entity_id"))
+            if identity in seen:
+                continue
+            seen.add(identity)
+            hits.append(row)
+    request_count = sum(1 for row in hits if row.get("entity_type") == "request")
+    defect_count = sum(1 for row in hits if row.get("entity_type") == "defect")
+    parts = []
+    if request_count:
+        parts.append(f"{request_count} открытых заявок")
+    if defect_count:
+        parts.append(f"{defect_count} дефектов")
+    return {
+        "summary": "Рядом есть ещё " + " и ".join(parts) + "." if parts else "",
+        "hits": hits,
+    }
+
+
 @work_orders_bp.route("/")
 @login_required
 @permission_required(PERM_WAYBILLS_VIEW)
@@ -258,6 +299,8 @@ def plan_detail_json(plan_id: uuid.UUID):
 @login_required
 @permission_required(PERM_WAYBILLS_VIEW)
 def plan_page(plan_id: uuid.UUID):
+    from app.modules.requests.districts import district_choices
+
     try:
         plan = WorkPlanService.get_owned(plan_id, current_user)
     except NotFoundError:
@@ -267,8 +310,8 @@ def plan_page(plan_id: uuid.UUID):
     payload = WorkPlanService.serialize_plan(plan, current_user)
     percent = int(round((payload["done"] + payload["excluded"]) * 100 / payload["total"])) if payload["total"] else 0
     report_recipients = []
-    can_send_report = payload["status"] == PLAN_COMPLETED and current_user.has_permission(PERM_MESSENGER_USE)
-    if can_send_report:
+    can_use_report = current_user.has_permission(PERM_MESSENGER_USE)
+    if can_use_report:
         from app.modules.messenger.repositories import MessengerRepository
 
         report_recipients = [
@@ -283,9 +326,26 @@ def plan_page(plan_id: uuid.UUID):
         percent=percent,
         exclude_reasons=EXCLUDE_REASONS,
         can_manage_plans=current_user.has_permission(PERM_WAYBILLS_EDIT) and payload["status"] == "in_progress",
-        can_send_report=can_send_report,
+        can_use_report=can_use_report,
         report_recipients=report_recipients,
+        districts=district_choices(empty_label="Все районы"),
     )
+
+
+@work_orders_bp.route("/plans/<uuid:plan_id>/available.json")
+@login_required
+@permission_required(PERM_WAYBILLS_EDIT)
+def plan_available_items(plan_id: uuid.UUID):
+    try:
+        plan = WorkPlanService.get_owned(plan_id, current_user)
+        if plan.status != "in_progress":
+            return ajax_error("Добавлять работы можно только в незавершённый план.")
+        rows = WorkOrderService.list_items(_filters_from_request(), None)
+        return jsonify({"items": WorkPlanService.available_rows(plan, rows)})
+    except NotFoundError as exc:
+        return ajax_error(str(exc), status=404)
+    except ValidationError as exc:
+        return ajax_error(str(exc), status=403)
 
 
 @work_orders_bp.route("/plans/<uuid:plan_id>/report", methods=["POST"])
@@ -534,8 +594,7 @@ def nearby_json():
     entity_id = _uuid_or_none(request.args.get("entity_id"))
     if entity_id is None or entity_type not in {"request", "defect"}:
         return jsonify({"hits": [], "summary": ""})
-    hits, summary = WorkOrderService.nearby_for(entity_type, entity_id, _current_plan())
-    return jsonify({"summary": summary, "hits": [WorkOrderService.hit_to_dict(h) for h in hits]})
+    return jsonify(_selection_related(entity_type, entity_id, _current_plan()))
 
 
 @work_orders_bp.route("/plan/add", methods=["POST"])
@@ -551,11 +610,11 @@ def plan_add():
         plan = WorkOrderService.get_or_create_today_draft(current_user)
         WaybillService.add_stop(plan, entity_type=entity_type, entity_id=entity_id, user_id=current_user.id)
         plan = WorkOrderService.today_plan(current_user.id)
-        hits, summary = WorkOrderService.nearby_for(entity_type, entity_id, plan)
+        nearby = _selection_related(entity_type, entity_id, plan)
         return ajax_ok(
             "Добавлено в план.",
             plan=WorkOrderService.serialize_plan(plan),
-            nearby={"summary": summary, "hits": [WorkOrderService.hit_to_dict(h) for h in hits]},
+            nearby=nearby,
         )
     except ValidationError as exc:
         return ajax_error(str(exc))
