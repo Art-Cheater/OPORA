@@ -8,7 +8,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 
 from flask import url_for
-from sqlalchemy import case, func, literal, or_, select, union_all
+from sqlalchemy import case, false as sa_false, func, literal, or_, select, union_all
 from sqlalchemy.orm import joinedload, load_only, selectinload
 
 from app.core.nearby import NearbyHit, NearbySearchService
@@ -46,8 +46,9 @@ from app.modules.waybills.workflow import STATUS_DRAFT, STATUS_IN_PROGRESS, stat
 
 @dataclass
 class WorkOrderFilter:
-    kind: str = "all"  # all | request | defect
+    kind: str = "all"  # all | request | defect | villages
     q: str = ""
+    pp: str = ""
     district: str = ""
     journal_id: str = ""
     status_id: str = ""
@@ -132,7 +133,7 @@ class WorkOrderService:
     def map_points(cls, filters: WorkOrderFilter, plan: Waybill | None) -> list[dict]:
         in_plan = cls._plan_keys(plan)
         points: list[dict] = []
-        if filters.kind in {"all", "request"}:
+        if filters.kind in {"all", "request", "villages"}:
             points.extend(cls._request_points(filters, in_plan, with_coords=True))
         if filters.kind in {"all", "defect"}:
             points.extend(cls._defect_points(filters, in_plan, with_coords=True))
@@ -142,7 +143,7 @@ class WorkOrderService:
     def list_items(cls, filters: WorkOrderFilter, plan: Waybill | None, limit: int = 80) -> list[dict]:
         in_plan = cls._plan_keys(plan)
         items: list[dict] = []
-        if filters.kind in {"all", "request"}:
+        if filters.kind in {"all", "request", "villages"}:
             items.extend(cls._request_points(filters, in_plan, with_coords=False, limit=limit))
         if filters.kind in {"all", "defect"}:
             items.extend(cls._defect_points(filters, in_plan, with_coords=False, limit=limit))
@@ -188,6 +189,7 @@ class WorkOrderService:
                     Request.journal_id,
                     Request.responsible_id,
                     Request.received_at,
+                    Request.pp,
                 ),
                 joinedload(Request.status),
                 joinedload(Request.journal),
@@ -201,9 +203,34 @@ class WorkOrderService:
             stmt = stmt.where(RequestStatus.is_final.is_(False), RequestStatus.active_filter())
         if filters.q:
             q = f"%{filters.q.strip()}%"
-            stmt = stmt.where(db.or_(Request.number.ilike(q), Request.address.ilike(q), Request.title.ilike(q)))
+            stmt = stmt.where(db.or_(Request.number.ilike(q), Request.address.ilike(q), Request.title.ilike(q), Request.pp.ilike(q)))
+        if filters.pp:
+            stmt = stmt.where(Request.pp.ilike(f"%{filters.pp.strip()}%"))
         if filters.district:
             stmt = stmt.where(Request.district == filters.district)
+        if filters.kind == "villages":
+            from app.modules.requests.journals import (
+                JOURNAL_LENINSKY_VILLAGES,
+                JOURNAL_NOVOVYATSKY_VILLAGES,
+                JOURNAL_OKTYABRSKY_VILLAGES,
+            )
+
+            village_ids = [
+                item.id
+                for item in cls.journals()
+                if item.code in {
+                    JOURNAL_OKTYABRSKY_VILLAGES,
+                    JOURNAL_NOVOVYATSKY_VILLAGES,
+                    JOURNAL_LENINSKY_VILLAGES,
+                }
+            ]
+            stmt = stmt.where(Request.journal_id.in_(village_ids) if village_ids else sa_false())
+        elif filters.kind == "request":
+            from app.modules.requests.journals import JOURNAL_MAIN
+
+            main = RequestRepository.get_journal_by_code(JOURNAL_MAIN)
+            if main is not None:
+                stmt = stmt.where(Request.journal_id == main.id)
         journal_id = _uuid_or_none(filters.journal_id)
         if journal_id:
             stmt = stmt.where(Request.journal_id == journal_id)
@@ -245,6 +272,7 @@ class WorkOrderService:
                     Defect.status_id,
                     Defect.responsible_id,
                     Defect.created_at,
+                    Defect.pp,
                 ),
                 joinedload(Defect.status),
             )
@@ -257,7 +285,9 @@ class WorkOrderService:
             stmt = stmt.where(DefectStatus.is_final.is_(False), DefectStatus.active_filter())
         if filters.q:
             q = f"%{filters.q.strip()}%"
-            stmt = stmt.where(db.or_(Defect.number.ilike(q), Defect.address.ilike(q), Defect.description.ilike(q)))
+            stmt = stmt.where(db.or_(Defect.number.ilike(q), Defect.address.ilike(q), Defect.description.ilike(q), Defect.pp.ilike(q)))
+        if filters.pp:
+            stmt = stmt.where(Defect.pp.ilike(f"%{filters.pp.strip()}%"))
         if filters.district:
             stmt = stmt.where(Defect.district == filters.district)
         status_id = _uuid_or_none(filters.status_id)
@@ -286,6 +316,7 @@ class WorkOrderService:
             "status_code": item.status.code if item.status else "",
             "journal": item.journal.name if item.journal else "",
             "district": item.district or "",
+            "pp": item.pp or "",
             "lat": lat,
             "lng": lng,
             "url": f"/requests/{item.id}?return_url=/work-orders/",
@@ -307,6 +338,7 @@ class WorkOrderService:
             "status_code": item.status.code if item.status else "",
             "journal": "Дефекты",
             "district": item.district or "",
+            "pp": item.pp or "",
             "lat": lat,
             "lng": lng,
             "url": f"/defects/{item.id}?return_url=/work-orders/",

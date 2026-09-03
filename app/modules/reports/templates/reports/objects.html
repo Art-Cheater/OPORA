@@ -52,6 +52,7 @@
                 <th>Окончание работ</th>
                 <th class="text-end">Сумма</th>
                 <th class="text-end">СИП, м</th>
+                <th class="text-end">Кабель, м</th>
                 <th class="text-end">Опоры, шт.</th>
                 <th class="text-end">Светильники, шт.</th>
                 <th class="text-end">ШУНО</th>
@@ -78,6 +79,7 @@
                 <td>{{ row.end_date.strftime('%d.%m.%Y') if row.end_date else "—" }}</td>
                 <td class="text-end">{{ row.amount }}</td>
                 <td class="text-end">{% if row.sip_meters is not none %}{{ row.sip_meters }}{% else %}—{% endif %}</td>
+                <td class="text-end">{% if row.cable_meters is not none %}{{ row.cable_meters }}{% else %}—{% endif %}</td>
                 <td class="text-end">{% if row.poles_count is not none %}{{ row.poles_count }}{% else %}—{% endif %}</td>
                 <td class="text-end">{% if row.lights_count is not none %}{{ row.lights_count }}{% else %}—{% endif %}</td>
                 <td class="text-end">{% if row.shuno_count is not none %}{{ row.shuno_count }}{% else %}—{% endif %}</td>
@@ -87,7 +89,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="13" class="table-empty">
+                <td colspan="14" class="table-empty">
                     <i class="bi bi-inbox"></i> За период нет объектов с контрактом
                 </td>
             </tr>
@@ -99,6 +101,7 @@
                 <td colspan="5">Итог</td>
                 <td class="text-end">{{ report.total_amount }}</td>
                 <td class="text-end">{{ report.total_sip }}</td>
+                <td class="text-end">{{ report.total_cable }}</td>
                 <td class="text-end">{{ report.total_poles }}</td>
                 <td class="text-end">{{ report.total_lights }}</td>
                 <td class="text-end">{{ report.total_shuno }}</td>

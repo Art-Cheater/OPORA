@@ -96,11 +96,17 @@ class ProjectForm(FlaskForm):
     responsible_id = SelectField("Ответственный", choices=[], validators=[Optional()])
     executor_ids = SelectMultipleField("Исполнители", choices=[], validators=[Optional()])
     sip_meters = DecimalField("СИП, метры (план)", places=2, validators=[Optional(), NumberRange(min=0)])
+    cable_meters = DecimalField("Кабель, метры (план)", places=2, validators=[Optional(), NumberRange(min=0)])
     poles_count = IntegerField("Опоры, шт. (план)", validators=[Optional(), NumberRange(min=0)])
     lights_count = IntegerField("Светильники, шт. (план)", validators=[Optional(), NumberRange(min=0)])
     shuno_count = IntegerField("ШУНО / шкафы, шт. (план)", validators=[Optional(), NumberRange(min=0)])
     sip_meters_fact = DecimalField(
         "СИП, метры (факт)",
+        places=2,
+        validators=[Optional(), NumberRange(min=0)],
+    )
+    cable_meters_fact = DecimalField(
+        "Кабель, метры (факт)",
         places=2,
         validators=[Optional(), NumberRange(min=0)],
     )

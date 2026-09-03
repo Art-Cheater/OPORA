@@ -296,8 +296,9 @@ def test_request_open_list_detail_and_forms(admin_client):
     assert list_resp.status_code == 200, list_resp.get_data(as_text=True)[:2000]
     list_html = list_resp.get_data(as_text=True)
     assert "journal-tabs" in list_html
-    assert "Найти" in list_html
-    assert 'id="opsMap"' in list_html
+    assert "Поиск" in list_html
+    assert "Сбор" in list_html
+    assert 'id="opsMap"' not in list_html
     table = admin_client.get("/requests/table")
     assert table.status_code == 200
     payload = table.get_json()

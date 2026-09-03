@@ -860,6 +860,26 @@ class RequestService:
         return req
 
     @classmethod
+    def restore_from_plan_in_session(cls, request_id: uuid.UUID, user_id: uuid.UUID, previous_code: str | None) -> Request:
+        """Вернуть статус, если система перевела заявку в работу из-за плана."""
+        req = cls._lock_request(request_id)
+        previous = (previous_code or "").strip()
+        current = req.status.code if req.status else ""
+        if not previous or current != STATUS_IN_PROGRESS or previous == STATUS_IN_PROGRESS:
+            return req
+        new_status = cls.get_status_by_code(previous)
+        cls._apply_status(
+            req,
+            new_status,
+            user_id,
+            history_action=HISTORY_STATUS_CHANGE,
+            history_comment="Заявка возвращена из плана работ",
+            audit_description=f"Заявка {req.number} возвращена из плана работ",
+            enforce_transition=False,
+        )
+        return req
+
+    @classmethod
     def complete_request(
         cls,
         request_id: uuid.UUID,

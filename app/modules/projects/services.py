@@ -37,10 +37,12 @@ class ProjectPayload:
     executor_ids: list[uuid.UUID]
     object_id: uuid.UUID | None
     sip_meters: Decimal | None = None
+    cable_meters: Decimal | None = None
     poles_count: int | None = None
     lights_count: int | None = None
     shuno_count: int | None = None
     sip_meters_fact: Decimal | None = None
+    cable_meters_fact: Decimal | None = None
     poles_count_fact: int | None = None
     lights_count_fact: int | None = None
     shuno_count_fact: int | None = None
@@ -60,10 +62,12 @@ class ProjectService:
         "manager_id",
         "object_id",
         "sip_meters",
+        "cable_meters",
         "poles_count",
         "lights_count",
         "shuno_count",
         "sip_meters_fact",
+        "cable_meters_fact",
         "poles_count_fact",
         "lights_count_fact",
         "shuno_count_fact",
@@ -278,10 +282,12 @@ class ProjectService:
             manager_id=payload.responsible_id,
             object_id=payload.object_id,
             sip_meters=payload.sip_meters,
+            cable_meters=payload.cable_meters,
             poles_count=payload.poles_count,
             lights_count=payload.lights_count,
             shuno_count=payload.shuno_count,
             sip_meters_fact=payload.sip_meters_fact,
+            cable_meters_fact=payload.cable_meters_fact,
             poles_count_fact=payload.poles_count_fact,
             lights_count_fact=payload.lights_count_fact,
             shuno_count_fact=payload.shuno_count_fact,
@@ -326,10 +332,12 @@ class ProjectService:
         project.manager_id = payload.responsible_id
         project.object_id = payload.object_id
         project.sip_meters = payload.sip_meters
+        project.cable_meters = payload.cable_meters
         project.poles_count = payload.poles_count
         project.lights_count = payload.lights_count
         project.shuno_count = payload.shuno_count
         project.sip_meters_fact = payload.sip_meters_fact
+        project.cable_meters_fact = payload.cable_meters_fact
         project.poles_count_fact = payload.poles_count_fact
         project.lights_count_fact = payload.lights_count_fact
         project.shuno_count_fact = payload.shuno_count_fact

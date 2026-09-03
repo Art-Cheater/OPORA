@@ -7,6 +7,7 @@
     <table class="table table-opora">
         <thead>
             <tr>
+                <th class="journal-repeat-col" title="Повторная запись"></th>
                 {{ sortable_th("Номер", "number", sort_by, sort_dir) }}
                 {{ sortable_th("Дата", "received_at", sort_by, sort_dir) }}
                 <th>Журнал</th>
@@ -21,6 +22,11 @@
             {% for req in requests_pagination.items %}
             {% set open_status = req.status and not req.status.is_final %}
             <tr data-opora-id="{{ req.id }}" class="{{ request_row_class(req) }}">
+                <td class="journal-repeat-col">
+                    {% if current_user.has_permission('requests.edit') and open_status %}
+                    <button type="button" class="journal-repeat-btn" data-opora-repeat data-id="{{ req.id }}" data-number="{{ req.number }}" title="Повторная запись">+</button>
+                    {% endif %}
+                </td>
                 <td class="fw-semibold">
                     <span class="request-number {% if req.repeat_count and req.repeat_count > 0 %}request-number--repeat{% endif %}">
                         {{ req.number }}
@@ -82,7 +88,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="8" class="table-empty">
+                <td colspan="9" class="table-empty">
                     <i class="bi bi-inbox"></i> Заявки не найдены
                 </td>
             </tr>

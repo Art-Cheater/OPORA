@@ -54,6 +54,7 @@ def test_objects_report_page_and_totals(app, admin_client):
                 executor_ids=[],
                 object_id=obj.id,
                 sip_meters=Decimal("150.50"),
+                cable_meters=Decimal("40.00"),
                 poles_count=10,
                 lights_count=12,
                 shuno_count=1,
@@ -89,6 +90,7 @@ def test_objects_report_page_and_totals(app, admin_client):
         row = report.rows[0]
         assert row.contract_number == "К-ОТЧ-1"
         assert row.sip_meters == Decimal("150.50")
+        assert row.cable_meters == Decimal("40.00")
         assert row.poles_count == 10
         assert row.lights_count == 12
         assert row.shuno_count == 1
@@ -100,6 +102,7 @@ def test_objects_report_page_and_totals(app, admin_client):
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
     assert "СИП, м" in html
+    assert "Кабель, м" in html
     assert "К-ОТЧ-1" in html
 
     export = admin_client.get(

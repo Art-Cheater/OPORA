@@ -413,43 +413,9 @@ class RequestRepository:
     @classmethod
     def _number_sort_keys(cls):
         """Ключи сортировки для номеров вида 25-149 (год, порядковый номер)."""
-        from sqlalchemy import Integer, case, cast
+        from app.core.numbering import sql_number_sort_keys
 
-        number = Request.number
-        dialect = db.session.get_bind().dialect.name
-        if dialect == "postgresql":
-            part1 = func.split_part(number, "-", 1)
-            part2 = func.split_part(number, "-", 2)
-            part3 = func.split_part(number, "-", 3)
-            # 25-149 → year=25, seq=149; REQ-2025-001 → year=2025, seq=1
-            year_expr = cast(
-                case((part3 != "", part2), else_=part1),
-                Integer,
-            )
-            seq_expr = cast(
-                case((part3 != "", part3), else_=part2),
-                Integer,
-            )
-        else:
-            # SQLite: первые два сегмента через instr
-            dash1 = func.instr(number, "-")
-            rest = func.substr(number, dash1 + 1)
-            dash2 = func.instr(rest, "-")
-            year_expr = cast(
-                case(
-                    (dash2 > 0, func.substr(rest, 1, dash2 - 1)),
-                    else_=func.substr(number, 1, dash1 - 1),
-                ),
-                Integer,
-            )
-            seq_expr = cast(
-                case(
-                    (dash2 > 0, func.substr(rest, dash2 + 1)),
-                    else_=rest,
-                ),
-                Integer,
-            )
-        return year_expr, seq_expr, number
+        return sql_number_sort_keys(Request.number)
 
     @classmethod
     def _apply_preset(cls, stmt, preset: str, current_user_id: uuid.UUID | None):

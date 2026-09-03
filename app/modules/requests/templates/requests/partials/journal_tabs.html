@@ -1,23 +1,33 @@
 {% set current_tab = tab|default(request.args.get('tab', '')) %}
 {% set current_journal = request.args.get('journal_id', '') %}
+{% set short_names = {
+    'requests': 'Заявки',
+    'oktyabrsky_villages': 'Октябрьский',
+    'novovyatsky_villages': 'Нововятский',
+    'leninsky_villages': 'Ленинский',
+} %}
 <nav class="journal-tabs" data-list-extra="journals" aria-label="Журналы">
     {% if current_user.has_permission('requests.view') %}
     <a href="{{ url_for('requests.index') }}"
        data-opora-journal="requests"
+       title="Все журналы"
        class="{% if not current_journal and current_tab != 'defects' %}is-active{% endif %}">
         <i class="bi bi-collection"></i> Все
     </a>
     {% for journal in journals|default([]) %}
     <a href="{{ url_for('requests.index', journal_id=journal.id) }}"
        data-opora-journal="requests"
+       title="{{ journal.name }}"
        class="{% if current_journal == journal.id|string %}is-active{% endif %}">
-        <i class="bi bi-journal-text"></i> {{ journal.name }}
+        <i class="bi bi-journal-text"></i> {{ short_names.get(journal.code, journal.name) }}
+        <span class="visually-hidden">{{ journal.name }}</span>
     </a>
     {% endfor %}
     {% endif %}
     {% if current_user.has_permission('defects.view') %}
     <a href="{{ url_for('requests.index', tab='defects') }}"
        data-opora-journal="defects"
+       title="Дефекты"
        class="{% if current_tab == 'defects' %}is-active{% endif %}">
         <i class="bi bi-exclamation-triangle"></i> Дефекты
     </a>

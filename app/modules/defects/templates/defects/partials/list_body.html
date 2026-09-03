@@ -22,11 +22,16 @@
             {{ filter_form.status_id(class="form-select") }}
         </div>
         <div class="journal-filters__actions">
+            {% if current_user.has_permission('waybills.view') %}
+            <a href="{{ url_for('work_orders.index') }}" class="btn btn-outline-primary journal-filters__collect">
+                Сбор
+            </a>
+            {% endif %}
             <button type="button" class="btn btn-outline-secondary journal-filters__more" id="defectFilterExtra" title="Дополнительные фильтры">
                 <i class="bi bi-sliders"></i>
             </button>
             <button type="submit" class="btn btn-primary journal-filters__find">
-                <i class="bi bi-search"></i> Найти
+                <i class="bi bi-search"></i> Поиск
             </button>
         </div>
     </div>
@@ -38,9 +43,6 @@
         <button type="button" id="defectFilterReset" class="btn btn-outline-secondary">Сброс</button>
     </div>
 </form>
-
-{% set map_src = url_for('requests.map_json', tab='defects') %}
-{% include "requests/partials/journal_map.html" %}
 
 <div id="defectsTableContainer" data-tour="list-table">{{ list_loading("Загрузка дефектов…") }}</div>
 <div id="defectsPaginationContainer"></div>

@@ -106,9 +106,27 @@ body:has(#planCreate) .app-content {
   font-weight: 700;
   padding: 0 1rem;
 }
-.plan-search button {
-  background: var(--opora-primary);
-  color: #fff;
+.plan-search--filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  align-items: end;
+}
+.plan-search--filters input,
+.plan-search--filters select {
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--opora-input-border);
+  background: var(--opora-input-bg);
+  color: var(--opora-text);
+  padding: 0 0.75rem;
+}
+.plan-nearby-toggle {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--opora-text-muted);
+  font-weight: 700;
+  padding: 0.2rem;
 }
 .plan-list {
   display: flex;

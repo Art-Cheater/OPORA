@@ -87,6 +87,52 @@ def test_defect_status_change(admin_client, app):
         assert status.code == STATUS_IN_PROGRESS
 
 
+def test_defect_list_status_action_and_permission(admin_client, client, app):
+    category_id = _category_id(app)
+    created = admin_client.post(
+        "/defects/new",
+        data={
+            "number": "DF-26-3",
+            "description": "Кабель повреждён",
+            "category_id": category_id,
+            "address": "ул. Мира, 3",
+            "submit": "Сохранить",
+        },
+        follow_redirects=False,
+    )
+    defect_id = created.headers["Location"].rstrip("/").split("/")[-1]
+    table = admin_client.get("/defects/table").get_json()["table_html"]
+    assert 'data-opora-action="status"' in table
+    assert "В работе" in table
+    assert "Выполнен" in table
+    ajax = admin_client.post(
+        f"/defects/{defect_id}/status",
+        json={"status_code": STATUS_IN_PROGRESS, "comment": "Смена из списка"},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert ajax.status_code == 200
+    assert ajax.get_json()["ok"] is True
+    with app.app_context():
+        item = db.session.get(Defect, defect_id)
+        status = db.session.get(DefectStatus, item.status_id)
+        assert status.code == STATUS_IN_PROGRESS
+        audit = db.session.scalar(
+            db.select(AuditLog).where(
+                AuditLog.entity_type == EntityType.DEFECT.value,
+                AuditLog.entity_id == item.id,
+                AuditLog.action == "status_change",
+            )
+        )
+        assert audit is not None
+    _login(client, "executor@test.local")
+    denied = client.post(
+        f"/defects/{defect_id}/status",
+        json={"status_code": "fixed"},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert denied.status_code == 403
+
+
 def test_defect_files_and_list_shell(admin_client, app):
     page = admin_client.get("/defects/")
     assert page.status_code == 200

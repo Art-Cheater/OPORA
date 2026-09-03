@@ -25,11 +25,12 @@ def test_requests_journals_include_defects_tab(admin_client):
     assert "Заявки в деревнях Нововятского района" in html
     assert "Заявки в деревнях Ленинского района" in html
     assert "Дефекты" in html
-    assert 'id="opsMap"' in html
-    assert "js/ops-map.js" in html
-    assert "vendor/leaflet/leaflet.js" in html
+    assert 'id="opsMap"' not in html
+    assert "js/ops-map.js" not in html
+    assert "vendor/leaflet/leaflet.js" not in html
     assert "css/requests-journal.css" in html
-    assert "Найти" in html
+    assert "Поиск" in html
+    assert "Сбор" in html
     assert "Новая заявка" in html
     assert 'data-tour="defects"' not in html
     assert ">Путевые листы</span>" not in html
@@ -51,9 +52,9 @@ def test_requests_defects_tab_looks_like_journal(admin_client, app):
     page = admin_client.get("/requests/?tab=defects")
     assert page.status_code == 200
     html = page.get_data(as_text=True)
-    assert 'id="opsMap"' in html
-    assert "js/ops-map.js" in html
-    assert "vendor/leaflet/leaflet.js" in html
+    assert 'id="opsMap"' not in html
+    assert "js/ops-map.js" not in html
+    assert "vendor/leaflet/leaflet.js" not in html
     assert 'id="defectFilterForm"' in html
     assert 'id="defectsTableContainer"' in html
     assert "journal-tabs" in html
@@ -111,11 +112,11 @@ def test_spa_nav_requests_keeps_journals_and_map(admin_client):
     assert page.status_code == 200
     html = page.get_data(as_text=True)
     assert 'id="appContent"' in html
-    assert 'id="opsMap"' in html
+    assert 'id="opsMap"' not in html
     assert "journal-tabs" in html
     assert "Дефекты" in html
-    assert "js/ops-map.js" in html
-    assert "vendor/leaflet/leaflet.js" in html
+    assert "js/ops-map.js" not in html
+    assert "vendor/leaflet/leaflet.js" not in html
     assert "css/requests-journal.css" in html
     assert 'id="appShell"' not in html
     assert page.headers.get("X-Opora-Partial") == "1"
@@ -190,15 +191,13 @@ def test_spa_nav_work_orders_keeps_available_list(admin_client):
     assert page.status_code == 200
     html = page.get_data(as_text=True)
     assert 'id="appContent"' in html
-    assert 'id="opsMap"' not in html
-    assert "Работа с заявками" in html
-    assert "Список работы" in html
-    assert 'id="workDesk"' in html
-    assert "css/work-desk.css" in html
+    assert 'id="opsMap"' in html
+    assert "Работа по заявкам" in html or "Работа с заявками" in html
+    assert "Доступные работы" in html
+    assert 'id="workOrderRoot"' in html
     assert "js/work-orders.js" in html
-    assert "Мой план работ" not in html
-    assert "Доступные работы" not in html
-    assert "workbench__top" not in html
+    assert "Мой план работ" in html
+    assert "workbench__top" in html
     assert 'id="appShell"' not in html
     assert page.headers.get("X-Opora-Partial") == "1"
 
@@ -211,7 +210,9 @@ def test_spa_list_scripts_bind_navigation_without_reload():
     main = (root / "app/static/js/main.js").read_text(encoding="utf-8")
     work = (root / "app/static/js/work-orders.js").read_text(encoding="utf-8")
     opora_list = (root / "app/static/js/opora-list.js").read_text(encoding="utf-8")
-    assert "OporaOpsMap" not in work
+    plan_new = (root / "app/static/js/work-plan-new.js").read_text(encoding="utf-8")
+    plan_detail = (root / "app/static/js/work-plan-detail.js").read_text(encoding="utf-8")
+    assert "OporaOpsMap" in work
     assert "opora:navigated" in work
     assert 'path === "/requests/" || path === "/defects/"' in main
     assert 'data-opora-journal' in main
@@ -219,12 +220,53 @@ def test_spa_list_scripts_bind_navigation_without_reload():
     assert 'baseUrl: defects ? "/defects"' in opora_list
     assert "reloadListMap" in opora_list
     assert "completeFromList" in opora_list
+    assert "changeStatusFromList" in opora_list
     assert "return_url=" in opora_list
     assert "OporaRequestsJournal" in main
+    assert "OporaWorkPlanNew" in main
+    assert "OporaWorkPlanDetail" in main
+    assert "OporaObjectForm" in main
     assert "ResizeObserver" in ops
     assert "destroy()" in ops
     assert "location.reload" not in ops
     assert "location.reload" not in main
     assert "location.reload" not in work
+    assert "location.reload" not in plan_new
+    assert "location.reload" not in plan_detail
+    assert "js-pick" not in plan_new
     assert "setTimeout(bootOps" not in main
     assert "script.async = false" in main
+
+
+def test_requests_number_sort_and_repeat_plus(admin_client, app):
+    with app.app_context():
+        journal_id = RequestRepository.get_default_journal().id
+        st_new = db.session.scalar(db.select(RequestStatus).where(RequestStatus.code == "new"))
+        for number, address in (("26-1", "ул. А, 1"), ("26-2", "ул. А, 2"), ("26-10", "ул. А, 10")):
+            db.session.add(
+                Request(
+                    number=number,
+                    title=address,
+                    description="Сортировка",
+                    address=address,
+                    applicant_name="QA",
+                    priority=Priority.MEDIUM.value,
+                    status_id=st_new.id,
+                    journal_id=journal_id,
+                )
+            )
+        db.session.commit()
+    payload = admin_client.get("/requests/table?sort_by=number&sort_dir=asc").get_json()
+    assert payload["entity"] == "request"
+    html = payload["table_html"]
+    assert "Внутренняя ошибка" not in html
+    pos1 = html.find('data-number="26-1"')
+    pos2 = html.find('data-number="26-2"')
+    pos10 = html.find('data-number="26-10"')
+    assert 0 <= pos1 < pos2 < pos10
+    assert "data-opora-repeat" in html
+    assert "journal-repeat-btn" in html
+    page = admin_client.get("/requests/")
+    assert "Сбор" in page.get_data(as_text=True)
+    assert "overflow-x: auto" not in page.get_data(as_text=True) or "journal-tabs" in page.get_data(as_text=True)
+

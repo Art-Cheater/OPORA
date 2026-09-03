@@ -5,6 +5,7 @@ from __future__ import annotations
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, FileField, FileRequired
 from wtforms import (
+    BooleanField,
     DateField,
     DecimalField,
     IntegerField,
@@ -33,6 +34,7 @@ OBJECT_KIND_CHOICES = [
     (WorkObjectKind.PLANNED.value, "Плановый"),
     (WorkObjectKind.COURT.value, "Судебный"),
     (WorkObjectKind.TECH_CONNECT.value, "Техническое присоединение"),
+    (WorkObjectKind.OTHER.value, "Другое"),
 ]
 
 OBJECT_KIND_LABELS = dict(OBJECT_KIND_CHOICES)
@@ -90,6 +92,15 @@ class ObjectForm(FlaskForm):
         choices=OBJECT_KIND_CHOICES,
         default=WorkObjectKind.PLANNED.value,
         validators=[DataRequired()],
+    )
+    kind_comment = StringField(
+        "Комментарий",
+        validators=[Optional(), Length(max=500)],
+        description="Пояснение для типа «Другое»",
+    )
+    create_draft_project = BooleanField(
+        "Создать черновик проекта",
+        default=True,
     )
     address = StringField("Адрес", validators=[DataRequired(), Length(max=1000)])
     full_name = StringField(

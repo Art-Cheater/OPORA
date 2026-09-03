@@ -136,9 +136,18 @@ class DefectRepository:
                 stmt = stmt.where(Defect.category_id == uuid.UUID(filters.category_id))
             except ValueError:
                 pass
-        sort_col = cls.SORT_FIELDS.get(filters.sort_by, Defect.created_at)
-        sort_expr = sort_col.desc() if filters.sort_dir == "desc" else sort_col.asc()
-        stmt = stmt.order_by(sort_expr, Defect.created_at.desc())
+        if filters.sort_by == "number":
+            from app.core.numbering import sql_number_sort_keys
+
+            year_expr, seq_expr, raw = sql_number_sort_keys(Defect.number)
+            if filters.sort_dir == "desc":
+                stmt = stmt.order_by(year_expr.desc(), seq_expr.desc(), raw.desc(), Defect.created_at.desc())
+            else:
+                stmt = stmt.order_by(year_expr.asc(), seq_expr.asc(), raw.asc(), Defect.created_at.desc())
+        else:
+            sort_col = cls.SORT_FIELDS.get(filters.sort_by, Defect.created_at)
+            sort_expr = sort_col.desc() if filters.sort_dir == "desc" else sort_col.asc()
+            stmt = stmt.order_by(sort_expr, Defect.created_at.desc())
         return db.paginate(stmt, page=page, per_page=per_page, error_out=False)
 
     @staticmethod

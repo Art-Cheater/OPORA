@@ -36,7 +36,7 @@
 
     <div class="plan-detail-list">
         {% for item in works %}
-        <article class="plan-work" data-result="{{ item.result }}">
+        <article class="plan-work" data-result="{{ item.result }}" data-item-id="{{ item.id }}">
             <div class="plan-work__top">
                 <div>
                     <span class="plan-work__kind">{{ item.type_label }}</span>

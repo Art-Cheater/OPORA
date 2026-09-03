@@ -48,6 +48,17 @@
                                         data-url="{{ url_for('defects.edit', defect_id=item.id) }}">Редактировать</button>
                             </li>
                             {% endif %}
+                            {% if current_user.has_permission('defects.status_change') %}
+                            {% set next_map = {
+                                'open': [('in_progress', 'В работе'), ('fixed', 'Выполнен'), ('cancelled', 'Отменён')],
+                                'in_progress': [('fixed', 'Выполнен'), ('cancelled', 'Отменён')],
+                            } %}
+                            {% for next_code, next_label in next_map.get(code, []) %}
+                            <li>
+                                <button type="button" class="dropdown-item" data-opora-action="status" data-id="{{ item.id }}" data-status="{{ next_code }}">{{ next_label }}</button>
+                            </li>
+                            {% endfor %}
+                            {% endif %}
                             {% if current_user.has_permission('defects.delete') %}
                             <li><hr class="dropdown-divider"></li>
                             <li>

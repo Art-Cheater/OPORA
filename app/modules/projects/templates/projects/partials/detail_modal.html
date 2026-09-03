@@ -93,6 +93,14 @@
                 </div>
             </div>
             {% endif %}
+            {% if is_builtin_visible('projects', 'cable_meters') and current_user.can_view_field('projects', 'cable_meters') %}
+            <div class="col-md-3">
+                <div class="opora-detail-field">
+                    <div class="opora-detail-field__label">Кабель, м (план)</div>
+                    <div>{% if project.cable_meters is not none %}{{ project.cable_meters }}{% else %}—{% endif %}</div>
+                </div>
+            </div>
+            {% endif %}
             {% if is_builtin_visible('projects', 'poles_count') and current_user.can_view_field('projects', 'poles_count') %}
             <div class="col-md-3">
                 <div class="opora-detail-field">

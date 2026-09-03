@@ -77,6 +77,7 @@ class ObjectReportRow:
     end_date: date | None
     amount: Decimal
     sip_meters: Decimal | None
+    cable_meters: Decimal | None
     poles_count: int | None
     lights_count: int | None
     shuno_count: int | None
@@ -90,6 +91,7 @@ class ObjectsReport:
     rows: list[ObjectReportRow]
     total_amount: Decimal
     total_sip: Decimal
+    total_cable: Decimal
     total_poles: int
     total_lights: int
     total_shuno: int
@@ -395,6 +397,7 @@ class ReportsService:
         rows: list[ObjectReportRow] = []
         total_amount = Decimal("0")
         total_sip = Decimal("0")
+        total_cable = Decimal("0")
         total_poles = 0
         total_lights = 0
         total_shuno = 0
@@ -409,6 +412,7 @@ class ReportsService:
             if nmck is not None:
                 remainder = cls._as_decimal(nmck) - amount
             sip = project.sip_meters if project is not None else None
+            cable = project.cable_meters if project is not None else None
             poles = project.poles_count if project is not None else None
             lights = project.lights_count if project is not None else None
             shuno = project.shuno_count if project is not None else None
@@ -423,6 +427,7 @@ class ReportsService:
                     end_date=contract.end_date,
                     amount=amount,
                     sip_meters=sip,
+                    cable_meters=cable,
                     poles_count=poles,
                     lights_count=lights,
                     shuno_count=shuno,
@@ -434,6 +439,8 @@ class ReportsService:
             total_final += amount
             if sip is not None:
                 total_sip += cls._as_decimal(sip)
+            if cable is not None:
+                total_cable += cls._as_decimal(cable)
             if poles is not None:
                 total_poles += poles
             if lights is not None:
@@ -448,6 +455,7 @@ class ReportsService:
             rows=rows,
             total_amount=total_amount,
             total_sip=total_sip,
+            total_cable=total_cable,
             total_poles=total_poles,
             total_lights=total_lights,
             total_shuno=total_shuno,
@@ -480,6 +488,7 @@ class ReportsService:
                 "Окончание работ",
                 "Сумма",
                 "СИП, метры",
+                "Кабель, метры",
                 "Опоры, шт.",
                 "Светильники, шт.",
                 "ШУНО",
@@ -498,6 +507,7 @@ class ReportsService:
                     fmt_date(item.end_date),
                     money(item.amount),
                     num(item.sip_meters),
+                    num(item.cable_meters),
                     num(item.poles_count),
                     num(item.lights_count),
                     num(item.shuno_count),
@@ -515,6 +525,7 @@ class ReportsService:
                 "",
                 money(report.total_amount),
                 money(report.total_sip),
+                money(report.total_cable),
                 str(report.total_poles),
                 str(report.total_lights),
                 str(report.total_shuno),

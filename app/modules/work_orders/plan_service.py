@@ -540,6 +540,14 @@ class WorkPlanService:
         history_text = f"Исключена из плана: {reason_label}. {text}"
         if item.request_id:
             req = RequestService._lock_request(item.request_id)
+            from app.modules.waybills.services import WaybillService
+
+            if not WaybillService.entity_in_other_active_work(
+                request_id=item.request_id, skip_plan_id=plan.id
+            ):
+                RequestService.restore_from_plan_in_session(
+                    item.request_id, user.id, item.previous_status_code
+                )
             RequestService._log_history(
                 req,
                 user.id,
@@ -550,6 +558,14 @@ class WorkPlanService:
         elif item.defect_id:
             defect = db.session.get(Defect, item.defect_id)
             if defect is not None:
+                from app.modules.waybills.services import WaybillService
+
+                if not WaybillService.entity_in_other_active_work(
+                    defect_id=item.defect_id, skip_plan_id=plan.id
+                ):
+                    DefectService.restore_from_plan_in_session(
+                        defect, user.id, item.previous_status_code
+                    )
                 DefectService._log_history(defect, user.id, "exclude_from_plan", history_text, {"plan_id": str(plan.id)})
         cls._log(
             plan,

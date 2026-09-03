@@ -293,12 +293,23 @@ def change_status(defect_id: uuid.UUID):
         return redirect(url_for("defects.index"))
     form = DefectStatusForm()
     form.status_code.choices = [(s.code, s.name) for s in DefectRepository.get_statuses()]
-    if form.validate_on_submit():
-        try:
-            DefectService.change_status(item, form.status_code.data, current_user.id, form.comment.data)
-            flash("Статус обновлён.", "success")
-        except ValidationError as exc:
-            flash(str(exc), "danger")
+    payload = request.get_json(silent=True) or {}
+    status_code = (form.status_code.data or payload.get("status_code") or request.form.get("status_code") or "").strip()
+    comment = form.comment.data or payload.get("comment")
+    if not status_code:
+        if is_ajax():
+            return ajax_error("Укажите статус.")
+        flash("Укажите статус.", "danger")
+        return redirect(url_for("defects.detail", defect_id=item.id))
+    try:
+        DefectService.change_status(item, status_code, current_user.id, comment)
+        if is_ajax():
+            return ajax_ok("Статус обновлён.")
+        flash("Статус обновлён.", "success")
+    except ValidationError as exc:
+        if is_ajax():
+            return ajax_error(str(exc))
+        flash(str(exc), "danger")
     return redirect(url_for("defects.detail", defect_id=item.id))
 
 

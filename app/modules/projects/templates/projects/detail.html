@@ -97,6 +97,12 @@
                         <div>{% if project.sip_meters is not none %}{{ project.sip_meters }}{% else %}—{% endif %}</div>
                     </div>
                     {% endif %}
+                    {% if current_user.can_view_field('projects', 'cable_meters') %}
+                    <div class="col-md-3">
+                        <small class="text-muted">Кабель, м</small>
+                        <div>{% if project.cable_meters is not none %}{{ project.cable_meters }}{% else %}—{% endif %}</div>
+                    </div>
+                    {% endif %}
                     {% if current_user.can_view_field('projects', 'poles_count') %}
                     <div class="col-md-3">
                         <small class="text-muted">Опоры, шт.</small>
@@ -120,6 +126,12 @@
                     <div class="col-md-3">
                         <small class="text-muted">СИП, м</small>
                         <div>{% if project.sip_meters_fact is not none %}{{ project.sip_meters_fact }}{% else %}—{% endif %}</div>
+                    </div>
+                    {% endif %}
+                    {% if current_user.can_view_field('projects', 'cable_meters_fact') %}
+                    <div class="col-md-3">
+                        <small class="text-muted">Кабель, м</small>
+                        <div>{% if project.cable_meters_fact is not none %}{{ project.cable_meters_fact }}{% else %}—{% endif %}</div>
                     </div>
                     {% endif %}
                     {% if current_user.can_view_field('projects', 'poles_count_fact') %}

@@ -6,7 +6,6 @@
 
 {% block extra_css %}
 {{ super() }}
-<link rel="stylesheet" href="{{ static_url('vendor/leaflet/leaflet.css') }}">
 <link rel="stylesheet" href="{{ static_url('css/requests-journal.css') }}">
 {% endblock %}
 
@@ -71,11 +70,16 @@
             {{ filter_form.status_id(class="form-select") }}
         </div>
         <div class="journal-filters__actions">
+            {% if current_user.has_permission('waybills.view') %}
+            <a href="{{ url_for('work_orders.index') }}" class="btn btn-outline-primary journal-filters__collect">
+                Сбор
+            </a>
+            {% endif %}
             <button type="button" class="btn btn-outline-secondary journal-filters__more" id="requestFilterExtra" title="Дополнительные фильтры" aria-expanded="false">
                 <i class="bi bi-sliders"></i>
             </button>
             <button type="submit" class="btn btn-primary journal-filters__find">
-                <i class="bi bi-search"></i> Найти
+                <i class="bi bi-search"></i> Поиск
             </button>
         </div>
     </div>
@@ -103,9 +107,6 @@
         <button type="button" id="requestFilterReset" class="btn btn-outline-secondary">Сброс</button>
     </div>
 </form>
-
-{% set map_src = url_for('requests.map_json', journal_id=request.args.get('journal_id', none)) %}
-{% include "requests/partials/journal_map.html" %}
 
 <div id="requestsTableContainer" data-tour="list-table">
     {{ list_loading("Загрузка заявок…") }}
@@ -135,7 +136,5 @@
 
 {% block extra_js %}
 {{ super() }}
-<script src="{{ static_url('vendor/leaflet/leaflet.js') }}"></script>
-<script src="{{ static_url('js/ops-map.js') }}"></script>
 <script src="{{ static_url('js/requests-journal.js') }}"></script>
 {% endblock %}

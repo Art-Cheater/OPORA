@@ -604,6 +604,37 @@ function initInstantNav(sidebar, closeSidebar) {
         }
     }
 
+    window.OporaObjectForm = {
+        init() {
+            document.querySelectorAll("[data-object-kind-form]").forEach((root) => {
+                const select = root.querySelector('[name="object_kind"]');
+                if (!select || select.dataset.kindBound === "1") return;
+                select.dataset.kindBound = "1";
+                const sync = () => {
+                    const kind = select.value;
+                    root.querySelectorAll(".js-kind-comment").forEach((node) => {
+                        node.hidden = kind !== "other";
+                    });
+                    root.querySelectorAll(".js-kind-court").forEach((node) => {
+                        node.hidden = kind !== "court";
+                    });
+                    const commentField = root.querySelector('[name="kind_comment"]');
+                    const commentWrap = commentField?.closest(".col-12, [class*='col-']");
+                    if (commentWrap && !commentWrap.classList.contains("js-kind-comment")) {
+                        commentWrap.hidden = kind !== "other";
+                    }
+                    const courtField = root.querySelector('[name="court_decision_number"]');
+                    const courtWrap = courtField?.closest(".col-12, [class*='col-']");
+                    if (courtWrap && !courtWrap.classList.contains("js-kind-court")) {
+                        courtWrap.hidden = kind !== "court";
+                    }
+                };
+                select.addEventListener("change", sync);
+                sync();
+            });
+        },
+    };
+
     function bootPageModules() {
         window.OporaList?.reset?.();
         window.OporaList?.bootPage?.();
@@ -626,6 +657,9 @@ function initInstantNav(sidebar, closeSidebar) {
         window.OporaOpsMap?.init?.();
         window.OporaRequestsJournal?.init?.();
         window.OporaWorkOrders?.init?.();
+        window.OporaWorkPlanNew?.init?.();
+        window.OporaWorkPlanDetail?.init?.();
+        window.OporaObjectForm?.init?.();
         if (document.getElementById("inquiryForwardCard")) {
             const card = document.getElementById("inquiryForwardCard");
             if (card) delete card.dataset.bound;

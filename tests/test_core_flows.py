@@ -92,6 +92,8 @@ def test_saved_rows_appear_in_ajax_tables(admin_client, app):
             "description": "проверка сохранения",
             "status": ProjectStatus.ACTIVE.value,
             "progress_percent": "10",
+            "sip_meters": "120",
+            "cable_meters": "45",
             "responsible_id": admin_id,
             "submit": "Сохранить",
         },
@@ -102,6 +104,12 @@ def test_saved_rows_appear_in_ajax_tables(admin_client, app):
     assert project_payload["success"] is True
     project_id = project_payload["id"]
     assert project_name in _table_html(admin_client, "/projects")
+    project_page_preview = admin_client.get(f"/projects/{project_id}?full=1")
+    assert project_page_preview.status_code == 200
+    preview_html = project_page_preview.get_data(as_text=True)
+    assert "120" in preview_html
+    assert "45" in preview_html
+    assert "Кабель" in preview_html
 
     modal = admin_client.get(f"/projects/{project_id}", headers=AJAX)
     assert modal.status_code == 200, modal.get_data(as_text=True)[:2000]

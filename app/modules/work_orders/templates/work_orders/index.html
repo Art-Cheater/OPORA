@@ -1,90 +1,115 @@
 {% extends "layouts/app.html" %}
 
-{% block title %}Работа с заявками — {{ app_name }}{% endblock %}
+{% block title %}Работа по заявкам — {{ app_name }}{% endblock %}
 
 {% block extra_css %}
 {{ super() }}
-<link rel="stylesheet" href="{{ static_url('css/work-desk.css') }}">
+<link rel="stylesheet" href="{{ static_url('vendor/leaflet/leaflet.css') }}">
 {% endblock %}
 
 {% block page_header %}{% endblock %}
 
 {% block content %}
-<div id="workDesk"
-     class="desk"
+<div id="workOrderRoot"
+     class="workbench"
      data-tour="workbench"
-     data-queue-url="{{ url_for('work_orders.queue_json') }}"
-     data-request-card-url="{{ url_for('work_orders.request_card_json', request_id='00000000-0000-0000-0000-000000000000') }}"
-     data-defect-card-url="{{ url_for('work_orders.defect_card_json', defect_id='00000000-0000-0000-0000-000000000000') }}"
-     data-request-complete-url="{{ url_for('work_orders.complete_request', request_id='00000000-0000-0000-0000-000000000000') }}"
-     data-defect-complete-url="{{ url_for('work_orders.complete_defect', defect_id='00000000-0000-0000-0000-000000000000') }}"
-     data-can-complete="{{ 'true' if can_complete else 'false' }}"
-     data-can-complete-defect="{{ 'true' if can_complete_defect else 'false' }}">
+     data-can-edit="{{ 'true' if can_edit_plan else 'false' }}"
+     data-can-complete="{{ 'true' if can_complete_waybill else 'false' }}"
+     data-items-url="{{ url_for('work_orders.items_json') }}"
+     data-map-url="{{ url_for('work_orders.map_json') }}"
+     data-plan-url="{{ url_for('work_orders.plan_json') }}"
+     data-nearby-url="{{ url_for('work_orders.nearby_json') }}"
+     data-route-url="{{ url_for('work_orders.route_json') }}"
+     data-add-url="{{ url_for('work_orders.plan_add') }}"
+     data-remove-url="{{ url_for('work_orders.plan_remove') }}"
+     data-reorder-url="{{ url_for('work_orders.plan_reorder') }}"
+     data-save-url="{{ url_for('work_orders.plan_save') }}"
+     data-complete-url="{{ url_for('work_orders.plan_complete') }}">
 
-    <header class="desk__head">
+    <header class="workbench__head">
         <div>
-            <p class="desk__eyebrow">Рабочее место мастера</p>
-            <h1 class="desk__title">Работа с заявками</h1>
+            <p class="workbench__eyebrow">Рабочее место мастера</p>
+            <h1 class="workbench__title">Работа по заявкам</h1>
         </div>
-        <div class="desk__head-actions">
+        <div class="workbench__head-actions">
             {% if can_manage_plans %}
-            <a class="desk-btn" href="{{ url_for('work_orders.plans_index') }}">Мои планы</a>
-            <a class="desk-btn desk-btn--accent" href="{{ url_for('work_orders.plans_new') }}">+ Новый план работ</a>
+            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('work_orders.plans_index') }}">Мои планы</a>
+            <a class="btn btn-primary btn-sm" href="{{ url_for('work_orders.plans_new') }}">Создать план работ</a>
             {% endif %}
         </div>
     </header>
 
-    <div class="desk__toolbar" data-tour="filters">
-        <div class="desk__filters" role="group" aria-label="Тип журнала">
-            <button type="button" class="desk__chip is-active" data-journal="all">Все</button>
-            {% for journal in journals %}
-            <button type="button" class="desk__chip" data-journal="{{ journal.code }}">{{ journal.name }}</button>
-            {% endfor %}
-            <button type="button" class="desk__chip" data-journal="defects">Дефекты</button>
-        </div>
-        <form id="deskSearch" class="desk__search">
-            <label class="visually-hidden" for="deskSearchInput">Поиск</label>
-            <input id="deskSearchInput" type="search" name="q" class="desk__search-input"
-                   placeholder="Номер, адрес, улица, ПП, описание" autocomplete="off">
-            <button type="submit" class="desk__search-btn">Найти</button>
-        </form>
-        <div class="desk__filters" role="group" aria-label="Фильтр по статусу">
-            <button type="button" class="desk__chip is-active" data-preset="all">Все</button>
-            <button type="button" class="desk__chip" data-preset="new">Новые</button>
-            <button type="button" class="desk__chip" data-preset="in_progress">В работе</button>
-            <button type="button" class="desk__chip" data-preset="completed">Выполненные</button>
-        </div>
+    <p class="workbench__flash" id="workFlash" aria-live="polite"></p>
+
+    <div class="workbench__top">
+        <section class="workbench__map card">
+            <div id="opsMap"
+                 data-src="{{ url_for('work_orders.map_json') }}"
+                 data-kind="workbench"></div>
+            <div id="opsMapStatus" class="workbench__map-status">Загрузка карты…</div>
+        </section>
+
+        <section class="workbench__available card">
+            <h2>Доступные работы</h2>
+            <form id="workFilters" class="workbench-filters" data-tour="filters">
+                <label>
+                    <span>Номер ПП</span>
+                    <input type="search" name="pp" placeholder="ПП" autocomplete="off">
+                </label>
+                <label>
+                    <span>Район</span>
+                    <select name="district">
+                        {% for value, label in districts %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    <span>Тип работы</span>
+                    <select name="kind">
+                        <option value="all">Все</option>
+                        <option value="request">Заявки</option>
+                        <option value="defect">Дефекты</option>
+                        <option value="villages">Из деревень</option>
+                    </select>
+                </label>
+                <button type="submit">Поиск</button>
+            </form>
+            <div id="workItems" class="workbench-items">
+                <p class="workbench-empty">Загрузка работ…</p>
+            </div>
+        </section>
     </div>
 
-    <p class="desk-flash" id="deskFlash" aria-live="polite"></p>
+    <button type="button" class="workbench-nearby-toggle" id="workNearbyToggle" hidden>
+        ⌄ Работы рядом
+    </button>
 
-    <div class="desk__workspace">
-        <div class="desk__body">
-            <section class="desk__queue" aria-label="Список работы">
-                <div class="desk__queue-head">
-                    <h2 class="desk__queue-title">Очередь работ</h2>
-                    <span class="desk__queue-meta" id="deskQueueMeta"></span>
-                </div>
-                <div id="deskQueue" class="desk__queue-list">
-                    <p class="desk__empty">Загрузка работ…</p>
-                </div>
-                <div id="deskPager" class="desk__pager" hidden></div>
-            </section>
+    <section class="workbench__nearby card" id="workNearbyWrap" hidden>
+        <h2>Рядом обнаружены другие работы</h2>
+        <p class="workbench-empty" id="workNearbySummary"></p>
+        <div id="workNearby" class="workbench-items"></div>
+    </section>
 
-            <section class="desk__panel" id="deskPanel" aria-live="polite">
-                <div class="desk__panel-head" id="deskPanelHead" hidden></div>
-                <div class="desk__panel-empty" id="deskPanelEmpty">
-                    <i class="bi bi-ui-checks-grid"></i>
-                    <p>Выберите работу слева — справа откроются адрес, ПП, описание, фото и история.</p>
-                </div>
-                <div class="desk__panel-scroll" id="deskPanelBody" hidden></div>
-            </section>
+    <section class="workbench__plan card">
+        <h2>Мой план работ</h2>
+        <div id="workPlan" class="workbench-plan"></div>
+        <div class="workbench__plan-actions">
+            <button type="button" class="btn btn-outline-primary" id="workRouteBtn" disabled>Построить маршрут</button>
+            {% if can_edit_plan %}
+            <button type="button" class="btn btn-primary" id="workSaveBtn" disabled>Создать путевой лист</button>
+            {% endif %}
+            {% if can_complete_waybill %}
+            <button type="button" class="btn btn-success" id="workCompleteBtn" hidden>Завершить путевой лист</button>
+            {% endif %}
         </div>
-    </div>
+    </section>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 {{ super() }}
+<script src="{{ static_url('vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ static_url('js/ops-map.js') }}"></script>
 <script src="{{ static_url('js/work-orders.js') }}"></script>
 {% endblock %}

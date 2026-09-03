@@ -39,6 +39,7 @@ def _payload(address: str, result_text: str | None) -> ObjectPayload:
         source_sheet=None,
         notes="Муниципальная программа",
         status=WorkObjectStatus.FREE.value,
+        create_draft_project=False,
     )
 
 
@@ -252,3 +253,49 @@ def test_accepted_result_does_not_create_contract_draft(app):
         assert obj.status == WorkObjectStatus.COMPLETED.value
         assert contracts == []
         assert _projects_for(obj) == []
+
+
+def test_object_kind_other_comment_roundtrip(app):
+    with app.app_context():
+        user_id = _admin_id()
+        payload = _payload("ул. Временная, 8", None)
+        payload.object_kind = WorkObjectKind.OTHER.value
+        payload.kind_comment = "Временный объект для обслуживания линии"
+        obj = ObjectService.create(payload, user_id)
+        assert obj.object_kind == WorkObjectKind.OTHER.value
+        assert obj.kind_comment == "Временный объект для обслуживания линии"
+        payload.object_kind = WorkObjectKind.PLANNED.value
+        ObjectService.update(obj, payload, user_id)
+        assert obj.object_kind == WorkObjectKind.PLANNED.value
+        assert obj.kind_comment == "Временный объект для обслуживания линии"
+        payload.object_kind = WorkObjectKind.OTHER.value
+        payload.kind_comment = "Уточнение"
+        ObjectService.update(obj, payload, user_id)
+        assert obj.kind_comment == "Уточнение"
+
+
+def test_create_object_draft_project_checkbox(app, admin_client):
+    with app.app_context():
+        user_id = _admin_id()
+        on_payload = _payload("ул. Черновик, 1", None)
+        on_payload.create_draft_project = True
+        obj = ObjectService.create(on_payload, user_id)
+        projects = _projects_for(obj)
+        assert len(projects) == 1
+        assert projects[0].status == ProjectStatus.DRAFT.value
+        on_payload.create_draft_project = True
+        ObjectService.update(obj, on_payload, user_id)
+        assert len(_projects_for(obj)) == 1
+
+        off_payload = _payload("ул. Без проекта, 2", None)
+        off_payload.create_draft_project = False
+        bare = ObjectService.create(off_payload, user_id)
+        assert _projects_for(bare) == []
+
+    page = admin_client.get("/objects/new")
+    html = page.get_data(as_text=True)
+    assert "Другое" in html
+    assert "Создать черновик проекта" in html
+    assert 'name="create_draft_project"' in html
+    assert "checked" in html
+

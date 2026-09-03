@@ -66,10 +66,12 @@ def _payload(form: ObjectForm, obj=None) -> ObjectPayload:
             form.court_decision_number.data,
             default=None,
         ),
+        kind_comment=field("kind_comment", form.kind_comment.data, default=None),
         result_text=field("result_text", form.result_text.data, default=None),
         source_sheet=obj.source_sheet if obj is not None else None,
         notes=field("notes", form.notes.data, default=None),
         status=field("status", form.status.data or "free", default="free"),
+        create_draft_project=bool(getattr(form, "create_draft_project", None) and form.create_draft_project.data),
     )
 
 
@@ -156,12 +158,13 @@ def search():
     )
 
 
-def _render_form_modal(form: ObjectForm, form_action: str, modal_title: str):
+def _render_form_modal(form: ObjectForm, form_action: str, modal_title: str, *, mode: str = "create"):
     return render_template(
         "objects/partials/form_modal.html",
         form=form,
         form_action=form_action,
         modal_title=modal_title,
+        mode=mode,
     )
 
 
@@ -212,6 +215,7 @@ def create():
     if request.method == "GET":
         form.status.data = "free"
         form.work_type.data = "Устройство наружного освещения"
+        form.create_draft_project.data = True
     if form.validate_on_submit():
         try:
             obj = ObjectService.create(_payload(form), current_user.id)
@@ -375,6 +379,7 @@ def edit(object_id: uuid.UUID):
         form.contract_amount.data = obj.contract_amount
         form.budget_amount.data = obj.budget_amount
         form.court_decision_number.data = obj.court_decision_number
+        form.kind_comment.data = obj.kind_comment
         form.result_text.data = obj.result_text
         form.notes.data = obj.notes
         form.status.data = obj.status
@@ -393,7 +398,7 @@ def edit(object_id: uuid.UUID):
                 return ajax_error(
                     str(exc),
                     html=_render_form_modal(
-                        form, url_for("objects.edit", object_id=obj.id), "Редактирование объекта"
+                        form, url_for("objects.edit", object_id=obj.id), "Редактирование объекта", mode="edit"
                     ),
                 )
             flash(str(exc), "danger")
@@ -401,12 +406,12 @@ def edit(object_id: uuid.UUID):
         return ajax_error(
             form_errors_message(form),
             html=_render_form_modal(
-                form, url_for("objects.edit", object_id=obj.id), "Редактирование объекта"
+                form, url_for("objects.edit", object_id=obj.id), "Редактирование объекта", mode="edit"
             ),
         )
     if is_ajax() and request.method == "GET":
         return _render_form_modal(
-            form, url_for("objects.edit", object_id=obj.id), "Редактирование объекта"
+            form, url_for("objects.edit", object_id=obj.id), "Редактирование объекта", mode="edit"
         )
     return render_template("objects/form.html", form=form, mode="edit", obj=obj)
 

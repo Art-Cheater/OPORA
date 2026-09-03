@@ -46,6 +46,12 @@
         <small class="text-muted">Тип объекта</small>
         <div>{{ kind_labels.get(obj.object_kind, obj.object_kind) or "—" }}</div>
     </div>
+    {% if obj.object_kind == 'other' and obj.kind_comment %}
+    <div class="col-12">
+        <small class="text-muted">Комментарий</small>
+        <div>{{ obj.kind_comment }}</div>
+    </div>
+    {% endif %}
     <div class="col-md-6">
         <small class="text-muted">Тип работ</small>
         <div>{{ obj.work_type or "—" }}</div>

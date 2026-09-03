@@ -345,6 +345,7 @@ window.OporaList = (() => {
         else if (action === "edit") openEdit(id);
         else if (action === "delete") openDeleteConfirm(id);
         else if (action === "complete") completeFromList(id);
+        else if (action === "status") changeStatusFromList(id, actionBtn.dataset.status);
         return;
       }
 
@@ -846,6 +847,31 @@ window.OporaList = (() => {
       }
     } catch {
       showToast("Ошибка удаления", "danger");
+    }
+  }
+
+  async function changeStatusFromList(id, statusCode) {
+    if (!id || !statusCode) return;
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
+    try {
+      const response = await fetch(`${config.baseUrl}/${id}/status`, {
+        method: "POST",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          ...(csrf ? { "X-CSRFToken": csrf } : {}),
+        },
+        body: JSON.stringify({ status_code: statusCode, csrf_token: csrf }),
+      });
+      const data = await parseJsonResponse(response, "Не удалось сменить статус");
+      if (!response.ok || data.ok === false) {
+        throw new Error(data.message || "Не удалось сменить статус");
+      }
+      showToast(data.message || "Статус обновлён.");
+      loadTable();
+    } catch (err) {
+      showToast(err?.message || "Не удалось сменить статус", "danger");
     }
   }
 

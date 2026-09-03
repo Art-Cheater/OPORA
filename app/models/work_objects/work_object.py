@@ -40,6 +40,7 @@ class WorkObject(ActiveRecordMixin, BaseModel):
         default=WorkObjectKind.PLANNED.value,
         nullable=True,
     )
+    kind_comment: Mapped[str | None] = mapped_column(String(500), nullable=True)
     address: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     plan_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     work_deadline: Mapped[str | None] = mapped_column(String(500), nullable=True)

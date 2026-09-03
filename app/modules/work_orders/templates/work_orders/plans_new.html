@@ -12,12 +12,12 @@
 {% block content %}
 <div id="planCreate"
      class="plan-page"
-     data-search-url="{{ url_for('work_orders.queue_json') }}"
+     data-search-url="{{ url_for('work_orders.items_json') }}"
      data-related-url="{{ url_for('work_orders.related_json') }}"
      data-save-url="{{ url_for('work_orders.plans_create') }}"
      data-cancel-url="{{ url_for('work_orders.index') }}">
 
-    <a class="plan-page__back" href="{{ url_for('work_orders.index') }}">← Назад к работе с заявками</a>
+    <a class="plan-page__back" href="{{ url_for('work_orders.index') }}">← Назад к работе по заявкам</a>
 
     <header class="plan-page__hero">
         <p class="plan-page__eyebrow">Новый выезд</p>
@@ -30,19 +30,30 @@
 
     <div class="plan-page__grid">
         <section class="plan-card">
-            <h2>Добавить работы</h2>
-            <form id="planSearch" class="plan-search">
-                <input type="search" name="q" placeholder="Поиск заявки, дефекта, адреса, ПП…" autocomplete="off">
-                <button type="submit">Найти</button>
+            <h2>Доступные работы</h2>
+            <form id="planSearch" class="plan-search plan-search--filters">
+                <input type="search" name="pp" placeholder="Номер ПП" autocomplete="off">
+                <select name="district">
+                    {% for value, label in districts %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <select name="kind">
+                    <option value="all">Все</option>
+                    <option value="request">Заявки</option>
+                    <option value="defect">Дефекты</option>
+                    <option value="villages">Из деревень</option>
+                </select>
+                <button type="submit">Поиск</button>
             </form>
             <div id="planSearchResults" class="plan-list">
-                <p class="plan-empty">Введите номер, адрес или ПП — здесь появятся заявки и дефекты.</p>
+                <p class="plan-empty">Загрузка работ…</p>
             </div>
         </section>
 
         <section class="plan-card">
             <div class="plan-card__head">
-                <h2>Работы в плане</h2>
+                <h2>Мой план работ</h2>
                 <span id="planCount">0</span>
             </div>
             <div id="planBasket" class="plan-list">
@@ -51,10 +62,11 @@
         </section>
     </div>
 
+    <button type="button" class="plan-nearby-toggle" id="planNearbyToggle" hidden>⌄ Работы рядом</button>
+
     <section class="plan-card plan-card--wide" id="planRelatedWrap" hidden>
-        <h2 id="planRelatedTitle">Ещё работы по ПП</h2>
+        <h2 id="planRelatedTitle">Рядом обнаружены другие работы</h2>
         <div id="planRelated" class="plan-related"></div>
-        <button type="button" class="plan-btn" id="planAddSelected" hidden>Добавить выбранные</button>
     </section>
 
     <div class="plan-page__bar">

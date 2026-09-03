@@ -61,6 +61,7 @@ class WaybillStop(BaseModel):
     latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    previous_status_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     waybill: Mapped[Waybill] = relationship(
         "Waybill",

@@ -39,13 +39,22 @@ def _uuid_or_none(value) -> uuid.UUID | None:
 
 
 def _filters_from_request() -> WorkOrderFilter:
-    kind = (request.args.get("kind") or "all").strip().lower()
-    if kind not in {"all", "request", "defect"}:
-        kind = "all"
+    raw_kind = (request.args.get("kind") or request.args.get("work_type") or "all").strip().lower()
+    kind_map = {
+        "all": "all",
+        "request": "request",
+        "requests": "request",
+        "defect": "defect",
+        "defects": "defect",
+        "villages": "villages",
+        "village": "villages",
+    }
+    kind = kind_map.get(raw_kind, "all")
     active_raw = (request.args.get("active_only") or "1").strip().lower()
     return WorkOrderFilter(
         kind=kind,
         q=request.args.get("q") or "",
+        pp=request.args.get("pp") or "",
         district=request.args.get("district") or "",
         journal_id=request.args.get("journal_id") or "",
         status_id=request.args.get("status_id") or "",
@@ -67,6 +76,8 @@ def _current_plan():
 @login_required
 @permission_required(PERM_WAYBILLS_VIEW)
 def index():
+    from app.modules.requests.districts import district_choices
+
     can_complete = (
         current_user.has_permission(PERM_REQUESTS_EDIT)
         or current_user.has_permission(PERM_REQUESTS_APPROVE)
@@ -76,12 +87,16 @@ def index():
         current_user.has_permission(PERM_DEFECTS_EDIT)
         or current_user.has_permission(PERM_DEFECTS_STATUS_CHANGE)
     )
+    can_edit_plan = current_user.has_permission(PERM_WAYBILLS_EDIT)
     return render_template(
         "work_orders/index.html",
         can_complete=can_complete,
         can_complete_defect=can_complete_defect,
-        can_manage_plans=current_user.has_permission(PERM_WAYBILLS_EDIT),
+        can_manage_plans=can_edit_plan,
+        can_edit_plan=can_edit_plan,
+        can_complete_waybill=current_user.has_permission(PERM_WAYBILLS_STATUS_CHANGE),
         journals=RequestRepository.get_journals(),
+        districts=district_choices(empty_label="Все районы"),
     )
 
 
@@ -179,11 +194,13 @@ def plans_index():
 @permission_required(PERM_WAYBILLS_EDIT)
 def plans_new():
     from app.models.base import format_local_dt, utcnow
+    from app.modules.requests.districts import district_choices
 
     return render_template(
         "work_orders/plans_new.html",
         master_name=current_user.full_name,
         created_label=format_local_dt(utcnow(), "%d.%m.%Y"),
+        districts=district_choices(empty_label="Все районы"),
     )
 
 

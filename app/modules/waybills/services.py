@@ -233,10 +233,81 @@ class WaybillService:
         else:
             raise ValidationError("Неизвестный тип точки.")
         db.session.add(stop)
+        db.session.flush()
+        cls._apply_add_status(stop, target, entity_type, user_id)
         cls._log_audit(user_id, AuditAction.UPDATE.value, item.id, f"Добавлена точка в {item.number}", new_values={"stop": stop.address})
         cls._log_history(item, user_id, "add_stop", stop.address, {"entity_type": entity_type, "entity_id": str(entity_id)})
         db.session.commit()
         return stop
+
+    @classmethod
+    def _apply_add_status(cls, stop: WaybillStop, target, entity_type: str, user_id: uuid.UUID) -> None:
+        from app.modules.defects.services import DefectService
+        from app.modules.defects.workflow import STATUS_IN_PROGRESS as DEFECT_IN_PROGRESS
+        from app.modules.requests.services import RequestService
+        from app.modules.requests.workflow import STATUS_IN_PROGRESS as REQ_IN_PROGRESS
+
+        if entity_type == "request":
+            previous = target.status.code if target.status else ""
+            if previous and previous != REQ_IN_PROGRESS:
+                RequestService.mark_in_progress_in_session(target.id, user_id)
+                stop.previous_status_code = previous
+        elif entity_type == "defect":
+            previous = target.status.code if target.status else ""
+            if previous and previous != DEFECT_IN_PROGRESS:
+                DefectService.mark_in_progress_in_session(target, user_id)
+                stop.previous_status_code = previous
+
+    @staticmethod
+    def entity_in_other_active_work(
+        *,
+        request_id: uuid.UUID | None = None,
+        defect_id: uuid.UUID | None = None,
+        skip_waybill_id: uuid.UUID | None = None,
+        skip_plan_id: uuid.UUID | None = None,
+    ) -> bool:
+        from app.models.work_plans.work_plan import WorkPlan
+        from app.models.work_plans.work_plan_item import WorkPlanItem
+        from app.modules.work_orders.plan_service import ITEM_ACTIVE, PLAN_DRAFT, PLAN_IN_PROGRESS
+
+        stop_stmt = (
+            db.select(WaybillStop.id)
+            .join(Waybill, Waybill.id == WaybillStop.waybill_id)
+            .where(
+                WaybillStop.active_filter(),
+                Waybill.active_filter(),
+                Waybill.status.in_({STATUS_DRAFT, STATUS_IN_PROGRESS}),
+            )
+            .limit(1)
+        )
+        if skip_waybill_id is not None:
+            stop_stmt = stop_stmt.where(WaybillStop.waybill_id != skip_waybill_id)
+        if request_id is not None:
+            stop_stmt = stop_stmt.where(WaybillStop.request_id == request_id)
+        elif defect_id is not None:
+            stop_stmt = stop_stmt.where(WaybillStop.defect_id == defect_id)
+        else:
+            return False
+        if db.session.scalar(stop_stmt) is not None:
+            return True
+        item_stmt = (
+            db.select(WorkPlanItem.id)
+            .join(WorkPlan, WorkPlan.id == WorkPlanItem.plan_id)
+            .where(
+                WorkPlanItem.active_filter(),
+                WorkPlan.active_filter(),
+                WorkPlan.status.in_({PLAN_DRAFT, PLAN_IN_PROGRESS}),
+                WorkPlanItem.result == ITEM_ACTIVE,
+            )
+            .limit(1)
+        )
+        if skip_plan_id is not None:
+            item_stmt = item_stmt.where(WorkPlanItem.plan_id != skip_plan_id)
+        if request_id is not None:
+            item_stmt = item_stmt.where(WorkPlanItem.request_id == request_id)
+        else:
+            item_stmt = item_stmt.where(WorkPlanItem.defect_id == defect_id)
+        return db.session.scalar(item_stmt) is not None
 
     @staticmethod
     def _next_order(waybill_id: uuid.UUID) -> int:
@@ -260,10 +331,33 @@ class WaybillService:
         )
         if stop is None:
             raise ValidationError("Точка не найдена.")
+        cls._restore_stop_status(stop, user_id, skip_waybill_id=item.id)
         stop.soft_delete(deleted_by=user_id)
         cls._log_audit(user_id, AuditAction.UPDATE.value, item.id, f"Удалена точка из {item.number}", old_values={"stop": stop.address})
         cls._log_history(item, user_id, "remove_stop", stop.address)
         db.session.commit()
+
+    @classmethod
+    def _restore_stop_status(cls, stop: WaybillStop, user_id: uuid.UUID, *, skip_waybill_id: uuid.UUID) -> None:
+        from app.modules.defects.services import DefectService
+        from app.modules.requests.services import RequestService
+
+        if not stop.previous_status_code:
+            return
+        if stop.request_id and cls.entity_in_other_active_work(
+            request_id=stop.request_id, skip_waybill_id=skip_waybill_id
+        ):
+            return
+        if stop.defect_id and cls.entity_in_other_active_work(
+            defect_id=stop.defect_id, skip_waybill_id=skip_waybill_id
+        ):
+            return
+        if stop.request_id:
+            RequestService.restore_from_plan_in_session(stop.request_id, user_id, stop.previous_status_code)
+        elif stop.defect_id:
+            defect = stop.defect or db.session.get(Defect, stop.defect_id)
+            if defect is not None:
+                DefectService.restore_from_plan_in_session(defect, user_id, stop.previous_status_code)
 
     @classmethod
     def reorder_stops(cls, item: Waybill, stop_ids: list[uuid.UUID], user_id: uuid.UUID) -> None:

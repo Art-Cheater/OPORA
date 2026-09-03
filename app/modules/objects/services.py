@@ -71,10 +71,12 @@ class ObjectPayload:
     contract_amount: Decimal | None = None
     budget_amount: Decimal | None = None
     court_decision_number: str | None = None
+    kind_comment: str | None = None
     result_text: str | None = None
     source_sheet: str | None = None
     notes: str | None = None
     status: str = WorkObjectStatus.FREE.value
+    create_draft_project: bool = False
 
 
 @dataclass
@@ -276,6 +278,34 @@ class ObjectService:
     ) -> Project | None:
         """Совместимость: создать проект по результату ТЗ/ЛСР."""
         return cls._ensure_chain_for_result(obj, user_id, volumes=volumes)
+
+    @classmethod
+    def _ensure_draft_project(cls, obj: WorkObject, user_id: uuid.UUID) -> Project | None:
+        """Создать один черновик проекта, если у объекта его ещё нет."""
+        existing = cls._active_project(obj)
+        if existing is not None:
+            return existing
+        db.session.flush()
+        project = ProjectService.create_project(
+            ProjectPayload(
+                code=ProjectRepository.next_code(),
+                name=(obj.display_address or obj.name)[:500],
+                description=obj.result_text or obj.kind_comment,
+                status=ProjectStatus.DRAFT.value,
+                progress_percent=0,
+                start_date=None,
+                end_date=None,
+                responsible_id=user_id,
+                executor_ids=[],
+                object_id=obj.id,
+            ),
+            user_id,
+            commit=False,
+            allow_busy_object=True,
+        )
+        obj.status = WorkObjectStatus.IN_PROJECT.value
+        obj.updated_by = user_id
+        return project
 
     @classmethod
     def _ensure_chain_for_result(
@@ -898,10 +928,12 @@ class ObjectService:
         kind = payload.object_kind or WorkObjectKind.PLANNED.value
         if kind != WorkObjectKind.COURT.value:
             court = None
+        comment = cls._normalize(payload.kind_comment)
         obj = WorkObject(
             name=full_name[:1000],
             work_type=cls._normalize(payload.work_type) or WORK_TYPE_DEFAULT,
             object_kind=kind,
+            kind_comment=(comment[:500] if kind == WorkObjectKind.OTHER.value and comment else None),
             address=address[:1000],
             plan_year=payload.plan_year,
             work_deadline=cls._normalize(payload.work_deadline),
@@ -920,16 +952,22 @@ class ObjectService:
         )
         db.session.add(obj)
         db.session.flush()
-        cls._ensure_project_for_result(obj, user_id)
-        AuditService.log(
-            user_id=user_id,
-            action=AuditAction.CREATE.value,
-            entity_type=EntityType.WORK_OBJECT.value,
-            entity_id=obj.id,
-            description=f"Создан объект {obj.display_address}",
-            new_values={"address": obj.address, "status": obj.status},
-        )
-        db.session.commit()
+        try:
+            if payload.create_draft_project:
+                cls._ensure_draft_project(obj, user_id)
+            cls._ensure_project_for_result(obj, user_id)
+            AuditService.log(
+                user_id=user_id,
+                action=AuditAction.CREATE.value,
+                entity_type=EntityType.WORK_OBJECT.value,
+                entity_id=obj.id,
+                description=f"Создан объект {obj.display_address}",
+                new_values={"address": obj.address, "status": obj.status},
+            )
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
         return obj
 
     @classmethod
@@ -943,9 +981,14 @@ class ObjectService:
         kind = payload.object_kind or WorkObjectKind.PLANNED.value
         if kind != WorkObjectKind.COURT.value:
             court = None
+        comment = cls._normalize(payload.kind_comment)
         obj.name = full_name[:1000]
         obj.work_type = cls._normalize(payload.work_type) or WORK_TYPE_DEFAULT
         obj.object_kind = kind
+        if kind == WorkObjectKind.OTHER.value:
+            obj.kind_comment = comment[:500] if comment else None
+        elif comment:
+            obj.kind_comment = comment[:500]
         obj.address = address[:1000]
         obj.plan_year = payload.plan_year
         obj.work_deadline = cls._normalize(payload.work_deadline)

@@ -204,12 +204,13 @@ class DefectService:
         comment: str | None = None,
         *,
         commit: bool = True,
+        enforce_transition: bool = True,
     ) -> Defect:
         new_status = DefectRepository.get_status_by_code(status_code)
         if new_status is None:
             raise ValidationError("Статус не найден.")
         current = item.status.code if item.status else ""
-        if not can_transition(current, status_code):
+        if not can_transition(current, status_code) and enforce_transition:
             raise ValidationError("Недопустимый переход статуса.")
         previous_id = item.status_id
         item.status_id = new_status.id
@@ -234,6 +235,21 @@ class DefectService:
         if current == STATUS_IN_PROGRESS:
             return item
         return cls.change_status(item, STATUS_IN_PROGRESS, user_id, comment="Дефект включён в план работ", commit=False)
+
+    @classmethod
+    def restore_from_plan_in_session(cls, item: Defect, user_id: uuid.UUID, previous_code: str | None) -> Defect:
+        previous = (previous_code or "").strip()
+        current = item.status.code if item.status else ""
+        if not previous or current != STATUS_IN_PROGRESS or previous == STATUS_IN_PROGRESS:
+            return item
+        return cls.change_status(
+            item,
+            previous,
+            user_id,
+            comment="Дефект возвращён из плана работ",
+            commit=False,
+            enforce_transition=False,
+        )
 
     @classmethod
     def mark_fixed_in_session(cls, item: Defect, user_id: uuid.UUID, *, comment: str | None = None) -> bool:

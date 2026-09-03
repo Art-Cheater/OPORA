@@ -25,6 +25,7 @@ class WorkObjectKind(str, Enum):
   PLANNED = "planned"
   COURT = "court"
   TECH_CONNECT = "tech_connect"
+  OTHER = "other"
 
 
 class ProjectStatus(str, Enum):

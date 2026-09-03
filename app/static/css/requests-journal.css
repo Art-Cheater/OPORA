@@ -1,28 +1,39 @@
-/* Журнал заявок: вкладки → фильтры → карта → плотная таблица → пагинация. */
+/* Журнал заявок: вкладки → фильтры → таблица → пагинация. */
 .journal-page {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+  min-width: 0;
+  overflow-x: clip;
 }
 .journal-tabs {
   display: flex;
-  gap: 0.15rem;
-  overflow-x: auto;
+  flex-wrap: nowrap;
+  gap: 0.1rem;
+  overflow: hidden;
   border-bottom: 1px solid var(--opora-border);
   padding-bottom: 0;
   margin: 0;
+  scrollbar-width: none;
 }
+.journal-tabs::-webkit-scrollbar { display: none; }
 .journal-tabs a {
-  flex: 0 0 auto;
+  flex: 1 1 0;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.7rem 0.9rem 0.75rem;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.5rem 0.35rem 0.55rem;
   color: var(--opora-text-muted);
   text-decoration: none;
   font-weight: 600;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
+  line-height: 1.15;
+  text-align: center;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
 }
@@ -95,7 +106,8 @@
   margin-left: auto;
   align-items: center;
 }
-.journal-filters__find {
+.journal-filters__find,
+.journal-filters__collect {
   height: 40px;
   min-width: 7.5rem;
   font-weight: 700;
@@ -154,7 +166,28 @@
 }
 .journal-page .table-responsive {
   overflow-x: auto;
+  max-width: 100%;
 }
+.journal-repeat-col {
+  width: 2.25rem;
+  padding-left: 0.4rem !important;
+  padding-right: 0.25rem !important;
+}
+.journal-repeat-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 1px solid var(--opora-border);
+  border-radius: 8px;
+  background: var(--opora-card);
+  color: var(--opora-primary);
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.journal-repeat-btn:hover { background: var(--opora-primary); color: #fff; }
 
 .journal-pager {
   display: flex;

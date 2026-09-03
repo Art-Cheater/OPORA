@@ -85,21 +85,20 @@ def test_work_orders_access(client):
     page = client.get("/work-orders/")
     assert page.status_code == 200
     html = page.get_data(as_text=True)
-    assert "Работа с заявками" in html
-    assert 'id="workDesk"' in html
-    assert "Очередь работ" in html
+    assert "Работа с заявками" in html or "Работа по заявкам" in html
+    assert 'id="workOrderRoot"' in html
+    assert "Доступные работы" in html
+    assert "Мой план работ" in html
+    assert "Номер ПП" in html
+    assert "Тип работы" in html
+    assert "Из деревень" in html
     assert "Мои планы" in html
-    assert "Новый план работ" in html
-    assert "css/work-desk.css" in html
+    assert "Создать план работ" in html
     assert "js/work-orders.js" in html
+    assert 'id="opsMap"' in html
+    assert "js/ops-map.js" in html
+    assert "vendor/leaflet/leaflet.js" in html
     assert "/work-orders/plans/new" in html
-    assert "Мой план работ" not in html
-    assert "Доступные работы" not in html
-    assert "workbench__top" not in html
-    assert "table-opora" not in html
-    assert 'id="opsMap"' not in html
-    assert "js/ops-map.js" not in html
-    assert "vendor/leaflet/leaflet.js" not in html
     _login(client, "executor@test.local")
     assert client.get("/work-orders/").status_code == 200
     denied = client.post("/work-orders/plan/add", json={"entity_type": "defect", "entity_id": "00000000-0000-0000-0000-000000000001"})
@@ -222,8 +221,8 @@ def test_work_orders_plan_nearby_reorder_route(client, app):
     with app.app_context():
         req = db.session.get(Request, request_id)
         defect = db.session.get(Defect, defect_id)
-        assert req.status_id == req_status
-        assert defect.status_id == def_status
+        assert db.session.get(RequestStatus, req.status_id).code == "in_progress"
+        assert db.session.get(DefectStatus, defect.status_id).code == "in_progress"
         mapper_names = {mapper.class_.__name__ for mapper in db.Model.registry.mappers}
         assert "RequestDefect" not in mapper_names
         stops = list(db.session.scalars(db.select(WaybillStop).where(WaybillStop.active_filter())))
@@ -234,7 +233,7 @@ def test_work_orders_plan_nearby_reorder_route(client, app):
     with app.app_context():
         req = db.session.get(Request, request_id)
         defect = db.session.get(Defect, defect_id)
-        assert req.status_id == req_status
+        assert db.session.get(RequestStatus, req.status_id).code == "in_progress"
         assert db.session.get(DefectStatus, defect.status_id).code == "fixed"
 
 
@@ -337,8 +336,9 @@ def test_work_plans_journals_related_complete_and_auto_close(client, app):
         )
 
     html = client.get("/work-orders/").get_data(as_text=True)
-    assert "leaflet" not in html.lower()
-    assert 'id="opsMap"' not in html
+    assert "leaflet" in html.lower()
+    assert 'id="opsMap"' in html
+    assert "Доступные работы" in html
 
     defects_only = client.get("/work-orders/queue.json?journal=defects").get_json()["items"]
     assert {row["id"] for row in defects_only} == {defect_id}
@@ -361,6 +361,9 @@ def test_work_plans_journals_related_complete_and_auto_close(client, app):
     create_html = create_page.get_data(as_text=True)
     assert "Создание плана работ" in create_html
     assert "Сохранить план" in create_html
+    assert "Номер ПП" in create_html
+    assert "Из деревень" in create_html
+    assert "Доступные работы" in create_html
     assert "черновик" not in create_html.lower()
     with app.app_context():
         from sqlalchemy import func
@@ -466,6 +469,83 @@ def test_work_plans_journals_related_complete_and_auto_close(client, app):
         plan_row = db.session.get(WorkPlan, plan_id)
         assert plan_row.status == "completed"
         assert db.session.get(RequestStatus, db.session.get(Request, first_id).status_id).code == "completed"
-        assert db.session.get(RequestStatus, db.session.get(Request, same_id).status_id).code == "in_progress"
+        assert db.session.get(RequestStatus, db.session.get(Request, same_id).status_id).code == "new"
         assert db.session.get(DefectStatus, db.session.get(Defect, defect_id).status_id).code == "fixed"
+
+
+def test_work_orders_filters_pp_district_and_villages(client, app):
+    from app.modules.requests.journals import JOURNAL_OKTYABRSKY_VILLAGES
+    from app.modules.requests.repositories import RequestRepository
+
+    _login(client, "master@test.local")
+    request_id, extra_id, defect_id, _, _ = _seed_work(app, suffix="71")
+    with app.app_context():
+        villages = RequestRepository.get_journal_by_code(JOURNAL_OKTYABRSKY_VILLAGES)
+        st_new = db.session.scalar(db.select(RequestStatus).where(RequestStatus.code == "new"))
+        village = Request(
+            number="26-719",
+            title="Деревня",
+            description="Деревенская",
+            address="д. Широковцы, 2",
+            district="Октябрьский",
+            pp="12",
+            applicant_name="QA",
+            priority=Priority.MEDIUM.value,
+            status_id=st_new.id,
+            journal_id=villages.id,
+        )
+        req = db.session.get(Request, request_id)
+        req.pp = "69"
+        extra = db.session.get(Request, extra_id)
+        extra.pp = "70"
+        db.session.add(village)
+        db.session.commit()
+        village_id = str(village.id)
+
+    by_pp = client.get("/work-orders/items.json?pp=69").get_json()["items"]
+    assert request_id in {row["id"] for row in by_pp}
+    assert extra_id not in {row["id"] for row in by_pp}
+    by_district = client.get("/work-orders/items.json?district=Ленинский").get_json()["items"]
+    ids = {row["id"] for row in by_district}
+    assert request_id in ids
+    assert village_id not in ids
+    villages_only = client.get("/work-orders/items.json?kind=villages").get_json()["items"]
+    assert {row["id"] for row in villages_only} == {village_id}
+    defects_only = client.get("/work-orders/items.json?kind=defect").get_json()["items"]
+    assert {row["id"] for row in defects_only} == {defect_id}
+
+
+def test_remove_from_plan_restores_status_only_if_system_changed(client, app):
+    _login(client, "master@test.local")
+    request_id, extra_id, defect_id, req_status, def_status = _seed_work(app, suffix="72")
+    added = client.post("/work-orders/plan/add", json={"entity_type": "defect", "entity_id": defect_id})
+    assert added.status_code == 200
+    stop_id = added.get_json()["plan"]["stops"][0]["id"]
+    with app.app_context():
+        defect = db.session.get(Defect, defect_id)
+        assert db.session.get(DefectStatus, defect.status_id).code == "in_progress"
+    removed = client.post("/work-orders/plan/remove", json={"stop_id": stop_id})
+    assert removed.status_code == 200
+    assert removed.get_json()["plan"]["stops"] == []
+    with app.app_context():
+        defect = db.session.get(Defect, defect_id)
+        assert defect.status_id == def_status
+        assert db.session.get(DefectStatus, defect.status_id).code == "open"
+
+    with app.app_context():
+        extra = db.session.get(Request, extra_id)
+        extra.status_id = db.session.scalar(
+            db.select(RequestStatus.id).where(RequestStatus.code == "in_progress")
+        )
+        db.session.commit()
+        extra_status = extra.status_id
+    added_extra = client.post("/work-orders/plan/add", json={"entity_type": "request", "entity_id": extra_id})
+    assert added_extra.status_code == 200
+    extra_stop = added_extra.get_json()["plan"]["stops"][0]["id"]
+    client.post("/work-orders/plan/remove", json={"stop_id": extra_stop})
+    with app.app_context():
+        extra = db.session.get(Request, extra_id)
+        assert extra.status_id == extra_status
+
+
 
