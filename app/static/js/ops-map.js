@@ -71,7 +71,8 @@ window.OporaOpsMap = {
     const statusNode = document.getElementById("opsMapStatus");
     const KIROV = [58.6035, 49.668];
     const COLORS = { request: "#2563EB", defect: "#DC3545", route: "#c45c26" };
-    const dark = document.documentElement.getAttribute("data-theme") === "dark";
+    // Рабочая карта должна оставаться светлой и читаемой при любой теме интерфейса.
+    const dark = this._kind !== "workbench" && document.documentElement.getAttribute("data-theme") === "dark";
     const tiles = dark
       ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
       : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";

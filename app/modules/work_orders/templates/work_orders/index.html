@@ -34,7 +34,7 @@
         <div class="workbench__head-actions">
             {% if can_manage_plans %}
             <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('work_orders.plans_index') }}">Мои планы</a>
-            <a class="btn btn-primary btn-sm" href="{{ url_for('work_orders.plans_new') }}">Создать план работ</a>
+            <a class="btn btn-primary btn-sm" href="{{ url_for('work_orders.plans_new') }}">Создать план</a>
             {% endif %}
         </div>
     </header>
@@ -97,10 +97,7 @@
         <div class="workbench__plan-actions">
             <button type="button" class="btn btn-outline-primary" id="workRouteBtn" disabled>Построить маршрут</button>
             {% if can_edit_plan %}
-            <button type="button" class="btn btn-primary" id="workSaveBtn" disabled>Создать путевой лист</button>
-            {% endif %}
-            {% if can_complete_waybill %}
-            <button type="button" class="btn btn-success" id="workCompleteBtn" hidden>Завершить путевой лист</button>
+            <button type="button" class="btn btn-primary" id="workSaveBtn" disabled>Создать план</button>
             {% endif %}
         </div>
     </section>

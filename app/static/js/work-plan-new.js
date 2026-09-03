@@ -149,7 +149,7 @@ window.OporaWorkPlanNew = {
           );
           if (!rows.length) {
             if (relatedWrap) relatedWrap.hidden = true;
-            if (nearbyToggle) nearbyToggle.hidden = false;
+            if (nearbyToggle) nearbyToggle.hidden = true;
             relatedBox.innerHTML = "";
             return;
           }

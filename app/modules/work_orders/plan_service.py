@@ -116,6 +116,17 @@ class WorkPlanService:
         )
 
     @classmethod
+    def record_report_sent(cls, plan: WorkPlan, user: User, recipient_name: str) -> None:
+        cls._log(
+            plan,
+            user.id,
+            "report_sent",
+            f"Отчёт по плану отправлен сотруднику {recipient_name}",
+        )
+        plan.updated_by = user.id
+        db.session.commit()
+
+    @classmethod
     def get_owned(cls, plan_id: uuid.UUID, user: User) -> WorkPlan:
         plan = db.session.scalar(
             select(WorkPlan)

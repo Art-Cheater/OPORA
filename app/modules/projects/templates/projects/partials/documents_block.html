@@ -36,7 +36,7 @@
                 </div>
                 <div class="col-12">
                     <label class="form-label small mb-1">{{ document_form.description.label.text }}</label>
-                    {{ document_form.description(class="form-control form-control-sm", rows=2, placeholder="Описание (необязательно)") }}
+                    {{ document_form.description(class="form-control form-control-sm", rows=2, placeholder="Примечание (необязательно)") }}
                 </div>
                 <div class="col-12">
                     {{ document_form.submit(class="btn btn-primary btn-sm") }}
@@ -129,7 +129,7 @@
                                        value="{{ item.doc_date.strftime('%Y-%m-%d') if item.doc_date else '' }}">
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label small mb-1">Описание</label>
+                                <label class="form-label small mb-1">Примечание</label>
                                 <textarea name="description" class="form-control form-control-sm" rows="2"
                                           maxlength="5000">{{ item.description or '' }}</textarea>
                             </div>

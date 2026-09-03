@@ -137,7 +137,7 @@ class ProjectDocumentForm(FlaskForm):
     )
     document_number = StringField("Номер", validators=[Optional(), Length(max=100)])
     document_date = DateField("Дата документа", validators=[Optional()], format="%Y-%m-%d")
-    description = TextAreaField("Описание", validators=[Optional(), Length(max=5000)])
+    description = TextAreaField("Примечание", validators=[Optional(), Length(max=5000)])
     files = MultipleFileField("Файл", validators=[DataRequired(message="Выберите файл")])
     submit = SubmitField("Добавить документ")
 
@@ -153,7 +153,7 @@ class ProjectDocumentEditForm(FlaskForm):
     )
     document_number = StringField("Номер", validators=[Optional(), Length(max=100)])
     document_date = DateField("Дата документа", validators=[Optional()], format="%Y-%m-%d")
-    description = TextAreaField("Описание", validators=[Optional(), Length(max=5000)])
+    description = TextAreaField("Примечание", validators=[Optional(), Length(max=5000)])
     submit = SubmitField("Сохранить")
 
 

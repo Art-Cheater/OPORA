@@ -16,7 +16,6 @@ window.OporaWorkOrders = {
     const filterForm = document.getElementById("workFilters");
     const saveBtn = document.getElementById("workSaveBtn");
     const routeBtn = document.getElementById("workRouteBtn");
-    const completeBtn = document.getElementById("workCompleteBtn");
     const canEdit = root.dataset.canEdit === "true";
     let plan = { stops: [], editable: true, status: null };
     let nearbyHits = [];
@@ -98,7 +97,7 @@ window.OporaWorkOrders = {
     function renderNearby(hits, summary) {
       nearbyHits = hits || [];
       const hasHits = nearbyHits.length > 0;
-      if (nearbyToggle) nearbyToggle.hidden = !hasHits && !lastAdded;
+      if (nearbyToggle) nearbyToggle.hidden = !hasHits;
       if (nearbySummary) nearbySummary.textContent = summary || "";
       if (!nearbyBox) return;
       if (!hasHits) {
@@ -144,10 +143,6 @@ window.OporaWorkOrders = {
       }
       if (saveBtn) saveBtn.disabled = !canEdit || !stops.length || !plan.editable;
       if (routeBtn) routeBtn.disabled = stops.length < 1;
-      if (completeBtn) {
-        completeBtn.hidden = !plan.status || plan.status === "draft" || !stops.length;
-        completeBtn.disabled = plan.status === "completed";
-      }
     }
 
     function applyPlan(nextPlan) {
@@ -191,7 +186,7 @@ window.OporaWorkOrders = {
         .then((res) => res.json())
         .then((data) => {
           renderNearby(data.hits || [], data.summary || "");
-          if (nearbyToggle) nearbyToggle.hidden = false;
+          if (nearbyToggle) nearbyToggle.hidden = !(data.hits || []).length;
         })
         .catch(() => {});
     }
@@ -210,9 +205,8 @@ window.OporaWorkOrders = {
           }
           applyPlan(body.plan);
           if (body.nearby) renderNearby(body.nearby.hits || [], body.nearby.summary || "");
-          if (nearbyToggle) nearbyToggle.hidden = false;
           lastAdded = { type, id };
-          toast(body.message || "Добавлено в план.");
+          toast(body.message || "Добавлено в подборку. Нажмите «Создать план».");
           loadItems();
         })
         .catch(() => toast("Не удалось добавить в план.", false));
@@ -270,9 +264,15 @@ window.OporaWorkOrders = {
             toast(body.message || "Не удалось сохранить.", false);
             return;
           }
-          applyPlan(body.plan);
-          toast(body.message || "Путевой лист сохранён.");
-          loadItems();
+          if (body.redirect && window.OporaNav?.go) {
+            window.OporaNav.go(body.redirect, "Открываем план…");
+            return;
+          }
+          if (body.redirect) {
+            window.location.href = body.redirect;
+            return;
+          }
+          toast(body.message || "План создан.");
         })
         .catch(() => toast("Не удалось сохранить план.", false));
     });
@@ -286,26 +286,6 @@ window.OporaWorkOrders = {
           toast("Маршрут построен.");
         })
         .catch(() => toast("Не удалось построить маршрут.", false));
-    });
-
-    completeBtn?.addEventListener("click", () => {
-      if (!window.confirm("Завершить путевой лист? Входящие дефекты будут отмечены выполненными.")) return;
-      fetch(root.dataset.completeUrl, { method: "POST", headers: headers(true), body: "{}" })
-        .then((res) => res.json())
-        .then((body) => {
-          if (!body.ok) {
-            toast(body.message || "Не удалось завершить.", false);
-            return;
-          }
-          applyPlan(body.plan);
-          renderNearby([], "");
-          if (nearbyWrap) nearbyWrap.hidden = true;
-          if (nearbyToggle) nearbyToggle.hidden = true;
-          window.OporaOpsMap?.clearRoute?.();
-          toast(body.message || "Путевой лист завершён.");
-          loadItems();
-        })
-        .catch(() => toast("Не удалось завершить путевой лист.", false));
     });
 
     root.addEventListener("opora:add-to-plan", (event) => {

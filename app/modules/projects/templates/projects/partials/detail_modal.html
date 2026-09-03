@@ -3,6 +3,23 @@
 <span class="d-none" data-opora-card-title>{{ project.code }} — {{ project.name }}</span>
 <span class="d-none" data-opora-card-badge>{{ project_status_badge(project.status) }}</span>
 
+<div class="mb-3 d-flex flex-wrap gap-2">
+    <a href="{{ url_for('projects.detail', project_id=project.id, full=1) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-box-arrow-up-right"></i> Полная страница</a>
+    {% if project.work_object and current_user.has_permission('objects.view') %}
+    <a href="{{ url_for('objects.detail', object_id=project.work_object.id, full=1) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-geo-alt"></i> Объект</a>
+    {% endif %}
+    {% for tender in linked_tenders %}
+    {% if current_user.has_permission('tenders.view') %}
+    <a href="{{ url_for('tenders.detail', tender_id=tender.id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-hammer"></i> Заявка на торги {{ tender.number }}</a>
+    {% endif %}
+    {% endfor %}
+    {% for contract in linked_contracts %}
+    {% if current_user.has_permission('contracts.view') %}
+    <a href="{{ url_for('contracts.detail', contract_id=contract.id, full=1) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-file-earmark-text"></i> Контракт {{ contract.number }}</a>
+    {% endif %}
+    {% endfor %}
+</div>
+
 <div class="row g-4">
     <div class="col-lg-7">
         <div class="row g-3">
@@ -233,7 +250,7 @@
                             </div>
                             <div class="mb-1">
                                 <textarea name="description" class="form-control form-control-sm" rows="2"
-                                          placeholder="Описание">{{ item.description or '' }}</textarea>
+                                          placeholder="Примечание">{{ item.description or '' }}</textarea>
                             </div>
                             <button type="submit" name="submit" value="1" class="btn btn-primary btn-sm">Сохранить</button>
                         </form>

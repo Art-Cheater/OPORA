@@ -116,6 +116,29 @@ def test_procurement_chain_happy_path(app, admin_client):
         project = db.session.get(Project, project.id)
         assert obj.status == WorkObjectStatus.COMPLETED.value
         assert project.status == ProjectStatus.COMPLETED.value
+        object_id = str(obj.id)
+        project_id = str(project.id)
+        project_code = project.code
+        tender_id = str(tender.id)
+        contract_id = str(contract.id)
+        contract_number = contract.number
+
+    project_page = admin_client.get(f"/projects/{project_id}?full=1")
+    assert project_page.status_code == 200
+    project_html = project_page.get_data(as_text=True)
+    assert f"Контракт {contract_number}" in project_html
+    assert "Заявка на торги" in project_html
+
+    tender_page = admin_client.get(f"/tenders/{tender_id}")
+    tender_html = tender_page.get_data(as_text=True)
+    assert f"Контракт {contract_number}" in tender_html
+    assert f"Проект {project_code}" in tender_html
+
+    contract_page = admin_client.get(f"/contracts/{contract_id}")
+    contract_html = contract_page.get_data(as_text=True)
+    assert "Заявка на торги" in contract_html
+    assert "Проект" in contract_html
+    assert f"/objects/{object_id}" in contract_html
 
 
 def test_objects_index_requires_login(client):

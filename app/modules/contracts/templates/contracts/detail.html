@@ -6,6 +6,17 @@
 
 {% block page_header %}
 {% call page_header(contract.number ~ " — " ~ contract.title, "Карточка контракта", "file-earmark-text") %}
+{% if contract.project and current_user.has_permission('projects.view') %}
+<a href="{{ url_for('projects.detail', project_id=contract.project.id, full=1) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-folder2-open"></i> Проект</a>
+{% endif %}
+{% if contract.tender_application and current_user.has_permission('tenders.view') %}
+<a href="{{ url_for('tenders.detail', tender_id=contract.tender_application.id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-hammer"></i> Заявка на торги</a>
+{% endif %}
+{% for obj in contract.work_objects %}
+{% if current_user.has_permission('objects.view') %}
+<a href="{{ url_for('objects.detail', object_id=obj.id, full=1) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-geo-alt"></i> Объект</a>
+{% endif %}
+{% endfor %}
 <a href="{{ url_for('contracts.edit', contract_id=contract.id) }}" class="btn btn-primary">
     <i class="bi bi-pencil-square"></i> Редактировать
 </a>

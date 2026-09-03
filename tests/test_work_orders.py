@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from zipfile import ZipFile
 from decimal import Decimal
 
 from app.extensions import db
@@ -12,6 +13,8 @@ from app.models.enums import Priority
 from app.models.requests.request import Request
 from app.models.requests.request_status import RequestStatus
 from app.models.waybills.waybill_stop import WaybillStop
+from app.models.waybills.waybill import Waybill
+from app.models.work_plans.work_plan import WorkPlan
 from app.modules.requests.address_format import normalize_address
 from app.modules.requests.repositories import RequestRepository
 
@@ -93,7 +96,8 @@ def test_work_orders_access(client):
     assert "Тип работы" in html
     assert "Из деревень" in html
     assert "Мои планы" in html
-    assert "Создать план работ" in html
+    assert "Создать план" in html
+    assert "Создать путевой лист" not in html
     assert "js/work-orders.js" in html
     assert 'id="opsMap"' in html
     assert "js/ops-map.js" in html
@@ -204,12 +208,15 @@ def test_work_orders_plan_nearby_reorder_route(client, app):
     assert reorder.status_code == 200
     ordered = [s["id"] for s in reorder.get_json()["plan"]["stops"]]
     assert ordered == reversed_ids
-    saved = client.post("/work-orders/plan/save", json={})
-    assert saved.status_code == 200
-    assert saved.get_json()["plan"]["number"]
     route = client.get("/work-orders/route.json").get_json()
     assert len(route["points"]) == 2
     assert [p["order"] for p in route["points"]] == [1, 2]
+    saved = client.post("/work-orders/plan/save", json={})
+    assert saved.status_code == 200
+    saved_body = saved.get_json()
+    assert saved_body["plan"]["number"].startswith("ПР-")
+    assert saved_body["plan"]["status"] == "in_progress"
+    assert saved_body["redirect"].endswith(saved_body["plan"]["id"])
     items = client.get("/work-orders/items.json").get_json()["items"]
     by_type = {row["type"] for row in items}
     assert "request" in by_type
@@ -225,16 +232,10 @@ def test_work_orders_plan_nearby_reorder_route(client, app):
         assert db.session.get(DefectStatus, defect.status_id).code == "in_progress"
         mapper_names = {mapper.class_.__name__ for mapper in db.Model.registry.mappers}
         assert "RequestDefect" not in mapper_names
-        stops = list(db.session.scalars(db.select(WaybillStop).where(WaybillStop.active_filter())))
-        assert any(s.request_id is not None for s in stops)
-        assert any(s.defect_id is not None for s in stops)
-    completed = client.post("/work-orders/plan/complete", json={})
-    assert completed.status_code == 200, completed.get_data(as_text=True)
-    with app.app_context():
-        req = db.session.get(Request, request_id)
-        defect = db.session.get(Defect, defect_id)
-        assert db.session.get(RequestStatus, req.status_id).code == "in_progress"
-        assert db.session.get(DefectStatus, defect.status_id).code == "fixed"
+        created_plan = db.session.get(WorkPlan, saved_body["plan"]["id"])
+        assert created_plan is not None and created_plan.deleted_at is None
+        legacy = db.session.scalar(db.select(Waybill).where(Waybill.master_id == created_plan.master_id))
+        assert legacy is not None and legacy.deleted_at is not None
 
 
 def test_dispatcher_cannot_edit_work_plan(client, app):
@@ -471,6 +472,31 @@ def test_work_plans_journals_related_complete_and_auto_close(client, app):
         assert db.session.get(RequestStatus, db.session.get(Request, first_id).status_id).code == "completed"
         assert db.session.get(RequestStatus, db.session.get(Request, same_id).status_id).code == "new"
         assert db.session.get(DefectStatus, db.session.get(Defect, defect_id).status_id).code == "fixed"
+
+        from app.models.auth.user import User
+
+        recipient_id = str(
+            db.session.scalar(db.select(User.id).where(User.email == "executor@test.local"))
+        )
+
+    report = client.post(
+        f"/work-orders/plans/{plan_id}/report",
+        json={"recipient_id": recipient_id},
+    )
+    assert report.status_code == 200, report.get_data(as_text=True)
+    assert report.get_json()["ok"] is True
+    with app.app_context():
+        from app.core.upload_utils import resolve_storage_path
+        from app.models.messenger.messenger_message import MessengerMessage
+
+        message = db.session.get(MessengerMessage, report.get_json()["message_id"])
+        assert message is not None
+        assert message.mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        with ZipFile(resolve_storage_path(message.storage_key)) as archive:
+            xml = archive.read("word/document.xml").decode("utf-8")
+        assert saved_plan["number"] in xml
+        assert "Закрытые заявки" in xml
+        assert "Мастер QA" in xml
 
 
 def test_work_orders_filters_pp_district_and_villages(client, app):

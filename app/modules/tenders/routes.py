@@ -12,7 +12,13 @@ from app.core.decorators import permission_required
 from app.core.exceptions import ValidationError
 from app.core.forms_utils import form_errors_message
 from app.core.http import ajax_error, ajax_ok, is_ajax
-from app.core.upload_utils import collect_upload_files, resolve_download_filename, resolve_storage_path, save_upload
+from app.core.upload_utils import (
+    collect_upload_files,
+    is_previewable_mime,
+    resolve_download_filename,
+    resolve_storage_path,
+    save_upload,
+)
 from app.models.auth.constants import (
     PERM_CONTRACTS_CREATE,
     PERM_TENDERS_CREATE,
@@ -22,6 +28,7 @@ from app.models.auth.constants import (
 from app.models.enums import TenderApplicationStatus
 from app.modules.tenders.blueprint import tenders_bp
 from app.modules.tenders.forms import (
+    TENDER_DOC_TYPE_LABELS,
     TENDER_STATUS_LABELS,
     TenderDocumentForm,
     TenderFilterForm,
@@ -226,12 +233,53 @@ def detail(tender_id: uuid.UUID):
         return redirect(url_for("tenders.index"))
     doc_form = TenderDocumentForm()
     project_docs = TenderService.linked_project_documents(tender)
+    from app.extensions import db
+    from app.models.contracts.contract import Contract
+    from app.modules.projects.forms import DOCUMENT_TYPE_LABELS as PROJECT_DOCUMENT_TYPE_LABELS
+
+    linked_contracts = list(
+        db.session.scalars(
+            db.select(Contract)
+            .where(
+                Contract.tender_application_id == tender.id,
+                Contract.active_filter(),
+            )
+            .order_by(Contract.created_at.desc())
+        )
+    )
+    tender_file_items = [
+        {
+            "name": doc.file_name or doc.title,
+            "title": doc.title,
+            "type_label": TENDER_DOC_TYPE_LABELS.get(doc.document_type, "Прочее"),
+            "mime": doc.mime_type,
+            "download_url": url_for(
+                "tenders.download_document", tender_id=tender.id, document_id=doc.id
+            ),
+            "preview_url": (
+                url_for(
+                    "tenders.download_document",
+                    tender_id=tender.id,
+                    document_id=doc.id,
+                    inline=1,
+                )
+                if doc.storage_key and is_previewable_mime(doc.mime_type)
+                else None
+            ),
+        }
+        for doc in tender.documents
+        if doc.deleted_at is None and doc.storage_key
+    ]
     return render_template(
         "tenders/detail.html",
         tender=tender,
         status_labels=TENDER_STATUS_LABELS,
         doc_form=doc_form,
         project_docs=project_docs,
+        linked_contracts=linked_contracts,
+        tender_file_items=tender_file_items,
+        tender_doc_type_labels=TENDER_DOC_TYPE_LABELS,
+        project_doc_type_labels=PROJECT_DOCUMENT_TYPE_LABELS,
         can_create_contract=(
             tender.status == TenderApplicationStatus.WON.value
             and current_user.has_permission(PERM_CONTRACTS_CREATE)
@@ -364,9 +412,10 @@ def download_document(tender_id: uuid.UUID, document_id: uuid.UUID):
     if not path.is_file():
         flash("Файл не найден.", "danger")
         return redirect(url_for("tenders.detail", tender_id=tender.id))
+    inline = request.args.get("inline") == "1" and is_previewable_mime(doc.mime_type)
     return send_file(
         path,
-        as_attachment=True,
+        as_attachment=not inline,
         download_name=resolve_download_filename(doc.file_name or doc.title),
         mimetype=doc.mime_type or "application/octet-stream",
     )

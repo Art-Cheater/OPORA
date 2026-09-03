@@ -322,10 +322,10 @@ function initInstantNav(sidebar, closeSidebar) {
 
     const CACHE_TTL = 45000;
     const OVERLAY_MS = 400;
+    const ASSET_TIMEOUT_MS = 8000;
+    const NAV_TIMEOUT_MS = 20000;
     const pageCache = new Map();
     const SHELL_ASSET = /bootstrap|main\.css|main\.js|opora-list|phone-mask|search\.js|search\.css|requests-form|tour\.js|tour\.css/;
-    const SKELETON =
-        '<div class="opora-loading" role="status"><div class="spinner-border text-primary"></div><div class="opora-loading__text">Загрузка…</div></div>';
     const LIST_SHELLS = {
         "/waybills/": {
             title: "Путевые листы",
@@ -516,8 +516,6 @@ function initInstantNav(sidebar, closeSidebar) {
     };
 
     const showSkeleton = (label) => {
-        const content = document.getElementById("appContent") || document.querySelector(".app-content");
-        if (content) content.innerHTML = SKELETON;
         closeSidebar();
         window.clearTimeout(overlayTimer);
         overlayTimer = window.setTimeout(() => {
@@ -570,8 +568,16 @@ function initInstantNav(sidebar, closeSidebar) {
             const link = document.createElement("link");
             link.rel = "stylesheet";
             link.href = href;
-            link.onload = () => resolve();
-            link.onerror = () => resolve();
+            let settled = false;
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                window.clearTimeout(timer);
+                resolve();
+            };
+            const timer = window.setTimeout(finish, ASSET_TIMEOUT_MS);
+            link.onload = finish;
+            link.onerror = finish;
             document.head.appendChild(link);
         });
     }
@@ -585,8 +591,16 @@ function initInstantNav(sidebar, closeSidebar) {
             const script = document.createElement("script");
             script.async = false;
             script.src = src;
-            script.onload = () => resolve();
-            script.onerror = () => resolve();
+            let settled = false;
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                window.clearTimeout(timer);
+                resolve();
+            };
+            const timer = window.setTimeout(finish, ASSET_TIMEOUT_MS);
+            script.onload = finish;
+            script.onerror = finish;
             document.body.appendChild(script);
         });
     }
@@ -690,15 +704,18 @@ function initInstantNav(sidebar, closeSidebar) {
     }
 
     function fetchPage(href) {
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), NAV_TIMEOUT_MS);
         return fetch(href, {
             credentials: "same-origin",
             cache: "no-store",
+            signal: controller.signal,
             headers: {
                 "X-Opora-Nav": "1",
                 "X-Requested-With": "OporaNav",
                 Accept: "text/html",
             },
-        });
+        }).finally(() => window.clearTimeout(timer));
     }
 
     const inflightPages = new Map();
@@ -916,6 +933,7 @@ function initInstantNav(sidebar, closeSidebar) {
             emitNavigated(href);
         } catch (err) {
             if (token !== navToken) return;
+            hideLoading();
             window.location.href = href;
         }
     }

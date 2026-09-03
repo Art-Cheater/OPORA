@@ -31,6 +31,7 @@ TENDER_DOC_TYPE_CHOICES = [
     (TenderDocumentType.PRICE_REQUEST.value, "Запрос ценовой информации"),
     (TenderDocumentType.OTHER.value, "Прочее"),
 ]
+TENDER_DOC_TYPE_LABELS = dict(TENDER_DOC_TYPE_CHOICES)
 
 
 class TenderFilterForm(FlaskForm):

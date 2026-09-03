@@ -7,6 +7,19 @@
 
 {% block page_header %}
 {% call page_header(project.code ~ " — " ~ project.name, "Карточка проекта", "folder2-open") %}
+{% if project.work_object and current_user.has_permission('objects.view') %}
+<a href="{{ url_for('objects.detail', object_id=project.work_object.id, full=1) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-geo-alt"></i> Объект</a>
+{% endif %}
+{% for tender in linked_tenders %}
+{% if current_user.has_permission('tenders.view') %}
+<a href="{{ url_for('tenders.detail', tender_id=tender.id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-hammer"></i> Заявка на торги {{ tender.number }}</a>
+{% endif %}
+{% endfor %}
+{% for contract in linked_contracts %}
+{% if current_user.has_permission('contracts.view') %}
+<a href="{{ url_for('contracts.detail', contract_id=contract.id, full=1) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-file-earmark-text"></i> Контракт {{ contract.number }}</a>
+{% endif %}
+{% endfor %}
 {% if current_user.has_permission('tenders.create') and project.status in ['draft', 'active', 'cancelled'] %}
 <a href="{{ url_for('tenders.create', project_id=project.id) }}" class="btn btn-outline-primary">
     <i class="bi bi-hammer"></i> В заявку на торги

@@ -29,8 +29,10 @@ window.OporaWorkPlanDetail = {
     function closeModals() {
       const completeModal = document.getElementById("deskCompleteModal");
       const excludeModal = document.getElementById("deskExcludeModal");
+      const reportModal = document.getElementById("planReportModal");
       if (completeModal) completeModal.hidden = true;
       if (excludeModal) excludeModal.hidden = true;
+      if (reportModal) reportModal.hidden = true;
       pendingId = "";
     }
 
@@ -89,6 +91,38 @@ window.OporaWorkPlanDetail = {
         document.getElementById("deskExcludeComment").value = "";
         document.getElementById("deskExcludeModal").hidden = false;
       }
+    });
+
+    document.getElementById("planReportOpen")?.addEventListener("click", () => {
+      document.getElementById("planReportModal").hidden = false;
+    });
+
+    document.getElementById("planReportSend")?.addEventListener("click", () => {
+      const recipientId = document.getElementById("planReportRecipient")?.value || "";
+      if (!recipientId) {
+        toast("Выберите адресата отчёта.", false);
+        return;
+      }
+      const button = document.getElementById("planReportSend");
+      button.disabled = true;
+      fetch(root.dataset.reportUrl, {
+        method: "POST",
+        headers: headers(true),
+        body: JSON.stringify({ recipient_id: recipientId }),
+      })
+        .then((res) => res.json())
+        .then((body) => {
+          if (!body.ok) {
+            toast(body.message || "Не удалось сформировать отчёт.", false);
+            return;
+          }
+          closeModals();
+          toast(body.message || "Отчёт отправлен в мессенджере.");
+        })
+        .catch(() => toast("Не удалось сформировать отчёт.", false))
+        .finally(() => {
+          button.disabled = false;
+        });
     });
 
     document.getElementById("deskCompleteSubmit")?.addEventListener("click", () => {

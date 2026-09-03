@@ -121,12 +121,23 @@ body:has(#planCreate) .app-content {
   padding: 0 0.75rem;
 }
 .plan-nearby-toggle {
-  align-self: flex-start;
-  border: 0;
-  background: transparent;
-  color: var(--opora-text-muted);
+  position: fixed;
+  left: calc(50% + var(--opora-sidebar-width, 260px) / 2);
+  bottom: 5.8rem;
+  transform: translateX(-50%);
+  z-index: 45;
+  border: 1px solid var(--opora-border);
+  border-radius: 999px;
+  background: var(--opora-card);
+  color: var(--opora-primary);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
   font-weight: 700;
-  padding: 0.2rem;
+  padding: 0.65rem 1.1rem;
+}
+.plan-page__hero-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.9rem;
 }
 .plan-list {
   display: flex;
@@ -276,4 +287,5 @@ body:has(#planCreate) .app-content {
   .plan-page__grid { grid-template-columns: 1fr; }
   .plan-page__hero--row { flex-direction: column; align-items: flex-start; }
   .plan-page__bar { left: 1rem; right: 1rem; }
+  .plan-nearby-toggle { left: 50%; }
 }

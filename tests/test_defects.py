@@ -87,6 +87,45 @@ def test_defect_status_change(admin_client, app):
         assert status.code == STATUS_IN_PROGRESS
 
 
+def test_defect_status_can_be_changed_in_edit_form(admin_client, app):
+    category_id = _category_id(app)
+    created = admin_client.post(
+        "/defects/new",
+        data={
+            "number": "DF-26-EDIT",
+            "description": "Статус меняется вместе с карточкой",
+            "category_id": category_id,
+            "address": "ул. Производственная, 1",
+            "district": "Ленинский",
+            "submit": "Сохранить",
+        },
+        follow_redirects=False,
+    )
+    defect_id = created.headers["Location"].rstrip("/").split("/")[-1]
+    edit_page = admin_client.get(f"/defects/{defect_id}/edit")
+    assert edit_page.status_code == 200
+    assert 'name="status_code"' in edit_page.get_data(as_text=True)
+
+    changed = admin_client.post(
+        f"/defects/{defect_id}/edit",
+        data={
+            "number": "DF-26-EDIT",
+            "description": "Статус изменён из формы",
+            "category_id": category_id,
+            "address": "ул. Производственная, 1",
+            "district": "Ленинский",
+            "status_code": STATUS_IN_PROGRESS,
+            "submit": "Сохранить",
+        },
+        follow_redirects=False,
+    )
+    assert changed.status_code == 302
+    with app.app_context():
+        item = db.session.get(Defect, defect_id)
+        assert item.status.code == STATUS_IN_PROGRESS
+        assert any(entry.action == "status_change" for entry in item.history)
+
+
 def test_defect_list_status_action_and_permission(admin_client, client, app):
     category_id = _category_id(app)
     created = admin_client.post(

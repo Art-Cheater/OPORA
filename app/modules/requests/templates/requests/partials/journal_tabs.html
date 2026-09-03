@@ -2,9 +2,9 @@
 {% set current_journal = request.args.get('journal_id', '') %}
 {% set short_names = {
     'requests': 'Заявки',
-    'oktyabrsky_villages': 'Октябрьский',
-    'novovyatsky_villages': 'Нововятский',
-    'leninsky_villages': 'Ленинский',
+    'oktyabrsky_villages': 'Деревни Октябрьского',
+    'novovyatsky_villages': 'Деревни Нововятского',
+    'leninsky_villages': 'Деревни Ленинского',
 } %}
 <nav class="journal-tabs" data-list-extra="journals" aria-label="Журналы">
     {% if current_user.has_permission('requests.view') %}

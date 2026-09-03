@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import uuid
+from io import BytesIO
 
 from flask import abort, jsonify, render_template, request, url_for
 from flask_login import current_user, login_required
+from werkzeug.datastructures import FileStorage
 
 from app.core.decorators import any_permission_required, permission_required
 from app.core.exceptions import NotFoundError, ValidationError
@@ -13,6 +15,7 @@ from app.core.http import ajax_error, ajax_ok
 from app.models.auth.constants import (
     PERM_DEFECTS_EDIT,
     PERM_DEFECTS_STATUS_CHANGE,
+    PERM_MESSENGER_USE,
     PERM_REQUESTS_APPROVE,
     PERM_REQUESTS_DISPATCH,
     PERM_REQUESTS_EDIT,
@@ -25,9 +28,9 @@ from app.modules.defects.workflow import STATUS_FIXED
 from app.modules.requests.repositories import RequestRepository
 from app.modules.requests.services import RequestService
 from app.modules.waybills.services import WaybillService
-from app.modules.waybills.workflow import STATUS_DRAFT, STATUS_IN_PROGRESS
 from app.modules.work_orders.blueprint import work_orders_bp
-from app.modules.work_orders.plan_service import EXCLUDE_REASONS, WorkPlanService
+from app.modules.work_orders.plan_service import EXCLUDE_REASONS, PLAN_COMPLETED, WorkPlanService
+from app.modules.work_orders.report_service import DOCX_MIME, build_work_plan_report, report_filename
 from app.modules.work_orders.services import WorkOrderFilter, WorkOrderService
 
 
@@ -263,6 +266,16 @@ def plan_page(plan_id: uuid.UUID):
         abort(403)
     payload = WorkPlanService.serialize_plan(plan, current_user)
     percent = int(round((payload["done"] + payload["excluded"]) * 100 / payload["total"])) if payload["total"] else 0
+    report_recipients = []
+    can_send_report = payload["status"] == PLAN_COMPLETED and current_user.has_permission(PERM_MESSENGER_USE)
+    if can_send_report:
+        from app.modules.messenger.repositories import MessengerRepository
+
+        report_recipients = [
+            user
+            for user in MessengerRepository.list_users(current_user.id, limit=100)
+            if user.can_login and user.has_permission(PERM_MESSENGER_USE)
+        ]
     return render_template(
         "work_orders/plan_detail.html",
         plan=payload,
@@ -270,6 +283,60 @@ def plan_page(plan_id: uuid.UUID):
         percent=percent,
         exclude_reasons=EXCLUDE_REASONS,
         can_manage_plans=current_user.has_permission(PERM_WAYBILLS_EDIT) and payload["status"] == "in_progress",
+        can_send_report=can_send_report,
+        report_recipients=report_recipients,
+    )
+
+
+@work_orders_bp.route("/plans/<uuid:plan_id>/report", methods=["POST"])
+@login_required
+@permission_required(PERM_WAYBILLS_VIEW)
+@permission_required(PERM_MESSENGER_USE)
+def send_plan_report(plan_id: uuid.UUID):
+    from app.modules.auth.repositories import UserRepository
+    from app.modules.messenger.repositories import MessengerRepository
+    from app.modules.messenger.services import MessengerService
+
+    payload = request.get_json(silent=True) or request.form
+    recipient_id = _uuid_or_none(payload.get("recipient_id"))
+    if recipient_id is None or recipient_id == current_user.id:
+        return ajax_error("Выберите адресата отчёта.")
+    try:
+        plan = WorkPlanService.get_owned(plan_id, current_user)
+    except NotFoundError as exc:
+        return ajax_error(str(exc), status=404)
+    except ValidationError as exc:
+        return ajax_error(str(exc), status=403)
+    if plan.status != PLAN_COMPLETED:
+        return ajax_error("Отчёт можно сформировать только по завершённому плану.")
+
+    recipient = UserRepository.get_by_id(recipient_id)
+    if recipient is None or not recipient.can_login or not recipient.has_permission(PERM_MESSENGER_USE):
+        return ajax_error("Адресат не найден или не имеет доступа к мессенджеру.")
+
+    try:
+        content = build_work_plan_report(plan)
+        conversation = MessengerRepository.get_or_create_conversation(
+            current_user.id,
+            recipient.id,
+            created_by=current_user.id,
+        )
+        message = MessengerService.send_file(
+            conversation,
+            sender_id=current_user.id,
+            file_storage=FileStorage(
+                stream=BytesIO(content),
+                filename=report_filename(plan),
+                content_type=DOCX_MIME,
+            ),
+        )
+        WorkPlanService.record_report_sent(plan, current_user, recipient.full_name)
+    except (ValueError, ValidationError) as exc:
+        return ajax_error(str(exc))
+    return ajax_ok(
+        f"Отчёт сформирован и отправлен сотруднику {recipient.full_name}.",
+        message_id=str(message.id),
+        messenger_url=url_for("messenger.index"),
     )
 
 
@@ -535,20 +602,28 @@ def plan_reorder():
 @login_required
 @permission_required(PERM_WAYBILLS_EDIT)
 def plan_save():
-    plan = _current_plan()
-    if plan is None or not any(s.deleted_at is None for s in plan.stops):
+    selection = _current_plan()
+    active_stops = [stop for stop in (selection.stops if selection else []) if stop.deleted_at is None]
+    if selection is None or not active_stops:
         return ajax_error("Добавьте хотя бы одну работу в план.")
-    if plan.status == STATUS_DRAFT and current_user.has_permission(PERM_WAYBILLS_STATUS_CHANGE):
-        try:
-            WaybillService.change_status(plan, STATUS_IN_PROGRESS, current_user.id)
-        except ValidationError as exc:
-            return ajax_error(str(exc))
-        plan = WorkOrderService.today_plan(current_user.id)
-    payload = WorkOrderService.serialize_plan(plan)
-    label = payload.get("status_label") or ""
+    items = [
+        {
+            "entity_type": "request" if stop.request_id else "defect",
+            "entity_id": str(stop.request_id or stop.defect_id),
+        }
+        for stop in active_stops
+    ]
+    try:
+        plan = WorkPlanService.create_and_start(current_user, items)
+        # Старый Waybill здесь служил только временной подборкой на рабочем экране.
+        # После создания настоящего WorkPlan он больше не должен появляться в журналах.
+        WaybillService.delete(selection, current_user.id)
+    except (NotFoundError, ValidationError) as exc:
+        return ajax_error(str(exc))
     return ajax_ok(
-        f"Путевой лист {plan.number} сохранён" + (f" · {label}." if label else "."),
-        plan=payload,
+        f"План {plan.number} создан.",
+        plan=WorkPlanService.serialize_plan(plan, current_user),
+        redirect=url_for("work_orders.plan_page", plan_id=plan.id),
     )
 
 

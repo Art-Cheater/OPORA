@@ -67,6 +67,7 @@ class DefectForm(FlaskForm):
     latitude = HiddenField(validators=[Optional()])
     longitude = HiddenField(validators=[Optional()])
     responsible_id = SelectField("Ответственный", choices=[], validators=[Optional()], validate_choice=False)
+    status_code = SelectField("Статус", choices=[], validators=[Optional()], validate_choice=False)
     submit = SubmitField("Сохранить")
 
 

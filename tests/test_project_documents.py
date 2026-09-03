@@ -156,6 +156,7 @@ def test_edit_can_upload_single_typed_document(app, admin_client):
     html = resp.get_data(as_text=True)
     assert "Техническое задание" in html
     assert "TZ_MOPRA.txt" in html
+    assert "Примечание" in html
     with app.app_context():
         docs = list(
             db.session.scalars(

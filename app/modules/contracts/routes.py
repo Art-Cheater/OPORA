@@ -486,7 +486,7 @@ def detail(contract_id: uuid.UUID):
         **custom_field_detail_context(_CF, contract.id, current_user),
     }
 
-    if is_ajax():
+    if is_ajax() and not request.args.get("full"):
         return render_template("contracts/partials/detail_modal.html", **ctx)
 
     return render_template("contracts/detail.html", **ctx)

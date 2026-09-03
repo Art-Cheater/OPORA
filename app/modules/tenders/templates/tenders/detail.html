@@ -1,10 +1,24 @@
 {% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header %}
+{% from "macros/files.html" import file_gallery %}
 
 {% block title %}{{ tender.number }} — {{ app_name }}{% endblock %}
 
 {% block page_header %}
 {% call page_header(tender.number ~ " — " ~ tender.title, status_labels.get(tender.status, tender.status), "hammer") %}
+{% if tender.work_object and current_user.has_permission('objects.view') %}
+<a href="{{ url_for('objects.detail', object_id=tender.work_object.id, full=1) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-geo-alt"></i> Объект</a>
+{% endif %}
+{% for project in tender.projects %}
+{% if current_user.has_permission('projects.view') %}
+<a href="{{ url_for('projects.detail', project_id=project.id, full=1) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-folder2-open"></i> Проект {{ project.code }}</a>
+{% endif %}
+{% endfor %}
+{% for contract in linked_contracts %}
+{% if current_user.has_permission('contracts.view') %}
+<a href="{{ url_for('contracts.detail', contract_id=contract.id, full=1) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-file-earmark-text"></i> Контракт {{ contract.number }}</a>
+{% endif %}
+{% endfor %}
 {% if current_user.has_permission('tenders.edit') %}
 <a href="{{ url_for('tenders.edit', tender_id=tender.id) }}" class="btn btn-outline-primary btn-sm">Редактировать</a>
 {% endif %}
@@ -65,21 +79,12 @@
 
         <div class="card mb-4">
             <div class="card-header">Документы заявки на торги</div>
-            <ul class="list-group list-group-flush">
+            <div class="card-body">
                 {% for doc in tender.documents if doc.deleted_at is none %}
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="fw-medium">{{ doc.title }}</div>
-                        <div class="small text-muted">{{ doc.document_type }}</div>
-                    </div>
-                    {% if doc.storage_key %}
-                    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('tenders.download_document', tender_id=tender.id, document_id=doc.id) }}">Скачать</a>
-                    {% endif %}
-                </li>
-                {% else %}
-                <li class="list-group-item text-muted">Документов пока нет</li>
+                <div class="small mb-2"><strong>{{ doc.title }}</strong> · {{ tender_doc_type_labels.get(doc.document_type, 'Прочее') }}</div>
                 {% endfor %}
-            </ul>
+                {{ file_gallery(tender_file_items, "Документов пока нет") }}
+            </div>
             {% if current_user.has_permission('tenders.edit') %}
             <div class="card-body border-top">
                 <form method="POST" action="{{ url_for('tenders.add_document', tender_id=tender.id) }}" enctype="multipart/form-data" class="row g-2">
@@ -101,7 +106,7 @@
                 {% for doc in project_docs %}
                 <li class="list-group-item">
                     <div class="fw-medium">{{ doc.title }}</div>
-                    <div class="small text-muted">{{ doc.document_type }} · проект {{ doc.project.code if doc.project else '' }}</div>
+                    <div class="small text-muted">{{ project_doc_type_labels.get(doc.document_type, 'Прочее') }} · проект {{ doc.project.code if doc.project else '' }}</div>
                 </li>
                 {% else %}
                 <li class="list-group-item text-muted">У проектов пока нет документов</li>

@@ -317,6 +317,30 @@ def detail(project_id: uuid.UUID):
         flash("Проект не найден.", "danger")
         return redirect(url_for("projects.index"))
 
+    from app.models.contracts.contract import Contract
+    from app.models.tenders.tender_application import TenderApplication
+    from app.models.tenders.tender_project import TenderProject
+
+    linked_contracts = list(
+        db.session.scalars(
+            db.select(Contract)
+            .where(Contract.project_id == project.id, Contract.active_filter())
+            .order_by(Contract.created_at.desc())
+        )
+    )
+    linked_tenders = list(
+        db.session.scalars(
+            db.select(TenderApplication)
+            .join(TenderProject, TenderProject.tender_id == TenderApplication.id)
+            .where(
+                TenderProject.project_id == project.id,
+                TenderProject.active_filter(),
+                TenderApplication.active_filter(),
+            )
+            .order_by(TenderApplication.created_at.desc())
+        ).unique()
+    )
+
     comments = list(
         db.session.scalars(
             db.select(Comment)
@@ -473,7 +497,7 @@ def detail(project_id: uuid.UUID):
         reverse=True,
     )
 
-    if is_ajax():
+    if is_ajax() and not request.args.get("full"):
         return render_template(
             "projects/partials/detail_modal.html",
             project=project,
@@ -483,6 +507,8 @@ def detail(project_id: uuid.UUID):
             comment_form=comment_form,
             document_form=document_form,
             can_edit_docs=can_edit_docs,
+            linked_contracts=linked_contracts,
+            linked_tenders=linked_tenders,
             **custom_field_detail_context(_CF, project.id, current_user),
         )
 
@@ -495,6 +521,8 @@ def detail(project_id: uuid.UUID):
         comment_form=comment_form,
         document_form=document_form,
         can_edit_docs=can_edit_docs,
+        linked_contracts=linked_contracts,
+        linked_tenders=linked_tenders,
         **custom_field_detail_context(_CF, project.id, current_user),
     )
 

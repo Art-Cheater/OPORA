@@ -112,6 +112,7 @@ def _prepare_form(form: DefectForm) -> None:
     form.responsible_id.choices = [("", "Не назначен")] + [
         (str(u.id), u.full_name) for u in DefectRepository.get_masters()
     ]
+    form.status_code.choices = [(s.code, s.name) for s in DefectRepository.get_statuses()]
 
 
 def _prepare_filter(form: DefectFilterForm) -> None:
@@ -251,9 +252,25 @@ def edit(defect_id: uuid.UUID):
         form.category_id.data = str(item.category_id)
         form.responsible_id.data = str(item.responsible_id) if item.responsible_id else ""
         form.district.data = normalize_request_district(item.district) or ""
+        form.status_code.data = item.status.code if item.status else ""
     if form.validate_on_submit():
         try:
+            previous_status = item.status.code if item.status else ""
             DefectService.update(item, _payload_from_form(form, item), current_user.id)
+            requested_status = (form.status_code.data or "").strip()
+            if (
+                requested_status
+                and requested_status != previous_status
+                and current_user.has_permission(PERM_DEFECTS_STATUS_CHANGE)
+                and current_user.can_edit_field("defects", "status_id")
+            ):
+                DefectService.change_status(
+                    item,
+                    requested_status,
+                    current_user.id,
+                    comment="Статус изменён при редактировании дефекта",
+                    enforce_transition=False,
+                )
             flash("Дефект обновлён.", "success")
             return redirect(url_for("defects.detail", defect_id=item.id))
         except ValidationError as exc:

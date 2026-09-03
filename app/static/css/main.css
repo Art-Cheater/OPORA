@@ -825,12 +825,18 @@ body.is-opora-busy { cursor: wait; }
   cursor: default;
 }
 .workbench-nearby-toggle {
-  align-self: flex-start;
-  border: 0;
-  background: transparent;
-  color: var(--opora-text-muted);
-  font-weight: 600;
-  padding: 0.15rem 0.2rem;
+  position: fixed;
+  left: calc(50% + var(--opora-sidebar-width, 260px) / 2);
+  bottom: 1.25rem;
+  transform: translateX(-50%);
+  z-index: 45;
+  border: 1px solid var(--opora-border);
+  border-radius: 999px;
+  background: var(--opora-card);
+  color: var(--opora-primary);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  font-weight: 700;
+  padding: 0.65rem 1.1rem;
 }
 .workbench-nearby-toggle:hover { color: var(--opora-primary); }
 .workbench-plan__order {
@@ -871,6 +877,7 @@ body.is-opora-busy { cursor: wait; }
   .workbench__available { max-height: none; }
   .workbench-filters { grid-template-columns: 1fr 1fr; }
   .workbench__map #opsMap { height: 280px; }
+  .workbench-nearby-toggle { left: 50%; }
 }
 
 /* Всплывающее уведомление о сообщении в мессенджере */

@@ -4,6 +4,9 @@
     {{ modal_field(form.number, col=4, module='defects') }}
     {{ modal_field(form.category_id, col=4, module='defects') }}
     {{ modal_field(form.responsible_id, col=4, module='defects') }}
+    {% if mode == 'edit' and current_user.has_permission('defects.status_change') %}
+    {{ modal_field(form.status_code, col=4, module='defects', permission_field='status_id') }}
+    {% endif %}
     {% if current_user.can_view_field('defects', 'address') %}
     <div class="col-md-8">
         {{ form.address.label(class="form-label") }}
