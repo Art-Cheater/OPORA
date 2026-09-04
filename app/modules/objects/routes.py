@@ -333,7 +333,6 @@ def detail(object_id: uuid.UUID):
     linked_projects = chain.get("projects") or []
     can_create_project = (not has_active_project) and obj.status not in (
         "in_tender",
-        "in_contract",
         "completed",
         "archived",
     )
