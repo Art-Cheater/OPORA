@@ -230,8 +230,16 @@ window.OporaWorkPlanNew = {
       const btn = event.target.closest(".js-remove");
       if (!btn) return;
       const index = items.findIndex((item) => item.entity_type === btn.dataset.type && item.entity_id === btn.dataset.id);
+      const removed = index >= 0 ? items[index] : null;
       if (index >= 0) items.splice(index, 1);
-      lastAdded = items[items.length - 1] || null;
+      if (removed && lastAdded && removed.entity_type === lastAdded.entity_type && removed.entity_id === lastAdded.entity_id) {
+        lastAdded = null;
+        if (relatedWrap) relatedWrap.hidden = true;
+        if (nearbyToggle) nearbyToggle.hidden = true;
+        if (relatedBox) relatedBox.innerHTML = "";
+      } else {
+        lastAdded = items[items.length - 1] || null;
+      }
       renderBasket();
       loadRelated();
       search();

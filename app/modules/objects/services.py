@@ -977,6 +977,7 @@ class ObjectService:
             raise ValidationError("Адрес объекта обязателен.")
         full_name = cls._normalize(payload.name) or cls._compose_full_name(payload.work_type, address)
         old = {"address": obj.address, "status": obj.status, "contract_number": obj.contract_number}
+        old_result_text = cls._normalize(obj.result_text)
         court = cls._normalize(payload.court_decision_number)
         kind = payload.object_kind or WorkObjectKind.PLANNED.value
         if kind != WorkObjectKind.COURT.value:
@@ -1003,17 +1004,31 @@ class ObjectService:
         obj.notes = cls._normalize(payload.notes)
         obj.status = payload.status
         obj.updated_by = user_id
-        cls._ensure_project_for_result(obj, user_id)
-        AuditService.log(
-            user_id=user_id,
-            action=AuditAction.UPDATE.value,
-            entity_type=EntityType.WORK_OBJECT.value,
-            entity_id=obj.id,
-            description=f"Обновлён объект {obj.display_address}",
-            old_values=old,
-            new_values={"address": obj.address, "status": obj.status},
-        )
-        db.session.commit()
+        try:
+            # Обычное редактирование (сумма, адрес, комментарий) не должно
+            # повторно запускать цепочку Project/Tender/Contract. Она зависит
+            # от результата работ и запускается только при его изменении.
+            if old_result_text != obj.result_text:
+                project = cls._ensure_project_for_result(obj, user_id)
+                if project is not None:
+                    obj.status = WorkObjectStatus.IN_PROJECT.value
+            else:
+                # Форма может прислать устаревший select status. Обычное
+                # редактирование не имеет права откатывать lifecycle объекта.
+                obj.status = old["status"]
+            AuditService.log(
+                user_id=user_id,
+                action=AuditAction.UPDATE.value,
+                entity_type=EntityType.WORK_OBJECT.value,
+                entity_id=obj.id,
+                description=f"Обновлён объект {obj.display_address}",
+                old_values=old,
+                new_values={"address": obj.address, "status": obj.status},
+            )
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
         return obj
 
     @classmethod

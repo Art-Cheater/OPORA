@@ -47,6 +47,7 @@ window.OporaWorkPlanDetail = {
         <p class="plan-work__addr">${escapeHtml(item.address || "Адрес не указан")}</p>
         <p class="plan-work__meta">${item.pp ? `ПП ${escapeHtml(item.pp)}` : "ПП не указан"}${item.status ? ` · ${escapeHtml(item.status)}` : ""}</p>
         ${item.description ? `<p class="plan-work__desc">${escapeHtml(item.description)}</p>` : ""}
+        ${item.exclude_reason_label ? `<p class="plan-work__note">Причина исключения: ${escapeHtml(item.exclude_reason_label)}${item.exclude_comment ? `. Комментарий: ${escapeHtml(item.exclude_comment)}` : ""}${item.excluded_by ? `. Исключил: ${escapeHtml(item.excluded_by)}` : ""}${item.excluded_at ? ` · ${escapeHtml(item.excluded_at)}` : ""}</p>` : ""}
         ${actions}</article>`;
     }
 
@@ -172,7 +173,8 @@ window.OporaWorkPlanDetail = {
             return;
           }
           applyPlan(body.plan);
-          renderRelated(body.related || {});
+          // В режиме «Добавить работы» показывается только явный поиск:
+          // рекомендации относятся к карте рабочего места, не к этому списку.
           toast(body.message || "Работа добавлена в план.");
           searchAvailable();
         })

@@ -7,6 +7,7 @@ window.OporaWorkOrders = {
 
     const csrf = document.querySelector("meta[name='csrf-token']")?.content || "";
     const itemsBox = document.getElementById("workItems");
+    const detailBox = document.getElementById("workDetail");
     const planBox = document.getElementById("workPlan");
     const nearbyBox = document.getElementById("workNearby");
     const nearbyWrap = document.getElementById("workNearbyWrap");
@@ -92,6 +93,13 @@ window.OporaWorkOrders = {
           </article>`;
         })
         .join("");
+    }
+
+    function renderDetail(item) {
+      if (!detailBox || !item) return;
+      const type = item.type || item.entity_type;
+      const id = item.id || item.entity_id;
+      detailBox.innerHTML = `<article class="workbench-hit workbench-hit--detail"><div class="workbench-hit__body"><strong>${typeDot(type)} ${typeLabel(type, item.number)}</strong><small>${escapeHtml(item.address || "Адрес не указан")}${item.pp ? ` · ПП ${escapeHtml(item.pp)}` : ""}</small>${item.description ? `<p>${escapeHtml(item.description)}</p>` : ""}</div><div class="workbench-detail__actions"><a class="btn btn-outline-secondary btn-sm" href="${escapeHtml(item.url || "#")}">Открыть</a>${addButton(type, id, item.in_plan || inPlan(type, id))}</div></article>`;
     }
 
     function renderNearby(hits, summary) {
@@ -240,6 +248,7 @@ window.OporaWorkOrders = {
     planBox?.addEventListener("click", (event) => {
       const btn = event.target.closest(".js-remove");
       if (!btn) return;
+      const removed = (plan.stops || []).find((stop) => stop.id === btn.dataset.stopId);
       fetch(root.dataset.removeUrl, {
         method: "POST",
         headers: headers(true),
@@ -254,7 +263,11 @@ window.OporaWorkOrders = {
           applyPlan(body.plan);
           toast(body.message || "Удалено из плана.");
           loadItems();
-          if (lastAdded) loadNearby(lastAdded.type, lastAdded.id);
+          if (removed && lastAdded && removed.entity_type === lastAdded.type && removed.entity_id === lastAdded.id) {
+            lastAdded = null;
+            renderNearby([], "");
+            if (nearbyWrap) nearbyWrap.hidden = true;
+          } else if (lastAdded) loadNearby(lastAdded.type, lastAdded.id);
         })
         .catch(() => toast("Не удалось удалить из плана.", false));
     });
@@ -302,6 +315,12 @@ window.OporaWorkOrders = {
       const type = event.detail?.type;
       const id = event.detail?.id;
       if (type && id) addToPlan(type, id);
+    });
+
+    root.addEventListener("opora:select-work", (event) => renderDetail(event.detail?.point));
+    detailBox?.addEventListener("click", (event) => {
+      const btn = event.target.closest(".js-add");
+      if (btn && !btn.disabled) addToPlan(btn.dataset.type, btn.dataset.id);
     });
 
     let dragId = "";

@@ -29,6 +29,8 @@
 
     <p class="plan-page__flash" id="planFlash" aria-live="polite"></p>
 
+    <label class="plan-map-toggle"><input type="checkbox" id="planMapEnabled"> Включить карту выбранных работ</label>
+
     <div class="plan-page__grid">
         <section class="plan-card">
             <h2>Доступные работы</h2>
@@ -63,17 +65,15 @@
         </section>
     </div>
 
-    <button type="button" class="plan-nearby-toggle" id="planNearbyToggle" hidden>⌄ Работы рядом</button>
-
-    <section class="plan-card plan-card--wide" id="planRelatedWrap" hidden>
-        <h2 id="planRelatedTitle">Рядом обнаружены другие работы</h2>
-        <div id="planRelated" class="plan-related"></div>
-    </section>
-
-    <label class="plan-map-toggle"><input type="checkbox" id="planMapEnabled"> Включить карту</label>
     <section class="plan-card plan-card--wide" id="planMapWrap" hidden>
         <div id="opsMap" data-kind="plan"></div>
         <p id="opsMapStatus" class="plan-empty">Карта выбранных работ.</p>
+    </section>
+
+    <button type="button" class="plan-nearby-toggle" id="planNearbyToggle" hidden>⌄ Работы рядом</button>
+    <section class="plan-card plan-card--wide" id="planRelatedWrap" hidden>
+        <h2 id="planRelatedTitle">Рядом обнаружены другие работы</h2>
+        <div id="planRelated" class="plan-related"></div>
     </section>
 
     <div class="plan-page__bar">

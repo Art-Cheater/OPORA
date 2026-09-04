@@ -498,6 +498,7 @@ window.OporaList = (() => {
         });
         const data = await parseJsonResponse(response, "Ошибка сохранения");
         if (data.success) {
+          window.OporaNav?.invalidate?.(config.baseUrl || window.location.href);
           saving = false;
           modal?.removeEventListener("hide.bs.modal", blockHide);
           bootstrap.Modal.getInstance(modal)?.hide();
@@ -572,7 +573,8 @@ window.OporaList = (() => {
     if (config.tableContainerId && document.getElementById(config.tableContainerId)) {
       await loadTable();
     } else {
-      window.location.reload();
+      window.OporaNav?.invalidate?.(window.location.href);
+      window.OporaNav?.go?.(window.location.href, "Обновление списка…");
     }
   }
 

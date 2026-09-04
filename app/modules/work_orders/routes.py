@@ -372,7 +372,7 @@ def download_plan_order(plan_id: uuid.UUID):
     if plan.status not in {"in_progress", PLAN_COMPLETED}:
         return ajax_error("Бланк доступен после формирования плана.", status=400)
     payload = WorkPlanService.serialize_plan(plan, current_user)
-    fields = {key: (request.form.get(key) or "") for key in ("order_number", "producer", "crew_lead", "crew_members", "lift_responsible")}
+    fields = {key: (request.form.get(key) or "") for key in ("order_number", "producer", "crew_count", "crew_lead", "crew_members", "lift_responsible")}
     try:
         content = build_order_workbook(payload, fields)
     except ValueError as exc:

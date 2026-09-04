@@ -188,7 +188,8 @@ def test_work_desk_queue_card_and_complete(client, app):
 
 def test_work_orders_map_colors_and_types(admin_client, app):
     request_id, extra_id, defect_id, _, _ = _seed_work(app, suffix="81")
-    assert admin_client.get("/work-orders/map.json").get_json()["points"] == []
+    initial_ids = {point["id"] for point in admin_client.get("/work-orders/map.json").get_json()["points"]}
+    assert {request_id, extra_id, defect_id}.issubset(initial_ids)
     assert admin_client.post("/work-orders/plan/add", json={"entity_type": "request", "entity_id": request_id}).status_code == 200
     assert admin_client.post("/work-orders/plan/add", json={"entity_type": "defect", "entity_id": defect_id}).status_code == 200
     payload = admin_client.get("/work-orders/map.json").get_json()

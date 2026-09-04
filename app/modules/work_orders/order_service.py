@@ -9,6 +9,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from openpyxl import load_workbook
+from openpyxl.styles import Alignment
 
 TEMPLATE_PATH = Path(__file__).with_name("resources") / "order_template.xlsx"
 WORK_ROWS = tuple(range(18, 31)) + tuple(range(36, 53))
@@ -37,6 +38,8 @@ def build_order_workbook(plan: dict, fields: dict[str, str]) -> bytes:
     for cell, key in (("D7", "producer"), ("F7", "crew_lead"), ("F9", "crew_members"), ("F10", "lift_responsible")):
         if fields.get(key):
             sheet[cell] = excel_text(fields[key])
+    if fields.get("crew_count"):
+        sheet["D9"] = excel_text(fields["crew_count"])
 
     for row in WORK_ROWS:
         for col in range(1, 8):
@@ -49,6 +52,11 @@ def build_order_workbook(plan: dict, fields: dict[str, str]) -> bytes:
         sheet.cell(row, 2).value = excel_text(item.get("pp") or "")
         sheet.cell(row, 3).value = excel_text(item.get("address") or "")
         sheet.cell(row, 4).value = excel_text(item.get("description") or "")
+        for col in range(1, 8):
+            cell = sheet.cell(row, col)
+            cell.alignment = Alignment(horizontal="left" if col in {3, 4} else "center", vertical="top", wrap_text=True)
+        text_size = max(len(str(item.get("address") or "")), len(str(item.get("description") or "")))
+        sheet.row_dimensions[row].height = max(sheet.row_dimensions[row].height or 15, min(72, 18 + 12 * ((text_size + 28) // 29)))
     stream = BytesIO()
     workbook.save(stream)
     return stream.getvalue()

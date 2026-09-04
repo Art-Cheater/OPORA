@@ -186,15 +186,18 @@ window.OporaOpsMap = {
             .addTo(self._layer)
             .bindPopup(popupHtml(point), { maxWidth: 280 });
         } else {
-          L.circleMarker(pos, {
+          const marker = L.circleMarker(pos, {
             radius: point.in_plan ? 10 : 8,
             color: "#fff",
             weight: point.in_plan ? 2 : 1,
             fillColor: markerColor(point),
             fillOpacity: 0.92,
-          })
-            .addTo(self._layer)
-            .bindPopup(popupHtml(point), { maxWidth: 300 });
+          }).addTo(self._layer).bindPopup(popupHtml(point), { maxWidth: 300 });
+          if (self._kind === "workbench") {
+            marker.on("click", () => mapNode.dispatchEvent(new CustomEvent("opora:select-work", {
+              bubbles: true, detail: { point }
+            })));
+          }
         }
       });
       if (self._kind === "route" && line.length > 1) {

@@ -683,15 +683,24 @@ function initInstantNav(sidebar, closeSidebar) {
         initFlashMessages();
     }
 
-    async function applyHtml(html) {
+    function disposePage() {
+        window.OporaList?.reset?.();
+        window.OporaOpsMap?.destroy?.();
+        window.dispatchEvent(new CustomEvent("opora:before-navigate"));
+    }
+
+    async function applyHtml(html, token) {
+        if (token !== undefined && token !== navToken) return false;
         const doc = new DOMParser().parseFromString(html, "text/html");
         const nextContent = doc.querySelector("#appContent, .app-content");
         const currentContent = document.querySelector("#appContent, .app-content");
         if (!nextContent || !currentContent) return false;
         document.title = doc.title;
         nextContent.querySelectorAll("script").forEach((node) => node.remove());
+        disposePage();
         currentContent.replaceWith(nextContent);
         await ensureAssets(doc);
+        if (token !== undefined && token !== navToken) return false;
         bootPageModules();
         return true;
     }
@@ -887,7 +896,7 @@ function initInstantNav(sidebar, closeSidebar) {
         if (cached) {
             hideLoading();
             if (push) history.pushState({ oporaNav: true }, "", href);
-            const ok = await applyHtml(cached);
+            const ok = await applyHtml(cached, token);
             if (token !== navToken) return;
             if (!ok) {
                 window.location.href = href;
@@ -907,7 +916,7 @@ function initInstantNav(sidebar, closeSidebar) {
             loadPageHtml(href).then(async (html) => {
                 if (token !== navToken || !html) return;
                 if (!mergeListChrome(html)) {
-                    await applyHtml(html);
+                    await applyHtml(html, token);
                 }
                 emitNavigated(href);
             });
@@ -923,7 +932,7 @@ function initInstantNav(sidebar, closeSidebar) {
                 return;
             }
             if (push) history.pushState({ oporaNav: true }, "", href);
-            const ok = await applyHtml(html);
+            const ok = await applyHtml(html, token);
             if (token !== navToken) return;
             if (!ok) {
                 window.location.href = href;
@@ -947,6 +956,15 @@ function initInstantNav(sidebar, closeSidebar) {
                 return;
             }
             navigateTo(next.href, label || "Загрузка");
+        },
+        invalidate(href) {
+            const key = cacheKey(href || window.location.href);
+            pageCache.delete(key);
+            // Mutation в карточке меняет список: старый response нельзя
+            // использовать при следующем переходе в журнал заявок.
+            if (key.startsWith("/requests") || key.startsWith("/defects")) {
+                [...pageCache.keys()].filter((item) => item.startsWith("/requests") || item.startsWith("/defects")).forEach((item) => pageCache.delete(item));
+            }
         },
     };
 

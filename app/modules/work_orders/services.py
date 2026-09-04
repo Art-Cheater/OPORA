@@ -131,18 +131,12 @@ class WorkOrderService:
 
     @classmethod
     def map_points(cls, filters: WorkOrderFilter, plan: Waybill | None) -> list[dict]:
-        """Карта рабочего места показывает только уже выбранные работы."""
-        if plan is None:
-            return []
-        points = []
-        for order, stop in enumerate(sorted((s for s in plan.stops if s.deleted_at is None), key=lambda s: s.sort_order), start=1):
-            row = cls.serialize_stop(stop, order)
-            if row["lat"] is not None and row["lng"] is not None:
-                row["stop_id"] = row["id"]
-                row["id"] = row["entity_id"]
-                row["type"] = row["entity_type"]
-                row["in_plan"] = True
-                points.append(row)
+        """Карта — вход в рабочее место: только доступные открытые работы."""
+        in_plan = cls._plan_keys(plan)
+        points = cls._request_points(filters, in_plan, with_coords=True, limit=500)
+        if filters.kind in {"all", "defect"}:
+            points.extend(cls._defect_points(filters, in_plan, with_coords=True, limit=500))
+        points.sort(key=lambda row: (row.get("number") or ""))
         return points
 
     @classmethod

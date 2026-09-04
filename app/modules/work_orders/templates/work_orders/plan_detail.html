@@ -79,10 +79,6 @@
         <div id="planAddResults" class="plan-list">
             <p class="plan-empty">Выберите работы для добавления.</p>
         </div>
-        <div id="planAddRelatedWrap" hidden>
-            <h3>Работы рядом</h3>
-            <div id="planAddRelated" class="plan-related"></div>
-        </div>
     </section>
     {% endif %}
 
@@ -100,7 +96,7 @@
             <p class="plan-work__meta">{% if item.pp %}ПП {{ item.pp }}{% else %}ПП не указан{% endif %}{% if item.status %} · {{ item.status }}{% endif %}</p>
             {% if item.description %}<p class="plan-work__desc">{{ item.description }}</p>{% endif %}
             {% if item.complete_comment %}<p class="plan-work__note">Комментарий: {{ item.complete_comment }}</p>{% endif %}
-            {% if item.exclude_reason_label %}<p class="plan-work__note">Исключена: {{ item.exclude_reason_label }}. {{ item.exclude_comment }}</p>{% endif %}
+            {% if item.exclude_reason_label %}<p class="plan-work__note">Причина исключения: {{ item.exclude_reason_label }}{% if item.exclude_comment %}. Комментарий: {{ item.exclude_comment }}{% endif %}{% if item.excluded_by %}. Исключил: {{ item.excluded_by }}{% endif %}{% if item.excluded_at %} · {{ item.excluded_at }}{% endif %}</p>{% endif %}
             {% if item.photos %}
             <div class="desk-photos">
                 {% for photo in item.photos %}
@@ -146,9 +142,10 @@
     <form class="desk-modal__card" method="POST" action="{{ url_for('work_orders.download_plan_order', plan_id=plan.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <h3>Бланк-распоряжение</h3>
-        <p class="desk-modal__hint">ПП, адрес и описание работ уже будут подставлены из плана. Остальные поля можно заполнить вручную.</p>
-        <label>Номер распоряжения <input name="order_number" required maxlength="100" autocomplete="off"></label>
+        <p class="desk-modal__hint">Проверьте данные перед выгрузкой: номер можно оставить пустым для заполнения на бумаге.</p>
+        <label>Номер распоряжения <input name="order_number" maxlength="100" autocomplete="off"></label>
         <label>Производитель работ <input name="producer" value="{{ plan.master }}" maxlength="255"></label>
+        <label>Количество человек в бригаде <input name="crew_count" type="number" min="1" value="2"></label>
         <label>Член бригады / машинист <input name="crew_lead" maxlength="255"></label>
         <label>Состав бригады <input name="crew_members" maxlength="500"></label>
         <label>Ответственный за автоподъёмник <input name="lift_responsible" maxlength="255"></label>
