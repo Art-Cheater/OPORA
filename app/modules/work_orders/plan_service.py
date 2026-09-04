@@ -552,6 +552,7 @@ class WorkPlanService:
         *,
         reason: str,
         comment: str,
+        files: list[FileStorage] | None = None,
     ) -> WorkPlan:
         if plan.status != PLAN_IN_PROGRESS:
             raise ValidationError("Исключать работы можно из плана со статусом «В работе».")
@@ -572,6 +573,29 @@ class WorkPlanService:
         item.excluded_at = utcnow()
         item.excluded_by = user.id
         item.updated_by = user.id
+        uploads = [storage for storage in (files or []) if storage and storage.filename]
+        if uploads:
+            from app.core.upload_utils import UploadValidationError, save_upload
+
+            for storage in uploads:
+                try:
+                    saved = save_upload(storage, relative_dir=f"work-plans/{plan.id}/exclusions/{item.id}")
+                except UploadValidationError as exc:
+                    raise ValidationError(str(exc)) from exc
+                db.session.add(
+                    Attachment(
+                        uploaded_by=user.id,
+                        entity_type=EntityType.WORK_PLAN_ITEM.value,
+                        entity_id=item.id,
+                        file_name=saved.file_name,
+                        storage_key=saved.storage_key,
+                        mime_type=saved.mime_type,
+                        file_size=saved.file_size,
+                        checksum=None,
+                        created_by=user.id,
+                        updated_by=user.id,
+                    )
+                )
         reason_label = EXCLUDE_REASON_LABELS[reason_code]
         history_text = f"Исключена из плана: {reason_label}. {text}"
         if item.request_id:
@@ -807,10 +831,31 @@ class WorkPlanService:
             "exclude_comment": item.exclude_comment or "",
             "excluded_at": cls._fmt_dt(item.excluded_at),
             "excluded_by": item.excluded_by_user.full_name if item.excluded_by_user else "",
+            "exclusion_files": cls._exclusion_files(item),
             "photos": photos,
             "can_complete": item.result == ITEM_ACTIVE and (plan_status or (item.plan.status if item.plan else "")) == PLAN_IN_PROGRESS,
             "can_exclude": item.result == ITEM_ACTIVE and (plan_status or (item.plan.status if item.plan else "")) == PLAN_IN_PROGRESS,
         }
+
+    @classmethod
+    def _exclusion_files(cls, item: WorkPlanItem) -> list[dict]:
+        files = db.session.scalars(
+            select(Attachment)
+            .where(
+                Attachment.entity_type == EntityType.WORK_PLAN_ITEM.value,
+                Attachment.entity_id == item.id,
+                Attachment.active_filter(),
+            )
+            .order_by(Attachment.created_at.asc())
+        )
+        return [
+            {
+                "id": str(file.id),
+                "name": file.file_name,
+                "url": url_for("work_orders.download_exclusion_attachment", item_id=item.id, attachment_id=file.id, inline=1),
+            }
+            for file in files
+        ]
 
     @classmethod
     def _entity_photos(cls, item: WorkPlanItem) -> list[dict]:

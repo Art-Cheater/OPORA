@@ -12,6 +12,7 @@ from werkzeug.datastructures import FileStorage
 from app.core.decorators import any_permission_required, permission_required, role_required
 from app.core.exceptions import NotFoundError, ValidationError
 from app.core.http import ajax_error, ajax_ok
+from app.extensions import db
 from app.models.auth.constants import (
     PERM_DEFECTS_EDIT,
     PERM_DEFECTS_STATUS_CHANGE,
@@ -25,6 +26,9 @@ from app.models.auth.constants import (
     ROLE_ADMIN,
     ROLE_DIRECTOR,
 )
+from app.models.enums import EntityType
+from app.models.files.attachment import Attachment
+from app.models.work_plans.work_plan_item import WorkPlanItem
 from app.modules.defects.services import DefectService
 from app.modules.defects.workflow import STATUS_FIXED
 from app.modules.requests.repositories import RequestRepository
@@ -552,12 +556,40 @@ def work_plan_exclude_item(plan_id: uuid.UUID, item_id: uuid.UUID):
             current_user,
             reason=payload.get("reason") or "",
             comment=payload.get("comment") or "",
+            files=request.files.getlist("files") if request.files else [],
         )
         return ajax_ok("Работа исключена из плана.", plan=WorkPlanService.serialize_plan(plan, current_user))
     except NotFoundError as exc:
         return ajax_error(str(exc), status=404)
     except ValidationError as exc:
         return ajax_error(str(exc))
+
+
+@work_orders_bp.route("/plan-items/<uuid:item_id>/attachments/<uuid:attachment_id>/download")
+@login_required
+@permission_required(PERM_WAYBILLS_VIEW)
+def download_exclusion_attachment(item_id: uuid.UUID, attachment_id: uuid.UUID):
+    """Файл исключения доступен только пользователю, который видит его план."""
+    from flask import send_file
+    from app.core.upload_utils import resolve_download_filename, resolve_storage_path
+
+    item = db.session.get(WorkPlanItem, item_id)
+    if item is None or item.deleted_at is not None:
+        abort(404)
+    WorkPlanService.get_owned(item.plan_id, current_user)
+    attachment = db.session.get(Attachment, attachment_id)
+    if (
+        attachment is None
+        or attachment.deleted_at is not None
+        or attachment.entity_type != EntityType.WORK_PLAN_ITEM.value
+        or attachment.entity_id != item.id
+    ):
+        abort(404)
+    return send_file(
+        resolve_storage_path(attachment.storage_key),
+        download_name=resolve_download_filename(attachment.file_name),
+        as_attachment=request.args.get("inline") != "1",
+    )
 
 
 @work_orders_bp.route("/related.json")
@@ -637,7 +669,10 @@ def route_json():
         for stop in payload["stops"]
         if stop["lat"] is not None and stop["lng"] is not None
     ]
-    return jsonify({"points": points, "missing": max(len(payload["stops"]) - len(points), 0)})
+    from app.core.routing import RoutingService
+
+    route = RoutingService.route([(point["lat"], point["lng"]) for point in points])
+    return jsonify({"points": points, "missing": max(len(payload["stops"]) - len(points), 0), "route": route})
 
 
 @work_orders_bp.route("/nearby.json")

@@ -172,6 +172,9 @@ body:has(#planCreate) .app-content {
   padding: 0.35rem 0.7rem;
 }
 .plan-row button.is-remove { background: transparent; color: var(--opora-text-muted); border: 1px solid var(--opora-border); }
+.plan-nearby-actions, .workbench-nearby-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: .35rem; flex-shrink: 0; }
+.plan-distance-badge, .workbench-distance-badge { background: #0d6efd; color: #fff; border-radius: 999px; padding: .28rem .55rem; font-size: .78rem; font-weight: 800; white-space: nowrap; }
+.plan-nearby-badge, .workbench-nearby-badge { background: var(--opora-accent-light); color: var(--opora-text); border: 1px solid var(--opora-border); border-radius: 999px; padding: .28rem .55rem; font-size: .75rem; font-weight: 700; white-space: nowrap; }
 .plan-empty { margin: 1rem 0; color: var(--opora-text-muted); text-align: center; }
 .plan-related { display: flex; flex-direction: column; gap: 0.45rem; }
 .plan-related label {

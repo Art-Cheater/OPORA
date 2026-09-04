@@ -82,6 +82,25 @@ def any_permission_required(*permission_codes: str):
     return decorator
 
 
+def request_or_legacy_defect_permission_required(request_permission: str, legacy_defect_permission: str):
+    """Единый RBAC для Defect: новые роли управляются через Requests.
+
+    Старые роли с `defects.*` продолжают работать до отдельной миграции прав.
+    """
+
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(*args, **kwargs):
+            _ensure_can_access()
+            if not current_user.has_any_permission(request_permission, legacy_defect_permission):
+                abort(403)
+            return view_func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
 def admin_required(view_func):
     """Декоратор: доступ только для администратора."""
 

@@ -258,7 +258,7 @@ def _prepare_request_form(form: RequestForm, *, include_defects: bool = False) -
     form.journal_id.choices = [
         (str(item.id), item.name) for item in RequestRepository.get_journals()
     ]
-    if include_defects and current_user.has_permission(PERM_DEFECTS_CREATE):
+    if include_defects and current_user.has_any_permission(PERM_REQUESTS_CREATE, PERM_DEFECTS_CREATE):
         form.journal_id.choices.append((DEFECT_JOURNAL_VALUE, "Дефекты"))
     form.executor_id.choices = [("", "Не назначен")]
     BuiltinFieldService.apply_to_form(form, "requests")
@@ -687,7 +687,7 @@ def create():
     _apply_request_create_defaults(form)
 
     if request.method == "POST" and form.journal_id.data == DEFECT_JOURNAL_VALUE:
-        if not current_user.has_permission(PERM_DEFECTS_CREATE):
+        if not current_user.has_any_permission(PERM_REQUESTS_CREATE, PERM_DEFECTS_CREATE):
             abort(403)
         redirect_url = url_for("defects.create")
         if is_ajax():

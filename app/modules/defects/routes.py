@@ -10,7 +10,7 @@ from flask import flash, jsonify, redirect, render_template, request, send_file,
 from flask_login import current_user, login_required
 
 from app.core.address import load_address_selection_token
-from app.core.decorators import permission_required
+from app.core.decorators import request_or_legacy_defect_permission_required
 from app.core.exceptions import NotFoundError, ValidationError
 from app.core.navigation import back_navigation
 from app.core.field_permissions import FieldPermissionService
@@ -26,6 +26,10 @@ from app.models.auth.constants import (
     PERM_DEFECTS_FILE_UPLOAD,
     PERM_DEFECTS_STATUS_CHANGE,
     PERM_DEFECTS_VIEW,
+    PERM_REQUESTS_CREATE,
+    PERM_REQUESTS_DELETE,
+    PERM_REQUESTS_EDIT,
+    PERM_REQUESTS_VIEW,
 )
 from app.models.communication.comment import Comment
 from app.models.enums import EntityType
@@ -122,7 +126,7 @@ def _prepare_filter(form: DefectFilterForm) -> None:
 
 @defects_bp.route("/")
 @login_required
-@permission_required(PERM_DEFECTS_VIEW)
+@request_or_legacy_defect_permission_required(PERM_REQUESTS_VIEW, PERM_DEFECTS_VIEW)
 def index():
     filter_form = DefectFilterForm(request.args)
     _prepare_filter(filter_form)
@@ -136,7 +140,7 @@ def index():
 
 @defects_bp.route("/table")
 @login_required
-@permission_required(PERM_DEFECTS_VIEW)
+@request_or_legacy_defect_permission_required(PERM_REQUESTS_VIEW, PERM_DEFECTS_VIEW)
 def table():
     filters = DefectFilter(
         q=request.args.get("q", ""),
@@ -166,14 +170,14 @@ def table():
 
 @defects_bp.route("/map.json")
 @login_required
-@permission_required(PERM_DEFECTS_VIEW)
+@request_or_legacy_defect_permission_required(PERM_REQUESTS_VIEW, PERM_DEFECTS_VIEW)
 def map_json():
     return jsonify({"points": DefectRepository.map_points(), "remaining": 0})
 
 
 @defects_bp.route("/new", methods=["GET", "POST"])
 @login_required
-@permission_required(PERM_DEFECTS_CREATE)
+@request_or_legacy_defect_permission_required(PERM_REQUESTS_CREATE, PERM_DEFECTS_CREATE)
 def create():
     form = DefectForm()
     _prepare_form(form)
@@ -199,7 +203,7 @@ def create():
 
 @defects_bp.route("/<uuid:defect_id>")
 @login_required
-@permission_required(PERM_DEFECTS_VIEW)
+@request_or_legacy_defect_permission_required(PERM_REQUESTS_VIEW, PERM_DEFECTS_VIEW)
 def detail(defect_id: uuid.UUID):
     item = DefectRepository.get_by_id(defect_id)
     if item is None:
@@ -240,7 +244,7 @@ def detail(defect_id: uuid.UUID):
 
 @defects_bp.route("/<uuid:defect_id>/edit", methods=["GET", "POST"])
 @login_required
-@permission_required(PERM_DEFECTS_EDIT)
+@request_or_legacy_defect_permission_required(PERM_REQUESTS_EDIT, PERM_DEFECTS_EDIT)
 def edit(defect_id: uuid.UUID):
     item = DefectRepository.get_by_id(defect_id)
     if item is None:
@@ -261,7 +265,7 @@ def edit(defect_id: uuid.UUID):
             if (
                 requested_status
                 and requested_status != previous_status
-                and current_user.has_permission(PERM_DEFECTS_STATUS_CHANGE)
+                and current_user.has_any_permission(PERM_REQUESTS_EDIT, PERM_DEFECTS_STATUS_CHANGE)
                 and current_user.can_edit_field("defects", "status_id")
             ):
                 DefectService.change_status(
@@ -287,7 +291,7 @@ def edit(defect_id: uuid.UUID):
 
 @defects_bp.route("/<uuid:defect_id>/delete", methods=["POST"])
 @login_required
-@permission_required(PERM_DEFECTS_DELETE)
+@request_or_legacy_defect_permission_required(PERM_REQUESTS_DELETE, PERM_DEFECTS_DELETE)
 def delete(defect_id: uuid.UUID):
     item = DefectRepository.get_by_id(defect_id)
     if item is None:
@@ -302,7 +306,7 @@ def delete(defect_id: uuid.UUID):
 
 @defects_bp.route("/<uuid:defect_id>/status", methods=["POST"])
 @login_required
-@permission_required(PERM_DEFECTS_STATUS_CHANGE)
+@request_or_legacy_defect_permission_required(PERM_REQUESTS_EDIT, PERM_DEFECTS_STATUS_CHANGE)
 def change_status(defect_id: uuid.UUID):
     item = DefectRepository.get_by_id(defect_id)
     if item is None:
@@ -332,7 +336,7 @@ def change_status(defect_id: uuid.UUID):
 
 @defects_bp.route("/<uuid:defect_id>/comment", methods=["POST"])
 @login_required
-@permission_required(PERM_DEFECTS_EDIT)
+@request_or_legacy_defect_permission_required(PERM_REQUESTS_EDIT, PERM_DEFECTS_EDIT)
 def add_comment(defect_id: uuid.UUID):
     item = DefectRepository.get_by_id(defect_id)
     if item is None:
@@ -347,7 +351,7 @@ def add_comment(defect_id: uuid.UUID):
 
 @defects_bp.route("/<uuid:defect_id>/attachment", methods=["POST"])
 @login_required
-@permission_required(PERM_DEFECTS_FILE_UPLOAD)
+@request_or_legacy_defect_permission_required(PERM_REQUESTS_EDIT, PERM_DEFECTS_FILE_UPLOAD)
 def add_attachment(defect_id: uuid.UUID):
     item = DefectRepository.get_by_id(defect_id)
     if item is None:
@@ -365,7 +369,7 @@ def add_attachment(defect_id: uuid.UUID):
 
 @defects_bp.route("/<uuid:defect_id>/attachment/<uuid:attachment_id>/download")
 @login_required
-@permission_required(PERM_DEFECTS_VIEW)
+@request_or_legacy_defect_permission_required(PERM_REQUESTS_VIEW, PERM_DEFECTS_VIEW)
 def download_attachment(defect_id: uuid.UUID, attachment_id: uuid.UUID):
     item = DefectRepository.get_by_id(defect_id)
     attachment = db.session.get(Attachment, attachment_id)
@@ -378,7 +382,7 @@ def download_attachment(defect_id: uuid.UUID, attachment_id: uuid.UUID):
 
 @defects_bp.route("/<uuid:defect_id>/attachment/<uuid:attachment_id>/delete", methods=["POST"])
 @login_required
-@permission_required(PERM_DEFECTS_FILE_DELETE)
+@request_or_legacy_defect_permission_required(PERM_REQUESTS_EDIT, PERM_DEFECTS_FILE_DELETE)
 def delete_attachment(defect_id: uuid.UUID, attachment_id: uuid.UUID):
     item = DefectRepository.get_by_id(defect_id)
     attachment = db.session.get(Attachment, attachment_id)
@@ -395,14 +399,14 @@ def delete_attachment(defect_id: uuid.UUID, attachment_id: uuid.UUID):
 
 @defects_bp.route("/<uuid:defect_id>/coords", methods=["GET", "POST"])
 @login_required
-@permission_required(PERM_DEFECTS_VIEW)
+@request_or_legacy_defect_permission_required(PERM_REQUESTS_VIEW, PERM_DEFECTS_VIEW)
 def ensure_coords(defect_id: uuid.UUID):
     item = DefectRepository.get_by_id(defect_id)
     if item is None:
         return jsonify({"success": False, "message": "Не найден"}), 404
     if item.latitude is not None and item.longitude is not None:
         return jsonify({"success": True, "latitude": float(item.latitude), "longitude": float(item.longitude), "address": item.address})
-    persist = current_user.has_permission(PERM_DEFECTS_EDIT)
+    persist = current_user.has_any_permission(PERM_REQUESTS_EDIT, PERM_DEFECTS_EDIT)
     dummy = type("P", (), {})()
     dummy.address = item.address
     dummy.normalized_address = item.normalized_address

@@ -691,6 +691,43 @@ def _register_cli_commands(app: Flask) -> None:
             db.session.commit()
         click.echo(f"Готово: обновлено {changed}, без изменений/пропуск {skipped}, всего {len(rows)}.")
 
+    @app.cli.command("repair-work-coordinates")
+    @click.option("--entity", type=click.Choice(["requests", "defects", "all"]), default="all", show_default=True)
+    @click.option("--only-missing", is_flag=True, help="Обрабатывать только записи без пары координат")
+    @click.option("--dry-run", is_flag=True, help="Проверить без записи в БД")
+    @click.option("--limit", default=0, show_default=True, help="Максимум записей каждого типа (0 = все)")
+    def repair_work_coordinates(entity: str, only_missing: bool, dry_run: bool, limit: int):
+        """Безопасно дополнить координаты заявок и дефектов по сохранённому адресу."""
+        from app.models.defects.defect import Defect
+        from app.models.requests.request import Request
+        from app.modules.requests.services import RequestService
+
+        models = []
+        if entity in {"requests", "all"}:
+            models.append(("request", Request))
+        if entity in {"defects", "all"}:
+            models.append(("defect", Defect))
+        updated = skipped = 0
+        for label, model in models:
+            stmt = db.select(model).where(model.active_filter()).order_by(model.created_at.desc())
+            if only_missing:
+                stmt = stmt.where((model.latitude.is_(None)) | (model.longitude.is_(None)))
+            if limit > 0:
+                stmt = stmt.limit(limit)
+            for item in db.session.scalars(stmt):
+                query = (item.normalized_address or item.address or "").strip()
+                coords = RequestService._geocode_latlng(query)
+                if not coords:
+                    skipped += 1
+                    continue
+                if not dry_run:
+                    item.latitude, item.longitude = coords
+                updated += 1
+            if not dry_run:
+                db.session.commit()
+            click.echo(f"{label}: обновлено {updated}, пропущено {skipped}")
+        click.echo("Проверка завершена." if dry_run else "Координаты сохранены.")
+
     @app.cli.command("init-db")
     def init_db():
         """Создаёт схему (SQLite: create_all) и заполняет справочники + админа."""

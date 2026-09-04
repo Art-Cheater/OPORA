@@ -130,6 +130,7 @@ class EntityType(str, Enum):
   DEFECT = "defect"
   WAYBILL = "waybill"
   WORK_PLAN = "work_plan"
+  WORK_PLAN_ITEM = "work_plan_item"
   WORK_OBJECT = "work_object"
   PROJECT = "project"
   TENDER_APPLICATION = "tender_application"

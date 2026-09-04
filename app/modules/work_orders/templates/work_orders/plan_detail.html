@@ -97,6 +97,7 @@
             {% if item.description %}<p class="plan-work__desc">{{ item.description }}</p>{% endif %}
             {% if item.complete_comment %}<p class="plan-work__note">Комментарий: {{ item.complete_comment }}</p>{% endif %}
             {% if item.exclude_reason_label %}<p class="plan-work__note">Причина исключения: {{ item.exclude_reason_label }}{% if item.exclude_comment %}. Комментарий: {{ item.exclude_comment }}{% endif %}{% if item.excluded_by %}. Исключил: {{ item.excluded_by }}{% endif %}{% if item.excluded_at %} · {{ item.excluded_at }}{% endif %}</p>{% endif %}
+            {% if item.exclusion_files %}<p class="plan-work__note">Файлы: {% for file in item.exclusion_files %}<a href="{{ file.url }}" target="_blank" rel="noopener">{{ file.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
             {% if item.photos %}
             <div class="desk-photos">
                 {% for photo in item.photos %}
@@ -181,6 +182,9 @@
             </select>
         </label>
         <textarea id="deskExcludeComment" rows="3" placeholder="Комментарий"></textarea>
+        <label class="desk-modal__files">Файлы (необязательно)
+            <input id="deskExcludeFiles" type="file" multiple>
+        </label>
         <div class="desk-modal__actions">
             <button type="button" class="desk-btn" data-close-modal>Отмена</button>
             <button type="button" class="desk-btn desk-btn--danger" id="deskExcludeSubmit">Исключить</button>

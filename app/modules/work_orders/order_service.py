@@ -86,8 +86,13 @@ def build_order_workbook(plan: dict, fields: dict[str, str]) -> bytes:
     for index, item in enumerate(plan["items"]):
         row = work_rows[index]
         sheet.cell(row, 1).value = index + 1
-        sheet.cell(row, 2).value = excel_text(item.get("pp") or "")
-        sheet.cell(row, 3).value = excel_text(item.get("address") or "")
+        # Колонка «номера» в утверждённом бланке — видимый номер работы,
+        # а не ПП. ПП остаётся рядом с адресом и не теряется.
+        sheet.cell(row, 2).value = excel_text(item.get("number") or "")
+        address = item.get("address") or ""
+        pp = item.get("pp") or ""
+        pp_label = pp if pp.casefold().startswith("пп") else f"ПП {pp}"
+        sheet.cell(row, 3).value = excel_text(f"{pp_label} — {address}" if pp else address)
         sheet.cell(row, 4).value = excel_text(item.get("description") or "")
         for col in range(1, 8):
             cell = sheet.cell(row, col)

@@ -8,7 +8,10 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from xml.sax.saxutils import escape
 
 from app.models.base import as_utc_aware, format_local_dt
+from app.models.enums import EntityType
+from app.models.files.attachment import Attachment
 from app.models.work_plans.work_plan import WorkPlan
+from app.extensions import db
 
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -109,6 +112,17 @@ def build_work_plan_report(plan: WorkPlan) -> bytes:
         for item in excluded:
             reason = item.exclude_comment or item.exclude_reason or "причина не указана"
             body.append(_paragraph(f"• {item.number_snapshot}: {reason}."))
+            names = list(
+                db.session.scalars(
+                    db.select(Attachment.file_name).where(
+                        Attachment.entity_type == EntityType.WORK_PLAN_ITEM.value,
+                        Attachment.entity_id == item.id,
+                        Attachment.active_filter(),
+                    )
+                )
+            )
+            if names:
+                body.append(_paragraph(f"  Приложенные файлы: {', '.join(names)}."))
 
     document_xml = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'

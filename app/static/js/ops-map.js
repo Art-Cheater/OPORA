@@ -159,6 +159,7 @@ window.OporaOpsMap = {
     }
 
     function markerColor(point) {
+      if (point.in_plan) return "#198754";
       return COLORS[point.type] || COLORS.request;
     }
 
@@ -243,7 +244,7 @@ window.OporaOpsMap = {
         .catch(() => setStatus("Не удалось загрузить карту."));
     };
 
-    this.setRoute = function setRoute(points) {
+    this.setRoute = function setRoute(points, geometry) {
       if (!self._routeLayer || self._map !== map) return 0;
       self._routeLayer.clearLayers();
       const line = [];
@@ -262,9 +263,9 @@ window.OporaOpsMap = {
           }),
         }).addTo(self._routeLayer);
       });
-      if (line.length > 1) {
-        L.polyline(line, { color: COLORS.route, weight: 4, opacity: 0.9 }).addTo(self._routeLayer);
-        map.fitBounds(line, { padding: [36, 36], maxZoom: 16 });
+      if (Array.isArray(geometry) && geometry.length > 1) {
+        L.polyline(geometry, { color: COLORS.route, weight: 4, opacity: 0.9 }).addTo(self._routeLayer);
+        map.fitBounds(geometry, { padding: [36, 36], maxZoom: 16 });
       } else if (line.length === 1) {
         map.setView(line[0], 16);
       }

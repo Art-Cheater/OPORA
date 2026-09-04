@@ -45,3 +45,26 @@ class RoutingService:
         while len(cls._cache) > current_app.config["ROUTING_CACHE_MAX_SIZE"]:
             cls._cache.popitem(last=False)
         return result
+
+    @classmethod
+    def route(cls, points: list[tuple[float, float]]) -> dict | None:
+        """Дорожный маршрут в порядке мастера, без подмены прямыми линиями."""
+        if len(points) < 2:
+            return {"geometry": [[lat, lng] for lat, lng in points], "distance_m": 0}
+        base = (current_app.config.get("ROUTING_BASE_URL") or "").rstrip("/")
+        if not base:
+            return None
+        coords = ";".join(f"{lng},{lat}" for lat, lng in points)
+        url = f"{base}/route/v1/driving/{coords}?" + urlencode({"overview": "full", "geometries": "geojson"})
+        for _ in range(max(1, current_app.config["ROUTING_RETRIES"] + 1)):
+            try:
+                req = Request(url, headers={"User-Agent": "OPORA-routing/1.0", "Accept": "application/json"})
+                with urlopen(req, timeout=current_app.config["ROUTING_TIMEOUT_SECONDS"]) as response:  # nosec B310
+                    route = json.loads(response.read().decode("utf-8")).get("routes", [])[0]
+                coords_out = route.get("geometry", {}).get("coordinates", [])
+                if not coords_out:
+                    return None
+                return {"geometry": [[lat, lng] for lng, lat in coords_out], "distance_m": int(round(float(route.get("distance") or 0)))}
+            except Exception:
+                continue
+        return None

@@ -54,6 +54,7 @@ window.OporaWorkPlanDetail = {
         <p class="plan-work__meta">${item.pp ? `ПП ${escapeHtml(item.pp)}` : "ПП не указан"}${item.status ? ` · ${escapeHtml(item.status)}` : ""}</p>
         ${item.description ? `<p class="plan-work__desc">${escapeHtml(item.description)}</p>` : ""}
         ${item.exclude_reason_label ? `<p class="plan-work__note">Причина исключения: ${escapeHtml(item.exclude_reason_label)}${item.exclude_comment ? `. Комментарий: ${escapeHtml(item.exclude_comment)}` : ""}${item.excluded_by ? `. Исключил: ${escapeHtml(item.excluded_by)}` : ""}${item.excluded_at ? ` · ${escapeHtml(item.excluded_at)}` : ""}</p>` : ""}
+        ${(item.exclusion_files || []).length ? `<p class="plan-work__note">Файлы: ${(item.exclusion_files || []).map((file) => `<a href="${escapeHtml(file.url)}" target="_blank" rel="noopener">${escapeHtml(file.name)}</a>`).join(", ")}</p>` : ""}
         ${actions}</article>`;
     }
 
@@ -295,13 +296,14 @@ window.OporaWorkPlanDetail = {
 
     document.getElementById("deskExcludeSubmit")?.addEventListener("click", () => {
       if (!pendingId) return;
+      const data = new FormData();
+      data.append("reason", document.getElementById("deskExcludeReason").value);
+      data.append("comment", document.getElementById("deskExcludeComment").value);
+      Array.from(document.getElementById("deskExcludeFiles")?.files || []).forEach((file) => data.append("files", file));
       fetch(withItem(root.dataset.excludeUrl, pendingId), {
         method: "POST",
-        headers: headers(true),
-        body: JSON.stringify({
-          reason: document.getElementById("deskExcludeReason").value,
-          comment: document.getElementById("deskExcludeComment").value,
-        }),
+        headers: headers(),
+        body: data,
       })
         .then((res) => res.json())
         .then((body) => {

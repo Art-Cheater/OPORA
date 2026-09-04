@@ -122,7 +122,8 @@ def test_nearby_priority_and_does_not_change_status(app):
         assert ("request", str(same_addr.id)) in by_id
         assert by_id[("request", str(same_addr.id))].priority == PRIORITY_ADDRESS
         assert by_id[("request", str(same_street.id))].priority == PRIORITY_STREET
-        assert by_id[("request", str(same_district.id))].priority == PRIORITY_DISTRICT
+        # Район без координат не является достаточным критерием nearby.
+        assert ("request", str(same_district.id)) not in by_id
         assert ("defect", str(geo.id)) in by_id
         assert by_id[("defect", str(geo.id))].priority == PRIORITY_GEO
         assert ("request", str(closed.id)) not in by_id

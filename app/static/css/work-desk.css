@@ -39,6 +39,9 @@ body:has(#workDesk) .app-footer { flex-shrink: 0; }
   color: #fff;
 }
 .desk-btn--accent:hover { background: var(--opora-primary-hover); color: #fff; }
+.workbench-nearby-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: .35rem; flex-shrink: 0; }
+.workbench-distance-badge { background: #0d6efd; color: #fff; border-radius: 999px; padding: .28rem .55rem; font-size: .78rem; font-weight: 800; white-space: nowrap; }
+.workbench-nearby-badge { background: var(--opora-accent-light); color: var(--opora-text); border: 1px solid var(--opora-border); border-radius: 999px; padding: .28rem .55rem; font-size: .75rem; font-weight: 700; white-space: nowrap; }
 .desk__toolbar {
   display: flex;
   flex-direction: column;

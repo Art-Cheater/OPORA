@@ -168,12 +168,13 @@ window.OporaWorkPlanNew = {
           relatedBox.innerHTML = rows
             .map((row) => {
               const already = hasItem(row.entity_type, row.entity_id);
+              const distance = row.distance_m ? (row.distance_m >= 1000 ? `${(row.distance_m / 1000).toFixed(1).replace('.', ',')} км` : `${row.distance_m} м`) : "";
               return `<article class="plan-row">
                 <div>
                   <strong>${row.entity_type === "defect" ? "" : "№ "}${escapeHtml(row.number)}</strong>
-              <small>${escapeHtml(row.type_label || (row.entity_type === "defect" ? "Дефект" : "Заявка"))} · ${escapeHtml(row.address || "")}</small><small>${row.nearby_reason ? `${escapeHtml(row.nearby_reason)}${row.distance_m ? " · " : ""}` : ""}${row.distance_m ? `До выбранной работы: ${row.distance_m >= 1000 ? `${(row.distance_m / 1000).toFixed(1).replace('.', ',')} км` : `${row.distance_m} м`}` : ""}</small>
+              <small>${escapeHtml(row.type_label || (row.entity_type === "defect" ? "Дефект" : "Заявка"))} · ${escapeHtml(row.address || "")}${row.pp ? ` · ПП ${escapeHtml(row.pp)}` : ""}</small>
                 </div>
-                ${already ? '<button type="button" disabled>В плане</button>' : `<button type="button" class="js-add" data-type="${escapeHtml(row.entity_type)}" data-id="${escapeHtml(row.entity_id)}" data-number="${escapeHtml(row.number)}" data-address="${escapeHtml(row.address || "")}" data-pp="${escapeHtml(row.pp || "")}" data-lat="${escapeHtml(row.lat ?? "")}" data-lng="${escapeHtml(row.lng ?? "")}" data-label="${escapeHtml(row.type_label)}">Добавить</button>`}
+                <div class="plan-nearby-actions">${row.nearby_reason && row.nearby_reason !== "Тот же район" ? `<span class="plan-nearby-badge">${escapeHtml(row.nearby_reason)}</span>` : ""}${distance ? `<span class="plan-distance-badge" title="${row.nearby_reason?.includes("≈") ? "Приблизительное расстояние по прямой" : "Расстояние до выбранной работы"}">${distance}</span>` : ""}${already ? '<button type="button" disabled>В плане</button>' : `<button type="button" class="js-add" data-type="${escapeHtml(row.entity_type)}" data-id="${escapeHtml(row.entity_id)}" data-number="${escapeHtml(row.number)}" data-address="${escapeHtml(row.address || "")}" data-pp="${escapeHtml(row.pp || "")}" data-lat="${escapeHtml(row.lat ?? "")}" data-lng="${escapeHtml(row.lng ?? "")}" data-label="${escapeHtml(row.type_label)}">Добавить</button>`}</div>
               </article>`;
             })
             .join("");

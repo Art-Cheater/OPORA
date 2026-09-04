@@ -94,7 +94,7 @@ def test_work_orders_access(client):
     html = page.get_data(as_text=True)
     assert "Работа с заявками" in html or "Работа по заявкам" in html
     assert 'id="workOrderRoot"' in html
-    assert "Доступные работы" in html
+    assert "Выберите точку на карте" in html
     assert "Мой план работ" in html
     assert "Номер ПП" in html
     assert "Тип работы" in html
@@ -117,8 +117,8 @@ def test_order_blank_is_filled_from_the_real_template():
     content = build_order_workbook(
         {
             "items": [
-                {"pp": "ПП-12", "address": "ул. Лепсе, 12", "description": "Не горит светильник"},
-                {"pp": "", "address": "ул. Лепсе, 15", "description": "Обрыв провода"},
+                {"number": "25-215", "pp": "ПП-12", "address": "ул. Лепсе, 12", "description": "Не горит светильник"},
+                {"number": "DF-25", "pp": "", "address": "ул. Лепсе, 15", "description": "Обрыв провода"},
             ]
         },
         {
@@ -132,7 +132,8 @@ def test_order_blank_is_filled_from_the_real_template():
     sheet = load_workbook(BytesIO(content), data_only=False)["табель"]
     assert sheet["D4"].value == "Бланк-распоряжение №7"
     assert sheet["D7"].value == "Иванов И.И."
-    assert sheet.cell(WORK_ROWS[0], 2).value == "ПП-12"
+    assert sheet.cell(WORK_ROWS[0], 2).value == "25-215"
+    assert sheet.cell(WORK_ROWS[0], 3).value == "ПП-12 — ул. Лепсе, 12"
     assert sheet.cell(WORK_ROWS[1], 3).value == "ул. Лепсе, 15"
 
 

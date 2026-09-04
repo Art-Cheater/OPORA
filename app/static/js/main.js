@@ -451,6 +451,13 @@ function initInstantNav(sidebar, closeSidebar) {
 
     let navToken = 0;
     let overlayTimer = 0;
+    const navDebug = document.documentElement.dataset.environment === "development" ||
+        window.location.hostname === "localhost";
+
+    function logNavigation(event, token, extra = "") {
+        if (!navDebug) return;
+        console.debug("[OporaNav]", event, { token, ...extra && { extra } });
+    }
 
     function cacheKey(href) {
         const url = new URL(href, window.location.href);
@@ -762,12 +769,16 @@ function initInstantNav(sidebar, closeSidebar) {
                 if (
                     !response.ok ||
                     (response.redirected && /\/auth\/login/.test(finalUrl)) ||
-                    !isHtmlNavResponse(response)
+                    !isHtmlNavResponse(response) ||
+                    response.headers.get("X-Opora-Partial") !== "1"
                 ) {
                     return null;
                 }
                 const html = await response.text();
-                if (!html.includes("app-content")) return null;
+                // Never inject a full document (for example after a redirect) into
+                // the existing shell. The server contract for X-Opora-Nav is a
+                // partial containing exactly the application content.
+                if (!html.includes("app-content") || /<html[\s>]/i.test(html)) return null;
                 cacheSet(href, html);
                 return html;
             })
@@ -889,6 +900,7 @@ function initInstantNav(sidebar, closeSidebar) {
 
     async function navigateTo(href, label, { push = true } = {}) {
         const token = ++navToken;
+        logNavigation("start", token, href);
         markSidebar(href);
         closeSidebar();
 
@@ -899,15 +911,20 @@ function initInstantNav(sidebar, closeSidebar) {
         const cached = spec || skipCache ? null : cacheGet(href);
 
         if (cached) {
-            hideLoading();
-            if (push) history.pushState({ oporaNav: true }, "", href);
-            const ok = await applyHtml(cached, token);
-            if (token !== navToken) return;
-            if (!ok) {
-                window.location.href = href;
-                return;
+            try {
+                hideLoading();
+                if (push) history.pushState({ oporaNav: true }, "", href);
+                const ok = await applyHtml(cached, token);
+                if (token !== navToken) return;
+                if (!ok) {
+                    window.location.href = href;
+                    return;
+                }
+                logNavigation("boot complete", token);
+                emitNavigated(href);
+            } finally {
+                if (token === navToken) hideLoading();
             }
-            emitNavigated(href);
             return;
         }
 
@@ -923,7 +940,12 @@ function initInstantNav(sidebar, closeSidebar) {
                 if (!mergeListChrome(html)) {
                     await applyHtml(html, token);
                 }
+                logNavigation("boot complete", token);
                 emitNavigated(href);
+            }).catch(() => {
+                // The shell is already usable; a failed chrome refresh must not
+                // leave an invisible navigation lock behind.
+                if (token === navToken) hideLoading();
             });
             return;
         }
@@ -933,22 +955,32 @@ function initInstantNav(sidebar, closeSidebar) {
             const html = await loadPageHtml(href);
             if (token !== navToken) return;
             if (!html) {
+                logNavigation("malformed partial", token, href);
                 window.location.href = href;
                 return;
             }
+            logNavigation("partial received", token);
             if (push) history.pushState({ oporaNav: true }, "", href);
             const ok = await applyHtml(html, token);
             if (token !== navToken) return;
             if (!ok) {
+                logNavigation("DOM apply failed", token, href);
                 window.location.href = href;
                 return;
             }
-            hideLoading();
+            logNavigation("boot complete", token);
             emitNavigated(href);
         } catch (err) {
             if (token !== navToken) return;
-            hideLoading();
+            logNavigation("error", token, String(err));
             window.location.href = href;
+        } finally {
+            // Every navigation branch (including stale requests, asset failures
+            // and malformed partials) must release the current shell loader.
+            if (token === navToken) {
+                hideLoading();
+                logNavigation("finish", token);
+            }
         }
     }
 

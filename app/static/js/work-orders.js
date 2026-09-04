@@ -127,12 +127,13 @@ window.OporaWorkOrders = {
           const already = inPlan(type, id);
           const dist = item.distance_m ? (item.distance_m >= 1000 ? `${(item.distance_m / 1000).toFixed(1).replace('.', ',')} км` : `${item.distance_m} м`) : "";
           const reason = item.nearby_reason || "";
+          const badges = `${reason ? `<span class="workbench-nearby-badge">${escapeHtml(reason)}</span>` : ""}${dist ? `<span class="workbench-distance-badge" title="${reason.includes("≈") ? "Приблизительное расстояние по прямой" : "Расстояние до выбранной работы"}">${escapeHtml(dist)}</span>` : ""}`;
           return `<article class="workbench-hit">
             <div class="workbench-hit__body">
               <strong>${typeDot(type)} ${typeLabel(type, item.number)}</strong>
-              <small>${escapeHtml(item.address || "")}</small><small>${reason ? `${escapeHtml(reason)}${dist ? " · " : ""}` : ""}${dist ? `До выбранной работы: ${escapeHtml(dist)}` : ""}</small>
+              <small>${escapeHtml(item.address || "")}</small>
             </div>
-            ${addButton(type, id, already)}
+            <div class="workbench-nearby-actions">${badges}${addButton(type, id, already)}</div>
           </article>`;
         })
         .join("");
@@ -306,10 +307,10 @@ window.OporaWorkOrders = {
         .then((res) => res.json())
         .then((data) => {
           window.OporaOpsMap?.init?.();
-          const count = window.OporaOpsMap?.setRoute?.(data.points || []) || 0;
+          const count = window.OporaOpsMap?.setRoute?.(data.points || [], data.route?.geometry || null) || 0;
           const missing = Number(data.missing || 0);
-          if (!count) {
-            toast("Маршрут не построен: у выбранных работ пока нет координат.", false);
+          if (count < 2 || !data.route?.geometry?.length) {
+            toast(count < 2 ? "Маршрут не построен: у выбранных работ пока нет координат." : "Не удалось построить дорожный маршрут. Проверьте подключение сервиса маршрутизации.", false);
           } else if (count === 1) {
             toast(missing ? "Показана одна точка. У остальных работ пока нет координат." : "Показана точка выбранной работы.");
           } else {

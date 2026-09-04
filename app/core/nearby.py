@@ -161,9 +161,12 @@ class NearbySearchService:
             reason = "Тот же ПП" if same_pp else ""
             direct = haversine_m(origin_lat, origin_lng, lat, lng) if origin_lat is not None and origin_lng is not None and lat is not None and lng is not None else None
             if direct is None:
-                # Сильная текстовая связь полезна и без координат; расстояние не выдумываем.
+                # Район сам по себе не означает близость. Без координат оставляем
+                # только строго тот же ПП либо сильное совпадение адреса/улицы.
+                if not same_pp and int(row.priority) not in {PRIORITY_ADDRESS, PRIORITY_STREET}:
+                    continue
                 if not reason:
-                    reason = {PRIORITY_ADDRESS: "Тот же адрес", PRIORITY_STREET: "Та же улица", PRIORITY_DISTRICT: "Тот же район"}.get(int(row.priority), "Без координат")
+                    reason = {PRIORITY_ADDRESS: "Тот же адрес", PRIORITY_STREET: "Та же улица"}.get(int(row.priority), "Без координат")
             elif direct > preliminary_limit and not same_pp:
                 continue
             elif routed < candidate_limit:
