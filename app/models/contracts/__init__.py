@@ -5,6 +5,7 @@ from app.models.contracts.contract_contractor import ContractContractor
 from app.models.contracts.contract_document import ContractDocument
 from app.models.contracts.contract_history import ContractHistory
 from app.models.contracts.contract_object import ContractObject
+from app.models.contracts.contract_project import ContractProject
 
 __all__ = [
     "Contract",
@@ -12,4 +13,5 @@ __all__ = [
     "ContractDocument",
     "ContractHistory",
     "ContractObject",
+    "ContractProject",
 ]

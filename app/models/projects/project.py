@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from app.models.projects.project_member import ProjectMember
     from app.models.requests.request import Request
     from app.models.contracts.contract import Contract
+    from app.models.contracts.contract_project import ContractProject
     from app.models.work_objects.work_object import WorkObject
 
 
@@ -103,6 +104,10 @@ class Project(ActiveRecordMixin, BaseModel):
         "Contract",
         back_populates="project",
         lazy="select",
+    )
+    contract_links: Mapped[list[ContractProject]] = relationship(
+        "ContractProject", back_populates="project",
+        foreign_keys="ContractProject.project_id", lazy="select",
     )
     history: Mapped[list[ProjectHistory]] = relationship(
         "ProjectHistory",

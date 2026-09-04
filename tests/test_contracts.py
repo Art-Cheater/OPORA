@@ -12,7 +12,9 @@ from app.models.audit.audit_log import AuditLog
 from app.models.communication.comment import Comment
 from app.models.contracts.contract import Contract
 from app.models.contracts.contract_history import ContractHistory
+from app.models.projects.project import Project
 from app.models.enums import EntityType
+from app.modules.contracts.services import ContractService
 
 
 AJAX_HEADERS = {"X-Requested-With": "XMLHttpRequest"}
@@ -87,6 +89,24 @@ def test_contract_create_edit_serializes_audit_and_history(app, admin_client):
             )
         ).all()
         assert any(item.new_values and item.new_values.get("amount") == "1234.56" for item in audits)
+
+
+def test_contract_can_link_and_unlink_multiple_projects(app, admin_client):
+    contract_id = _create_contract(admin_client)
+    with app.app_context():
+        contract = db.session.get(Contract, uuid.UUID(contract_id))
+        user_id = contract.created_by
+        first = Project(code=f"PRJ-M2M-{uuid.uuid4().hex[:6]}", name="Первый проект", created_by=user_id, updated_by=user_id)
+        second = Project(code=f"PRJ-M2M-{uuid.uuid4().hex[:6]}", name="Второй проект", created_by=user_id, updated_by=user_id)
+        db.session.add_all([first, second])
+        db.session.commit()
+        ContractService.link_project(contract, first, user_id)
+        ContractService.link_project(contract, second, user_id)
+        db.session.refresh(contract)
+        assert {project.id for project in contract.projects} == {first.id, second.id}
+        ContractService.unlink_project(contract, first, user_id)
+        db.session.refresh(contract)
+        assert [project.id for project in contract.projects] == [second.id]
 
 
 @pytest.mark.parametrize(

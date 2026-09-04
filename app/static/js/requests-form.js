@@ -71,6 +71,7 @@
   }
 
   let checkTimer = null;
+  let lifecycleController = null;
   async function checkAddress(form) {
     const input = addressInput(form);
     if (!input) return null;
@@ -420,10 +421,17 @@
     init,
     handleCreateSubmit,
     checkAddress,
+    destroy() {
+      clearTimeout(checkTimer);
+      lifecycleController?.abort();
+      lifecycleController = null;
+    },
   };
 
   document.addEventListener("DOMContentLoaded", boot);
   if (document.readyState !== "loading") boot();
+  window.addEventListener("opora:navigated", boot);
+  window.addEventListener("opora:before-navigate", () => window.OporaRequestsForm.destroy());
 
   function boot() {
     document.querySelectorAll("[data-requests-form]").forEach(init);

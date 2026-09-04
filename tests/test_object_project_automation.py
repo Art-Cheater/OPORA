@@ -255,6 +255,36 @@ def test_accepted_result_does_not_create_contract_draft(app):
         assert _projects_for(obj) == []
 
 
+def test_in_contract_price_edit_keeps_lifecycle_and_does_not_restart_automation(app, monkeypatch):
+    """Регрессия: изменение цены не должно заново создавать procurement chain."""
+    with app.app_context():
+        user_id = _admin_id()
+        payload = _payload("ул. Цена контракта, 11", "Работы ведутся")
+        payload.contract_number = "К-PRICE-11"
+        payload.contractor_name = "ООО Свет"
+        obj = ObjectService.create(payload, user_id)
+        assert obj.status == WorkObjectStatus.IN_CONTRACT.value
+        project = _projects_for(obj)[0]
+        project.status = ProjectStatus.IN_CONTRACT.value
+        db.session.commit()
+
+        calls = []
+        monkeypatch.setattr(
+            ObjectService,
+            "_ensure_project_for_result",
+            classmethod(lambda cls, *_args: calls.append(True)),
+        )
+        payload.contract_amount = 123456
+        ObjectService.update(obj, payload, user_id)
+        db.session.refresh(obj)
+        db.session.refresh(project)
+
+        assert obj.contract_amount == 123456
+        assert obj.status == WorkObjectStatus.IN_CONTRACT.value
+        assert project.status == ProjectStatus.IN_CONTRACT.value
+        assert calls == []
+
+
 def test_object_kind_other_comment_roundtrip(app):
     with app.app_context():
         user_id = _admin_id()

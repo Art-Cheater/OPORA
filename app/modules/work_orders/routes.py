@@ -33,7 +33,7 @@ from app.modules.waybills.services import WaybillService
 from app.modules.work_orders.blueprint import work_orders_bp
 from app.modules.work_orders.plan_service import EXCLUDE_REASONS, PLAN_COMPLETED, WorkPlanService
 from app.modules.work_orders.report_service import DOCX_MIME, build_work_plan_report, report_filename
-from app.modules.work_orders.order_service import XLSX_MIME, build_order_workbook, order_filename
+from app.modules.work_orders.order_service import XLSX_MIME, build_order_workbook, master_initials, order_filename
 from app.modules.work_orders.services import WorkOrderFilter, WorkOrderService
 
 
@@ -354,6 +354,7 @@ def plan_page(plan_id: uuid.UUID):
         can_manage_plans=current_user.has_permission(PERM_WAYBILLS_EDIT) and payload["status"] == "in_progress",
         can_create_order=current_user.has_permission(PERM_WAYBILLS_EDIT) and payload["status"] in {"in_progress", "completed"},
         can_use_report=can_use_report,
+        master_initials=master_initials(current_user.full_name),
         report_recipients=report_recipients,
         districts=district_choices(empty_label="Все районы"),
     )
@@ -372,7 +373,7 @@ def download_plan_order(plan_id: uuid.UUID):
     if plan.status not in {"in_progress", PLAN_COMPLETED}:
         return ajax_error("Бланк доступен после формирования плана.", status=400)
     payload = WorkPlanService.serialize_plan(plan, current_user)
-    fields = {key: (request.form.get(key) or "") for key in ("order_number", "producer", "crew_count", "crew_lead", "crew_members", "lift_responsible")}
+    fields = {key: (request.form.get(key) or "") for key in ("order_number", "producer", "crew_count", "crew_lead", "crew_members", "lift_responsible", "issuer", "briefing_conductor")}
     try:
         content = build_order_workbook(payload, fields)
     except ValueError as exc:

@@ -1,9 +1,17 @@
 window.OporaWorkOrders = {
+  _abort: null,
+  destroy() {
+    this._abort?.abort();
+    this._abort = null;
+  },
   init() {
     const root = document.getElementById("workOrderRoot");
     if (!root) return;
     if (root.dataset.woInited === "1") return;
     root.dataset.woInited = "1";
+    this.destroy();
+    const abort = new AbortController();
+    this._abort = abort;
 
     const csrf = document.querySelector("meta[name='csrf-token']")?.content || "";
     const itemsBox = document.getElementById("workItems");
@@ -99,7 +107,7 @@ window.OporaWorkOrders = {
       if (!detailBox || !item) return;
       const type = item.type || item.entity_type;
       const id = item.id || item.entity_id;
-      detailBox.innerHTML = `<article class="workbench-hit workbench-hit--detail"><div class="workbench-hit__body"><strong>${typeDot(type)} ${typeLabel(type, item.number)}</strong><small>${escapeHtml(item.address || "Адрес не указан")}${item.pp ? ` · ПП ${escapeHtml(item.pp)}` : ""}</small>${item.description ? `<p>${escapeHtml(item.description)}</p>` : ""}</div><div class="workbench-detail__actions"><a class="btn btn-outline-secondary btn-sm" href="${escapeHtml(item.url || "#")}">Открыть</a>${addButton(type, id, item.in_plan || inPlan(type, id))}</div></article>`;
+      detailBox.innerHTML = `<article class="workbench-hit workbench-hit--detail"><div class="workbench-hit__body"><strong>${typeDot(type)} ${typeLabel(type, item.number)}</strong><small>${escapeHtml(item.address || "Адрес не указан")}</small><small>ПП: ${escapeHtml(item.pp || "не указан")} · Район: ${escapeHtml(item.district || "не указан")} · Статус: ${escapeHtml(item.status || "не указан")}</small>${item.description ? `<p>${escapeHtml(item.description)}</p>` : ""}</div><div class="workbench-detail__actions"><a class="btn btn-outline-secondary btn-sm" href="${escapeHtml(item.url || "#")}">Открыть ${type === "defect" ? "дефект" : "заявку"}</a>${addButton(type, id, item.in_plan || inPlan(type, id))}</div></article>`;
     }
 
     function renderNearby(hits, summary) {
@@ -122,7 +130,7 @@ window.OporaWorkOrders = {
           return `<article class="workbench-hit">
             <div class="workbench-hit__body">
               <strong>${typeDot(type)} ${typeLabel(type, item.number)}</strong>
-              <small>${escapeHtml(item.address || "")}${reason ? ` · ${escapeHtml(reason)}` : ""}${dist ? ` · ${escapeHtml(dist)}` : ""}</small>
+              <small>${escapeHtml(item.address || "")}</small><small>${reason ? `${escapeHtml(reason)}${dist ? " · " : ""}` : ""}${dist ? `До выбранной работы: ${escapeHtml(dist)}` : ""}</small>
             </div>
             ${addButton(type, id, already)}
           </article>`;
@@ -315,9 +323,9 @@ window.OporaWorkOrders = {
       const type = event.detail?.type;
       const id = event.detail?.id;
       if (type && id) addToPlan(type, id);
-    });
+    }, { signal: abort.signal });
 
-    root.addEventListener("opora:select-work", (event) => renderDetail(event.detail?.point));
+    root.addEventListener("opora:select-work", (event) => renderDetail(event.detail?.point), { signal: abort.signal });
     detailBox?.addEventListener("click", (event) => {
       const btn = event.target.closest(".js-add");
       if (btn && !btn.disabled) addToPlan(btn.dataset.type, btn.dataset.id);

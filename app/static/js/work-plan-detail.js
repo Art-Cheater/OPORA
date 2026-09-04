@@ -1,13 +1,19 @@
 window.OporaWorkPlanDetail = {
+  _abort: null,
+  destroy() { this._abort?.abort(); this._abort = null; },
   init() {
     const root = document.getElementById("planDetail");
     if (!root) return;
     if (root.dataset.planDetailInited === "1") return;
     root.dataset.planDetailInited = "1";
+    this.destroy();
+    this._abort = new AbortController();
 
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
     const planList = root.querySelector(".plan-detail-list");
     const addPanel = document.getElementById("planAddPanel");
+    // Существующие пункты всегда идут раньше кандидатов и в DOM, и на экране.
+    if (planList && addPanel) planList.after(addPanel);
     const addForm = document.getElementById("planAddSearch");
     const addResults = document.getElementById("planAddResults");
     const addRelatedWrap = document.getElementById("planAddRelatedWrap");
@@ -83,6 +89,7 @@ window.OporaWorkPlanDetail = {
 
     function applyPlan(plan) {
       if (!plan) return;
+      window.OporaNav?.invalidateRelated?.(["/work-orders", "/work-orders/plans"]);
       (plan.items || []).forEach((item) => {
         if (planList && !root.querySelector(`[data-item-id="${item.id}"]`)) {
           planList.insertAdjacentHTML("beforeend", workMarkup(item));

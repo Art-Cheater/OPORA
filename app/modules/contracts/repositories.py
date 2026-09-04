@@ -13,6 +13,7 @@ from app.extensions import db
 from app.models.auth.user import User
 from app.models.contracts.contract import Contract
 from app.models.contracts.contract_object import ContractObject
+from app.models.contracts.contract_project import ContractProject
 
 
 @dataclass
@@ -56,6 +57,7 @@ class ContractRepository:
             .where(Contract.id == contract_id, Contract.active_filter())
             .options(
                 selectinload(Contract.object_links).joinedload(ContractObject.work_object),
+                selectinload(Contract.project_links).joinedload(ContractProject.project),
                 selectinload(Contract.history),
                 selectinload(Contract.documents),
                 joinedload(Contract.responsible).options(

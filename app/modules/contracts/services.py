@@ -19,6 +19,7 @@ from app.models.contracts.contract import Contract
 from app.models.contracts.contract_document import ContractDocument
 from app.models.contracts.contract_history import ContractHistory
 from app.models.contracts.contract_object import ContractObject
+from app.models.contracts.contract_project import ContractProject
 from app.models.enums import (
     AuditAction,
     ContractDocumentType,
@@ -292,6 +293,21 @@ class ContractService:
             existing.updated_by = user_id
 
     @classmethod
+    def _ensure_project_link(cls, contract: Contract, project: Project, user_id: uuid.UUID) -> ContractProject:
+        link = db.session.scalar(db.select(ContractProject).where(
+            ContractProject.contract_id == contract.id, ContractProject.project_id == project.id
+        ))
+        if link is None:
+            link = ContractProject(contract_id=contract.id, project_id=project.id, created_by=user_id, updated_by=user_id)
+            db.session.add(link)
+        elif link.deleted_at is not None:
+            link.restore()
+            link.updated_by = user_id
+        if contract.project_id is None:
+            contract.project_id = project.id
+        return link
+
+    @classmethod
     def create_draft_from_plan(
         cls,
         obj: WorkObject,
@@ -315,6 +331,8 @@ class ContractService:
             cls._ensure_object_link(existing, obj, user_id)
             if project is not None and existing.project_id is None:
                 existing.project_id = project.id
+            if project is not None:
+                cls._ensure_project_link(existing, project, user_id)
             if tender is not None and existing.tender_application_id is None:
                 existing.tender_application_id = tender.id
             obj.status = WorkObjectStatus.IN_CONTRACT.value
@@ -353,6 +371,8 @@ class ContractService:
         db.session.add(contract)
         db.session.flush()
         cls._ensure_object_link(contract, obj, user_id)
+        if project is not None:
+            cls._ensure_project_link(contract, project, user_id)
         obj.status = WorkObjectStatus.IN_CONTRACT.value
         obj.updated_by = user_id
         if project is not None:
@@ -425,6 +445,7 @@ class ContractService:
         db.session.flush()
 
         for project in projects:
+            cls._ensure_project_link(contract, project, user_id)
             if project.object_id:
                 db.session.add(
                     ContractObject(
@@ -877,19 +898,42 @@ class ContractService:
     def set_project(
         cls, contract: Contract, project: Project | None, user_id: uuid.UUID
     ) -> Contract:
-        old = str(contract.project_id) if contract.project_id else None
-        contract.project_id = project.id if project is not None else None
-        contract.updated_by = user_id
-        cls._log_audit(
-            user_id,
-            AuditAction.UPDATE.value,
-            contract.id,
-            "Изменена связь контракта с проектом",
-            {"project_id": old},
-            {"project_id": str(project.id) if project else None},
-        )
+        if project is None:
+            # Legacy primary field is cleared only when explicitly requested; M2M links stay intact.
+            old = str(contract.project_id) if contract.project_id else None
+            contract.project_id = None
+            contract.updated_by = user_id
+            cls._log_audit(user_id, AuditAction.UPDATE.value, contract.id, "Очищен основной проект контракта", {"project_id": old}, {"project_id": None})
+        else:
+            cls.link_project(contract, project, user_id, commit=False)
         db.session.commit()
         return contract
+
+    @classmethod
+    def link_project(cls, contract: Contract, project: Project, user_id: uuid.UUID, *, commit: bool = True) -> ContractProject:
+        link = cls._ensure_project_link(contract, project, user_id)
+        contract.updated_by = user_id
+        cls._log_audit(user_id, AuditAction.UPDATE.value, contract.id, f"Привязан проект к контракту: {project.code}", None, {"project_id": str(project.id), "action": "contract_project_link"})
+        cls._log_history(contract, user_id, "contract_project_link", "Привязан проект", {"project_id": str(project.id), "project_code": project.code})
+        if commit:
+            db.session.commit()
+        return link
+
+    @classmethod
+    def unlink_project(cls, contract: Contract, project: Project, user_id: uuid.UUID) -> None:
+        link = db.session.scalar(db.select(ContractProject).where(
+            ContractProject.contract_id == contract.id, ContractProject.project_id == project.id, ContractProject.active_filter()
+        ))
+        if link is None:
+            raise ValidationError("Связь с проектом не найдена.")
+        link.soft_delete(deleted_by=user_id)
+        if contract.project_id == project.id:
+            remaining = [item for item in contract.projects if item.id != project.id]
+            contract.project_id = remaining[0].id if remaining else None
+        contract.updated_by = user_id
+        cls._log_audit(user_id, AuditAction.UPDATE.value, contract.id, f"Отвязан проект от контракта: {project.code}", {"project_id": str(project.id), "action": "contract_project_unlink"}, None)
+        cls._log_history(contract, user_id, "contract_project_unlink", "Отвязан проект", {"project_id": str(project.id), "project_code": project.code})
+        db.session.commit()
 
     @classmethod
     def delete_contract(cls, contract: Contract, user_id: uuid.UUID) -> None:

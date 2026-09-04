@@ -159,14 +159,33 @@ class NearbySearchService:
             same_pp = bool(pp_key) and normalize_pp(row.pp) == pp_key
             distance = None
             reason = "Тот же ПП" if same_pp else ""
-            if not same_pp:
-                direct = haversine_m(origin_lat, origin_lng, lat, lng) if origin_lat is not None and origin_lng is not None and lat is not None and lng is not None else None
-                if direct is None or direct > preliminary_limit or routed >= candidate_limit:
-                    continue
+            direct = haversine_m(origin_lat, origin_lng, lat, lng) if origin_lat is not None and origin_lng is not None and lat is not None and lng is not None else None
+            if direct is None:
+                # Сильная текстовая связь полезна и без координат; расстояние не выдумываем.
+                if not reason:
+                    reason = {PRIORITY_ADDRESS: "Тот же адрес", PRIORITY_STREET: "Та же улица", PRIORITY_DISTRICT: "Тот же район"}.get(int(row.priority), "Без координат")
+            elif direct > preliminary_limit and not same_pp:
+                continue
+            elif routed < candidate_limit:
                 routed += 1
-                distance = RoutingService.route_distance((origin_lat, origin_lng), (lat, lng))
-                if distance is None or distance > max_distance:
+                routed_distance = RoutingService.route_distance((origin_lat, origin_lng), (lat, lng))
+                if routed_distance is not None:
+                    if routed_distance > max_distance and not same_pp:
+                        continue
+                    distance = routed_distance
+                    reason = ("Тот же ПП · " if same_pp else "") + "По маршруту"
+                elif direct <= max_distance:
+                    # Когда OSRM/иной provider недоступен, не превращаем nearby в PP-only.
+                    distance = direct
+                    reason = ("Тот же ПП · " if same_pp else "") + "≈ по прямой"
+                elif not same_pp:
                     continue
+            elif not same_pp:
+                # Не теряем ближайшие точки только из-за лимита запросов к routing.
+                if direct > max_distance:
+                    continue
+                distance = direct
+                reason = "≈ по прямой"
             hits.append(
                 NearbyHit(
                     entity_type=row.entity_type,
@@ -193,7 +212,7 @@ class NearbySearchService:
             )
             if len(hits) >= limit:
                 break
-        return hits
+        return sorted(hits, key=lambda hit: (0 if normalize_pp(hit.pp) == pp_key and pp_key else 1, hit.distance_m is None, hit.distance_m or 0, hit.priority, hit.number))[:limit]
 
     @staticmethod
     def _request_query(priority: int, extra, exclude_ids: list[uuid.UUID]):

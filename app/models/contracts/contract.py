@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from app.models.contracts.contract_document import ContractDocument
     from app.models.contracts.contract_history import ContractHistory
     from app.models.contracts.contract_object import ContractObject
+    from app.models.contracts.contract_project import ContractProject
     from app.models.projects.project import Project
     from app.models.tenders.tender_application import TenderApplication
     from app.models.work_objects.work_object import WorkObject
@@ -131,6 +132,10 @@ class Contract(BaseModel):
         lazy="select",
         cascade="all, delete-orphan",
     )
+    project_links: Mapped[list[ContractProject]] = relationship(
+        "ContractProject", back_populates="contract",
+        foreign_keys="ContractProject.contract_id", lazy="select", cascade="all, delete-orphan",
+    )
     history: Mapped[list[ContractHistory]] = relationship(
         "ContractHistory",
         back_populates="contract",
@@ -163,6 +168,14 @@ class Contract(BaseModel):
             for link in self.contractor_links
             if link.contractor is not None and link.deleted_at is None
         ]
+
+    @property
+    def projects(self) -> list[Project]:
+        """Все активные проекты; legacy project_id остаётся primary-ссылкой."""
+        linked = [link.project for link in self.project_links if link.deleted_at is None and link.project is not None and link.project.deleted_at is None]
+        if self.project is not None and self.project.deleted_at is None and self.project not in linked:
+            linked.insert(0, self.project)
+        return linked
 
     def __repr__(self) -> str:
         return f"<Contract {self.number}>"

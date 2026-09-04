@@ -22,6 +22,7 @@ from app.models.contracts.contract_contractor import ContractContractor
 from app.models.contracts.contract_document import ContractDocument
 from app.models.contracts.contract_history import ContractHistory
 from app.models.contracts.contract_object import ContractObject
+from app.models.contracts.contract_project import ContractProject
 from app.models.contractors.contractor import Contractor
 from app.models.agreements.pole_agreement import PoleAgreement
 from app.models.agreements.pole_agreement_site import PoleAgreementSite
@@ -107,6 +108,7 @@ __all__ = [
     "ContractDocument",
     "ContractHistory",
     "ContractObject",
+    "ContractProject",
     "Contractor",
     "PoleAgreement",
     "PoleAgreementSite",

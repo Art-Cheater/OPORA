@@ -9,6 +9,7 @@ window.OporaOpsMap = {
   _onResize: null,
   _onClick: null,
   _paint: null,
+  _selectedMarker: null,
 
   destroy() {
     if (this._resizeObs) {
@@ -35,6 +36,7 @@ window.OporaOpsMap = {
     this._routeLayer = null;
     this._paint = null;
     this._points = [];
+    this._selectedMarker = null;
   },
 
   init() {
@@ -194,9 +196,12 @@ window.OporaOpsMap = {
             fillOpacity: 0.92,
           }).addTo(self._layer).bindPopup(popupHtml(point), { maxWidth: 300 });
           if (self._kind === "workbench") {
-            marker.on("click", () => mapNode.dispatchEvent(new CustomEvent("opora:select-work", {
-              bubbles: true, detail: { point }
-            })));
+            marker.on("click", () => {
+              if (self._selectedMarker && self._selectedMarker !== marker) self._selectedMarker.setStyle({ radius: 8, weight: 1, color: "#fff" });
+              self._selectedMarker = marker;
+              marker.setStyle({ radius: 12, weight: 3, color: "#111827" });
+              mapNode.dispatchEvent(new CustomEvent("opora:select-work", { bubbles: true, detail: { point } }));
+            });
           }
         }
       });

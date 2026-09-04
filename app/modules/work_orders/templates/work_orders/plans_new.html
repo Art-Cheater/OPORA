@@ -31,8 +31,17 @@
 
     <label class="plan-map-toggle"><input type="checkbox" id="planMapEnabled"> Включить карту выбранных работ</label>
 
-    <div class="plan-page__grid">
-        <section class="plan-card">
+    <section class="plan-card plan-card--wide">
+        <div class="plan-card__head">
+            <h2>Мой план работ</h2>
+            <span id="planCount">0</span>
+        </div>
+        <div id="planBasket" class="plan-list">
+            <p class="plan-empty">Пока пусто. Добавьте заявки и дефекты ниже.</p>
+        </div>
+    </section>
+
+    <section class="plan-card plan-card--wide">
             <h2>Доступные работы</h2>
             <form id="planSearch" class="plan-search plan-search--filters">
                 <input type="search" name="pp" placeholder="Номер ПП" autocomplete="off">
@@ -52,18 +61,7 @@
             <div id="planSearchResults" class="plan-list">
                 <p class="plan-empty">Загрузка работ…</p>
             </div>
-        </section>
-
-        <section class="plan-card">
-            <div class="plan-card__head">
-                <h2>Мой план работ</h2>
-                <span id="planCount">0</span>
-            </div>
-            <div id="planBasket" class="plan-list">
-                <p class="plan-empty">Пока пусто. Добавьте заявки и дефекты слева или из рекомендаций.</p>
-            </div>
-        </section>
-    </div>
+    </section>
 
     <section class="plan-card plan-card--wide" id="planMapWrap" hidden>
         <div id="opsMap" data-kind="plan"></div>

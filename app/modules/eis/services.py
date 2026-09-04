@@ -789,6 +789,10 @@ class EisImportService:
             contract.eis_url = eis.url[:700]
         if eis.delivery_place and not (contract.delivery_place or "").strip():
             contract.delivery_place = eis.delivery_place[:5000]
+        # EIS работает fill-only: новая распознанная связь добавляется, ручные не удаляются.
+        if project is not None:
+            from app.modules.contracts.services import ContractService
+            ContractService._ensure_project_link(contract, project, user_id or contract.created_by)
         return contract, created
 
     def _apply_object_denorm(

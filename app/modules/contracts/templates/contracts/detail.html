@@ -6,9 +6,9 @@
 
 {% block page_header %}
 {% call page_header(contract.number ~ " — " ~ contract.title, "Карточка контракта", "file-earmark-text") %}
-{% if contract.project and current_user.has_permission('projects.view') %}
-<a href="{{ url_for('projects.detail', project_id=contract.project.id, full=1) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-folder2-open"></i> Проект</a>
-{% endif %}
+{% for project in contract.projects %}{% if current_user.has_permission('projects.view') %}
+<a href="{{ url_for('projects.detail', project_id=project.id, full=1) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-folder2-open"></i> {{ project.code }}</a>
+{% endif %}{% endfor %}
 {% if contract.tender_application and current_user.has_permission('tenders.view') %}
 <a href="{{ url_for('tenders.detail', tender_id=contract.tender_application.id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-hammer"></i> Заявка на торги</a>
 {% endif %}
@@ -67,16 +67,16 @@
                 <div class="row g-3">
                     {% include "contracts/partials/detail_fields.html" %}
                     <div class="col-md-12">
-                        <small class="text-muted">Проект</small>
-                        <div>
-                            {% if contract.project and current_user.has_permission('projects.view') %}
-                            <a href="{{ url_for('projects.detail', project_id=contract.project.id) }}">
-                                {{ contract.project.code }} — {{ contract.project.name }}
-                            </a>
-                            {% elif contract.project %}
-                            {{ contract.project.code }} — {{ contract.project.name }}
-                            {% else %}—{% endif %}
-                        </div>
+                        <small class="text-muted">Проекты</small>
+                        <ul class="mb-2">
+                            {% for project in contract.projects %}
+                            <li class="d-flex align-items-center gap-2">
+                                {% if current_user.has_permission('projects.view') %}<a href="{{ url_for('projects.detail', project_id=project.id) }}">{{ project.code }} — {{ project.name }}</a>{% else %}{{ project.code }} — {{ project.name }}{% endif %}
+                                {% if current_user.has_permission('contracts.edit') %}<form method="POST" action="{{ url_for('contracts.unlink_project', contract_id=contract.id, project_id=project.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-link btn-sm text-danger p-0">Отвязать</button></form>{% endif %}
+                            </li>
+                            {% else %}<li class="text-muted">Проекты не привязаны.</li>{% endfor %}
+                        </ul>
+                        {% if current_user.has_permission('contracts.edit') and link_project_form %}<form method="POST" action="{{ url_for('contracts.link_project', contract_id=contract.id) }}" class="row g-2 align-items-end">{{ link_project_form.hidden_tag() }}<div class="col-md-8">{{ link_project_form.project_id(class="form-select form-select-sm") }}</div><div class="col-md-4">{{ link_project_form.submit(class="btn btn-outline-primary btn-sm") }}</div></form>{% endif %}
                     </div>
                     <div class="col-md-12">
                         <small class="text-muted">Объекты контракта</small>

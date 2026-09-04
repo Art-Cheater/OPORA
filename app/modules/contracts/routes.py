@@ -34,6 +34,7 @@ from app.modules.contracts.forms import (
     ContractFilterForm,
     ContractForm,
     ContractLinkObjectForm,
+    ContractLinkProjectForm,
 )
 from app.modules.contracts.repositories import ContractFilter, ContractRepository
 from app.modules.contracts.services import ContractPayload, ContractService
@@ -197,6 +198,9 @@ def _prepare_contract_form(form: ContractForm, contract=None) -> None:
                     else str(contract.project_id),
                 )
             )
+    form.project_ids.choices = [(str(p.id), f"{p.code} — {p.name}"[:120]) for p in projects]
+    if contract is not None and request.method == "GET":
+        form.project_ids.data = [str(project.id) for project in contract.projects]
 
     BuiltinFieldService.apply_to_form(form, "contracts")
 
@@ -399,6 +403,10 @@ def create():
                 project = db.session.get(Project, project_id)
                 if project is not None and project.deleted_at is None:
                     ContractService.set_project(created, project, current_user.id)
+            for raw_project_id in form.project_ids.data or []:
+                project = db.session.get(Project, _uuid_or_none(raw_project_id))
+                if project is not None and project.deleted_at is None:
+                    ContractService.link_project(created, project, current_user.id)
             save_custom_fields(_CF, created.id, request.form, current_user)
             if is_ajax():
                 return ajax_ok("Контракт успешно создан.", id=str(created.id))
@@ -464,6 +472,7 @@ def detail(contract_id: uuid.UUID):
     comment_form = ContractCommentForm()
     document_form = ContractDocumentForm()
     link_object_form = ContractLinkObjectForm()
+    link_project_form = ContractLinkProjectForm()
     objects = ObjectRepository.list_choices(q="", limit=20, free_only=False)
     link_object_form.object_id.choices = [("", "Выберите объект…")] + [
         (str(item.id), ObjectRepository.label_for_select(item)) for item in objects
@@ -472,6 +481,10 @@ def detail(contract_id: uuid.UUID):
         "data-choice-url": url_for("objects.api_choices"),
         "data-choice-placeholder": "Начните вводить адрес или название…",
     }
+    from app.extensions import db
+    from app.models.projects.project import Project
+    projects = list(db.session.scalars(db.select(Project).where(Project.active_filter()).order_by(Project.code.asc()).limit(80)))
+    link_project_form.project_id.choices = [("", "Выберите проект…")] + [(str(p.id), f"{p.code} — {p.name}"[:120]) for p in projects]
     can_edit_docs = current_user.has_permission(PERM_CONTRACTS_EDIT)
     document_items = _document_items(contract, can_edit=can_edit_docs)
 
@@ -483,6 +496,7 @@ def detail(contract_id: uuid.UUID):
         "document_items": document_items,
         "can_edit_docs": can_edit_docs,
         "link_object_form": link_object_form,
+        "link_project_form": link_project_form,
         **custom_field_detail_context(_CF, contract.id, current_user),
     }
 
@@ -525,6 +539,10 @@ def edit(contract_id: uuid.UUID):
                     ContractService.set_project(contract, project, current_user.id)
             elif form.project_id.data == "":
                 ContractService.set_project(contract, None, current_user.id)
+            for raw_project_id in form.project_ids.data or []:
+                project = db.session.get(Project, _uuid_or_none(raw_project_id))
+                if project is not None and project.deleted_at is None:
+                    ContractService.link_project(contract, project, current_user.id)
             save_custom_fields(_CF, contract.id, request.form, current_user)
             if is_ajax():
                 return ajax_ok("Контракт обновлён.", id=str(contract.id))
@@ -748,6 +766,45 @@ def unlink_object(contract_id: uuid.UUID, object_id: uuid.UUID):
     except ValidationError as exc:
         flash(str(exc), "danger")
     return redirect(url_for("contracts.detail", contract_id=contract.id))
+
+
+@contracts_bp.route("/<uuid:contract_id>/projects", methods=["POST"])
+@login_required
+@permission_required(PERM_CONTRACTS_EDIT)
+def link_project(contract_id: uuid.UUID):
+    from app.extensions import db
+    from app.models.projects.project import Project
+
+    contract = ContractRepository.get_by_id(contract_id)
+    form = ContractLinkProjectForm()
+    form.project_id.choices = [(str(p.id), p.code) for p in db.session.scalars(db.select(Project).where(Project.active_filter()))]
+    project = db.session.get(Project, _uuid_or_none(form.project_id.data)) if form.validate_on_submit() else None
+    if contract is None or project is None or project.deleted_at is not None:
+        flash("Контракт или проект не найден.", "danger")
+    else:
+        ContractService.link_project(contract, project, current_user.id)
+        flash("Проект привязан к контракту.", "success")
+    return redirect(url_for("contracts.detail", contract_id=contract_id))
+
+
+@contracts_bp.route("/<uuid:contract_id>/projects/<uuid:project_id>/unlink", methods=["POST"])
+@login_required
+@permission_required(PERM_CONTRACTS_EDIT)
+def unlink_project(contract_id: uuid.UUID, project_id: uuid.UUID):
+    from app.extensions import db
+    from app.models.projects.project import Project
+
+    contract = ContractRepository.get_by_id(contract_id)
+    project = db.session.get(Project, project_id)
+    if contract is None or project is None or project.deleted_at is not None:
+        flash("Контракт или проект не найден.", "danger")
+    else:
+        try:
+            ContractService.unlink_project(contract, project, current_user.id)
+            flash("Проект отвязан от контракта.", "success")
+        except ValidationError as exc:
+            flash(str(exc), "danger")
+    return redirect(url_for("contracts.detail", contract_id=contract_id))
 
 @contracts_bp.route("/<uuid:contract_id>/document/<uuid:document_id>/download")
 @login_required

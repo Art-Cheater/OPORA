@@ -9,6 +9,7 @@ from wtforms import (
     DateField,
     DecimalField,
     MultipleFileField,
+    SelectMultipleField,
     SelectField,
     StringField,
     SubmitField,
@@ -160,6 +161,9 @@ class ContractForm(FlaskForm):
         validators=[Optional()],
         validate_choice=False,
     )
+    project_ids = SelectMultipleField(
+        "Проекты (можно выбрать несколько)", choices=[], validators=[Optional()], validate_choice=False
+    )
     submit = SubmitField("Сохранить")
 
 
@@ -203,6 +207,11 @@ class ContractLinkObjectForm(FlaskForm):
         validate_choice=False,
     )
     submit = SubmitField("Привязать")
+
+
+class ContractLinkProjectForm(FlaskForm):
+    project_id = SelectField("Проект", choices=[], validators=[DataRequired(message="Выберите проект.")], validate_choice=False)
+    submit = SubmitField("Привязать проект")
 
 
 class ContractWorkflowForm(FlaskForm):

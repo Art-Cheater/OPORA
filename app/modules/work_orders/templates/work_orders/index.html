@@ -84,16 +84,6 @@
         </section>
     </div>
 
-    <button type="button" class="workbench-nearby-toggle" id="workNearbyToggle" hidden>
-        <i class="bi bi-arrow-down-circle-fill"></i> Показать работы рядом
-    </button>
-
-    <section class="workbench__nearby card" id="workNearbyWrap" hidden>
-        <h2>Рядом обнаружены другие работы</h2>
-        <p class="workbench-empty" id="workNearbySummary"></p>
-        <div id="workNearby" class="workbench-items"></div>
-    </section>
-
     <section class="workbench__plan card">
         <h2>Мой план работ</h2>
         <div id="workPlan" class="workbench-plan"></div>
@@ -103,6 +93,15 @@
             <button type="button" class="btn btn-primary" id="workSaveBtn" disabled>Создать план</button>
             {% endif %}
         </div>
+    </section>
+
+    <button type="button" class="workbench-nearby-toggle" id="workNearbyToggle" hidden>
+        <i class="bi bi-arrow-down-circle-fill"></i> Показать работы рядом
+    </button>
+    <section class="workbench__nearby card" id="workNearbyWrap" hidden>
+        <h2>Рядом обнаружены другие работы</h2>
+        <p class="workbench-empty" id="workNearbySummary"></p>
+        <div id="workNearby" class="workbench-items"></div>
     </section>
 </div>
 {% endblock %}

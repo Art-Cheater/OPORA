@@ -685,6 +685,11 @@ function initInstantNav(sidebar, closeSidebar) {
 
     function disposePage() {
         window.OporaList?.reset?.();
+        window.OporaWorkOrders?.destroy?.();
+        window.OporaWorkPlanNew?.destroy?.();
+        window.OporaWorkPlanDetail?.destroy?.();
+        window.OporaRequestsForm?.destroy?.();
+        window.OporaRequestsJournal?.destroy?.();
         window.OporaOpsMap?.destroy?.();
         window.dispatchEvent(new CustomEvent("opora:before-navigate"));
     }
@@ -965,6 +970,13 @@ function initInstantNav(sidebar, closeSidebar) {
             if (key.startsWith("/requests") || key.startsWith("/defects")) {
                 [...pageCache.keys()].filter((item) => item.startsWith("/requests") || item.startsWith("/defects")).forEach((item) => pageCache.delete(item));
             }
+        },
+        invalidateRelated(prefixes) {
+            const normalized = (prefixes || []).map((prefix) => new URL(prefix, window.location.href).pathname.replace(/\/$/, ""));
+            [...pageCache.keys()].forEach((key) => {
+                const path = key.split("?")[0].replace(/\/$/, "");
+                if (normalized.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) pageCache.delete(key);
+            });
         },
     };
 

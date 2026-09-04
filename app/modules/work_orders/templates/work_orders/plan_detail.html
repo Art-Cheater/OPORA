@@ -143,12 +143,9 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <h3>Бланк-распоряжение</h3>
         <p class="desk-modal__hint">Проверьте данные перед выгрузкой: номер можно оставить пустым для заполнения на бумаге.</p>
-        <label>Номер распоряжения <input name="order_number" maxlength="100" autocomplete="off"></label>
-        <label>Производитель работ <input name="producer" value="{{ plan.master }}" maxlength="255"></label>
-        <label>Количество человек в бригаде <input name="crew_count" type="number" min="1" value="2"></label>
-        <label>Член бригады / машинист <input name="crew_lead" maxlength="255"></label>
-        <label>Состав бригады <input name="crew_members" maxlength="500"></label>
-        <label>Ответственный за автоподъёмник <input name="lift_responsible" maxlength="255"></label>
+        <fieldset class="order-preview"><legend>Общие сведения</legend><label>Номер распоряжения <input name="order_number" maxlength="100" autocomplete="off"></label><label>Производитель работ <input name="producer" value="{{ plan.master }}" maxlength="255"></label><label>Количество человек в бригаде <input name="crew_count" type="number" min="1" value="2"></label><label>Член бригады / машинист <input name="crew_lead" maxlength="255"></label><label>Состав бригады <input name="crew_members" maxlength="500"></label><label>Ответственный за автоподъёмник <input name="lift_responsible" maxlength="255"></label></fieldset>
+        <fieldset class="order-preview"><legend>Поручается выполнить работы</legend><table><thead><tr><th>№</th><th>ПП</th><th>Адрес</th><th>Характер повреждения</th></tr></thead><tbody>{% for item in works %}<tr><td>{{ loop.index }}</td><td>{{ item.pp or '—' }}</td><td>{{ item.address or '—' }}</td><td>{{ item.description or '—' }}</td></tr>{% endfor %}</tbody></table></fieldset>
+        <fieldset class="order-preview"><legend>Служебные отметки</legend><label>Бланк-распоряжение выдал <input name="issuer" value="{{ master_initials }}" maxlength="255"></label><label>Целевой инструктаж провёл <input name="briefing_conductor" value="{{ master_initials }}" maxlength="255"></label></fieldset>
         <div class="desk-modal__actions">
             <button type="button" class="desk-btn" data-close-modal>Отмена</button>
             <button type="submit" class="desk-btn desk-btn--done">Скачать XLSX</button>
