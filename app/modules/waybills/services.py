@@ -186,6 +186,8 @@ class WaybillService:
             target = db.session.scalar(db.select(Request).where(Request.id == entity_id, Request.active_filter()))
             if target is None:
                 raise ValidationError("Заявка не найдена.")
+            if cls.entity_in_other_active_work(request_id=target.id, skip_waybill_id=item.id):
+                raise ValidationError("Эта заявка уже входит в другой активный план.")
             already = db.session.scalar(
                 db.select(WaybillStop.id).where(
                     WaybillStop.waybill_id == item.id,
@@ -210,6 +212,8 @@ class WaybillService:
             target = db.session.scalar(db.select(Defect).where(Defect.id == entity_id, Defect.active_filter()))
             if target is None:
                 raise ValidationError("Дефект не найден.")
+            if cls.entity_in_other_active_work(defect_id=target.id, skip_waybill_id=item.id):
+                raise ValidationError("Этот дефект уже входит в другой активный план.")
             already = db.session.scalar(
                 db.select(WaybillStop.id).where(
                     WaybillStop.waybill_id == item.id,

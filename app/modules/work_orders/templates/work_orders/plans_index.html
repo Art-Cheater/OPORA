@@ -17,6 +17,9 @@
             <p class="plan-page__eyebrow">Журнал мастера</p>
             <h1>Мои планы</h1>
         </div>
+        {% if can_track_plans %}
+        <a class="plan-btn plan-btn--ghost" href="{{ url_for('work_orders.tracking') }}">Отслеживание работы</a>
+        {% endif %}
         {% if can_manage_plans %}
         <a class="plan-btn plan-btn--save" href="{{ url_for('work_orders.plans_new') }}">+ Новый план работ</a>
         {% endif %}

@@ -380,6 +380,20 @@
     toggleBarrier(form);
     bindAddressCheck(form);
     bindAddressSuggestions(form);
+    const journal = form.querySelector('[name="journal_id"]');
+    const defectCreateUrl = form.dataset.defectCreateUrl || "";
+    journal?.addEventListener("change", () => {
+      if (journal.value !== "__defects__" || !defectCreateUrl) return;
+      const modal = form.closest(".modal");
+      if (modal && window.bootstrap) {
+        bootstrap.Modal.getInstance(modal)?.hide();
+      }
+      if (window.OporaNav?.go) {
+        window.OporaNav.go(defectCreateUrl, "Создание дефекта");
+      } else {
+        window.location.href = defectCreateUrl;
+      }
+    });
     form.addEventListener("submit", (event) => {
       syncOriginalAddress(form);
       const received = form.querySelector('[name="received_at"]');

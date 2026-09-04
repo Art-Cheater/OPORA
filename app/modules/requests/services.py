@@ -195,7 +195,27 @@ class RequestService:
 
         from app.core.address import HeuristicGeocodingProvider
 
+        from app.modules.requests.address_format import address_expression_anchor, format_address, split_address_query
+
         current_address = (payload.address or "").strip()
+        anchor = address_expression_anchor(current_address)
+        if anchor:
+            # «Лепсе 12, 15» и «Лепсе 12-15» — выражения пользователя,
+            # а не один адрес для Nominatim. Сохраняем их дословно.
+            _kind, street, house = split_address_query(anchor)
+            payload.original_address = current_address
+            payload.address = current_address[:500]
+            payload.normalized_address = format_address(anchor)
+            payload.street = street or None
+            payload.house = house or None
+            payload.region = None
+            payload.settlement = None
+            payload.district = normalize_request_district(payload.district)
+            payload.address_source = "manual_multi"
+            payload.address_external_id = None
+            payload.latitude = None
+            payload.longitude = None
+            return
         selected = (payload.normalized_address or "").strip()
         original = (payload.original_address or "").strip()
         selection_is_current = bool(selected) and current_address in {
@@ -228,8 +248,6 @@ class RequestService:
         payload.latitude = None
         payload.longitude = None
         from app.core.address import get_address_suggestion_service
-        from app.modules.requests.address_format import split_address_query
-
         try:
             fallback = get_address_suggestion_service().suggest(submitted, limit=8)
         except Exception:
@@ -669,6 +687,7 @@ class RequestService:
     ) -> Request:
         """Зафиксировать повторное обращение на существующей открытой заявке."""
         from datetime import datetime, timezone
+        from app.models.base import format_local_dt
 
         if req.status is None or req.status.is_final:
             raise ValidationError("Повтор можно отметить только для открытой заявки.")
@@ -691,9 +710,9 @@ class RequestService:
             # Дописываем к описанию, не затираем
             note = description.strip()
             if req.description:
-                req.description = f"{req.description}\n\n[Повтор {when.strftime('%d.%m.%Y %H:%M')}]\n{note}"
+                req.description = f"{req.description}\n\n[Повтор {format_local_dt(when)}]\n{note}"
             else:
-                req.description = f"[Повтор {when.strftime('%d.%m.%Y %H:%M')}]\n{note}"
+                req.description = f"[Повтор {format_local_dt(when)}]\n{note}"
         if has_barrier is not None:
             req.has_barrier = bool(has_barrier)
             if req.has_barrier:
@@ -716,7 +735,7 @@ class RequestService:
             req,
             user_id,
             "repeat_call",
-            f"Повторное обращение зафиксировано ({when.strftime('%d.%m.%Y %H:%M')})",
+            f"Повторное обращение зафиксировано ({format_local_dt(when)})",
             {
                 "repeat_count": req.repeat_count,
                 "call_at": when.isoformat(),

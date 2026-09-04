@@ -32,6 +32,9 @@
             <h1 class="workbench__title">Работа по заявкам</h1>
         </div>
         <div class="workbench__head-actions">
+            {% if can_track_plans %}
+            <a class="btn btn-outline-primary btn-sm" href="{{ url_for('work_orders.tracking') }}">Отслеживание работы</a>
+            {% endif %}
             {% if can_manage_plans %}
             <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('work_orders.plans_index') }}">Мои планы</a>
             <a class="btn btn-primary btn-sm" href="{{ url_for('work_orders.plans_new') }}">Создать план</a>
@@ -82,7 +85,7 @@
     </div>
 
     <button type="button" class="workbench-nearby-toggle" id="workNearbyToggle" hidden>
-        ⌄ Работы рядом
+        <i class="bi bi-arrow-down-circle-fill"></i> Показать работы рядом
     </button>
 
     <section class="workbench__nearby card" id="workNearbyWrap" hidden>

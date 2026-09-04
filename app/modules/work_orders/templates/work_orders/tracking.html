@@ -1,0 +1,79 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Отслеживание работы — {{ app_name }}{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ static_url('css/work-plans.css') }}">
+{% endblock %}
+
+{% block page_header %}{% endblock %}
+
+{% block content %}
+<div class="plan-page plan-page--list">
+    <a class="plan-page__back" href="{{ url_for('work_orders.index') }}">← К работе с заявками</a>
+    <header class="plan-page__hero">
+        <p class="plan-page__eyebrow">Контроль выполнения</p>
+        <h1>Отслеживание работы</h1>
+        <p class="plan-page__hint">Сводка по планам, исполнителям и текущей стадии выполнения.</p>
+    </header>
+
+    <form class="plan-card plan-card--wide tracking-filters" method="GET">
+        <label>Исполнитель
+            <select name="master_id">
+                <option value="">Все исполнители</option>
+                {% for master in masters %}
+                <option value="{{ master.id }}" {% if filters.master_id == master.id|string %}selected{% endif %}>{{ master.full_name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Стадия
+            <select name="status">
+                <option value="" {% if not filters.status %}selected{% endif %}>Все стадии</option>
+                <option value="draft" {% if filters.status == 'draft' %}selected{% endif %}>Черновик</option>
+                <option value="in_progress" {% if filters.status == 'in_progress' %}selected{% endif %}>В работе</option>
+                <option value="completed" {% if filters.status == 'completed' %}selected{% endif %}>Завершён</option>
+            </select>
+        </label>
+        <label>Создан с
+            <input type="date" name="date_from" value="{{ filters.date_from }}">
+        </label>
+        <label>Создан по
+            <input type="date" name="date_to" value="{{ filters.date_to }}">
+        </label>
+        <button class="plan-btn plan-btn--save" type="submit">Применить</button>
+        <a class="plan-btn plan-btn--ghost" href="{{ url_for('work_orders.tracking') }}">Сбросить</a>
+    </form>
+
+    <section class="tracking-stats" aria-label="Сводка планов">
+        <div class="tracking-stat"><span>Всего планов</span><strong>{{ stats.total }}</strong></div>
+        <div class="tracking-stat"><span>В работе</span><strong>{{ stats.in_progress }}</strong></div>
+        <div class="tracking-stat"><span>Завершено</span><strong>{{ stats.completed }}</strong></div>
+        <div class="tracking-stat"><span>Осталось работ</span><strong>{{ stats.remaining }}</strong></div>
+    </section>
+
+    {% if plans %}
+    <section class="tracking-list" aria-label="Планы работ">
+        {% for item in plans %}
+        <article class="tracking-row">
+            <div>
+                <strong>{{ item.number }}</strong>
+                <div class="tracking-row__meta">{{ item.created_at }}</div>
+            </div>
+            <div>
+                <strong>{{ item.master or 'Исполнитель не указан' }}</strong>
+                <div class="tracking-row__meta">{{ item.total }} работ в плане</div>
+            </div>
+            <div><span class="desk-item__status" data-code="{{ item.status }}">{{ item.status_label }}</span></div>
+            <div class="tracking-row__progress">
+                <div class="tracking-row__bar"><span style="width: {{ item.progress_percent }}%"></span></div>
+                <p>{{ item.done }} выполнено · {{ item.excluded }} исключено · {{ item.remaining }} осталось</p>
+            </div>
+        </article>
+        {% endfor %}
+    </section>
+    {% else %}
+    <p class="plan-empty">По выбранным фильтрам планов нет.</p>
+    {% endif %}
+</div>
+{% endblock %}

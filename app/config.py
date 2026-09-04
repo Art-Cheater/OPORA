@@ -176,6 +176,15 @@ class Config:
     ADDRESS_SELECTION_TOKEN_MAX_AGE = int(
         os.getenv("ADDRESS_SELECTION_TOKEN_MAX_AGE", "3600")
     )
+    # Routing выключен, пока production не укажет совместимый OSRM backend.
+    ROUTING_BASE_URL = os.getenv("ROUTING_BASE_URL", "").strip()
+    ROUTING_TIMEOUT_SECONDS = float(os.getenv("ROUTING_TIMEOUT_SECONDS", "1.5"))
+    ROUTING_RETRIES = int(os.getenv("ROUTING_RETRIES", "1"))
+    ROUTING_CACHE_TTL_SECONDS = int(os.getenv("ROUTING_CACHE_TTL_SECONDS", "900"))
+    ROUTING_CACHE_MAX_SIZE = int(os.getenv("ROUTING_CACHE_MAX_SIZE", "512"))
+    NEARBY_ROUTE_DISTANCE_METERS = int(os.getenv("NEARBY_ROUTE_DISTANCE_METERS", "1500"))
+    NEARBY_ROUTE_TOLERANCE_METERS = int(os.getenv("NEARBY_ROUTE_TOLERANCE_METERS", "200"))
+    NEARBY_ROUTING_CANDIDATE_LIMIT = int(os.getenv("NEARBY_ROUTING_CANDIDATE_LIMIT", "8"))
     MESSENGER_USER_LOOKUP_LIMIT = int(os.getenv("MESSENGER_USER_LOOKUP_LIMIT", "50"))
 
     EIS_SYNC_HOURS = os.getenv("EIS_SYNC_HOURS", "12,18").strip()

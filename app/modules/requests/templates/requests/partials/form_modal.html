@@ -1,4 +1,5 @@
 <form method="POST" action="{{ form_action }}" class="opora-modal-form" data-requests-form="1"
+      {% if mode == 'create' and current_user.has_permission('defects.create') %}data-defect-create-url="{{ url_for('defects.create') }}"{% endif %}
       {% if mode == 'edit' and req %}data-request-id="{{ req.id }}"{% endif %}>
     {{ form.hidden_tag() }}
     {% include "requests/partials/form_fields.html" %}

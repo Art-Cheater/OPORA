@@ -17,8 +17,8 @@
     {# Цвет из справочника request_statuses.color — более контрастный #}
     {% if status %}
     {% set color = status.color or '#546E7A' %}
-    <span class="badge badge-status request-status-badge"
-          style="background-color: color-mix(in srgb, {{ color }} 28%, var(--opora-card)); color: {{ color }}; border: 2px solid color-mix(in srgb, {{ color }} 55%, var(--opora-border));">
+    <span class="badge badge-status request-status-badge{% if status.code == 'completed' %} request-status-badge--completed{% endif %}"
+          {% if status.code != 'completed' %}style="background-color: color-mix(in srgb, {{ color }} 28%, var(--opora-card)); color: {{ color }}; border: 2px solid color-mix(in srgb, {{ color }} 55%, var(--opora-border));"{% endif %}>
         {{ status.name }}
     </span>
     {% else %}

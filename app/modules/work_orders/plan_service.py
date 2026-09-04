@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import datetime
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from flask import url_for
 from sqlalchemy import case, select
@@ -640,6 +641,76 @@ class WorkPlanService:
         )
         return [cls.serialize_plan_summary(plan) for plan in plans]
 
+    @staticmethod
+    def parse_filter_date(value: str | None) -> date | None:
+        try:
+            return date.fromisoformat((value or "").strip())
+        except ValueError:
+            return None
+
+    @classmethod
+    def tracking(
+        cls,
+        *,
+        status: str = "",
+        master_id: uuid.UUID | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> dict:
+        """Сводка WorkPlan для директорского контроля без изменения планов."""
+        conditions = [WorkPlan.active_filter()]
+        if status:
+            conditions.append(WorkPlan.status == status)
+        if master_id is not None:
+            conditions.append(WorkPlan.master_id == master_id)
+
+        local_zone = ZoneInfo("Europe/Moscow")
+        if date_from is not None:
+            start = datetime.combine(date_from, time.min, tzinfo=local_zone).astimezone(timezone.utc)
+            conditions.append(WorkPlan.created_at >= start)
+        if date_to is not None:
+            finish = datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=local_zone).astimezone(timezone.utc)
+            conditions.append(WorkPlan.created_at < finish)
+
+        plans = list(
+            db.session.scalars(
+                select(WorkPlan)
+                .options(joinedload(WorkPlan.master), selectinload(WorkPlan.items))
+                .where(*conditions)
+                .order_by(
+                    case(
+                        (WorkPlan.status == PLAN_IN_PROGRESS, 0),
+                        (WorkPlan.status == PLAN_DRAFT, 1),
+                        else_=2,
+                    ),
+                    WorkPlan.created_at.desc(),
+                )
+            ).unique()
+        )
+        rows = [cls.serialize_plan_summary(plan) for plan in plans]
+        masters = list(
+            db.session.scalars(
+                select(User)
+                .join(WorkPlan, WorkPlan.master_id == User.id)
+                .where(WorkPlan.active_filter(), User.active_filter(), User.is_active.is_(True))
+                .distinct()
+                .order_by(User.full_name)
+            ).unique()
+        )
+        return {
+            "plans": rows,
+            "masters": masters,
+            "stats": {
+                "total": len(rows),
+                "draft": sum(1 for row in rows if row["status"] == PLAN_DRAFT),
+                "in_progress": sum(1 for row in rows if row["status"] == PLAN_IN_PROGRESS),
+                "completed": sum(1 for row in rows if row["status"] == PLAN_COMPLETED),
+                "works": sum(row["total"] for row in rows),
+                "done": sum(row["done"] for row in rows),
+                "remaining": sum(row["remaining"] for row in rows),
+            },
+        }
+
     @classmethod
     def serialize_plan_summary(cls, plan: WorkPlan) -> dict:
         items = cls._active_items(plan)
@@ -655,11 +726,13 @@ class WorkPlanService:
             "saved_at": cls._fmt_dt(plan.saved_at),
             "completed_at": cls._fmt_dt(plan.completed_at),
             "master": plan.master.full_name if plan.master else "",
+            "master_id": str(plan.master_id),
             "total": len(items),
             "done": done,
             "excluded": excluded,
             "active": sum(1 for item in items if item.result == ITEM_ACTIVE),
             "remaining": sum(1 for item in items if item.result == ITEM_ACTIVE),
+            "progress_percent": int(round((done + excluded) * 100 / len(items))) if items else 0,
             "editable": False,
         }
 

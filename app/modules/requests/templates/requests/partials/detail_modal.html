@@ -49,7 +49,7 @@
                     <div class="opora-detail-field__label">{{ builtin_label('requests', 'received_at', 'Дата и время получения') }}</div>
                     <div>
                         {% if req.received_at %}
-                            {{ req.received_at.strftime('%d.%m.%Y %H:%M') }}
+                            {{ req.received_at|local_dt }}
                         {% else %}
                             —
                         {% endif %}
@@ -134,7 +134,7 @@
                     <div class="opora-detail-field__label">Даты обращений</div>
                     <div>
                         {% if req.received_at %}
-                        <div>1. {{ req.received_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                        <div>1. {{ req.received_at|local_dt }}</div>
                         {% endif %}
                         {% for d in req.repeat_dates or [] %}
                         <div class="text-danger">{{ loop.index + 1 }}. {{ d.replace('T', ' ')[:16] }}</div>
@@ -165,7 +165,7 @@
                 <div class="border rounded-3 p-3 mb-2">
                     <div class="d-flex justify-content-between">
                         <strong>{{ item.author.full_name if item.author else "Пользователь" }}</strong>
-                        <small class="text-muted">{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</small>
+                        <small class="text-muted">{{ item.created_at|local_dt }}</small>
                     </div>
                     <div class="mt-2">{{ item.body }}</div>
                 </div>
@@ -194,7 +194,7 @@
                 {% for h in req.history %}
                 <div class="border-start border-2 ps-3 mb-3">
                     <div class="fw-medium small">{{ h.comment or h.action }}</div>
-                    <div class="text-muted small">{{ h.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                    <div class="text-muted small">{{ h.created_at|local_dt }}</div>
                     {% if h.changed_by_user %}
                     <div class="text-muted small">Автор: {{ h.changed_by_user.full_name }}</div>
                     {% endif %}

@@ -38,8 +38,9 @@
     --status-not-ready-bg: #FDE8EA;
     --status-in-progress: #E6A700;
     --status-in-progress-bg: #FFF8E1;
-    --status-done: #2E7D32;
-    --status-done-bg: #E8F5E9;
+    --status-done: #176B2C;
+    --status-done-bg: #DDF4E2;
+    --status-done-border: #27863D;
     --bs-primary: #F57C00;
     --bs-primary-rgb: 245, 124, 0;
     --bs-border-radius: 10px;
@@ -120,8 +121,9 @@ html[data-theme="dark"] {
     --status-not-ready-bg: rgba(220, 53, 69, 0.18);
     --status-in-progress: #E6B422;
     --status-in-progress-bg: rgba(230, 167, 0, 0.16);
-    --status-done: #6BCB77;
-    --status-done-bg: rgba(46, 125, 50, 0.18);
+    --status-done: #B9F5C2;
+    --status-done-bg: rgba(40, 142, 66, 0.42);
+    --status-done-border: #63C878;
     --bs-body-bg: #0F1115;
     --bs-body-color: #F1F3F5;
     --bs-link-color: #FF8C1A;
@@ -133,6 +135,20 @@ html[data-theme="dark"] {
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+
+/* Прокрутка остаётся доступной колёсиком, touch и клавиатурой, но без лишних полос. */
+html:has(body.app-body),
+body.app-body,
+body.app-body * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+html:has(body.app-body)::-webkit-scrollbar,
+body.app-body::-webkit-scrollbar,
+body.app-body *::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
 
 body {
     font-family: var(--bs-body-font-family);
@@ -413,6 +429,12 @@ body.is-opora-busy { cursor: wait; }
 .badge-not-ready { background: var(--status-not-ready-bg); color: var(--status-not-ready); }
 .badge-in-progress { background: var(--status-in-progress-bg); color: #9A7000; }
 .badge-done { background: var(--status-done-bg); color: var(--status-done); }
+.request-status-badge--completed {
+    background: var(--status-done-bg);
+    color: var(--status-done);
+    border: 2px solid var(--status-done-border);
+    font-weight: 700;
+}
 .badge-neutral { background: var(--opora-surface-hover); color: var(--opora-text-muted); }
 .badge-role { background: rgba(245,124,0,0.1); color: var(--opora-primary); font-size: 0.75rem; padding: 0.3em 0.65em; border-radius: 6px; }
 

@@ -72,9 +72,11 @@ window.OporaWorkPlanDetail = {
       const completeModal = document.getElementById("deskCompleteModal");
       const excludeModal = document.getElementById("deskExcludeModal");
       const reportModal = document.getElementById("planReportModal");
+      const orderModal = document.getElementById("planOrderModal");
       if (completeModal) completeModal.hidden = true;
       if (excludeModal) excludeModal.hidden = true;
       if (reportModal) reportModal.hidden = true;
+      if (orderModal) orderModal.hidden = true;
       pendingId = "";
     }
 
@@ -227,6 +229,11 @@ window.OporaWorkPlanDetail = {
 
     document.getElementById("planReportOpen")?.addEventListener("click", () => {
       const modal = document.getElementById("planReportModal");
+      if (modal) modal.hidden = false;
+    });
+
+    document.getElementById("planOrderOpen")?.addEventListener("click", () => {
+      const modal = document.getElementById("planOrderModal");
       if (modal) modal.hidden = false;
     });
 

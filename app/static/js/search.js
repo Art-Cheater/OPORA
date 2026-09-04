@@ -111,6 +111,19 @@
     }
   });
 
+  dropdown.addEventListener("click", (e) => {
+    const link = e.target.closest("a.global-search-item");
+    if (!link) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    dropdown.classList.remove("show");
+
+    const url = link.getAttribute("href");
+    if (window.OporaNav?.go) window.OporaNav.go(url, link.textContent.trim());
+    else window.location.href = url;
+  });
+
   document.addEventListener("click", (e) => {
     if (!wrap.contains(e.target)) {
       dropdown.classList.remove("show");

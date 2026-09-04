@@ -37,9 +37,9 @@
                 </td>
                 <td class="text-muted journal-date-cell">
                     {% if req.received_at %}
-                        {{ req.received_at.strftime('%d.%m.%Y %H:%M') }}
+                        {{ req.received_at|local_dt }}
                     {% else %}
-                        {{ req.created_at.strftime('%d.%m.%Y %H:%M') }}
+                        {{ req.created_at|local_dt }}
                     {% endif %}
                 </td>
                 <td class="small">{{ req.journal.name if req.journal else "—" }}</td>

@@ -5,11 +5,11 @@ from __future__ import annotations
 import uuid
 from io import BytesIO
 
-from flask import abort, jsonify, render_template, request, url_for
+from flask import abort, jsonify, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 from werkzeug.datastructures import FileStorage
 
-from app.core.decorators import any_permission_required, permission_required
+from app.core.decorators import any_permission_required, permission_required, role_required
 from app.core.exceptions import NotFoundError, ValidationError
 from app.core.http import ajax_error, ajax_ok
 from app.models.auth.constants import (
@@ -22,6 +22,8 @@ from app.models.auth.constants import (
     PERM_WAYBILLS_EDIT,
     PERM_WAYBILLS_STATUS_CHANGE,
     PERM_WAYBILLS_VIEW,
+    ROLE_ADMIN,
+    ROLE_DIRECTOR,
 )
 from app.modules.defects.services import DefectService
 from app.modules.defects.workflow import STATUS_FIXED
@@ -31,6 +33,7 @@ from app.modules.waybills.services import WaybillService
 from app.modules.work_orders.blueprint import work_orders_bp
 from app.modules.work_orders.plan_service import EXCLUDE_REASONS, PLAN_COMPLETED, WorkPlanService
 from app.modules.work_orders.report_service import DOCX_MIME, build_work_plan_report, report_filename
+from app.modules.work_orders.order_service import XLSX_MIME, build_order_workbook, order_filename
 from app.modules.work_orders.services import WorkOrderFilter, WorkOrderService
 
 
@@ -75,41 +78,34 @@ def _current_plan():
     return WorkOrderService.today_plan(current_user.id)
 
 
+def _can_track_plans() -> bool:
+    return current_user.has_any_role(ROLE_DIRECTOR, ROLE_ADMIN)
+
+
+def _plural(value: int, one: str, few: str, many: str) -> str:
+    tail = value % 100
+    if 11 <= tail <= 14:
+        word = many
+    elif value % 10 == 1:
+        word = one
+    elif 2 <= value % 10 <= 4:
+        word = few
+    else:
+        word = many
+    return f"{value} {word}"
+
+
 def _selection_related(entity_type: str, entity_id: uuid.UUID, selection) -> dict:
-    """Рекомендации для временной подборки: ПП, адрес/улица и район."""
-    skip_requests = {
-        stop.request_id
-        for stop in (selection.stops if selection else [])
-        if stop.deleted_at is None and stop.request_id
-    }
-    skip_defects = {
-        stop.defect_id
-        for stop in (selection.stops if selection else [])
-        if stop.deleted_at is None and stop.defect_id
-    }
-    related = WorkPlanService.related_works(
-        entity_type=entity_type,
-        entity_id=entity_id,
-        plan=None,
-        extra_skip_requests=skip_requests,
-        extra_skip_defects=skip_defects,
-    )
-    hits = []
-    seen = set()
-    for key in ("by_pp", "by_address", "by_district"):
-        for row in related.get(key, []):
-            identity = (row.get("entity_type"), row.get("entity_id"))
-            if identity in seen:
-                continue
-            seen.add(identity)
-            hits.append(row)
+    """Единый nearby: точный ПП либо дорожное расстояние, без broad районов."""
+    geo_hits, _ = WorkOrderService.nearby_for(entity_type, entity_id, selection)
+    hits = [WorkOrderService.hit_to_dict(hit) for hit in geo_hits]
     request_count = sum(1 for row in hits if row.get("entity_type") == "request")
     defect_count = sum(1 for row in hits if row.get("entity_type") == "defect")
     parts = []
     if request_count:
-        parts.append(f"{request_count} открытых заявок")
+        parts.append(_plural(request_count, "открытая заявка", "открытые заявки", "открытых заявок"))
     if defect_count:
-        parts.append(f"{defect_count} дефектов")
+        parts.append(_plural(defect_count, "дефект", "дефекта", "дефектов"))
     return {
         "summary": "Рядом есть ещё " + " и ".join(parts) + "." if parts else "",
         "hits": hits,
@@ -139,6 +135,7 @@ def index():
         can_manage_plans=can_edit_plan,
         can_edit_plan=can_edit_plan,
         can_complete_waybill=current_user.has_permission(PERM_WAYBILLS_STATUS_CHANGE),
+        can_track_plans=_can_track_plans(),
         journals=RequestRepository.get_journals(),
         districts=district_choices(empty_label="Все районы"),
     )
@@ -230,6 +227,35 @@ def plans_index():
         "work_orders/plans_index.html",
         plans=WorkPlanService.my_plans(current_user),
         can_manage_plans=current_user.has_permission(PERM_WAYBILLS_EDIT),
+        can_track_plans=_can_track_plans(),
+    )
+
+
+@work_orders_bp.route("/tracking/")
+@login_required
+@role_required(ROLE_DIRECTOR, ROLE_ADMIN)
+def tracking():
+    status = (request.args.get("status") or "").strip()
+    if status not in {"", "draft", "in_progress", "completed"}:
+        status = ""
+    master_id = _uuid_or_none(request.args.get("master_id"))
+    date_from = WorkPlanService.parse_filter_date(request.args.get("date_from"))
+    date_to = WorkPlanService.parse_filter_date(request.args.get("date_to"))
+    data = WorkPlanService.tracking(
+        status=status,
+        master_id=master_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    return render_template(
+        "work_orders/tracking.html",
+        **data,
+        filters={
+            "status": status,
+            "master_id": str(master_id) if master_id else "",
+            "date_from": date_from.isoformat() if date_from else "",
+            "date_to": date_to.isoformat() if date_to else "",
+        },
     )
 
 
@@ -326,9 +352,36 @@ def plan_page(plan_id: uuid.UUID):
         percent=percent,
         exclude_reasons=EXCLUDE_REASONS,
         can_manage_plans=current_user.has_permission(PERM_WAYBILLS_EDIT) and payload["status"] == "in_progress",
+        can_create_order=current_user.has_permission(PERM_WAYBILLS_EDIT) and payload["status"] in {"in_progress", "completed"},
         can_use_report=can_use_report,
         report_recipients=report_recipients,
         districts=district_choices(empty_label="Все районы"),
+    )
+
+
+@work_orders_bp.route("/plans/<uuid:plan_id>/order", methods=["POST"])
+@login_required
+@permission_required(PERM_WAYBILLS_EDIT)
+def download_plan_order(plan_id: uuid.UUID):
+    try:
+        plan = WorkPlanService.get_owned(plan_id, current_user)
+    except NotFoundError as exc:
+        abort(404, str(exc))
+    except ValidationError:
+        abort(403)
+    if plan.status not in {"in_progress", PLAN_COMPLETED}:
+        return ajax_error("Бланк доступен после формирования плана.", status=400)
+    payload = WorkPlanService.serialize_plan(plan, current_user)
+    fields = {key: (request.form.get(key) or "") for key in ("order_number", "producer", "crew_lead", "crew_members", "lift_responsible")}
+    try:
+        content = build_order_workbook(payload, fields)
+    except ValueError as exc:
+        return ajax_error(str(exc), status=500)
+    return send_file(
+        BytesIO(content),
+        mimetype=XLSX_MIME,
+        as_attachment=True,
+        download_name=order_filename(fields["order_number"]),
     )
 
 
@@ -583,7 +636,7 @@ def route_json():
         for stop in payload["stops"]
         if stop["lat"] is not None and stop["lng"] is not None
     ]
-    return jsonify({"points": points, "remaining": 0})
+    return jsonify({"points": points, "missing": max(len(payload["stops"]) - len(points), 0)})
 
 
 @work_orders_bp.route("/nearby.json")

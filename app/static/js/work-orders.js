@@ -109,11 +109,12 @@ window.OporaWorkOrders = {
           const type = item.entity_type || item.type;
           const id = item.entity_id || item.id;
           const already = inPlan(type, id);
-          const dist = item.distance_m ? `${item.distance_m} м` : "";
+          const dist = item.distance_m ? (item.distance_m >= 1000 ? `${(item.distance_m / 1000).toFixed(1).replace('.', ',')} км` : `${item.distance_m} м`) : "";
+          const reason = item.nearby_reason || "";
           return `<article class="workbench-hit">
             <div class="workbench-hit__body">
               <strong>${typeDot(type)} ${typeLabel(type, item.number)}</strong>
-              <small>${escapeHtml(item.address || "")}${dist ? ` · ${escapeHtml(dist)}` : ""}</small>
+              <small>${escapeHtml(item.address || "")}${reason ? ` · ${escapeHtml(reason)}` : ""}${dist ? ` · ${escapeHtml(dist)}` : ""}</small>
             </div>
             ${addButton(type, id, already)}
           </article>`;
@@ -148,6 +149,7 @@ window.OporaWorkOrders = {
     function applyPlan(nextPlan) {
       plan = nextPlan || { stops: [], editable: true, status: null };
       renderPlan();
+      refreshMap();
     }
 
     function refreshMap() {
@@ -232,6 +234,7 @@ window.OporaWorkOrders = {
     nearbyToggle?.addEventListener("click", () => {
       if (nearbyWrap) nearbyWrap.hidden = false;
       nearbyWrap?.scrollIntoView({ behavior: "smooth", block: "start" });
+      nearbyToggle.hidden = true;
     });
 
     planBox?.addEventListener("click", (event) => {
@@ -282,8 +285,15 @@ window.OporaWorkOrders = {
         .then((res) => res.json())
         .then((data) => {
           window.OporaOpsMap?.init?.();
-          window.OporaOpsMap?.setRoute?.(data.points || []);
-          toast("Маршрут построен.");
+          const count = window.OporaOpsMap?.setRoute?.(data.points || []) || 0;
+          const missing = Number(data.missing || 0);
+          if (!count) {
+            toast("Маршрут не построен: у выбранных работ пока нет координат.", false);
+          } else if (count === 1) {
+            toast(missing ? "Показана одна точка. У остальных работ пока нет координат." : "Показана точка выбранной работы.");
+          } else {
+            toast(missing ? `Маршрут построен по ${count} точкам. Без координат: ${missing}.` : `Маршрут построен по ${count} точкам.`);
+          }
         })
         .catch(() => toast("Не удалось построить маршрут.", false));
     });

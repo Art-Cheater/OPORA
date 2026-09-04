@@ -5,6 +5,7 @@
 {% block extra_css %}
 {{ super() }}
 <link rel="stylesheet" href="{{ static_url('css/work-plans.css') }}">
+<link rel="stylesheet" href="{{ static_url('vendor/leaflet/leaflet.css') }}">
 {% endblock %}
 
 {% block page_header %}{% endblock %}
@@ -13,7 +14,7 @@
 <div id="planCreate"
      class="plan-page"
      data-search-url="{{ url_for('work_orders.items_json') }}"
-     data-related-url="{{ url_for('work_orders.related_json') }}"
+     data-related-url="{{ url_for('work_orders.nearby_json') }}"
      data-save-url="{{ url_for('work_orders.plans_create') }}"
      data-cancel-url="{{ url_for('work_orders.index') }}">
 
@@ -69,6 +70,12 @@
         <div id="planRelated" class="plan-related"></div>
     </section>
 
+    <label class="plan-map-toggle"><input type="checkbox" id="planMapEnabled"> Включить карту</label>
+    <section class="plan-card plan-card--wide" id="planMapWrap" hidden>
+        <div id="opsMap" data-kind="plan"></div>
+        <p id="opsMapStatus" class="plan-empty">Карта выбранных работ.</p>
+    </section>
+
     <div class="plan-page__bar">
         <a class="plan-btn plan-btn--ghost" href="{{ url_for('work_orders.index') }}">Отмена</a>
         <button type="button" class="plan-btn plan-btn--save" id="planSave">Сохранить план</button>
@@ -78,5 +85,7 @@
 
 {% block extra_js %}
 {{ super() }}
+<script src="{{ static_url('vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ static_url('js/ops-map.js') }}"></script>
 <script src="{{ static_url('js/work-plan-new.js') }}"></script>
 {% endblock %}

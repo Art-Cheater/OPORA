@@ -37,6 +37,7 @@ class RequestFilterForm(FlaskForm):
     )
     pp = StringField("ПП", validators=[Optional(), Length(max=255)])
     for_beresnev = BooleanField("Для Береснева", default=False)
+    hide_completed = BooleanField("Убрать выполненные", default=False)
     status_id = SelectField("Статус", choices=[], validators=[Optional()])
     priority = SelectField(
         "Приоритет",

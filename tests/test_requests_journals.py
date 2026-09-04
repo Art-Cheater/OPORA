@@ -5,13 +5,14 @@ from __future__ import annotations
 from decimal import Decimal
 
 from app.extensions import db
+from app.models.base import format_local_dt
 from app.models.defects.defect import Defect
 from app.models.defects.defect_category import DefectCategory
 from app.models.defects.defect_status import DefectStatus
 from app.models.enums import Priority
 from app.models.requests.request import Request
 from app.models.requests.request_status import RequestStatus
-from app.modules.requests.address_format import normalize_address
+from app.modules.requests.address_format import address_expression_anchor, normalize_address
 from app.modules.requests.repositories import RequestRepository
 
 
@@ -34,6 +35,84 @@ def test_requests_journals_include_defects_tab(admin_client):
     assert "Новая заявка" in html
     assert 'data-tour="defects"' not in html
     assert ">Путевые листы</span>" not in html
+
+
+def test_request_create_journal_can_open_defect_creation(admin_client, client):
+    page = admin_client.get("/requests/new")
+    html = page.get_data(as_text=True)
+    assert '<option value="__defects__">Дефекты</option>' in html
+    assert 'data-defect-create-url="/defects/new"' in html
+
+    redirected = admin_client.post(
+        "/requests/new",
+        data={"journal_id": "__defects__"},
+        follow_redirects=False,
+    )
+    assert redirected.status_code == 302
+    assert redirected.headers["Location"].endswith("/defects/new")
+
+    ajax = admin_client.post(
+        "/requests/new",
+        data={"journal_id": "__defects__"},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert ajax.status_code == 200
+    assert ajax.get_json()["redirect_url"] == "/defects/new"
+
+    client.post("/auth/logout", follow_redirects=True)
+    client.post(
+        "/auth/login",
+        data={"email": "executor@test.local", "password": "pass12345", "submit": "Войти"},
+        follow_redirects=True,
+    )
+    executor_html = client.get("/requests/new").get_data(as_text=True)
+    assert 'value="__defects__"' not in executor_html
+
+
+def test_request_create_preserves_multiple_houses_and_moscow_time(admin_client, app):
+    response = admin_client.post(
+        "/requests/new",
+        data={
+            "number": "26-9921",
+            "address": "Лепсе 12, 15",
+            "received_at": "2026-09-04T10:20",
+            "dispatcher_name": "Иванова А.С.",
+            "applicant_name": "Тест",
+            "priority": "medium",
+            "submit": "Сохранить",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 302, response.get_data(as_text=True)[:500]
+    request_id = response.headers["Location"].rstrip("/").split("/")[-1]
+    with app.app_context():
+        item = db.session.get(Request, request_id)
+        assert item.address == "Лепсе 12, 15"
+        assert item.normalized_address == "Киров, улица Лепсе, дом 12"
+        assert format_local_dt(item.received_at) == "04.09.2026 10:20"
+    assert address_expression_anchor("Лепсе 12-15") == "Лепсе 12"
+    assert address_expression_anchor("Лепсе 12/1, 15") is None
+
+
+def test_requests_hide_completed_filter(admin_client, app):
+    with app.app_context():
+        journal_id = RequestRepository.get_default_journal().id
+        completed = db.session.scalar(db.select(RequestStatus).where(RequestStatus.code == "completed"))
+        item = Request(
+            number="26-9922",
+            title="Завершённая",
+            address="ул. Тест, 22",
+            applicant_name="QA",
+            priority=Priority.MEDIUM.value,
+            status_id=completed.id,
+            journal_id=journal_id,
+        )
+        db.session.add(item)
+        db.session.commit()
+    visible = admin_client.get("/requests/table?number=26-9922").get_json()["table_html"]
+    hidden = admin_client.get("/requests/table?number=26-9922&hide_completed=1").get_json()["table_html"]
+    assert "26-9922" in visible
+    assert "26-9922" not in hidden
 
 
 def test_requests_defects_tab_looks_like_journal(admin_client, app):

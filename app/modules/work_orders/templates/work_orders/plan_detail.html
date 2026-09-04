@@ -41,6 +41,11 @@
                 <i class="bi bi-file-earmark-word"></i> Сформировать отчёт
             </button>
             {% endif %}
+            {% if can_create_order %}
+            <button type="button" class="plan-btn plan-btn--ghost" id="planOrderOpen">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Создать бланк-распоряжение
+            </button>
+            {% endif %}
         </div>
         <div class="plan-progress">
             <div class="plan-progress__bar"><span style="width: {{ percent }}%"></span></div>
@@ -133,6 +138,25 @@
         </div>
         {% if not report_recipients %}<p class="desk-modal__hint">Нет доступных адресатов с доступом к мессенджеру.</p>{% endif %}
     </div>
+</div>
+{% endif %}
+
+{% if can_create_order %}
+<div class="desk-modal" id="planOrderModal" hidden>
+    <form class="desk-modal__card" method="POST" action="{{ url_for('work_orders.download_plan_order', plan_id=plan.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <h3>Бланк-распоряжение</h3>
+        <p class="desk-modal__hint">ПП, адрес и описание работ уже будут подставлены из плана. Остальные поля можно заполнить вручную.</p>
+        <label>Номер распоряжения <input name="order_number" required maxlength="100" autocomplete="off"></label>
+        <label>Производитель работ <input name="producer" value="{{ plan.master }}" maxlength="255"></label>
+        <label>Член бригады / машинист <input name="crew_lead" maxlength="255"></label>
+        <label>Состав бригады <input name="crew_members" maxlength="500"></label>
+        <label>Ответственный за автоподъёмник <input name="lift_responsible" maxlength="255"></label>
+        <div class="desk-modal__actions">
+            <button type="button" class="desk-btn" data-close-modal>Отмена</button>
+            <button type="submit" class="desk-btn desk-btn--done">Скачать XLSX</button>
+        </div>
+    </form>
 </div>
 {% endif %}
 

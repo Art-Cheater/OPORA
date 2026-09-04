@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from flask import (
     abort,
@@ -32,6 +33,7 @@ from app.core.navigation import back_navigation
 from app.core.upload_utils import resolve_download_filename, resolve_storage_path
 from app.extensions import db
 from app.models.auth.constants import (
+    PERM_DEFECTS_CREATE,
     PERM_DEFECTS_VIEW,
     PERM_REQUESTS_APPROVE,
     PERM_REQUESTS_CREATE,
@@ -44,6 +46,7 @@ from app.models.auth.user import User
 from app.models.communication.comment import Comment
 from app.models.enums import Priority
 from app.models.files.attachment import Attachment
+from app.models.base import format_local_dt
 from app.modules.requests.blueprint import requests_bp
 from app.modules.requests.forms import (
     AssignMasterForm,
@@ -127,8 +130,13 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
     if received_at is None:
         # Не подставляем «сейчас» молча — дата обязательна в форме.
         received_at = None
-    elif isinstance(received_at, datetime) and received_at.tzinfo is None:
-        received_at = received_at.replace(tzinfo=timezone.utc)
+    elif isinstance(received_at, datetime):
+        # DateTimeLocalField приходит без tz: диспетчер вводит московское время.
+        received_at = (
+            received_at.replace(tzinfo=ZoneInfo("Europe/Moscow"))
+            if received_at.tzinfo is None
+            else received_at
+        ).astimezone(timezone.utc)
 
     def preserved(code, submitted, attr, default=None):
         """Скрытые builtin-поля не затираем при сохранении."""
@@ -230,7 +238,10 @@ def _prepare_filter_form(form: RequestFilterForm) -> None:
     ]
 
 
-def _prepare_request_form(form: RequestForm) -> None:
+DEFECT_JOURNAL_VALUE = "__defects__"
+
+
+def _prepare_request_form(form: RequestForm, *, include_defects: bool = False) -> None:
     from app.core.builtin_field_service import BuiltinFieldService
 
     statuses = RequestRepository.get_statuses()
@@ -247,6 +258,8 @@ def _prepare_request_form(form: RequestForm) -> None:
     form.journal_id.choices = [
         (str(item.id), item.name) for item in RequestRepository.get_journals()
     ]
+    if include_defects and current_user.has_permission(PERM_DEFECTS_CREATE):
+        form.journal_id.choices.append((DEFECT_JOURNAL_VALUE, "Дефекты"))
     form.executor_id.choices = [("", "Не назначен")]
     BuiltinFieldService.apply_to_form(form, "requests")
 
@@ -259,7 +272,8 @@ def _prepare_assign_master_form(form: AssignMasterForm) -> None:
 
 
 def _apply_request_create_defaults(form: RequestForm) -> None:
-    from datetime import datetime, timezone
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
 
     if request.method != "GET":
         return
@@ -283,7 +297,7 @@ def _apply_request_create_defaults(form: RequestForm) -> None:
     form.pp.data = ""
     form.applicant_name.data = ""
     form.priority.data = Priority.MEDIUM.value
-    form.received_at.data = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    form.received_at.data = datetime.now(ZoneInfo("Europe/Moscow")).replace(tzinfo=None, second=0, microsecond=0)
     status = RequestRepository.get_status_by_code(STATUS_NEW)
     if status is not None:
         form.status_id.data = str(status.id)
@@ -309,6 +323,7 @@ def _build_filters() -> RequestFilter:
         district=request.args.get("district", ""),
         pp=request.args.get("pp", ""),
         for_beresnev=for_beresnev_raw in {"1", "true", "on", "yes", "y"},
+        hide_completed=(request.args.get("hide_completed") or "").strip().lower() in {"1", "true", "on", "yes", "y"},
         journal_id=request.args.get("journal_id", ""),
         status_id=request.args.get("status_id", ""),
         priority=request.args.get("priority", ""),
@@ -579,7 +594,7 @@ def open_by_address():
 
     received = None
     if existing.received_at:
-        received = existing.received_at.strftime("%d.%m.%Y %H:%M")
+        received = format_local_dt(existing.received_at)
     return jsonify(
         {
             "found": True,
@@ -599,6 +614,7 @@ def open_by_address():
 @permission_required(PERM_REQUESTS_EDIT)
 def mark_repeat(request_id: uuid.UUID):
     from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
 
     req = RequestRepository.get_by_id(request_id)
     if req is None:
@@ -616,8 +632,8 @@ def mark_repeat(request_id: uuid.UUID):
         except ValueError:
             try:
                 call_at = datetime.strptime(str(call_raw), "%Y-%m-%dT%H:%M").replace(
-                    tzinfo=timezone.utc
-                )
+                    tzinfo=ZoneInfo("Europe/Moscow")
+                ).astimezone(timezone.utc)
             except ValueError:
                 call_at = None
 
@@ -667,8 +683,16 @@ def _cf_form(entity_id=None):
 @permission_required(PERM_REQUESTS_CREATE)
 def create():
     form = RequestForm()
-    _prepare_request_form(form)
+    _prepare_request_form(form, include_defects=True)
     _apply_request_create_defaults(form)
+
+    if request.method == "POST" and form.journal_id.data == DEFECT_JOURNAL_VALUE:
+        if not current_user.has_permission(PERM_DEFECTS_CREATE):
+            abort(403)
+        redirect_url = url_for("defects.create")
+        if is_ajax():
+            return ajax_ok("Открываем создание дефекта.", redirect_url=redirect_url)
+        return redirect(redirect_url)
 
     if form.validate_on_submit():
         try:
@@ -824,7 +848,7 @@ def detail(request_id: uuid.UUID):
                 attachment_id=f.id,
             ),
             "can_delete": can_edit_files,
-            "created_at": f.created_at.strftime("%d.%m.%Y %H:%M"),
+            "created_at": format_local_dt(f.created_at),
         }
         for f in attachments
     ]
@@ -892,7 +916,11 @@ def edit(request_id: uuid.UUID):
 
         form.district.data = normalize_request_district(req.district) or ""
         if req.received_at is not None:
-            form.received_at.data = req.received_at
+            from app.models.base import as_utc_aware
+
+            form.received_at.data = as_utc_aware(req.received_at).astimezone(
+                ZoneInfo("Europe/Moscow")
+            ).replace(tzinfo=None)
 
     if form.validate_on_submit():
         try:

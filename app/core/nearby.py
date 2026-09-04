@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import math
+import re
 import uuid
 from dataclasses import dataclass
 from decimal import Decimal
 
+from flask import current_app
 from sqlalchemy import and_, func, literal, select, union_all
 
 from app.extensions import db
@@ -16,13 +18,23 @@ from app.models.requests.request import Request
 from app.models.requests.request_journal import RequestJournal
 from app.models.requests.request_status import RequestStatus
 from app.modules.requests.address_format import normalize_address
+from app.core.routing import RoutingService
 
 PRIORITY_ADDRESS = 1
 PRIORITY_STREET = 2
 PRIORITY_DISTRICT = 3
 PRIORITY_GEO = 4
-GEO_DELTA = Decimal("0.007")
+PRIORITY_PP = 0
+GEO_DELTA = Decimal("0.025")
 NEARBY_LIMIT = 20
+
+
+def normalize_pp(value: str | None) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    raw = " ".join(raw.casefold().split())
+    return re.sub(r"^пп[\s.:\-]*", "", raw).strip()
 
 
 def haversine_m(lat1, lon1, lat2, lon2) -> int | None:
@@ -53,6 +65,8 @@ class NearbyHit:
     distance_m: int | None = None
     latitude: float | None = None
     longitude: float | None = None
+    nearby_reason: str = ""
+    pp: str = ""
 
 
 class NearbySearchService:
@@ -65,6 +79,7 @@ class NearbySearchService:
         address: str | None = None,
         street: str | None = None,
         district: str | None = None,
+        pp: str | None = None,
         latitude: Decimal | None = None,
         longitude: Decimal | None = None,
         exclude_request_ids: list[uuid.UUID] | None = None,
@@ -78,6 +93,13 @@ class NearbySearchService:
         district_key = (district or "").strip()
 
         parts = []
+        pp_key = normalize_pp(pp)
+        if pp_key:
+            variants = {pp_key, f"пп {pp_key}", f"пп-{pp_key}"}
+            req_pp = func.lower(func.trim(Request.pp)).in_(variants)
+            def_pp = func.lower(func.trim(Defect.pp)).in_(variants)
+            parts.append(cls._request_query(PRIORITY_PP, req_pp, exclude_request_ids))
+            parts.append(cls._defect_query(PRIORITY_PP, def_pp, exclude_defect_ids))
         if target_address:
             parts.append(cls._request_query(PRIORITY_ADDRESS, Request.normalized_address == target_address, exclude_request_ids))
             parts.append(cls._defect_query(PRIORITY_ADDRESS, Defect.normalized_address == target_address, exclude_defect_ids))
@@ -115,13 +137,18 @@ class NearbySearchService:
 
         stmt = union_all(*parts).subquery()
         rows = db.session.execute(
-            select(stmt).order_by(stmt.c.priority.asc(), stmt.c.number.asc()).limit(limit * 3)
+            select(stmt).order_by(stmt.c.priority.asc(), stmt.c.number.asc()).limit(max(limit * 4, 32))
         ).all()
 
         origin_lat = float(latitude) if latitude is not None else None
         origin_lng = float(longitude) if longitude is not None else None
         seen: set[tuple[str, uuid.UUID]] = set()
         hits: list[NearbyHit] = []
+        candidate_limit = current_app.config["NEARBY_ROUTING_CANDIDATE_LIMIT"]
+        routed = 0
+        max_distance = current_app.config["NEARBY_ROUTE_DISTANCE_METERS"] + current_app.config["NEARBY_ROUTE_TOLERANCE_METERS"]
+        # Дорожная длина почти всегда больше прямой; фильтр оставляет запас.
+        preliminary_limit = int(max_distance / 0.55)
         for row in rows:
             key = (row.entity_type, row.entity_id)
             if key in seen:
@@ -129,9 +156,17 @@ class NearbySearchService:
             seen.add(key)
             lat = float(row.latitude) if row.latitude is not None else None
             lng = float(row.longitude) if row.longitude is not None else None
+            same_pp = bool(pp_key) and normalize_pp(row.pp) == pp_key
             distance = None
-            if origin_lat is not None and origin_lng is not None and lat is not None and lng is not None:
-                distance = haversine_m(origin_lat, origin_lng, lat, lng)
+            reason = "Тот же ПП" if same_pp else ""
+            if not same_pp:
+                direct = haversine_m(origin_lat, origin_lng, lat, lng) if origin_lat is not None and origin_lng is not None and lat is not None and lng is not None else None
+                if direct is None or direct > preliminary_limit or routed >= candidate_limit:
+                    continue
+                routed += 1
+                distance = RoutingService.route_distance((origin_lat, origin_lng), (lat, lng))
+                if distance is None or distance > max_distance:
+                    continue
             hits.append(
                 NearbyHit(
                     entity_type=row.entity_type,
@@ -152,6 +187,8 @@ class NearbySearchService:
                     distance_m=distance,
                     latitude=lat,
                     longitude=lng,
+                    nearby_reason=reason,
+                    pp=row.pp or "",
                 )
             )
             if len(hits) >= limit:
@@ -174,6 +211,7 @@ class NearbySearchService:
                 RequestJournal.name.label("journal_name"),
                 Request.latitude.label("latitude"),
                 Request.longitude.label("longitude"),
+                Request.pp.label("pp"),
             )
             .join(RequestStatus, Request.status_id == RequestStatus.id)
             .join(RequestJournal, Request.journal_id == RequestJournal.id)
@@ -204,6 +242,7 @@ class NearbySearchService:
                 literal("Дефекты").label("journal_name"),
                 Defect.latitude.label("latitude"),
                 Defect.longitude.label("longitude"),
+                Defect.pp.label("pp"),
             )
             .join(DefectStatus, Defect.status_id == DefectStatus.id)
             .where(

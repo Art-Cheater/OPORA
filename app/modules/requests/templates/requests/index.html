@@ -104,6 +104,10 @@
             {{ filter_form.for_beresnev(class="form-check-input", value="1") }}
             {{ filter_form.for_beresnev.label.text }}
         </label>
+        <label class="journal-filters__check">
+            {{ filter_form.hide_completed(class="form-check-input", value="1") }}
+            {{ filter_form.hide_completed.label.text }}
+        </label>
         <button type="button" id="requestFilterReset" class="btn btn-outline-secondary">Сброс</button>
     </div>
 </form>

@@ -131,12 +131,18 @@ class WorkOrderService:
 
     @classmethod
     def map_points(cls, filters: WorkOrderFilter, plan: Waybill | None) -> list[dict]:
-        in_plan = cls._plan_keys(plan)
-        points: list[dict] = []
-        if filters.kind in {"all", "request", "villages"}:
-            points.extend(cls._request_points(filters, in_plan, with_coords=True))
-        if filters.kind in {"all", "defect"}:
-            points.extend(cls._defect_points(filters, in_plan, with_coords=True))
+        """Карта рабочего места показывает только уже выбранные работы."""
+        if plan is None:
+            return []
+        points = []
+        for order, stop in enumerate(sorted((s for s in plan.stops if s.deleted_at is None), key=lambda s: s.sort_order), start=1):
+            row = cls.serialize_stop(stop, order)
+            if row["lat"] is not None and row["lng"] is not None:
+                row["stop_id"] = row["id"]
+                row["id"] = row["entity_id"]
+                row["type"] = row["entity_type"]
+                row["in_plan"] = True
+                points.append(row)
         return points
 
     @classmethod
@@ -381,6 +387,8 @@ class WorkOrderService:
         defect = stop.defect
         entity_type = "request" if stop.request_id else "defect"
         entity = request if request is not None else defect
+        latitude = stop.latitude if stop.latitude is not None else (entity.latitude if entity is not None else None)
+        longitude = stop.longitude if stop.longitude is not None else (entity.longitude if entity is not None else None)
         number = entity.number if entity is not None else ""
         description = ""
         status = ""
@@ -407,8 +415,8 @@ class WorkOrderService:
             "status": status,
             "journal": journal,
             "url": url,
-            "lat": float(stop.latitude) if stop.latitude is not None else None,
-            "lng": float(stop.longitude) if stop.longitude is not None else None,
+            "lat": float(latitude) if latitude is not None else None,
+            "lng": float(longitude) if longitude is not None else None,
             "color": "blue" if entity_type == "request" else "red",
         }
 
@@ -427,6 +435,7 @@ class WorkOrderService:
                 address=item.address,
                 street=item.street,
                 district=item.district,
+                pp=item.pp,
                 latitude=item.latitude,
                 longitude=item.longitude,
                 exclude_request_ids=exclude_req,
@@ -441,6 +450,7 @@ class WorkOrderService:
                 address=item.address,
                 street=item.street,
                 district=item.district,
+                pp=item.pp,
                 latitude=item.latitude,
                 longitude=item.longitude,
                 exclude_request_ids=exclude_req,
@@ -462,6 +472,11 @@ class WorkOrderService:
             "journal": hit.journal,
             "priority": hit.priority,
             "distance_m": hit.distance_m,
+            "nearby_reason": hit.nearby_reason,
+            "pp": hit.pp,
+            "lat": hit.latitude,
+            "lng": hit.longitude,
+            "type_label": "Заявка" if hit.entity_type == "request" else "Дефект",
             "url": (
                 f"/requests/{hit.entity_id}?return_url=/work-orders/"
                 if hit.entity_type == "request"

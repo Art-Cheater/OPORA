@@ -64,9 +64,11 @@ window.OporaOpsMap = {
       mapNode.replaceChildren();
     }
 
-    const src = mapNode.getAttribute("data-src");
-    if (!src) return false;
     this._kind = mapNode.getAttribute("data-kind") || "point";
+    const src = mapNode.getAttribute("data-src");
+    // Карта нового плана получает точки прямо из выбранной пользователем корзины.
+    // Для остальных экранов источником остаётся JSON endpoint.
+    if (!src && this._kind !== "plan") return false;
     this._container = mapNode;
     const statusNode = document.getElementById("opsMapStatus");
     const KIROV = [58.6035, 49.668];
@@ -234,7 +236,7 @@ window.OporaOpsMap = {
     };
 
     this.setRoute = function setRoute(points) {
-      if (!self._routeLayer || self._map !== map) return;
+      if (!self._routeLayer || self._map !== map) return 0;
       self._routeLayer.clearLayers();
       const line = [];
       (points || []).forEach((point) => {
@@ -255,8 +257,16 @@ window.OporaOpsMap = {
       if (line.length > 1) {
         L.polyline(line, { color: COLORS.route, weight: 4, opacity: 0.9 }).addTo(self._routeLayer);
         map.fitBounds(line, { padding: [36, 36], maxZoom: 16 });
+      } else if (line.length === 1) {
+        map.setView(line[0], 16);
       }
       refreshSize();
+      return line.length;
+    };
+
+    this.setPoints = function setPoints(points) {
+      if (!self._map || self._map !== map) return;
+      self._paint({ points: points || [] });
     };
 
     this.clearRoute = function clearRoute() {
@@ -275,7 +285,8 @@ window.OporaOpsMap = {
     };
     mapNode.addEventListener("click", this._onClick);
 
-    this.reload(src);
+    if (src) this.reload(src);
+    else this._paint({ points: [] });
     return true;
   },
 };

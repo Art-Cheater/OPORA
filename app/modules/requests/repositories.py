@@ -45,6 +45,7 @@ class RequestFilter:
     district: str = ""
     pp: str = ""
     for_beresnev: bool = False
+    hide_completed: bool = False
     journal_id: str = ""
     status_id: str = ""
     priority: str = ""
@@ -502,6 +503,8 @@ class RequestRepository:
             stmt = stmt.where(Request.pp.ilike(f"%{filters.pp.strip()}%"))
         if filters.for_beresnev:
             stmt = stmt.where(Request.for_beresnev.is_(True))
+        if filters.hide_completed:
+            stmt = stmt.where(RequestStatus.code != STATUS_COMPLETED)
         if filters.journal_id:
             try:
                 stmt = stmt.where(Request.journal_id == uuid.UUID(filters.journal_id))

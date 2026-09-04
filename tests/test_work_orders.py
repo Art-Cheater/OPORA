@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from zipfile import ZipFile
 from decimal import Decimal
+from io import BytesIO
+from zipfile import ZipFile
+
+from openpyxl import load_workbook
 
 from app.extensions import db
 from app.models.defects.defect import Defect
@@ -17,6 +20,7 @@ from app.models.waybills.waybill import Waybill
 from app.models.work_plans.work_plan import WorkPlan
 from app.modules.requests.address_format import normalize_address
 from app.modules.requests.repositories import RequestRepository
+from app.modules.work_orders.order_service import WORK_ROWS, build_order_workbook
 
 
 def _login(client, email: str, password: str = "pass12345"):
@@ -109,6 +113,29 @@ def test_work_orders_access(client):
     assert denied.status_code == 403
 
 
+def test_order_blank_is_filled_from_the_real_template():
+    content = build_order_workbook(
+        {
+            "items": [
+                {"pp": "ПП-12", "address": "ул. Лепсе, 12", "description": "Не горит светильник"},
+                {"pp": "", "address": "ул. Лепсе, 15", "description": "Обрыв провода"},
+            ]
+        },
+        {
+            "order_number": "7",
+            "producer": "Иванов И.И.",
+            "crew_lead": "Петров П.П.",
+            "crew_members": "Сидоров С.С.",
+            "lift_responsible": "Кузнецов К.К.",
+        },
+    )
+    sheet = load_workbook(BytesIO(content), data_only=False)["табель"]
+    assert sheet["D4"].value == "Бланк-распоряжение №7"
+    assert sheet["D7"].value == "Иванов И.И."
+    assert sheet.cell(WORK_ROWS[0], 2).value == "ПП-12"
+    assert sheet.cell(WORK_ROWS[1], 3).value == "ул. Лепсе, 15"
+
+
 def test_work_desk_queue_card_and_complete(client, app):
     _login(client, "master@test.local")
     request_id, extra_id, defect_id, _, _ = _seed_work(app, suffix="91")
@@ -161,6 +188,9 @@ def test_work_desk_queue_card_and_complete(client, app):
 
 def test_work_orders_map_colors_and_types(admin_client, app):
     request_id, extra_id, defect_id, _, _ = _seed_work(app, suffix="81")
+    assert admin_client.get("/work-orders/map.json").get_json()["points"] == []
+    assert admin_client.post("/work-orders/plan/add", json={"entity_type": "request", "entity_id": request_id}).status_code == 200
+    assert admin_client.post("/work-orders/plan/add", json={"entity_type": "defect", "entity_id": defect_id}).status_code == 200
     payload = admin_client.get("/work-orders/map.json").get_json()
     points = payload["points"]
     by_id = {p["id"]: p for p in points}
@@ -168,15 +198,16 @@ def test_work_orders_map_colors_and_types(admin_client, app):
     assert by_id[request_id]["color"] == "blue"
     assert by_id[defect_id]["type"] == "defect"
     assert by_id[defect_id]["color"] == "red"
-    only_defects = admin_client.get("/work-orders/map.json?kind=defect").get_json()["points"]
-    assert all(p["type"] == "defect" for p in only_defects)
-    assert defect_id in {p["id"] for p in only_defects}
-    assert request_id not in {p["id"] for p in only_defects}
 
 
 def test_work_orders_plan_nearby_reorder_route(client, app):
     _login(client, "master@test.local")
     request_id, extra_id, defect_id, req_status, def_status = _seed_work(app, suffix="82")
+    with app.app_context():
+        db.session.get(Request, request_id).pp = "ПП-82"
+        db.session.get(Request, extra_id).pp = "ПП-82"
+        db.session.get(Defect, defect_id).pp = "ПП-82"
+        db.session.commit()
     first = client.post(
         "/work-orders/plan/add",
         json={"entity_type": "defect", "entity_id": defect_id},
@@ -208,8 +239,15 @@ def test_work_orders_plan_nearby_reorder_route(client, app):
     assert reorder.status_code == 200
     ordered = [s["id"] for s in reorder.get_json()["plan"]["stops"]]
     assert ordered == reversed_ids
+    with app.app_context():
+        selection = db.session.get(Waybill, plan["id"])
+        for stop in selection.stops:
+            stop.latitude = None
+            stop.longitude = None
+        db.session.commit()
     route = client.get("/work-orders/route.json").get_json()
     assert len(route["points"]) == 2
+    assert route["missing"] == 0
     assert [p["order"] for p in route["points"]] == [1, 2]
     saved = client.post("/work-orders/plan/save", json={})
     assert saved.status_code == 200
@@ -217,6 +255,12 @@ def test_work_orders_plan_nearby_reorder_route(client, app):
     assert saved_body["plan"]["number"].startswith("ПР-")
     assert saved_body["plan"]["status"] == "in_progress"
     assert saved_body["redirect"].endswith(saved_body["plan"]["id"])
+    already_active = client.post(
+        "/work-orders/plan/add",
+        json={"entity_type": "request", "entity_id": request_id},
+    )
+    assert already_active.status_code == 400
+    assert "другой активный план" in already_active.get_json()["message"]
     items = client.get("/work-orders/items.json").get_json()["items"]
     by_type = {row["type"] for row in items}
     assert "request" in by_type
@@ -590,6 +634,21 @@ def test_remove_from_plan_restores_status_only_if_system_changed(client, app):
         assert defect.status_id == def_status
         assert db.session.get(DefectStatus, defect.status_id).code == "open"
 
+    added_request = client.post("/work-orders/plan/add", json={"entity_type": "request", "entity_id": request_id})
+    assert added_request.status_code == 200
+    request_stop = added_request.get_json()["plan"]["stops"][0]["id"]
+    with app.app_context():
+        req = db.session.get(Request, request_id)
+        assert db.session.get(RequestStatus, req.status_id).code == "in_progress"
+        stop = db.session.get(WaybillStop, request_stop)
+        assert stop.previous_status_code == "new"
+    removed_request = client.post("/work-orders/plan/remove", json={"stop_id": request_stop})
+    assert removed_request.status_code == 200
+    with app.app_context():
+        req = db.session.get(Request, request_id)
+        assert req.status_id == req_status
+        assert db.session.get(RequestStatus, req.status_id).code == "new"
+
     with app.app_context():
         extra = db.session.get(Request, extra_id)
         extra.status_id = db.session.scalar(
@@ -604,6 +663,41 @@ def test_remove_from_plan_restores_status_only_if_system_changed(client, app):
     with app.app_context():
         extra = db.session.get(Request, extra_id)
         assert extra.status_id == extra_status
+
+
+def test_director_tracking_filters_plans(client, app):
+    from app.modules.auth.services import AuthService
+
+    request_id, _, defect_id, _, _ = _seed_work(app, suffix="73")
+    _login(client, "master@test.local")
+    created = client.post(
+        "/work-orders/plans/",
+        json={
+            "items": [
+                {"entity_type": "request", "entity_id": request_id},
+                {"entity_type": "defect", "entity_id": defect_id},
+            ]
+        },
+    )
+    assert created.status_code == 200
+    plan_number = created.get_json()["plan"]["number"]
+
+    with app.app_context():
+        AuthService.create_user("director@test.local", "pass12345", "Директор QA", "director")
+
+    _login(client, "director@test.local")
+    page = client.get("/work-orders/tracking/?status=in_progress")
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert "Отслеживание работы" in html
+    assert plan_number in html
+    assert "Мастер QA" in html
+    assert "В работе" in html
+    assert 'name="master_id"' in html
+    assert 'name="date_from"' in html
+
+    _login(client, "master@test.local")
+    assert client.get("/work-orders/tracking/").status_code == 403
 
 
 

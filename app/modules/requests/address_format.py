@@ -38,6 +38,32 @@ _HOUSE_TAIL = re.compile(
 )
 
 _MULTI_SPACE = re.compile(r"\s+")
+_SIMPLE_HOUSE = r"\d+"
+
+
+def address_expression_anchor(address: str | None) -> str | None:
+    """Первый однозначный адрес из перечисления домов или простого диапазона.
+
+    Выражение остаётся текстом пользователя; anchor нужен только для старых
+    структурированных полей и никогда не отправляется геокодеру как multi-address.
+    """
+    text = _MULTI_SPACE.sub(" ", (address or "").strip())
+    if not text:
+        return None
+    range_match = re.fullmatch(rf"(?P<street>.+?\D)\s*(?P<first>{_SIMPLE_HOUSE})\s*-\s*(?P<last>{_SIMPLE_HOUSE})", text)
+    if range_match and not re.search(r"\d", range_match.group("street")):
+        return f"{range_match.group('street').strip(' ,')} {range_match.group('first')}"
+
+    parts = [part.strip() for part in text.split(",")]
+    if len(parts) < 2:
+        return None
+    first = parts[0]
+    first_match = re.fullmatch(rf"(?P<street>.+?\D)\s*(?P<house>{_SIMPLE_HOUSE})", first)
+    if not first_match or re.search(r"\d", first_match.group("street")):
+        return None
+    if not all(re.fullmatch(_SIMPLE_HOUSE, part) for part in parts[1:]):
+        return None
+    return f"{first_match.group('street').strip(' ,')} {first_match.group('house')}"
 
 
 def _title_ru(text: str) -> str:

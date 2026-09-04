@@ -15,6 +15,8 @@ window.OporaWorkPlanNew = {
     const nearbyToggle = document.getElementById("planNearbyToggle");
     const flashBox = document.getElementById("planFlash");
     const saveBtn = document.getElementById("planSave");
+    const mapToggle = document.getElementById("planMapEnabled");
+    const mapWrap = document.getElementById("planMapWrap");
     const searchForm = document.getElementById("planSearch");
     const items = [];
     let lastAdded = null;
@@ -59,6 +61,7 @@ window.OporaWorkPlanNew = {
       if (!items.length) {
         basketBox.innerHTML = '<p class="plan-empty">Пока пусто. Добавьте заявки и дефекты слева или из рекомендаций.</p>';
         if (saveBtn) saveBtn.disabled = true;
+        paintMap();
         return;
       }
       if (saveBtn) saveBtn.disabled = false;
@@ -73,6 +76,15 @@ window.OporaWorkPlanNew = {
           </article>`
         )
         .join("");
+      paintMap();
+    }
+
+    function paintMap() {
+      if (!mapToggle?.checked || !mapWrap || mapWrap.hidden) return;
+      window.OporaOpsMap?.init?.();
+      window.OporaOpsMap?.setPoints?.(items.filter((item) => item.lat != null && item.lng != null).map((item) => ({
+        id: item.entity_id, type: item.entity_type, number: item.number, address: item.address, lat: item.lat, lng: item.lng, color: item.entity_type === "defect" ? "red" : "blue", in_plan: true,
+      })));
     }
 
     function addItem(row) {
@@ -86,6 +98,8 @@ window.OporaWorkPlanNew = {
         number: row.number,
         address: row.address || "",
         pp: row.pp || "",
+        lat: row.lat,
+        lng: row.lng,
       });
       lastAdded = { entity_type: type, entity_id: id };
       renderBasket();
@@ -102,7 +116,7 @@ window.OporaWorkPlanNew = {
           <strong>${type === "defect" ? "" : "№ "}${escapeHtml(item.number)}</strong>
           <small>${escapeHtml(item.type_label || (type === "defect" ? "Дефект" : "Заявка"))} · ${escapeHtml(item.address || "")}${item.pp ? ` · ПП ${escapeHtml(item.pp)}` : ""}</small>
         </div>
-        ${already ? '<button type="button" disabled>В плане</button>' : `<button type="button" class="js-add" data-type="${escapeHtml(type)}" data-id="${escapeHtml(id)}" data-number="${escapeHtml(item.number)}" data-address="${escapeHtml(item.address || "")}" data-pp="${escapeHtml(item.pp || "")}" data-label="${escapeHtml(item.type_label || "")}">Добавить</button>`}
+        ${already ? '<button type="button" disabled>В плане</button>' : `<button type="button" class="js-add" data-type="${escapeHtml(type)}" data-id="${escapeHtml(id)}" data-number="${escapeHtml(item.number)}" data-address="${escapeHtml(item.address || "")}" data-pp="${escapeHtml(item.pp || "")}" data-lat="${escapeHtml(item.lat ?? "")}" data-lng="${escapeHtml(item.lng ?? "")}" data-label="${escapeHtml(item.type_label || "")}">Добавить</button>`}
       </article>`;
     }
 
@@ -139,14 +153,7 @@ window.OporaWorkPlanNew = {
       fetch(`${root.dataset.relatedUrl}?${params}`, { headers: headers() })
         .then((res) => res.json())
         .then((data) => {
-          const groups = [
-            { key: "by_pp", title: data.pp ? `Ещё работы по ПП ${data.pp}` : "Ещё работы по ПП" },
-            { key: "by_address", title: "Другие работы по этому адресу/улице" },
-            { key: "by_district", title: "Другие работы по району" },
-          ];
-          const rows = groups.flatMap((group) =>
-            (data[group.key] || []).filter((row) => !hasItem(row.entity_type, row.entity_id))
-          );
+          const rows = (data.hits || []).filter((row) => !hasItem(row.entity_type, row.entity_id));
           if (!rows.length) {
             if (relatedWrap) relatedWrap.hidden = true;
             if (nearbyToggle) nearbyToggle.hidden = true;
@@ -160,9 +167,9 @@ window.OporaWorkPlanNew = {
               return `<article class="plan-row">
                 <div>
                   <strong>${row.entity_type === "defect" ? "" : "№ "}${escapeHtml(row.number)}</strong>
-                  <small>${escapeHtml(row.type_label)} · ${escapeHtml(row.address || "")}${row.pp ? ` · ПП ${escapeHtml(row.pp)}` : ""}</small>
+              <small>${escapeHtml(row.type_label || (row.entity_type === "defect" ? "Дефект" : "Заявка"))} · ${escapeHtml(row.address || "")}${row.nearby_reason ? ` · ${escapeHtml(row.nearby_reason)}` : ""}${row.distance_m ? ` · ${row.distance_m >= 1000 ? `${(row.distance_m / 1000).toFixed(1).replace('.', ',')} км` : `${row.distance_m} м`}` : ""}</small>
                 </div>
-                ${already ? '<button type="button" disabled>В плане</button>' : `<button type="button" class="js-add" data-type="${escapeHtml(row.entity_type)}" data-id="${escapeHtml(row.entity_id)}" data-number="${escapeHtml(row.number)}" data-address="${escapeHtml(row.address || "")}" data-pp="${escapeHtml(row.pp || "")}" data-label="${escapeHtml(row.type_label)}">Добавить</button>`}
+                ${already ? '<button type="button" disabled>В плане</button>' : `<button type="button" class="js-add" data-type="${escapeHtml(row.entity_type)}" data-id="${escapeHtml(row.entity_id)}" data-number="${escapeHtml(row.number)}" data-address="${escapeHtml(row.address || "")}" data-pp="${escapeHtml(row.pp || "")}" data-lat="${escapeHtml(row.lat ?? "")}" data-lng="${escapeHtml(row.lng ?? "")}" data-label="${escapeHtml(row.type_label)}">Добавить</button>`}
               </article>`;
             })
             .join("");
@@ -186,6 +193,8 @@ window.OporaWorkPlanNew = {
         number: btn.dataset.number,
         address: btn.dataset.address,
         pp: btn.dataset.pp,
+        lat: btn.dataset.lat || null,
+        lng: btn.dataset.lng || null,
       });
       search();
     });
@@ -200,6 +209,8 @@ window.OporaWorkPlanNew = {
         number: btn.dataset.number,
         address: btn.dataset.address,
         pp: btn.dataset.pp,
+        lat: btn.dataset.lat || null,
+        lng: btn.dataset.lng || null,
       });
       search();
     });
@@ -207,6 +218,12 @@ window.OporaWorkPlanNew = {
     nearbyToggle?.addEventListener("click", () => {
       if (relatedWrap) relatedWrap.hidden = false;
       relatedWrap?.scrollIntoView({ behavior: "smooth", block: "start" });
+      nearbyToggle.hidden = true;
+    });
+
+    mapToggle?.addEventListener("change", () => {
+      if (mapWrap) mapWrap.hidden = !mapToggle.checked;
+      paintMap();
     });
 
     basketBox?.addEventListener("click", (event) => {

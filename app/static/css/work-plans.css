@@ -236,6 +236,43 @@ body:has(#planCreate) .app-content {
   margin-bottom: 0.45rem;
 }
 .plan-index-card p { margin: 0.2rem 0 0; color: var(--opora-text-muted); font-size: 0.88rem; }
+.tracking-filters {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) minmax(11rem, 1fr) repeat(2, minmax(9rem, 0.7fr)) auto auto;
+  gap: 0.7rem;
+  align-items: end;
+}
+.tracking-filters label { display: flex; flex-direction: column; gap: 0.3rem; color: var(--opora-text-muted); font-size: 0.8rem; }
+.tracking-filters select,
+.tracking-filters input {
+  min-width: 0;
+  height: 42px;
+  border: 1px solid var(--opora-input-border);
+  border-radius: 10px;
+  background: var(--opora-input-bg);
+  color: var(--opora-text);
+  padding: 0 0.7rem;
+}
+.tracking-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; }
+.tracking-stat { background: var(--opora-card); border: 1px solid var(--opora-border); border-radius: 14px; padding: 1rem; }
+.tracking-stat span { display: block; color: var(--opora-text-muted); font-size: 0.82rem; }
+.tracking-stat strong { display: block; margin-top: 0.2rem; font-size: 1.65rem; }
+.tracking-list { display: flex; flex-direction: column; gap: 0.65rem; }
+.tracking-row {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.8fr) minmax(12rem, 1.2fr) minmax(9rem, 0.8fr) minmax(13rem, 1fr);
+  gap: 0.8rem;
+  align-items: center;
+  background: var(--opora-card);
+  border: 1px solid var(--opora-border);
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+}
+.tracking-row__meta { color: var(--opora-text-muted); font-size: 0.82rem; }
+.tracking-row__progress { min-width: 0; }
+.tracking-row__progress p { margin: 0.35rem 0 0; color: var(--opora-text-muted); font-size: 0.8rem; }
+.tracking-row__bar { height: 8px; border-radius: 999px; overflow: hidden; background: var(--opora-border); }
+.tracking-row__bar span { display: block; height: 100%; background: var(--opora-primary); }
 .desk-item__status {
   flex-shrink: 0;
   font-size: 0.72rem;
@@ -292,4 +329,13 @@ body:has(#planCreate) .app-content {
   .plan-page__hero--row { flex-direction: column; align-items: flex-start; }
   .plan-page__bar { left: 1rem; right: 1rem; }
   .plan-nearby-toggle { left: 50%; }
+  .tracking-filters { grid-template-columns: 1fr 1fr; }
+  .tracking-stats { grid-template-columns: 1fr 1fr; }
+  .tracking-row { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 575.98px) {
+  .tracking-filters,
+  .tracking-stats,
+  .tracking-row { grid-template-columns: 1fr; }
 }
