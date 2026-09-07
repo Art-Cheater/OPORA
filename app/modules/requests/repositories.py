@@ -15,6 +15,7 @@ from app.models.auth.associations import UserRole
 from app.models.auth.position import Position
 from app.models.auth.role import Role
 from app.models.auth.user import User
+from app.models.maps.work_map_point import WorkMapPoint
 from app.models.requests.request import Request
 from app.models.requests.request_dispatcher import RequestDispatcher
 from app.models.requests.request_journal import RequestJournal
@@ -613,11 +614,31 @@ class RequestRepository:
         )
         stmt = cls.apply_filters(stmt, flt)
         stmt = stmt.limit(limit)
+        items = list(db.session.scalars(stmt))
+        extras_by_entity: dict[str, list[WorkMapPoint]] = {}
+        if items:
+            extra_stmt = (
+                db.select(WorkMapPoint)
+                .where(
+                    WorkMapPoint.entity_type == "request",
+                    WorkMapPoint.entity_id.in_([item.id for item in items]),
+                    WorkMapPoint.active_filter(),
+                )
+                .order_by(WorkMapPoint.entity_id, WorkMapPoint.sequence)
+            )
+            for point in db.session.scalars(extra_stmt):
+                extras_by_entity.setdefault(str(point.entity_id), []).append(point)
         points = []
-        for item in db.session.scalars(stmt):
+        for item in items:
+            extras = extras_by_entity.get(str(item.id), [])
+            if extras:
+                for point in extras:
+                    points.append({"id": f"request:{item.id}:point:{point.sequence}", "entity_id": str(item.id), "entity_type": "request", "type": "request", "number": item.number, "address": point.address_part, "parent_address": item.address, "lat": float(point.latitude), "lng": float(point.longitude), "url": f"/requests/{item.id}", "is_multi_point": len(extras) > 1, "point_count": len(extras), "point_sequence": point.sequence, "is_primary": point.is_primary, "confidence": point.confidence})
+                continue
             points.append(
                 {
                     "id": str(item.id),
+                    "entity_type": "request",
                     "type": "request",
                     "number": item.number,
                     "address": item.address,

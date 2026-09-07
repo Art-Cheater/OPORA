@@ -43,6 +43,7 @@ from app.models.auth.constants import (
     PERM_REQUESTS_VIEW,
 )
 from app.models.auth.user import User
+from app.models.maps.work_map_point import WorkMapPoint
 from app.models.communication.comment import Comment
 from app.models.enums import Priority
 from app.models.files.attachment import Attachment
@@ -835,6 +836,17 @@ def detail(request_id: uuid.UUID):
     back_url, back_label = back_navigation(fallback="/requests/")
     from app.modules.work_orders.plan_service import ENTITY_REQUEST, WorkPlanService
     active_assignments = WorkPlanService.active_assignments(ENTITY_REQUEST, req.id)
+    map_points = list(
+        db.session.scalars(
+            db.select(WorkMapPoint)
+            .where(
+                WorkMapPoint.entity_type == "request",
+                WorkMapPoint.entity_id == req.id,
+                WorkMapPoint.active_filter(),
+            )
+            .order_by(WorkMapPoint.sequence)
+        )
+    )
 
     photos = [f for f in attachments if (f.mime_type or "").startswith("image/")]
     documents = [f for f in attachments if not (f.mime_type or "").startswith("image/")]
@@ -878,6 +890,7 @@ def detail(request_id: uuid.UUID):
             dispatcher=dispatcher,
             lifecycle=lifecycle,
             active_assignments=active_assignments,
+            map_points=map_points,
             comment_form=comment_form,
             **custom_field_detail_context(_CF, req.id, current_user),
         )
@@ -894,6 +907,7 @@ def detail(request_id: uuid.UUID):
         material_form=material_form,
         attachment_form=attachment_form,
         active_assignments=active_assignments,
+        map_points=map_points,
         assign_form=assign_form,
         actions=actions,
         dispatcher=dispatcher,

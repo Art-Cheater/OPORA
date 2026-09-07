@@ -107,7 +107,9 @@ window.OporaWorkOrders = {
     function renderDetail(item) {
       if (!detailBox || !item) return;
       const type = item.type || item.entity_type;
-      const id = item.id || item.entity_id;
+      // A multi-point marker has a synthetic point id; mutations still target
+      // the single Request/Defect entity.
+      const id = item.entity_id || item.id;
       detailBox.innerHTML = `<article class="workbench-hit workbench-hit--detail"><div class="workbench-hit__body"><strong>${typeDot(type)} ${typeLabel(type, item.number)}</strong><small>${escapeHtml(item.address || "Адрес не указан")}</small><small>ПП: ${escapeHtml(item.pp || "не указан")} · Район: ${escapeHtml(item.district || "не указан")} · Статус: ${escapeHtml(item.status || "не указан")}</small>${item.description ? `<p>${escapeHtml(item.description)}</p>` : ""}</div><div class="workbench-detail__actions"><a class="btn btn-outline-secondary btn-sm" href="${escapeHtml(item.url || "#")}">Открыть ${type === "defect" ? "дефект" : "заявку"}</a>${addButton(type, id, item.in_plan || inPlan(type, id))}</div></article>`;
     }
 

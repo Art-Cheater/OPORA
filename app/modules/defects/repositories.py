@@ -13,6 +13,7 @@ from app.extensions import db
 from app.models.defects.defect import Defect
 from app.models.defects.defect_category import DefectCategory
 from app.models.defects.defect_status import DefectStatus
+from app.models.maps.work_map_point import WorkMapPoint
 from app.modules.requests.repositories import RequestRepository
 
 
@@ -190,12 +191,31 @@ class DefectRepository:
                 stmt = stmt.where(Defect.category_id == uuid.UUID(flt.category_id))
             except ValueError:
                 pass
-        rows = db.session.scalars(stmt.limit(limit))
+        items = list(db.session.scalars(stmt.limit(limit)))
+        extras_by_entity: dict[str, list[WorkMapPoint]] = {}
+        if items:
+            extra_stmt = (
+                db.select(WorkMapPoint)
+                .where(
+                    WorkMapPoint.entity_type == "defect",
+                    WorkMapPoint.entity_id.in_([item.id for item in items]),
+                    WorkMapPoint.active_filter(),
+                )
+                .order_by(WorkMapPoint.entity_id, WorkMapPoint.sequence)
+            )
+            for point in db.session.scalars(extra_stmt):
+                extras_by_entity.setdefault(str(point.entity_id), []).append(point)
         points = []
-        for item in rows:
+        for item in items:
+            extras = extras_by_entity.get(str(item.id), [])
+            if extras:
+                for point in extras:
+                    points.append({"id": f"defect:{item.id}:point:{point.sequence}", "entity_id": str(item.id), "entity_type": "defect", "type": "defect", "number": item.number, "address": point.address_part, "parent_address": item.address, "lat": float(point.latitude), "lng": float(point.longitude), "url": f"/defects/{item.id}", "is_multi_point": len(extras) > 1, "point_count": len(extras), "point_sequence": point.sequence, "is_primary": point.is_primary, "confidence": point.confidence})
+                continue
             points.append(
                 {
                     "id": str(item.id),
+                    "entity_type": "defect",
                     "type": "defect",
                     "number": item.number,
                     "address": item.address,

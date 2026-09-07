@@ -23,6 +23,7 @@ from app.models.defects.defect_history import DefectHistory
 from app.models.defects.defect_status import DefectStatus
 from app.models.enums import EntityType, Priority
 from app.models.files.attachment import Attachment
+from app.models.maps.work_map_point import WorkMapPoint
 from app.models.requests.request import Request
 from app.models.requests.request_history import RequestHistory
 from app.models.requests.request_journal import RequestJournal
@@ -247,7 +248,7 @@ class WorkOrderService:
         rows = []
         for item in db.session.scalars(stmt).unique():
             rows.append(cls._request_dict(item, in_plan))
-        return rows
+        return cls._expand_map_points(rows, "request") if with_coords else rows
 
     @classmethod
     def _defect_points(
@@ -300,7 +301,58 @@ class WorkOrderService:
         if bounds:
             stmt = stmt.where(Defect.created_at.between(bounds[0], bounds[1]))
         stmt = stmt.order_by(Defect.created_at.desc()).limit(limit)
-        return [cls._defect_dict(item, in_plan) for item in db.session.scalars(stmt).unique()]
+        rows = [cls._defect_dict(item, in_plan) for item in db.session.scalars(stmt).unique()]
+        return cls._expand_map_points(rows, "defect") if with_coords else rows
+
+    @staticmethod
+    def _expand_map_points(rows: list[dict], entity_type: str) -> list[dict]:
+        """Replace an anchor marker with all active address points in one query.
+
+        WorkPlan mutations continue to use ``entity_id``: each visible marker is
+        only another location of the same Request or Defect.
+        """
+        if not rows:
+            return rows
+        ids = [uuid.UUID(row["id"]) for row in rows]
+        points_by_entity: dict[str, list[WorkMapPoint]] = {}
+        stmt = (
+            select(WorkMapPoint)
+            .where(
+                WorkMapPoint.entity_type == entity_type,
+                WorkMapPoint.entity_id.in_(ids),
+                WorkMapPoint.active_filter(),
+            )
+            .order_by(WorkMapPoint.entity_id, WorkMapPoint.sequence)
+        )
+        for point in db.session.scalars(stmt):
+            points_by_entity.setdefault(str(point.entity_id), []).append(point)
+
+        result: list[dict] = []
+        for row in rows:
+            entity_points = points_by_entity.get(row["id"], [])
+            if not entity_points:
+                result.append(row)
+                continue
+            for point in entity_points:
+                marker = dict(row)
+                marker.update(
+                    {
+                        "id": f"{entity_type}:{row['id']}:point:{point.sequence}",
+                        "entity_id": row["id"],
+                        "entity_type": entity_type,
+                        "address": point.address_part,
+                        "parent_address": row["address"],
+                        "lat": float(point.latitude),
+                        "lng": float(point.longitude),
+                        "is_multi_point": len(entity_points) > 1,
+                        "point_count": len(entity_points),
+                        "point_sequence": point.sequence,
+                        "is_primary": point.is_primary,
+                        "confidence": point.confidence,
+                    }
+                )
+                result.append(marker)
+        return result
 
     @staticmethod
     def _request_dict(item: Request, in_plan: set[tuple[str, str]]) -> dict:

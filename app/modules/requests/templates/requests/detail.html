@@ -125,6 +125,16 @@
                             {% endif %}
                         </div>
                     </div>
+                    {% if map_points %}
+                    <div class="col-12">
+                        <small class="text-muted">Точки на карте ({{ map_points|length }})</small>
+                        <ol class="mb-0 ps-3 small">
+                            {% for point in map_points %}
+                            <li>{{ point.address_part }}{% if point.is_primary %} <span class="badge text-bg-primary">основная</span>{% endif %}</li>
+                            {% endfor %}
+                        </ol>
+                    </div>
+                    {% endif %}
                     {% if is_builtin_visible('requests', 'district') and current_user.can_view_field('requests', 'district') %}
                     <div class="col-md-6">
                         <small class="text-muted">{{ builtin_label('requests', 'district', 'Район') }}</small>

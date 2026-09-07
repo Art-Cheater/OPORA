@@ -33,6 +33,7 @@ from app.models.auth.constants import (
 )
 from app.models.communication.comment import Comment
 from app.models.enums import EntityType
+from app.models.maps.work_map_point import WorkMapPoint
 from app.models.files.attachment import Attachment
 from app.modules.defects.blueprint import defects_bp
 from app.modules.defects.forms import (
@@ -243,6 +244,17 @@ def detail(defect_id: uuid.UUID):
     back_url, back_label = back_navigation(fallback="/requests/?tab=defects")
     from app.modules.work_orders.plan_service import ENTITY_DEFECT, WorkPlanService
     active_assignments = WorkPlanService.active_assignments(ENTITY_DEFECT, item.id)
+    map_points = list(
+        db.session.scalars(
+            db.select(WorkMapPoint)
+            .where(
+                WorkMapPoint.entity_type == "defect",
+                WorkMapPoint.entity_id == item.id,
+                WorkMapPoint.active_filter(),
+            )
+            .order_by(WorkMapPoint.sequence)
+        )
+    )
     return render_template(
         "defects/detail.html",
         item=item,
@@ -255,6 +267,7 @@ def detail(defect_id: uuid.UUID):
         back_url=back_url,
         back_label=back_label,
         active_assignments=active_assignments,
+        map_points=map_points,
     )
 
 

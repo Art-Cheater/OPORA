@@ -51,6 +51,7 @@ from app.models.requests.request_journal import RequestJournal
 from app.models.requests.request_journal_counter import RequestJournalCounter
 from app.models.requests.request_material import RequestMaterial
 from app.models.requests.request_status import RequestStatus
+from app.models.maps.work_map_point import WorkMapPoint
 from app.models.waybills.waybill import Waybill
 from app.models.waybills.waybill_history import WaybillHistory
 from app.models.waybills.waybill_member import WaybillMember
@@ -85,6 +86,7 @@ __all__ = [
     "RequestStatus",
     "RequestHistory",
     "RequestMaterial",
+    "WorkMapPoint",
     "Defect",
     "DefectCategory",
     "DefectHistory",

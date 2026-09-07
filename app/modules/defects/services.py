@@ -180,6 +180,9 @@ class DefectService:
         except IntegrityError as exc:
             db.session.rollback()
             raise ValidationError("Дефект с таким номером уже существует.") from exc
+        from app.core.address.work_map_point_service import WorkMapPointService
+        from app.modules.requests.services import RequestService
+        WorkMapPointService.sync(item, "defect", RequestService._geocode_latlng, user_id)
         cls._log_audit(user_id, AuditAction.CREATE.value, item.id, f"Создан дефект {item.number}", None, cls._snapshot(item))
         cls._log_history(item, user_id, "create", "Создан дефект")
         db.session.commit()
@@ -210,6 +213,9 @@ class DefectService:
         item.responsible_id = payload.responsible_id
         item.pp = (payload.pp or "").strip() or None
         item.updated_by = user_id
+        from app.core.address.work_map_point_service import WorkMapPointService
+        from app.modules.requests.services import RequestService
+        WorkMapPointService.sync(item, "defect", RequestService._geocode_latlng, user_id)
         cls._log_audit(user_id, AuditAction.UPDATE.value, item.id, f"Изменён дефект {item.number}", old, cls._snapshot(item))
         cls._log_history(item, user_id, "update", "Изменение дефекта", {"old": old, "new": cls._snapshot(item)})
         db.session.commit()

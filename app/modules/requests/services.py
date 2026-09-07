@@ -596,6 +596,8 @@ class RequestService:
             db.session.rollback()
             raise ValidationError("Заявка с таким номером уже есть в этом журнале.") from exc
         RequestRepository.note_used_number(req.journal_id, req.number)
+        from app.core.address.work_map_point_service import WorkMapPointService
+        WorkMapPointService.sync(req, "request", cls._geocode_latlng, user_id)
 
         snapshot = cls._snapshot(req)
         cls._log_audit(
@@ -664,6 +666,8 @@ class RequestService:
         req.executor_id = payload.executor_id
         req.responsible_id = payload.responsible_id
         req.updated_by = user_id
+        from app.core.address.work_map_point_service import WorkMapPointService
+        WorkMapPointService.sync(req, "request", cls._geocode_latlng, user_id)
 
         new_snapshot = cls._snapshot(req)
         changes = cls._diff(old_snapshot, new_snapshot)

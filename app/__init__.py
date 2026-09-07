@@ -703,6 +703,8 @@ def _register_cli_commands(app: Flask) -> None:
         from app.models.requests.request import Request
         from app.modules.requests.services import RequestService
         from app.core.address.map_points import split_map_address_parts
+        from app.core.address.work_map_point_service import WorkMapPointService
+        from app.models.maps.work_map_point import WorkMapPoint
 
         models = []
         if entity in {"requests", "all"}:
@@ -717,6 +719,9 @@ def _register_cli_commands(app: Flask) -> None:
             if limit > 0:
                 stmt = stmt.limit(limit)
             for item in db.session.scalars(stmt):
+                if only_missing and db.session.scalar(db.select(WorkMapPoint.id).where(WorkMapPoint.entity_type == label, WorkMapPoint.entity_id == item.id, WorkMapPoint.active_filter()).limit(1)):
+                    skipped += 1
+                    continue
                 if getattr(item, "coordinates_source", None) == "manual":
                     skipped += 1
                     continue
@@ -730,6 +735,8 @@ def _register_cli_commands(app: Flask) -> None:
                     continue
                 if not dry_run:
                     item.latitude, item.longitude = coords
+                    if build_points:
+                        WorkMapPointService.sync(item, label, RequestService._geocode_latlng)
                 updated += 1
             if not dry_run:
                 db.session.commit()
