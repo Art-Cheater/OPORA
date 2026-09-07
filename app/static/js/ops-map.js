@@ -1,7 +1,8 @@
 /* Единая карта OPORA на MapLibre GL JS. OporaOpsMap — совместимый alias. */
 window.OporaMap = (() => {
   const DEFAULT_STYLE = "https://tiles.openfreemap.org/styles/liberty";
-  const ASSET_BASE = "https://unpkg.com/maplibre-gl@5.16.0/dist";
+  // Библиотека поставляется вместе с приложением: карта не зависит от CDN.
+  const ASSET_BASE = "/static/vendor/maplibre";
   const KIROV = [49.668, 58.6035];
   let assetPromise, map, container, resizeObserver, onResize, points = [], route = null, selected = null, hasFitted = false, fetchController;
 
@@ -92,12 +93,16 @@ window.OporaMap = (() => {
       return true;
     }).catch(() => { status("Карта недоступна: не удалось загрузить MapLibre.", true); return false; });
   }
-  function reload(url) {
+  function reload(url, { fit = false } = {}) {
     const target = url || container?.dataset.src; if (!target) return Promise.resolve();
     fetchController?.abort(); fetchController = new AbortController();
     return fetch(target, { headers: { Accept: "application/json" }, signal: fetchController.signal })
       .then((response) => { if (!response.ok) throw new Error("map response"); return response.json(); })
-      .then((data) => { points = data.points || []; selected = null; render({ fit: !hasFitted }); return data; })
+      .then((data) => {
+        points = data.points || [];
+        if (selected && !points.some((point) => String(point.id || point.entity_id) === String(selected.id))) selected = null;
+        render({ fit: fit || !hasFitted }); return data;
+      })
       .catch((error) => { if (error.name !== "AbortError") status("Не удалось загрузить данные карты.", true); });
   }
   function setPoints(rows) { points = rows || []; if (selected && !points.some((point) => String(point.id || point.entity_id) === String(selected.id))) selected = null; render(); }

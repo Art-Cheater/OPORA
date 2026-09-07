@@ -124,3 +124,18 @@ VALHALLA_BASE_URL=http://valhalla:8002
 ```
 
 Ни ключи, ни production credentials в документе не хранятся.
+
+## Диагностика маршрутизации
+
+Для Valhalla задайте `ROUTING_PROVIDER=valhalla` и
+`VALHALLA_BASE_URL=http://valhalla:8002`; для OSRM-совместимого сервиса
+используйте `ROUTING_BASE_URL`. Пока URL не задан, маршрут намеренно не
+подменяется прямой линией. Проверка без записи в БД: `flask check-routing`.
+
+## Сложные адреса
+
+`flask repair-work-coordinates --entity requests --only-missing --dry-run
+--build-points --limit 20` безопасно показывает распознанные диапазоны и списки
+домов. Автоматический backfill не запускается. Сейчас сохраняется первая
+успешная anchor-точка в существующие `latitude/longitude`; отдельная таблица
+multi-point для одной заявки требует отдельной миграции и ещё не вводилась.

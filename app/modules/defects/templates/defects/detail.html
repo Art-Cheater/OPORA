@@ -117,6 +117,12 @@
                      data-address="{{ item.address|e }}"
                      data-coords-url="{{ url_for('defects.ensure_coords', defect_id=item.id) }}"></div>
                 <div id="requestMapStatus" class="small text-muted mt-2"></div>
+                {% if item.latitude is none or item.longitude is none %}
+                    {% if current_user.has_permission('defects.edit') %}
+                    <p class="small text-muted mt-2 mb-1">У дефекта нет координат. Можно указать точку вручную.</p>
+                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('defects.edit', defect_id=item.id) }}#coordinates"><i class="bi bi-geo-alt"></i> Указать точку</a>
+                    {% else %}<p class="small text-muted mt-2 mb-0">У дефекта нет координат.</p>{% endif %}
+                {% endif %}
             </div>
         </div>
         <div class="card">

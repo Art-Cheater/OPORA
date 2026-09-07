@@ -25,6 +25,7 @@ window.OporaWorkOrders = {
     const filterForm = document.getElementById("workFilters");
     const saveBtn = document.getElementById("workSaveBtn");
     const routeBtn = document.getElementById("workRouteBtn");
+    const fitBtn = document.getElementById("workFitBtn");
     const canEdit = root.dataset.canEdit === "true";
     let plan = { stops: [], editable: true, status: null };
     let nearbyHits = [];
@@ -168,24 +169,23 @@ window.OporaWorkOrders = {
       // Любое изменение состава делает ранее построенную геометрию неактуальной.
       window.OporaOpsMap?.clearRoute?.();
       renderPlan();
-      refreshMap();
     }
 
-    function refreshMap() {
+    function refreshMap({ fit = false } = {}) {
       const mapNode = document.getElementById("opsMap");
       if (!mapNode || !window.OporaOpsMap) return;
       const url = `${root.dataset.mapUrl}?${filterParams()}`;
       mapNode.setAttribute("data-src", url);
       window.OporaOpsMap.init();
-      window.OporaOpsMap.reload?.(url);
+      window.OporaOpsMap.reload?.(url, { fit });
     }
 
-    function loadItems() {
+    function loadItems({ fit = false } = {}) {
       return fetch(`${root.dataset.itemsUrl}?${filterParams()}`, { headers: headers() })
         .then((res) => res.json())
         .then((data) => {
           renderItems(data.items || []);
-          refreshMap();
+          refreshMap({ fit });
         })
         .catch(() => {
           if (itemsBox) itemsBox.innerHTML = '<p class="workbench-empty">Не удалось загрузить список.</p>';
@@ -235,8 +235,9 @@ window.OporaWorkOrders = {
 
     filterForm?.addEventListener("submit", (event) => {
       event.preventDefault();
-      loadItems();
+      loadItems({ fit: true });
     });
+    fitBtn?.addEventListener("click", () => window.OporaOpsMap?.fitAll?.());
 
     itemsBox?.addEventListener("click", (event) => {
       const btn = event.target.closest(".js-add");

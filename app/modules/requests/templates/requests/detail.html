@@ -200,6 +200,12 @@
                      data-address="{{ req.address|e }}"
                      data-coords-url="{{ url_for('requests.ensure_coords', request_id=req.id) }}"></div>
                 <div id="requestMapStatus" class="small text-muted mt-2">Загрузка карты…</div>
+                {% if req.latitude is none or req.longitude is none %}
+                    {% if current_user.has_permission('requests.edit') %}
+                    <p class="small text-muted mt-2 mb-1">У заявки нет координат. Можно указать точку вручную.</p>
+                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('requests.edit', request_id=req.id) }}#coordinates"><i class="bi bi-geo-alt"></i> Указать точку</a>
+                    {% else %}<p class="small text-muted mt-2 mb-0">У заявки нет координат.</p>{% endif %}
+                {% endif %}
                 <a id="requestMapExternal"
                    class="btn btn-sm btn-outline-primary mt-2 {% if req.latitude is none or req.longitude is none %}d-none{% endif %}"
                    href="{% if req.latitude is not none and req.longitude is not none %}https://www.openstreetmap.org/?mlat={{ req.latitude }}&mlon={{ req.longitude }}#map=17/{{ req.latitude }}/{{ req.longitude }}{% else %}#{% endif %}"

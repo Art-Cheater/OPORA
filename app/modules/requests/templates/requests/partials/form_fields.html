@@ -36,14 +36,15 @@
     {% endif %}
 
     {% if current_user.can_edit_field('requests', 'address') %}
-    <div class="col-md-4" data-coordinate-fields>
+    <div class="col-md-4" data-coordinate-fields id="coordinates">
         <label class="form-label">Координаты</label>
         <div class="input-group input-group-sm mb-2">
             {{ form.latitude(class="form-control", placeholder="Широта", inputmode="decimal", **{'data-coordinate-lat': '1'}) }}
             {{ form.longitude(class="form-control", placeholder="Долгота", inputmode="decimal", **{'data-coordinate-lng': '1'}) }}
         </div>
         <button type="button" class="btn btn-outline-primary btn-sm" data-coordinate-picker>Указать на карте</button>
-        <div class="form-text" data-coordinate-warning></div>
+        <button type="button" class="btn btn-link btn-sm" data-coordinate-clear>Очистить точку</button>
+        <div class="form-text" data-coordinate-warning>Если адрес не найден автоматически, укажите точку вручную.</div>
     </div>
     {% endif %}
 
