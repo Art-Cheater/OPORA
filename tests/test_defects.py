@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from app.extensions import db
 from app.models.audit.audit_log import AuditLog
 from app.models.defects.defect import Defect
@@ -60,6 +62,21 @@ def test_defect_crud_without_request(admin_client, app):
             )
         )
         assert audit is not None
+
+
+def test_defect_manual_coordinates_are_saved(admin_client, app):
+    category_id = _category_id(app)
+    created = admin_client.post("/defects/new", data={
+        "number": "DF-26-MANUAL", "description": "Ручная точка", "category_id": category_id,
+        "address": "д. Башарово, Центральная 12", "reported_date": "2026-09-07", "reported_time": "10:00",
+        "latitude": "58.7000000", "longitude": "49.7000000", "coordinates_source": "manual", "submit": "Сохранить",
+    }, follow_redirects=False)
+    assert created.status_code == 302
+    defect_id = created.headers["Location"].rstrip("/").split("/")[-1]
+    with app.app_context():
+        item = db.session.get(Defect, defect_id)
+        assert item.latitude == Decimal("58.7000000") and item.longitude == Decimal("49.7000000")
+        assert item.coordinates_source == "manual"
 
 
 def test_defect_requires_report_date_and_time(admin_client, app):
@@ -206,7 +223,7 @@ def test_defect_files_and_list_shell(admin_client, app):
     assert "points" in map_resp.get_json()
 
 
-def test_executor_cannot_create_defect(client):
+def test_executor_cannot_create_defect_without_required_reported_at(client):
     _login(client, "executor@test.local")
     page = client.get("/defects/")
     assert page.status_code == 200
@@ -215,4 +232,4 @@ def test_executor_cannot_create_defect(client):
         data={"number": "DF-26-9", "description": "x", "address": "a", "submit": "Сохранить"},
         follow_redirects=False,
     )
-    assert created.status_code in (302, 403)
+    assert created.status_code == 200

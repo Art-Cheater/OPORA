@@ -67,6 +67,7 @@ class Request(BaseModel):
     dispatcher_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
+    coordinates_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     applicant_name: Mapped[str] = mapped_column(String(255), nullable=False)
     has_barrier: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

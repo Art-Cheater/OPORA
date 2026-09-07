@@ -6,6 +6,7 @@ from app.core.address.providers import (
     GeocodingProvider,
     HeuristicGeocodingProvider,
     NominatimGeocodingProvider,
+    PhotonGeocodingProvider,
 )
 from app.core.address.service import (
     AddressSuggestionService,
@@ -22,6 +23,7 @@ __all__ = [
     "GeocodingProvider",
     "HeuristicGeocodingProvider",
     "NominatimGeocodingProvider",
+    "PhotonGeocodingProvider",
     "get_address_suggestion_service",
     "load_address_selection_token",
     "make_address_selection_token",

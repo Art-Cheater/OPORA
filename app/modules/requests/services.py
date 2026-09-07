@@ -75,6 +75,7 @@ class RequestPayload:
     has_barrier: bool = False
     barrier_phone: str | None = None
     for_beresnev: bool = False
+    coordinates_source: str | None = None
 
 
 class RequestService:
@@ -100,6 +101,7 @@ class RequestService:
         "dispatcher_name",
         "latitude",
         "longitude",
+        "coordinates_source",
         "phone",
         "applicant_name",
         "priority",
@@ -174,6 +176,8 @@ class RequestService:
             raise ValidationError("Широта должна быть в диапазоне от -90 до 90.")
         if payload.longitude is not None and not Decimal("-180") <= payload.longitude <= Decimal("180"):
             raise ValidationError("Долгота должна быть в диапазоне от -180 до 180.")
+        if payload.coordinates_source not in {None, "manual", "geocoder", "import", "unknown"}:
+            raise ValidationError("Некорректный источник координат.")
         # title заполняется из адреса автоматически
         if not (payload.title or "").strip():
             payload.title = payload.address[:500]
@@ -198,6 +202,10 @@ class RequestService:
         from app.modules.requests.address_format import address_expression_anchor, format_address, split_address_query
 
         current_address = (payload.address or "").strip()
+        manual_coordinates = (
+            getattr(payload, "coordinates_source", None) == "manual"
+            and payload.latitude is not None and payload.longitude is not None
+        )
         # Village journals deliberately keep dispatcher-entered address raw.
         # Never send an uncertain village address through Kirov autocomplete/geocoding.
         journal = RequestRepository.get_journal(getattr(payload, "journal_id", None))
@@ -213,7 +221,8 @@ class RequestService:
             payload.region = payload.settlement = payload.street = payload.house = None
             payload.address_source = "village_manual"
             payload.address_external_id = None
-            payload.latitude = payload.longitude = None
+            if not manual_coordinates:
+                payload.latitude = payload.longitude = None
             return
         anchor = address_expression_anchor(current_address)
         if anchor:
@@ -230,8 +239,9 @@ class RequestService:
             payload.district = normalize_request_district(payload.district)
             payload.address_source = "manual_multi"
             payload.address_external_id = None
-            payload.latitude = None
-            payload.longitude = None
+            if not manual_coordinates:
+                payload.latitude = None
+                payload.longitude = None
             return
         selected = (payload.normalized_address or "").strip()
         original = (payload.original_address or "").strip()
@@ -256,14 +266,16 @@ class RequestService:
             payload.house = cls._normalize_text(payload.house)
             payload.address_source = cls._normalize_text(payload.address_source) or "selected"
             payload.address_external_id = cls._normalize_text(payload.address_external_id)
-            if payload.latitude is None or payload.longitude is None:
+            if not manual_coordinates and (payload.latitude is None or payload.longitude is None):
                 latlng = cls._geocode_latlng(selected or submitted)
                 if latlng:
                     payload.latitude, payload.longitude = latlng
+                    payload.coordinates_source = "geocoder"
             return
 
-        payload.latitude = None
-        payload.longitude = None
+        if not manual_coordinates:
+            payload.latitude = None
+            payload.longitude = None
         from app.core.address import get_address_suggestion_service
         try:
             fallback = get_address_suggestion_service().suggest(submitted, limit=8)
@@ -311,12 +323,16 @@ class RequestService:
         payload.house = suggestion.house or house or None
         payload.address_source = suggestion.address_source
         payload.address_external_id = suggestion.address_external_id
-        payload.latitude = suggestion.latitude
-        payload.longitude = suggestion.longitude
-        if payload.latitude is None or payload.longitude is None:
+        if not manual_coordinates:
+            payload.latitude = suggestion.latitude
+            payload.longitude = suggestion.longitude
+            if payload.latitude is not None and payload.longitude is not None:
+                payload.coordinates_source = "geocoder"
+        if not manual_coordinates and (payload.latitude is None or payload.longitude is None):
             latlng = cls._geocode_latlng(payload.normalized_address or submitted)
             if latlng:
                 payload.latitude, payload.longitude = latlng
+                payload.coordinates_source = "geocoder"
 
     @staticmethod
     def _geocode_latlng(query: str) -> tuple[Decimal, Decimal] | None:
@@ -362,6 +378,8 @@ class RequestService:
         if not latlng:
             return False
         req.latitude, req.longitude = latlng
+        if req.coordinates_source != "manual":
+            req.coordinates_source = "geocoder"
         if persist:
             db.session.commit()
         return True
@@ -555,6 +573,7 @@ class RequestService:
             dispatcher_name=cls._normalize_text(payload.dispatcher_name),
             latitude=payload.latitude,
             longitude=payload.longitude,
+            coordinates_source=payload.coordinates_source or ("geocoder" if payload.latitude is not None and payload.longitude is not None else None),
             phone=cls._normalize_text(payload.phone),
             applicant_name=(payload.applicant_name or "—").strip(),
             has_barrier=bool(payload.has_barrier),
@@ -635,6 +654,7 @@ class RequestService:
         req.dispatcher_name = cls._normalize_text(payload.dispatcher_name)
         req.latitude = payload.latitude
         req.longitude = payload.longitude
+        req.coordinates_source = payload.coordinates_source or ("geocoder" if payload.latitude is not None and payload.longitude is not None else None)
         req.phone = cls._normalize_text(payload.phone)
         req.applicant_name = (payload.applicant_name or "—").strip()
         req.has_barrier = bool(payload.has_barrier)

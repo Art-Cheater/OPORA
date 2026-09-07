@@ -267,9 +267,12 @@ window.OporaOpsMap = {
           }),
         }).addTo(self._routeLayer);
       });
-      if (Array.isArray(geometry) && geometry.length > 1) {
-        L.polyline(geometry, { color: COLORS.route, weight: 4, opacity: 0.9 }).addTo(self._routeLayer);
-        map.fitBounds(geometry, { padding: [36, 36], maxZoom: 16 });
+      const roadGeometry = geometry?.type === "LineString" && Array.isArray(geometry.coordinates)
+        ? geometry.coordinates.map(([lng, lat]) => [lat, lng])
+        : Array.isArray(geometry) ? geometry : [];
+      if (roadGeometry.length > 1) {
+        L.polyline(roadGeometry, { color: COLORS.route, weight: 4, opacity: 0.9 }).addTo(self._routeLayer);
+        map.fitBounds(roadGeometry, { padding: [36, 36], maxZoom: 16 });
       } else if (line.length === 1) {
         map.setView(line[0], 16);
       }
@@ -302,6 +305,13 @@ window.OporaOpsMap = {
     else this._paint({ points: [] });
     return true;
   },
+};
+
+// Общий интерфейс карты. Leaflet остаётся включённым provider до отдельного MapLibre switch.
+window.OporaMap = window.OporaMap || {
+  provider: "leaflet",
+  init: (...args) => window.OporaOpsMap.init(...args),
+  destroy: (...args) => window.OporaOpsMap.destroy(...args),
 };
 
 (function bindOpsMapLifecycle() {

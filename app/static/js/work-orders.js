@@ -309,7 +309,11 @@ window.OporaWorkOrders = {
           window.OporaOpsMap?.init?.();
           const count = window.OporaOpsMap?.setRoute?.(data.points || [], data.route?.geometry || null) || 0;
           const missing = Number(data.missing || 0);
-          if (count < 2 || !data.route?.geometry?.length) {
+          const geometry = data.route?.geometry;
+          const hasRoadGeometry = Array.isArray(geometry)
+            ? geometry.length > 1
+            : geometry?.type === "LineString" && Array.isArray(geometry.coordinates) && geometry.coordinates.length > 1;
+          if (count < 2 || !hasRoadGeometry) {
             toast(count < 2 ? "Маршрут не построен: у выбранных работ пока нет координат." : "Не удалось построить дорожный маршрут. Проверьте подключение сервиса маршрутизации.", false);
           } else if (count === 1) {
             toast(missing ? "Показана одна точка. У остальных работ пока нет координат." : "Показана точка выбранной работы.");

@@ -15,6 +15,7 @@ from app.core.address.providers import (
     GeocodingProvider,
     HeuristicGeocodingProvider,
     NominatimGeocodingProvider,
+    PhotonGeocodingProvider,
 )
 
 ProviderFactory = Callable[[Mapping[str, object]], GeocodingProvider]
@@ -36,8 +37,19 @@ def _nominatim_factory(config: Mapping[str, object]) -> GeocodingProvider:
     )
 
 
+def _photon_factory(config: Mapping[str, object]) -> GeocodingProvider:
+    return PhotonGeocodingProvider(
+        base_url=str(config.get("PHOTON_BASE_URL") or ""),
+        timeout_seconds=float(config.get("GEOCODING_TIMEOUT_SECONDS") or 2.5),
+        cache_ttl_seconds=float(config.get("GEOCODING_CACHE_TTL_SECONDS") or 600),
+        cache_max_size=int(config.get("GEOCODING_CACHE_MAX_SIZE") or 512),
+        region_bias=str(config.get("PHOTON_REGION_BIAS") or ""),
+    )
+
+
 _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
     "nominatim": _nominatim_factory,
+    "photon": _photon_factory,
     "heuristic": lambda _config: HeuristicGeocodingProvider(),
 }
 _SERVICE_INIT_LOCK = threading.Lock()

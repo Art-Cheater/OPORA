@@ -3,6 +3,7 @@
 from flask_wtf import FlaskForm
 from wtforms import (
     DateField,
+    DecimalField,
     HiddenField,
     MultipleFileField,
     SelectField,
@@ -68,8 +69,9 @@ class DefectForm(FlaskForm):
     pp = StringField("ПП (пункт питания)", validators=[Optional(), Length(max=255)])
     address_source = HiddenField(validators=[Optional(), Length(max=50)])
     address_external_id = HiddenField(validators=[Optional(), Length(max=255)])
-    latitude = HiddenField(validators=[Optional()])
-    longitude = HiddenField(validators=[Optional()])
+    latitude = DecimalField("Широта", validators=[Optional()], places=7)
+    longitude = DecimalField("Долгота", validators=[Optional()], places=7)
+    coordinates_source = HiddenField(validators=[Optional(), Length(max=20)])
     responsible_id = SelectField("Ответственный", choices=[], validators=[Optional()], validate_choice=False)
     status_code = SelectField("Статус", choices=[], validators=[Optional()], validate_choice=False)
     submit = SubmitField("Сохранить")

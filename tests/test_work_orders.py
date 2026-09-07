@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import json
 from io import BytesIO
 from zipfile import ZipFile
 
@@ -21,6 +22,20 @@ from app.models.work_plans.work_plan import WorkPlan
 from app.modules.requests.address_format import normalize_address
 from app.modules.requests.repositories import RequestRepository
 from app.modules.work_orders.order_service import WORK_ROWS, build_order_workbook
+
+
+class _RoutingResponse:
+    def __init__(self, payload):
+        self.payload = json.dumps(payload).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self):
+        return self.payload
 
 
 def _login(client, email: str, password: str = "pass12345"):
@@ -111,6 +126,21 @@ def test_work_orders_access(client):
     assert client.get("/work-orders/").status_code == 200
     denied = client.post("/work-orders/plan/add", json={"entity_type": "defect", "entity_id": "00000000-0000-0000-0000-000000000001"})
     assert denied.status_code == 403
+
+
+def test_routing_service_returns_geojson_or_safe_unavailable(app, monkeypatch):
+    from app.core.routing import RoutingService
+    import app.core.routing as routing
+
+    with app.app_context():
+        app.config.update(ROUTING_PROVIDER="osrm", ROUTING_BASE_URL="http://routing.test")
+        monkeypatch.setattr(routing, "urlopen", lambda *_args, **_kwargs: _RoutingResponse({"routes": [{"distance": 12450, "duration": 1240, "geometry": {"type": "LineString", "coordinates": [[49.668, 58.603], [49.67, 58.605]]}}]}))
+        route = RoutingService.route([(58.603, 49.668), (58.605, 49.67)])
+        assert route["geometry"]["type"] == "LineString"
+        assert route["distance_m"] == 12450
+        assert route["duration_s"] == 1240
+        app.config["ROUTING_BASE_URL"] = ""
+        assert RoutingService.route([(58.603, 49.668), (58.605, 49.67)]) is None
 
 
 def test_order_blank_is_filled_from_the_real_template():

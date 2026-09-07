@@ -678,7 +678,9 @@ def route_json():
     from app.core.routing import RoutingService
 
     route = RoutingService.route([(point["lat"], point["lng"]) for point in points])
-    return jsonify({"points": points, "missing": max(len(payload["stops"]) - len(points), 0), "route": route})
+    if route is None:
+        return jsonify({"ok": False, "error": "routing_unavailable", "points": points, "missing": max(len(payload["stops"]) - len(points), 0), "route": None})
+    return jsonify({"ok": True, "points": points, "missing": max(len(payload["stops"]) - len(points), 0), "route": route})
 
 
 @work_orders_bp.route("/nearby.json")

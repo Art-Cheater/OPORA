@@ -28,11 +28,22 @@
         {{ form.house() }}
         {{ form.address_source() }}
         {{ form.address_external_id() }}
-        {{ form.latitude(type="hidden") }}
-        {{ form.longitude(type="hidden") }}
+        {{ form.coordinates_source() }}
         {% else %}
         <div class="form-control-plaintext border rounded px-3 py-2 bg-light">{{ form.address.data or "—" }}</div>
         {% endif %}
+    </div>
+    {% endif %}
+
+    {% if current_user.can_edit_field('requests', 'address') %}
+    <div class="col-md-4" data-coordinate-fields>
+        <label class="form-label">Координаты</label>
+        <div class="input-group input-group-sm mb-2">
+            {{ form.latitude(class="form-control", placeholder="Широта", inputmode="decimal", **{'data-coordinate-lat': '1'}) }}
+            {{ form.longitude(class="form-control", placeholder="Долгота", inputmode="decimal", **{'data-coordinate-lng': '1'}) }}
+        </div>
+        <button type="button" class="btn btn-outline-primary btn-sm" data-coordinate-picker>Указать на карте</button>
+        <div class="form-text" data-coordinate-warning></div>
     </div>
     {% endif %}
 

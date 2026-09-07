@@ -82,6 +82,12 @@ def _payload_from_form(form: DefectForm, entity=None) -> DefectPayload:
         return default
 
     def coord(code):
+        if (form.coordinates_source.data or "").strip() == "manual":
+            value = getattr(form, code).data
+            try:
+                return Decimal(str(value)) if value not in (None, "") else None
+            except (InvalidOperation, TypeError, ValueError):
+                return None
         value = machine(code)
         if value in (None, ""):
             return None
@@ -110,6 +116,7 @@ def _payload_from_form(form: DefectForm, entity=None) -> DefectPayload:
         pp=(field("pp", form.pp.data, default="") or "").strip() or None,
         reported_date=form.reported_date.data,
         reported_time=form.reported_time.data,
+        coordinates_source=(form.coordinates_source.data or "").strip() or (getattr(entity, "coordinates_source", None) if entity else None),
     )
 
 

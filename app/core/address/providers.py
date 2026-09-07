@@ -62,6 +62,10 @@ class GeocodingProvider(ABC):
     def search(self, query: str, *, limit: int = 8) -> list[AddressSuggestion]:
         """Найти адреса по строке пользователя."""
 
+    def reverse_geocode(self, latitude: float, longitude: float) -> AddressSuggestion | None:
+        """Найти адрес для точки; старые провайдеры могут не поддерживать reverse."""
+        return None
+
 
 _MISSING = object()
 
@@ -273,6 +277,118 @@ class NominatimGeocodingProvider(GeocodingProvider):
             address_source="nominatim",
             address_external_id=external_id,
         )
+
+
+class PhotonGeocodingProvider(GeocodingProvider):
+    """Серверный клиент Photon с ограниченным размером ответа и без UI-зависимостей."""
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        timeout_seconds: float,
+        cache_ttl_seconds: float,
+        cache_max_size: int,
+        region_bias: str = "",
+        opener=urlopen,
+    ) -> None:
+        if not (base_url or "").strip():
+            raise ValueError("Для Photon укажите PHOTON_BASE_URL.")
+        self.base_url = base_url.rstrip("/")
+        self.timeout_seconds = max(0.1, float(timeout_seconds))
+        self.region_bias = (region_bias or "").strip()
+        self._opener = opener
+        self._cache = ThreadSafeTTLCache(ttl_seconds=cache_ttl_seconds, max_size=cache_max_size)
+
+    def _request(self, path: str, params: dict[str, str]) -> dict:
+        req = Request(
+            f"{self.base_url}{path}?{urlencode(params)}",
+            headers={"Accept": "application/json", "User-Agent": "OPORA-address/0.1"},
+        )
+        try:
+            with self._opener(req, timeout=self.timeout_seconds) as response:
+                raw = response.read(1_048_577)
+            if len(raw) > 1_048_576:
+                raise GeocodingError("Ответ геокодера превышает допустимый размер.")
+            payload = json.loads(raw.decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError) as exc:
+            raise GeocodingError("Сервис адресов временно недоступен.") from exc
+        if not isinstance(payload, dict):
+            raise GeocodingError("Photon вернул неожиданный формат ответа.")
+        return payload
+
+    def search(self, query: str, *, limit: int = 8) -> list[AddressSuggestion]:
+        cleaned = " ".join((query or "").split())
+        if not cleaned:
+            return []
+        safe_limit = min(max(int(limit), 1), 20)
+        key = f"forward|{cleaned.casefold()}|{safe_limit}"
+        cached = self._cache.get(key)
+        if cached is not _MISSING:
+            return cached
+        params = {"q": cleaned, "limit": str(safe_limit), "lang": "ru"}
+        if self.region_bias:
+            params["location_bias_scale"] = "0.2"
+        results = self._parse_features(cleaned, self._request("/api", params))
+        self._cache.set(key, results)
+        return results
+
+    def reverse_geocode(self, latitude: float, longitude: float) -> AddressSuggestion | None:
+        key = f"reverse|{latitude:.6f}|{longitude:.6f}"
+        cached = self._cache.get(key)
+        if cached is not _MISSING:
+            return cached[0] if cached else None
+        results = self._parse_features(
+            f"{latitude:.7f}, {longitude:.7f}",
+            self._request("/reverse", {"lat": str(latitude), "lon": str(longitude), "lang": "ru"}),
+        )
+        self._cache.set(key, results[:1])
+        return results[0] if results else None
+
+    @staticmethod
+    def _parse_features(query: str, payload: dict) -> list[AddressSuggestion]:
+        features = payload.get("features")
+        if not isinstance(features, list):
+            return []
+        results: list[AddressSuggestion] = []
+        for feature in features:
+            if not isinstance(feature, dict):
+                continue
+            geometry = feature.get("geometry") or {}
+            coords = geometry.get("coordinates") if isinstance(geometry, dict) else None
+            properties = feature.get("properties") or {}
+            if not isinstance(coords, list) or len(coords) < 2 or not isinstance(properties, dict):
+                continue
+            try:
+                longitude, latitude = float(coords[0]), float(coords[1])
+            except (TypeError, ValueError):
+                continue
+            name = str(properties.get("name") or "").strip()
+            street = str(properties.get("street") or name).strip() or None
+            house = str(properties.get("housenumber") or "").strip() or None
+            settlement = str(properties.get("city") or properties.get("locality") or properties.get("village") or "").strip() or None
+            region = str(properties.get("state") or properties.get("country") or "").strip() or None
+            district = str(properties.get("district") or properties.get("county") or "").strip() or None
+            pieces = [part for part in (settlement, street, house) if part]
+            normalized = ", ".join(pieces) or name
+            if not normalized:
+                continue
+            osm_type = str(properties.get("osm_type") or "").strip()
+            osm_id = str(properties.get("osm_id") or "").strip()
+            results.append(AddressSuggestion(
+                original_address=query,
+                normalized_address=normalized,
+                region=region,
+                district=district,
+                settlement=settlement,
+                street=street,
+                house=house,
+                latitude=latitude,
+                longitude=longitude,
+                address_source="photon",
+                address_external_id=f"{osm_type}/{osm_id}" if osm_type and osm_id else None,
+            ))
+        return results
 
 
 class HeuristicGeocodingProvider(GeocodingProvider):

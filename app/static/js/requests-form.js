@@ -162,9 +162,19 @@
   function applyAddressSuggestion(form, suggestion) {
     const input = addressInput(form);
     if (!input || !suggestion?.normalized_address) return;
+    const coordinatesSource = form.querySelector("[name='coordinates_source']")?.value;
+    const manualCoordinates = coordinatesSource === "manual";
+    const latitude = form.querySelector("[name='latitude']")?.value;
+    const longitude = form.querySelector("[name='longitude']")?.value;
     setField(form, "original_address", suggestion.original_address || input.value.trim());
     setField(form, "address_selection_token", suggestion.selection_token);
     ADDRESS_FIELDS.forEach((name) => setField(form, name, suggestion[name]));
+    // Явно выбранная на карте точка важнее новой адресной подсказки.
+    if (manualCoordinates) {
+      setField(form, "latitude", latitude);
+      setField(form, "longitude", longitude);
+      setField(form, "coordinates_source", "manual");
+    }
     input.value = suggestion.normalized_address;
     input.dataset.selectedAddress = "1";
     input.setAttribute("aria-expanded", "false");

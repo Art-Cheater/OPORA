@@ -12,10 +12,13 @@ from app.core.address import (
     GeocodingError,
     GeocodingProvider,
     NominatimGeocodingProvider,
+    PhotonGeocodingProvider,
 )
 from app.extensions import db
 from app.models.auth.user import User
 from app.models.requests.request_status import RequestStatus
+from app.models.requests.request_journal import RequestJournal
+from app.modules.requests.journals import JOURNAL_OKTYABRSKY_VILLAGES
 from app.modules.requests.services import RequestPayload, RequestService
 from app.modules.requests.workflow import STATUS_NEW
 
@@ -45,6 +48,24 @@ class FakeResponse:
 
     def read(self, _limit):
         return self.body
+
+
+def test_photon_parses_forward_and_reverse_results():
+    calls = []
+
+    def opener(request, *, timeout):
+        calls.append((request.full_url, timeout))
+        return FakeResponse({"features": [{"geometry": {"coordinates": [49.668, 58.603]}, "properties": {"name": "Лепсе", "street": "улица Лепсе", "housenumber": "79", "city": "Киров", "state": "Кировская область", "osm_type": "W", "osm_id": 12}}]})
+
+    provider = PhotonGeocodingProvider(base_url="http://photon.test", timeout_seconds=1, cache_ttl_seconds=60, cache_max_size=10, opener=opener)
+    forward = provider.search("Лепсе 79")
+    reverse = provider.reverse_geocode(58.603, 49.668)
+
+    assert forward[0].latitude == 58.603
+    assert forward[0].longitude == 49.668
+    assert forward[0].address_source == "photon"
+    assert reverse is not None and reverse.street == "улица Лепсе"
+    assert "/api?" in calls[0][0] and "/reverse?" in calls[1][0]
 
 
 def test_nominatim_uses_user_agent_timeout_and_cache():
@@ -305,3 +326,24 @@ def test_request_service_persists_selected_address_metadata(app):
         assert created.address_source == "nominatim"
         assert created.address_external_id == "way/123"
         assert created.latitude == Decimal("58.6030000")
+
+
+def test_manual_coordinates_survive_address_preparation(app):
+    with app.app_context():
+        user = db.session.scalar(db.select(User).where(User.email == "admin@opora.ru"))
+        status = db.session.scalar(db.select(RequestStatus).where(RequestStatus.code == STATUS_NEW))
+        village_journal = db.session.scalar(
+            db.select(RequestJournal).where(RequestJournal.code == JOURNAL_OKTYABRSKY_VILLAGES)
+        )
+        payload = RequestPayload(
+            number="ADDR-MANUAL-001", title="", description=None, address="д. Башарово, Центральная 12",
+            original_address="д. Башарово, Центральная 12", normalized_address=None, region=None, district=None,
+            settlement=None, street=None, house=None, address_source=None, address_external_id=None, pp=None,
+            received_at=datetime.now(timezone.utc), dispatcher_name="Диспетчер QA", latitude=Decimal("58.7000000"),
+            longitude=Decimal("49.7000000"), phone=None, applicant_name="—", priority="medium", status_id=status.id,
+            responsible_id=None, executor_id=None, journal_id=village_journal.id, coordinates_source="manual",
+        )
+        created = RequestService.create_request(payload, user.id)
+        assert created.latitude == Decimal("58.7000000")
+        assert created.longitude == Decimal("49.7000000")
+        assert created.coordinates_source == "manual"

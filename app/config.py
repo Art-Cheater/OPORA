@@ -179,8 +179,16 @@ class Config:
     ADDRESS_SELECTION_TOKEN_MAX_AGE = int(
         os.getenv("ADDRESS_SELECTION_TOKEN_MAX_AGE", "3600")
     )
-    # Routing выключен, пока production не укажет совместимый OSRM backend.
+    # Photon совместим с Nominatim, но подключается только явной настройкой.
+    PHOTON_BASE_URL = os.getenv("PHOTON_BASE_URL", "").strip()
+    PHOTON_REGION_BIAS = os.getenv("PHOTON_REGION_BIAS", "Киров, Кировская область").strip()
+    # Leaflet остаётся production-провайдером, пока отдельный MapLibre adapter не будет готов.
+    MAP_FRONTEND_PROVIDER = os.getenv("MAP_FRONTEND_PROVIDER", "leaflet").strip().lower()
+    MAPLIBRE_STYLE_URL = os.getenv("MAPLIBRE_STYLE_URL", "").strip()
+    # Routing выключен, пока production не укажет совместимый backend.
+    ROUTING_PROVIDER = os.getenv("ROUTING_PROVIDER", "osrm").strip().lower()
     ROUTING_BASE_URL = os.getenv("ROUTING_BASE_URL", "").strip()
+    VALHALLA_BASE_URL = os.getenv("VALHALLA_BASE_URL", "").strip()
     ROUTING_TIMEOUT_SECONDS = float(os.getenv("ROUTING_TIMEOUT_SECONDS", "1.5"))
     ROUTING_RETRIES = int(os.getenv("ROUTING_RETRIES", "1"))
     ROUTING_CACHE_TTL_SECONDS = int(os.getenv("ROUTING_CACHE_TTL_SECONDS", "900"))

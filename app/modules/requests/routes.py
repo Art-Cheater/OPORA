@@ -155,6 +155,12 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
         return default
 
     def signed_coordinate(code):
+        if (form.coordinates_source.data or "").strip() == "manual":
+            raw = getattr(form, code).data
+            try:
+                return Decimal(str(raw)) if raw not in (None, "") else None
+            except (InvalidOperation, TypeError, ValueError):
+                return None
         value = machine_field(code)
         if value in (None, ""):
             return None
@@ -221,6 +227,7 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
         has_barrier=bool(field("has_barrier", form.has_barrier.data, default=False)),
         barrier_phone=field("barrier_phone", form.barrier_phone.data, default=None),
         for_beresnev=bool(field("for_beresnev", form.for_beresnev.data, default=False)),
+        coordinates_source=(form.coordinates_source.data or "").strip() or (getattr(entity, "coordinates_source", None) if entity else None),
     )
 
 
