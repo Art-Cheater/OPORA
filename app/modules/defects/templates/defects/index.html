@@ -6,7 +6,6 @@
 
 {% block extra_css %}
 {{ super() }}
-<link rel="stylesheet" href="{{ static_url('vendor/leaflet/leaflet.css') }}">
 <link rel="stylesheet" href="{{ static_url('css/requests-journal.css') }}">
 {% endblock %}
 
@@ -27,7 +26,5 @@
 
 {% block extra_js %}
 {{ super() }}
-<script src="{{ static_url('vendor/leaflet/leaflet.js') }}"></script>
-<script src="{{ static_url('js/ops-map.js') }}"></script>
 <script src="{{ static_url('js/requests-journal.js') }}"></script>
 {% endblock %}

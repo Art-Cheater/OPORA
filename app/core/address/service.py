@@ -387,6 +387,12 @@ def get_address_suggestion_service() -> AddressSuggestionService:
         if existing is not None:
             return existing
         provider_name = str(current_app.config.get("GEOCODING_PROVIDER") or "nominatim")
+        # Photon — локальный optional service. Его отсутствие не должно
+        # блокировать создание Request/Defect: используем совместимый Nominatim.
+        if provider_name.strip().casefold() == "photon" and not str(
+            current_app.config.get("PHOTON_BASE_URL") or ""
+        ).strip():
+            provider_name = "nominatim"
         factory = _PROVIDER_FACTORIES.get(provider_name.strip().casefold())
         if factory is None:
             raise RuntimeError(f"Неизвестный GEOCODING_PROVIDER: {provider_name}")

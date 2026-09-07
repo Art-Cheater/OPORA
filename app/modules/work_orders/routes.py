@@ -331,6 +331,29 @@ def plan_detail_json(plan_id: uuid.UUID):
         return ajax_error(str(exc), status=403)
 
 
+@work_orders_bp.route("/plans/<uuid:plan_id>/map.json")
+@login_required
+@permission_required(PERM_WAYBILLS_VIEW)
+def plan_map_json(plan_id: uuid.UUID):
+    """Точки сохранённого плана в совместимом map JSON."""
+    try:
+        plan = WorkPlanService.get_owned(plan_id, current_user)
+    except NotFoundError as exc:
+        return ajax_error(str(exc), status=404)
+    except ValidationError as exc:
+        return ajax_error(str(exc), status=403)
+    payload = WorkPlanService.serialize_plan(plan, current_user)
+    points = [
+        {
+            "id": item["entity_id"], "type": item["entity_type"], "number": item["number"],
+            "address": item.get("address"), "lat": item.get("lat"), "lng": item.get("lng"),
+            "status": item.get("status"), "pp": item.get("pp"), "in_plan": True, "color": "green",
+        }
+        for item in payload["items"] if item.get("lat") is not None and item.get("lng") is not None
+    ]
+    return jsonify({"points": points, "without_coordinates": payload["total"] - len(points)})
+
+
 @work_orders_bp.route("/plans/<uuid:plan_id>")
 @login_required
 @permission_required(PERM_WAYBILLS_VIEW)
@@ -656,7 +679,7 @@ def plan_json():
     return jsonify(WorkOrderService.serialize_plan(_current_plan()))
 
 
-@work_orders_bp.route("/route.json")
+@work_orders_bp.route("/route.json", methods=["GET", "POST"])
 @login_required
 @permission_required(PERM_WAYBILLS_VIEW)
 def route_json():
@@ -675,12 +698,27 @@ def route_json():
         for stop in payload["stops"]
         if stop["lat"] is not None and stop["lng"] is not None
     ]
+    if request.method == "POST":
+        raw = (request.get_json(silent=True) or {}).get("points")
+        if not isinstance(raw, list) or not 2 <= len(raw) <= 50:
+            return jsonify({"ok": False, "error": "invalid_points", "message": "Передайте от 2 до 50 точек маршрута."}), 400
+        points = []
+        for index, item in enumerate(raw, 1):
+            try:
+                lat, lng = float(item["lat"]), float(item["lng"])
+            except (KeyError, TypeError, ValueError):
+                return jsonify({"ok": False, "error": "invalid_coordinates", "message": "Координаты маршрута указаны неверно."}), 400
+            if not -90 <= lat <= 90 or not -180 <= lng <= 180:
+                return jsonify({"ok": False, "error": "invalid_coordinates", "message": "Координаты маршрута вне допустимого диапазона."}), 400
+            points.append({"id": str(index), "order": index, "lat": lat, "lng": lng, "type": "point", "number": "", "address": ""})
+    if len(points) < 2:
+        return jsonify({"ok": False, "error": "not_enough_points", "message": "Для маршрута нужно минимум две точки с координатами.", "points": points}), 400
     from app.core.routing import RoutingService
 
     route = RoutingService.route([(point["lat"], point["lng"]) for point in points])
     if route is None:
-        return jsonify({"ok": False, "error": "routing_unavailable", "points": points, "missing": max(len(payload["stops"]) - len(points), 0), "route": None})
-    return jsonify({"ok": True, "points": points, "missing": max(len(payload["stops"]) - len(points), 0), "route": route})
+        return jsonify({"ok": False, "error": "routing_unavailable", "message": "Не удалось построить дорожный маршрут. Проверьте подключение сервиса маршрутизации.", "points": points, "missing": max(len(payload["stops"]) - len(points), 0), "route": None})
+    return jsonify({"ok": True, "points": points, "missing": max(len(payload["stops"]) - len(points), 0), "route": route, "geometry": route["geometry"], "distance_m": route["distance_m"], "duration_s": route["duration_s"]})
 
 
 @work_orders_bp.route("/nearby.json")

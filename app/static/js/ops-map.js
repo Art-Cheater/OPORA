@@ -1,323 +1,110 @@
-window.OporaOpsMap = {
-  _map: null,
-  _layer: null,
-  _routeLayer: null,
-  _kind: "point",
-  _points: [],
-  _container: null,
-  _resizeObs: null,
-  _onResize: null,
-  _onClick: null,
-  _paint: null,
-  _selectedMarker: null,
-  _hasFitted: false,
+/* Единая карта OPORA на MapLibre GL JS. OporaOpsMap — совместимый alias. */
+window.OporaMap = (() => {
+  const DEFAULT_STYLE = "https://tiles.openfreemap.org/styles/liberty";
+  const ASSET_BASE = "https://unpkg.com/maplibre-gl@5.16.0/dist";
+  const KIROV = [49.668, 58.6035];
+  let assetPromise, map, container, resizeObserver, onResize, points = [], route = null, selected = null, hasFitted = false, fetchController;
 
-  destroy() {
-    if (this._resizeObs) {
-      this._resizeObs.disconnect();
-      this._resizeObs = null;
-    }
-    if (this._onResize) {
-      window.removeEventListener("resize", this._onResize);
-      this._onResize = null;
-    }
-    if (this._container && this._onClick) {
-      this._container.removeEventListener("click", this._onClick);
-    }
-    this._onClick = null;
-    if (this._map) {
-      this._map.remove();
-      this._map = null;
-    }
-    if (this._container) {
-      delete this._container._leaflet_id;
-    }
-    this._container = null;
-    this._layer = null;
-    this._routeLayer = null;
-    this._paint = null;
-    this._points = [];
-    this._selectedMarker = null;
-    this._hasFitted = false;
-  },
-
-  init() {
-    const mapNode = document.getElementById("opsMap");
-    if (!mapNode) {
-      this.destroy();
-      return false;
-    }
-    if (typeof L === "undefined") {
-      const leaflet = document.querySelector('script[src*="leaflet"]');
-      if (leaflet && !leaflet.dataset.oporaMapWait) {
-        leaflet.dataset.oporaMapWait = "1";
-        leaflet.addEventListener("load", () => this.init(), { once: true });
-      }
-      return false;
-    }
-
-    if (this._map && this._container === mapNode) {
-      this._map.invalidateSize();
-      return true;
-    }
-
-    this.destroy();
-
-    if (mapNode._leaflet_id) {
-      delete mapNode._leaflet_id;
-      mapNode.replaceChildren();
-    }
-
-    this._kind = mapNode.getAttribute("data-kind") || "point";
-    const src = mapNode.getAttribute("data-src");
-    // Карта нового плана получает точки прямо из выбранной пользователем корзины.
-    // Для остальных экранов источником остаётся JSON endpoint.
-    if (!src && this._kind !== "plan") return false;
-    this._container = mapNode;
-    const statusNode = document.getElementById("opsMapStatus");
-    const KIROV = [58.6035, 49.668];
-    const COLORS = { request: "#2563EB", defect: "#DC3545", route: "#c45c26" };
-    // Рабочая карта должна оставаться светлой и читаемой при любой теме интерфейса.
-    const dark = mapNode.dataset.kind !== "workbench" && document.documentElement.getAttribute("data-theme") === "dark";
-    const tiles = dark
-      ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-      : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
-
-    const map = L.map(mapNode, { zoomControl: true });
-    this._map = map;
-    L.tileLayer(tiles, {
-      maxZoom: 19,
-      subdomains: "abcd",
-      attribution: "&copy; OpenStreetMap &copy; CARTO",
-    }).addTo(map);
-    map.setView(KIROV, 12);
-
-    const refreshSize = () => {
-      if (this._map === map) map.invalidateSize();
-    };
-    this._onResize = refreshSize;
-    window.addEventListener("resize", refreshSize);
-    if (typeof ResizeObserver === "function") {
-      this._resizeObs = new ResizeObserver(() => {
-        if (mapNode.offsetWidth > 0 && mapNode.offsetHeight > 0) refreshSize();
-      });
-      this._resizeObs.observe(mapNode);
-    }
-    map.whenReady(refreshSize);
-    requestAnimationFrame(() => requestAnimationFrame(refreshSize));
-
-    this._layer = L.layerGroup().addTo(map);
-    this._routeLayer = L.layerGroup().addTo(map);
-    const self = this;
-
-    function escapeHtml(value) {
-      return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-    }
-
-    function setStatus(text) {
-      if (statusNode) statusNode.textContent = text;
-    }
-
-    function typeLabel(type) {
-      if (type === "defect") return "Дефект";
-      if (type === "request") return "Заявка";
-      return type || "";
-    }
-
-    function numberLabel(point) {
-      if (point.type === "defect") return point.number || "";
-      return point.number ? `№${point.number}` : "";
-    }
-
-    function workbenchPopup(point) {
-      const canAdd = mapNode.closest("#workOrderRoot")?.dataset.canEdit === "true";
-      const inPlan = Boolean(point.in_plan);
-      const addBtn = canAdd && !inPlan
-        ? `<button type="button" class="btn btn-sm btn-primary mt-2 js-add-to-plan" data-type="${escapeHtml(point.type)}" data-id="${escapeHtml(point.id)}">Добавить в план</button>`
-        : inPlan
-          ? `<div class="small text-muted mt-2">В плане</div>`
-          : "";
-      const desc = point.description ? `<div class="mt-1">${escapeHtml(point.description)}</div>` : "";
-      return `<div class="ops-map-popup">
-        <div class="fw-semibold">${escapeHtml(numberLabel(point))}</div>
-        <div class="mt-1">${escapeHtml(point.address || "")}</div>
-        ${desc}
-        ${addBtn}
-      </div>`;
-    }
-
-    function popupHtml(point) {
-      if (self._kind === "workbench") return workbenchPopup(point);
-      const number = numberLabel(point) || typeLabel(point.type);
-      const address = escapeHtml(point.address || "");
-      const title = point.url
-        ? `<a href="${escapeHtml(point.url)}">${escapeHtml(number)}</a>`
-        : `<span class="fw-semibold">${escapeHtml(number)}</span>`;
-      return `<div><div>${title}</div><div class="small text-muted mt-1">${escapeHtml(typeLabel(point.type))}</div><div class="mt-1">${address}</div></div>`;
-    }
-
-    function markerColor(point) {
-      if (point.in_plan) return "#198754";
-      return COLORS[point.type] || COLORS.request;
-    }
-
-    this._paint = function paint(data) {
-      if (!self._layer || self._map !== map) return;
-      self._layer.clearLayers();
-      self._points = data.points || [];
-      const bounds = [];
-      const line = [];
-      self._points.forEach((point) => {
-        const lat = Number(point.lat);
-        const lng = Number(point.lng);
-        if (Number.isNaN(lat) || Number.isNaN(lng)) return;
-        const pos = [lat, lng];
-        bounds.push(pos);
-        if (self._kind === "route") {
-          line.push(pos);
-          const order = point.order || bounds.length;
-          L.marker(pos, {
-            icon: L.divIcon({
-              className: "ops-map-num",
-              html: `<span class="ops-map-num__badge">${order}</span>`,
-              iconSize: [26, 26],
-              iconAnchor: [13, 13],
-            }),
-          })
-            .addTo(self._layer)
-            .bindPopup(popupHtml(point), { maxWidth: 280 });
-        } else {
-          const marker = L.circleMarker(pos, {
-            radius: point.in_plan ? 10 : 8,
-            color: "#fff",
-            weight: point.in_plan ? 2 : 1,
-            fillColor: markerColor(point),
-            fillOpacity: 0.92,
-          }).addTo(self._layer).bindPopup(popupHtml(point), { maxWidth: 300 });
-          if (self._kind === "workbench") {
-            marker.on("click", () => {
-              if (self._selectedMarker && self._selectedMarker !== marker) self._selectedMarker.setStyle({ radius: 8, weight: 1, color: "#fff" });
-              self._selectedMarker = marker;
-              marker.setStyle({ radius: 12, weight: 3, color: "#111827" });
-              mapNode.dispatchEvent(new CustomEvent("opora:select-work", { bubbles: true, detail: { point } }));
-            });
-          }
-        }
-      });
-      if (self._kind === "route" && line.length > 1) {
-        L.polyline(line, { color: COLORS.route, weight: 3, opacity: 0.85 }).addTo(self._layer);
-      }
-      if (!self._hasFitted && bounds.length === 1) {
-        map.setView(bounds[0], 16);
-        self._hasFitted = true;
-      } else if (!self._hasFitted && bounds.length > 1) {
-        map.fitBounds(bounds, { padding: [28, 28], maxZoom: 16 });
-        self._hasFitted = true;
-      } else if (!self._hasFitted) {
-        map.setView(KIROV, 12);
-      }
-      refreshSize();
-      const count = bounds.length;
-      if (self._kind === "route") {
-        setStatus(count ? `Точек маршрута: ${count}.` : "Добавьте точки с координатами — появится линия маршрута.");
-      } else if (self._kind === "workbench") {
-        setStatus(count ? `На карте: ${count}. Красные — дефекты, синие — заявки.` : "Нет точек с координатами.");
-      } else if (self._kind === "journal") {
-        setStatus(count ? `На карте: ${count}. Синие — заявки, красные — дефекты.` : "Нет точек с координатами по текущим фильтрам.");
-      } else {
-        setStatus(count ? `Отметок: ${count}. Нажмите точку — номер и адрес.` : "Пока нет точек с координатами.");
-      }
-    };
-
-    this.reload = function reload(nextSrc) {
-      const url = nextSrc || mapNode.getAttribute("data-src");
-      if (!url) return Promise.resolve();
-      mapNode.setAttribute("data-src", url);
-      return fetch(url, { headers: { Accept: "application/json" } })
-        .then((response) => {
-          if (!response.ok) throw new Error("map");
-          return response.json();
-        })
-        .then((data) => {
-          if (self._map === map) self._paint(data);
-        })
-        .catch(() => setStatus("Не удалось загрузить карту."));
-    };
-
-    this.setRoute = function setRoute(points, geometry) {
-      if (!self._routeLayer || self._map !== map) return 0;
-      self._routeLayer.clearLayers();
-      const line = [];
-      (points || []).forEach((point) => {
-        const lat = Number(point.lat);
-        const lng = Number(point.lng);
-        if (Number.isNaN(lat) || Number.isNaN(lng)) return;
-        const pos = [lat, lng];
-        line.push(pos);
-        L.marker(pos, {
-          icon: L.divIcon({
-            className: "ops-map-num",
-            html: `<span class="ops-map-num__badge">${point.order || line.length}</span>`,
-            iconSize: [26, 26],
-            iconAnchor: [13, 13],
-          }),
-        }).addTo(self._routeLayer);
-      });
-      const roadGeometry = geometry?.type === "LineString" && Array.isArray(geometry.coordinates)
-        ? geometry.coordinates.map(([lng, lat]) => [lat, lng])
-        : Array.isArray(geometry) ? geometry : [];
-      if (roadGeometry.length > 1) {
-        L.polyline(roadGeometry, { color: COLORS.route, weight: 4, opacity: 0.9 }).addTo(self._routeLayer);
-        map.fitBounds(roadGeometry, { padding: [36, 36], maxZoom: 16 });
-      } else if (line.length === 1) {
-        map.setView(line[0], 16);
-      }
-      refreshSize();
-      return line.length;
-    };
-
-    this.setPoints = function setPoints(points) {
-      if (!self._map || self._map !== map) return;
-      self._paint({ points: points || [] });
-    };
-
-    this.clearRoute = function clearRoute() {
-      if (self._routeLayer) self._routeLayer.clearLayers();
-    };
-
-    this._onClick = (event) => {
-      const btn = event.target.closest(".js-add-to-plan");
-      if (!btn) return;
-      mapNode.dispatchEvent(
-        new CustomEvent("opora:add-to-plan", {
-          bubbles: true,
-          detail: { type: btn.getAttribute("data-type"), id: btn.getAttribute("data-id") },
-        })
-      );
-    };
-    mapNode.addEventListener("click", this._onClick);
-
-    if (src) this.reload(src);
-    else this._paint({ points: [] });
-    return true;
-  },
-};
-
-// Общий интерфейс карты. Leaflet остаётся включённым provider до отдельного MapLibre switch.
-window.OporaMap = window.OporaMap || {
-  provider: "leaflet",
-  init: (...args) => window.OporaOpsMap.init(...args),
-  destroy: (...args) => window.OporaOpsMap.destroy(...args),
-};
-
-(function bindOpsMapLifecycle() {
-  const boot = () => window.OporaOpsMap.init();
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot);
+  function status(text, error = false) {
+    const node = document.getElementById("opsMapStatus");
+    if (node) { node.textContent = text; node.classList.toggle("text-danger", error); }
   }
-  window.addEventListener("opora:navigated", boot);
+  function ensureAssets() {
+    if (window.maplibregl) return Promise.resolve(window.maplibregl);
+    if (assetPromise) return assetPromise;
+    assetPromise = new Promise((resolve, reject) => {
+      let css = document.querySelector("link[data-opora-maplibre]");
+      if (!css) { css = document.createElement("link"); css.rel = "stylesheet"; css.href = `${ASSET_BASE}/maplibre-gl.css`; css.dataset.oporaMaplibre = "1"; document.head.append(css); }
+      let script = document.querySelector("script[data-opora-maplibre]");
+      if (!script) { script = document.createElement("script"); script.src = `${ASSET_BASE}/maplibre-gl.js`; script.dataset.oporaMaplibre = "1"; document.head.append(script); }
+      const ready = () => window.maplibregl ? resolve(window.maplibregl) : reject(new Error("MapLibre unavailable"));
+      script.addEventListener("load", ready, { once: true });
+      script.addEventListener("error", () => reject(new Error("MapLibre load failed")), { once: true });
+    }).catch((error) => { assetPromise = null; throw error; });
+    return assetPromise;
+  }
+  function pointFeature(point) {
+    const lat = Number(point.lat), lng = Number(point.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    const type = point.type || point.entity_type || "request", inPlan = Boolean(point.in_plan);
+    return { type: "Feature", geometry: { type: "Point", coordinates: [lng, lat] }, properties: { ...point, type, id: String(point.id || point.entity_id || ""), in_plan: inPlan, color: inPlan ? "#198754" : (type === "defect" ? "#dc3545" : "#2563eb") } };
+  }
+  function collection(rows) { return { type: "FeatureCollection", features: (rows || []).map(pointFeature).filter(Boolean) }; }
+  function addLayers() {
+    map.addSource("opora-works", { type: "geojson", data: collection(points), cluster: true, clusterMaxZoom: 14, clusterRadius: 48 });
+    map.addLayer({ id: "opora-clusters", type: "circle", source: "opora-works", filter: ["has", "point_count"], paint: { "circle-color": "#344054", "circle-radius": ["step", ["get", "point_count"], 18, 20, 23, 100, 29], "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" } });
+    map.addLayer({ id: "opora-cluster-count", type: "symbol", source: "opora-works", filter: ["has", "point_count"], layout: { "text-field": ["get", "point_count_abbreviated"], "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"], "text-size": 12 }, paint: { "text-color": "#ffffff" } });
+    map.addLayer({ id: "opora-points", type: "circle", source: "opora-works", filter: ["!", ["has", "point_count"]], paint: { "circle-radius": ["case", ["get", "in_plan"], 10, 8], "circle-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-color": "#ffffff", "circle-opacity": 0.96 } });
+    map.addSource("opora-selected", { type: "geojson", data: collection([]) });
+    map.addLayer({ id: "opora-selected-point", type: "circle", source: "opora-selected", paint: { "circle-radius": 14, "circle-color": "transparent", "circle-stroke-width": 3, "circle-stroke-color": "#111827" } });
+    map.addSource("opora-route", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    map.addLayer({ id: "opora-route-line", type: "line", source: "opora-route", paint: { "line-color": "#c45c26", "line-width": 5, "line-opacity": 0.9 } });
+  }
+  function bindInteractions() {
+    map.on("click", "opora-clusters", (event) => {
+      const feature = map.queryRenderedFeatures(event.point, { layers: ["opora-clusters"] })[0];
+      if (feature) map.getSource("opora-works").getClusterExpansionZoom(feature.properties.cluster_id, (error, zoom) => { if (!error) map.easeTo({ center: feature.geometry.coordinates, zoom }); });
+    });
+    map.on("click", "opora-points", (event) => {
+      const feature = event.features?.[0]; if (!feature) return;
+      const point = { ...feature.properties, lat: feature.geometry.coordinates[1], lng: feature.geometry.coordinates[0] };
+      selected = point; map.getSource("opora-selected").setData(collection([point]));
+      container.dispatchEvent(new CustomEvent("opora:select-work", { bubbles: true, detail: { point } }));
+    });
+    ["opora-clusters", "opora-points"].forEach((layer) => { map.on("mouseenter", layer, () => map.getCanvas().style.cursor = "pointer"); map.on("mouseleave", layer, () => map.getCanvas().style.cursor = ""); });
+  }
+  function resize() { map?.resize(); }
+  function render({ fit = false } = {}) {
+    if (!map?.isStyleLoaded()) return;
+    map.getSource("opora-works")?.setData(collection(points));
+    map.getSource("opora-selected")?.setData(selected ? collection([selected]) : collection([]));
+    map.getSource("opora-route")?.setData({ type: "FeatureCollection", features: route?.type === "LineString" ? [{ type: "Feature", geometry: route, properties: {} }] : [] });
+    const coords = collection(points).features.map((feature) => feature.geometry.coordinates);
+    if ((fit || !hasFitted) && coords.length) {
+      if (coords.length === 1) map.jumpTo({ center: coords[0], zoom: 16 });
+      else { const bounds = coords.reduce((value, coord) => value.extend(coord), new window.maplibregl.LngLatBounds(coords[0], coords[0])); map.fitBounds(bounds, { padding: 36, maxZoom: 16, duration: 0 }); }
+      hasFitted = true;
+    }
+    status(container?.dataset.kind === "workbench" ? (coords.length ? `На карте: ${coords.length}. Синие — заявки, красные — дефекты, зелёные — в плане.` : "Нет точек с координатами.") : (coords.length ? `Отметок на карте: ${coords.length}.` : "Нет точек с координатами."));
+    resize();
+  }
+  function destroy() {
+    fetchController?.abort(); fetchController = null; resizeObserver?.disconnect(); resizeObserver = null;
+    if (onResize) window.removeEventListener("resize", onResize); onResize = null;
+    map?.remove(); map = null; container = null; points = []; route = null; selected = null; hasFitted = false;
+  }
+  function init() {
+    const node = document.getElementById("opsMap");
+    if (!node) { destroy(); return Promise.resolve(false); }
+    if (map && container === node) { resize(); return Promise.resolve(true); }
+    destroy(); container = node; status("Загрузка карты…");
+    return ensureAssets().then((lib) => {
+      if (container !== node) return false;
+      const style = node.dataset.mapStyle || document.querySelector('meta[name="opora-maplibre-style"]')?.content || DEFAULT_STYLE;
+      map = new lib.Map({ container: node, style: style || DEFAULT_STYLE, center: KIROV, zoom: 12, attributionControl: true });
+      map.addControl(new lib.NavigationControl(), "top-left");
+      map.on("load", () => { addLayers(); bindInteractions(); render(); });
+      map.on("error", (event) => { if (event?.error) status("Не удалось загрузить карту. Проверьте style URL и подключение.", true); });
+      onResize = resize; window.addEventListener("resize", onResize);
+      if (window.ResizeObserver) { resizeObserver = new ResizeObserver(resize); resizeObserver.observe(node); }
+      requestAnimationFrame(() => requestAnimationFrame(resize));
+      if (node.dataset.src) reload(node.dataset.src);
+      return true;
+    }).catch(() => { status("Карта недоступна: не удалось загрузить MapLibre.", true); return false; });
+  }
+  function reload(url) {
+    const target = url || container?.dataset.src; if (!target) return Promise.resolve();
+    fetchController?.abort(); fetchController = new AbortController();
+    return fetch(target, { headers: { Accept: "application/json" }, signal: fetchController.signal })
+      .then((response) => { if (!response.ok) throw new Error("map response"); return response.json(); })
+      .then((data) => { points = data.points || []; selected = null; render({ fit: !hasFitted }); return data; })
+      .catch((error) => { if (error.name !== "AbortError") status("Не удалось загрузить данные карты.", true); });
+  }
+  function setPoints(rows) { points = rows || []; if (selected && !points.some((point) => String(point.id || point.entity_id) === String(selected.id))) selected = null; render(); }
+  function setRoute(routePoints, geometry) { route = geometry?.type === "LineString" ? geometry : null; render(); return (routePoints || []).filter((point) => point.lat != null && point.lng != null).length; }
+  function clearRoute() { route = null; render(); }
+  function fitAll() { render({ fit: true }); }
+  return { init, destroy, reload, setPoints, setRoute, clearRoute, fitAll, ensureAssets, getMap: () => map };
 })();
+window.OporaOpsMap = window.OporaMap;
+(() => { const boot = () => window.OporaMap.init(); if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot(); window.addEventListener("opora:navigated", boot); window.addEventListener("opora:before-navigate", () => window.OporaMap.destroy()); })();

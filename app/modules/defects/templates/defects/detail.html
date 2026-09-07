@@ -6,7 +6,6 @@
 {% block title %}{{ item.number }} — {{ app_name }}{% endblock %}
 {% block extra_css %}
 {{ super() }}
-<link rel="stylesheet" href="{{ static_url('vendor/leaflet/leaflet.css') }}">
 {% endblock %}
 
 {% block page_header %}
@@ -139,6 +138,5 @@
 
 {% block extra_js %}
 {{ super() }}
-<script src="{{ static_url('vendor/leaflet/leaflet.js') }}"></script>
 <script src="{{ static_url('js/request-detail.js') }}"></script>
 {% endblock %}

@@ -122,7 +122,8 @@ def test_work_orders_access(client):
     assert "js/work-orders.js" in html
     assert 'id="opsMap"' in html
     assert "js/ops-map.js" in html
-    assert "vendor/leaflet/leaflet.js" in html
+    assert "vendor/leaflet/leaflet.js" not in html
+    assert "js/ops-map.js" in html
     assert "/work-orders/plans/new" not in html
     _login(client, "executor@test.local")
     assert client.get("/work-orders/").status_code == 200
@@ -232,6 +233,26 @@ def test_work_orders_map_colors_and_types(admin_client, app):
     assert by_id[request_id]["color"] == "blue"
     assert by_id[defect_id]["type"] == "defect"
     assert by_id[defect_id]["color"] == "red"
+
+
+def test_route_api_validates_points_and_keeps_geojson_contract(admin_client, app, monkeypatch):
+    from app.core.routing import RoutingService
+
+    invalid = admin_client.post("/work-orders/route.json", json={"points": [{"lat": 58.6, "lng": 49.6}]})
+    assert invalid.status_code == 400
+    assert invalid.get_json()["error"] == "invalid_points"
+
+    monkeypatch.setattr(RoutingService, "route", lambda points: {
+        "geometry": {"type": "LineString", "coordinates": [[lng, lat] for lat, lng in points]},
+        "distance_m": 1200,
+        "duration_s": 180,
+    })
+    response = admin_client.post("/work-orders/route.json", json={"points": [{"lat": 58.60, "lng": 49.67}, {"lat": 58.61, "lng": 49.68}]})
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["ok"] is True
+    assert body["geometry"]["type"] == "LineString"
+    assert body["geometry"]["coordinates"] == [[49.67, 58.60], [49.68, 58.61]]
 
 
 def test_work_orders_plan_nearby_reorder_route(client, app):
@@ -415,7 +436,8 @@ def test_work_plans_journals_related_complete_and_auto_close(client, app):
         )
 
     html = client.get("/work-orders/").get_data(as_text=True)
-    assert "leaflet" in html.lower()
+    assert "leaflet" not in html.lower()
+    assert "opora-maplibre-style" in html
     assert 'id="opsMap"' in html
     assert "Карта работ" in html
     assert "Выберите точку на карте" in html

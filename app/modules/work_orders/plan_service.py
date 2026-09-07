@@ -877,6 +877,8 @@ class WorkPlanService:
             if entity.status is not None:
                 live_status = entity.status.name
                 live_status_code = entity.status.code
+        latitude = getattr(entity, "latitude", None) if entity is not None else None
+        longitude = getattr(entity, "longitude", None) if entity is not None else None
         photos = cls._entity_photos(item)
         return {
             "id": str(item.id),
@@ -889,6 +891,9 @@ class WorkPlanService:
             "description": description,
             "street": item.street_snapshot or (entity.street if entity is not None else "") or "",
             "district": item.district_snapshot or (entity.district if entity is not None else "") or "",
+            # Единый контракт frontend-карт: оставляем короткие lat/lng.
+            "lat": float(latitude) if latitude is not None else None,
+            "lng": float(longitude) if longitude is not None else None,
             "result": item.result,
             "result_label": ITEM_RESULT_LABELS.get(item.result, item.result),
             "status": live_status,

@@ -160,11 +160,13 @@ window.OporaWorkOrders = {
         }
       }
       if (saveBtn) saveBtn.disabled = !canEdit || !stops.length || !plan.editable;
-      if (routeBtn) routeBtn.disabled = stops.length < 1;
+      if (routeBtn) routeBtn.disabled = stops.filter((stop) => stop.lat != null && stop.lng != null).length < 2;
     }
 
     function applyPlan(nextPlan) {
       plan = nextPlan || { stops: [], editable: true, status: null };
+      // Любое изменение состава делает ранее построенную геометрию неактуальной.
+      window.OporaOpsMap?.clearRoute?.();
       renderPlan();
       refreshMap();
     }
@@ -307,18 +309,19 @@ window.OporaWorkOrders = {
         .then((res) => res.json())
         .then((data) => {
           window.OporaOpsMap?.init?.();
-          const count = window.OporaOpsMap?.setRoute?.(data.points || [], data.route?.geometry || null) || 0;
+          const count = window.OporaOpsMap?.setRoute?.(data.points || [], data.geometry || data.route?.geometry || null) || 0;
           const missing = Number(data.missing || 0);
-          const geometry = data.route?.geometry;
+          const geometry = data.geometry || data.route?.geometry;
           const hasRoadGeometry = Array.isArray(geometry)
             ? geometry.length > 1
             : geometry?.type === "LineString" && Array.isArray(geometry.coordinates) && geometry.coordinates.length > 1;
-          if (count < 2 || !hasRoadGeometry) {
-            toast(count < 2 ? "Маршрут не построен: у выбранных работ пока нет координат." : "Не удалось построить дорожный маршрут. Проверьте подключение сервиса маршрутизации.", false);
-          } else if (count === 1) {
-            toast(missing ? "Показана одна точка. У остальных работ пока нет координат." : "Показана точка выбранной работы.");
+          if (!data.ok || count < 2 || !hasRoadGeometry) {
+            toast(data.message || (count < 2 ? "Для маршрута нужно минимум две точки с координатами." : "Не удалось построить дорожный маршрут. Проверьте подключение сервиса маршрутизации."), false);
           } else {
-            toast(missing ? `Маршрут построен по ${count} точкам. Без координат: ${missing}.` : `Маршрут построен по ${count} точкам.`);
+            const distance = Number(data.distance_m || data.route?.distance_m || 0);
+            const duration = Number(data.duration_s || data.route?.duration_s || 0);
+            const meta = `${distance ? ` · ${(distance / 1000).toFixed(1).replace('.', ',')} км` : ""}${duration ? ` · ${Math.ceil(duration / 60)} мин.` : ""}`;
+            toast(missing ? `Маршрут построен по ${count} точкам. Без координат: ${missing}.${meta}` : `Маршрут построен по ${count} точкам.${meta}`);
           }
         })
         .catch(() => toast("Не удалось построить маршрут.", false));

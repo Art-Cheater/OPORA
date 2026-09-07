@@ -754,6 +754,8 @@ body.is-opora-busy { cursor: wait; }
   width: 100%;
   background: #edf2f5;
 }
+.opora-coordinate-map { height: 420px; border-radius: 10px; overflow: hidden; background: #edf2f5; }
+.maplibregl-ctrl-group { border-radius: 8px; overflow: hidden; }
 .workbench__map-status {
   padding: 0.45rem 0.85rem 0.7rem;
   font-size: 0.8rem;

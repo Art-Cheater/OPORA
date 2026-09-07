@@ -2,9 +2,10 @@
 
 ## Назначение
 
-Документ фиксирует безопасный поэтапный переход к `MapLibre GL JS + Photon +
-Valhalla`. Он не является переключателем production: Leaflet и Nominatim
-остаются рабочими компонентами до завершения соответствующих фаз.
+Документ фиксирует картографический стек `MapLibre GL JS + Photon + Valhalla`.
+Основные карты Request, Defect, Work Orders, WorkPlan и Waybill уже используют
+MapLibre. Leaflet оставлен только как legacy для карт Agreements до отдельной
+изолированной миграции этого read-only модуля.
 
 ## Текущее состояние
 
@@ -14,8 +15,8 @@ Valhalla`. Он не является переключателем production: L
   ручная точка имеет приоритет над автоматическим геокодированием.
 - JSON карт совместим с будущим renderer: `id`, `type`, `number`, `address`,
   `lat`, `lng`, `url`, `in_plan`, `color`.
-- Рабочий frontend использует Leaflet через `app/static/js/ops-map.js` и
-  минимальный интерфейс `window.OporaMap`.
+- Рабочий frontend использует MapLibre через `app/static/js/ops-map.js` и
+  единый интерфейс `window.OporaMap` (`window.OporaOpsMap` — compatibility alias).
 - Адресные подсказки используют локальный каталог улиц Кирова и Nominatim;
   `PhotonGeocodingProvider` доступен при `GEOCODING_PROVIDER=photon`.
 - `RoutingService` поддерживает существующий OSRM-совместимый endpoint и
@@ -46,19 +47,15 @@ MapLibre не содержит собственных тайлов: style URL з
 
 ## Поэтапное внедрение
 
-1. **Phase 1 — стабилизация.** Поддерживать текущие `lat/lng`, ручные точки,
-   raw addresses деревень, marker state и Leaflet lifecycle.
-2. **Phase 2 — Valhalla.** Настроить backend и `ROUTING_PROVIDER=valhalla`.
+1. **MapLibre.** Поддерживать `lat/lng`, ручные точки, raw addresses деревень,
+   GeoJSON clustering, marker state и cleanup перед SPA navigation.
+2. **Valhalla.** Настроить backend и `ROUTING_PROVIDER=valhalla`.
    API маршрута получает точки в текущем порядке и возвращает GeoJSON
    `LineString`, `distance_m`, `duration_s` либо `routing_unavailable`.
-3. **Phase 3 — MapLibre.** Реализовать изолированный adapter, принимающий тот
-   же payload. Использовать один GeoJSON source с clustering, а не сотни DOM
-   markers. Переключение через `MAP_FRONTEND_PROVIDER=maplibre` возможно лишь
-   после проверки каждого экрана.
-4. **Phase 4 — Photon.** Подключить локальный/согласованный Photon через
+3. **Photon.** Подключить локальный/согласованный Photon через
    `GEOCODING_PROVIDER=photon`; локальный каталог улиц сохраняется первым
    уровнем exact/stable matching.
-5. **Phase 5 — маршруты.** Добавить Valhalla matrix для nearby, отдельное
+4. **Дальнейшие маршруты.** Добавить Valhalla matrix для nearby, отдельное
    подтверждаемое действие «Оптимизировать» и сохранение road geometry.
 
 ## Адреса и nearby
@@ -114,12 +111,14 @@ OSM data volume и публичные URL вводятся только отде
 ## Конфигурация
 
 ```env
-MAP_FRONTEND_PROVIDER=leaflet
-MAPLIBRE_STYLE_URL=
+MAP_PROVIDER=maplibre
+MAP_FRONTEND_PROVIDER=maplibre
+# Для self-hosted tiles замените OpenFreeMap URL своим style.json.
+MAPLIBRE_STYLE_URL=https://tiles.openfreemap.org/styles/liberty
 GEOCODING_PROVIDER=nominatim # или photon
 PHOTON_BASE_URL=http://photon:2322
 PHOTON_REGION_BIAS=Киров, Кировская область
-ROUTING_PROVIDER=osrm # или valhalla
+ROUTING_PROVIDER=valhalla # либо osrm для совместимого старого endpoint
 ROUTING_BASE_URL=
 VALHALLA_BASE_URL=http://valhalla:8002
 ```

@@ -1,0 +1,16 @@
+# Локальный пример: не подключается к production docker-compose.yml.
+services:
+  photon:
+    image: komoot/photon:latest
+    profiles: ["maps"]
+    volumes:
+      - ./data/photon:/photon/photon_data
+    ports:
+      - "2322:2322"
+  valhalla:
+    image: ghcr.io/gis-ops/docker-valhalla/valhalla:latest
+    profiles: ["maps"]
+    volumes:
+      - ./data/valhalla:/custom_files
+    ports:
+      - "8002:8002"

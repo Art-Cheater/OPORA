@@ -55,9 +55,11 @@
 
 {% block extra_js %}
 {% if not g.spa_nav|default(false) %}
+<meta name="opora-maplibre-style" content="{{ config.get('MAPLIBRE_STYLE_URL', '') }}">
 <script src="{{ url_for('static', filename='js/phone-mask.js') }}"></script>
 <script src="{{ url_for('static', filename='js/opora-list.js') }}"></script>
 <script src="{{ url_for('static', filename='js/requests-form.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ops-map.js') }}"></script>
 <script src="{{ url_for('static', filename='js/manual-coordinate-picker.js') }}"></script>
 <script src="{{ url_for('static', filename='js/projects-documents.js') }}"></script>
 <script src="{{ url_for('static', filename='js/search.js') }}"></script>

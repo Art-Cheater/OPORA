@@ -27,7 +27,7 @@ def test_requests_journals_include_defects_tab(admin_client):
     assert "Заявки в деревнях Ленинского района" in html
     assert "Дефекты" in html
     assert 'id="opsMap"' not in html
-    assert "js/ops-map.js" not in html
+    assert "js/ops-map.js" in html
     assert "vendor/leaflet/leaflet.js" not in html
     assert "css/requests-journal.css" in html
     assert "Поиск" in html
@@ -135,7 +135,7 @@ def test_requests_defects_tab_looks_like_journal(admin_client, app):
     assert page.status_code == 200
     html = page.get_data(as_text=True)
     assert 'id="opsMap"' not in html
-    assert "js/ops-map.js" not in html
+    assert "js/ops-map.js" in html
     assert "vendor/leaflet/leaflet.js" not in html
     assert 'id="defectFilterForm"' in html
     assert 'id="defectsTableContainer"' in html
