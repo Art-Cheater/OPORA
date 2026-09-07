@@ -115,7 +115,9 @@ def test_work_orders_access(client):
     assert "Тип работы" in html
     assert "Из деревень" in html
     assert "Мои планы" in html
-    assert "Создать план" not in html
+    # План создаётся прямо из выбранных на карте работ; это не отдельный route/UI.
+    assert 'id="workSaveBtn"' in html
+    assert "Создать план" in html
     assert "Создать путевой лист" not in html
     assert "js/work-orders.js" in html
     assert 'id="opsMap"' in html
@@ -415,7 +417,9 @@ def test_work_plans_journals_related_complete_and_auto_close(client, app):
     html = client.get("/work-orders/").get_data(as_text=True)
     assert "leaflet" in html.lower()
     assert 'id="opsMap"' in html
-    assert "Доступные работы" in html
+    assert "Карта работ" in html
+    assert "Выберите точку на карте" in html
+    assert "Доступные работы" not in html
 
     defects_only = client.get("/work-orders/queue.json?journal=defects").get_json()["items"]
     assert {row["id"] for row in defects_only} == {defect_id}

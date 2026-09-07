@@ -31,7 +31,8 @@ def test_requests_journals_include_defects_tab(admin_client):
     assert "vendor/leaflet/leaflet.js" not in html
     assert "css/requests-journal.css" in html
     assert "Поиск" in html
-    assert "Сбор" in html
+    assert "Сброс" in html
+    assert "Сбор" not in html
     assert "Новая заявка" in html
     assert 'data-tour="defects"' not in html
     assert ">Путевые листы</span>" not in html
@@ -66,7 +67,9 @@ def test_request_create_journal_can_open_defect_creation(admin_client, client):
         follow_redirects=True,
     )
     executor_html = client.get("/requests/new").get_data(as_text=True)
-    assert 'value="__defects__"' not in executor_html
+    # Исполнитель имеет актуальное право создать Defect, поэтому журнал доступен
+    # и ведёт на существующую форму дефекта, а не создаёт Request с этим значением.
+    assert '<option value="__defects__">Дефекты</option>' in executor_html
 
 
 def test_request_create_preserves_multiple_houses_and_moscow_time(admin_client, app):
@@ -272,7 +275,9 @@ def test_spa_nav_work_orders_keeps_available_list(admin_client):
     assert 'id="appContent"' in html
     assert 'id="opsMap"' in html
     assert "Работа по заявкам" in html or "Работа с заявками" in html
-    assert "Доступные работы" in html
+    assert "Карта работ" in html
+    assert "Выберите точку на карте" in html
+    assert "Доступные работы" not in html
     assert 'id="workOrderRoot"' in html
     assert "js/work-orders.js" in html
     assert "Мой план работ" in html
@@ -346,6 +351,6 @@ def test_requests_number_sort_and_repeat_plus(admin_client, app):
     assert "data-opora-repeat" in html
     assert "journal-repeat-btn" in html
     page = admin_client.get("/requests/")
-    assert "Сбор" in page.get_data(as_text=True)
+    assert "Сброс" in page.get_data(as_text=True)
     assert "overflow-x: auto" not in page.get_data(as_text=True) or "journal-tabs" in page.get_data(as_text=True)
 
