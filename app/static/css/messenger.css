@@ -78,6 +78,15 @@ html[data-theme="dark"] {
   flex-shrink: 0;
 }
 
+/* Вторичная настройка: живёт в header, а не как третий grid-item. */
+.tg-push-control { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.tg-push-button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--tg-sidebar-border); border-radius: 8px; background: transparent; color: var(--tg-text-muted); font: inherit; font-size: 12px; line-height: 1; padding: 8px; cursor: pointer; white-space: nowrap; }
+.tg-push-button:hover:not(:disabled), .tg-push-button:focus-visible { color: var(--tg-accent); border-color: var(--tg-accent); outline: none; }
+.tg-push-button:disabled { cursor: default; opacity: .65; }
+.tg-push-status { display: none; max-width: 145px; color: var(--tg-text-muted); font-size: 11px; line-height: 1.2; }
+.tg-push-status.is-visible { display: inline; }
+@media (max-width: 480px) { .tg-push-button__label { display: none; } .tg-push-status { max-width: 100px; } }
+
 .tg-sidebar__back {
   width: 36px;
   height: 36px;

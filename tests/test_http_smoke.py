@@ -33,6 +33,27 @@ def test_admin_pages(admin_client):
         assert resp.status_code == 200, path
 
 
+def test_messenger_push_control_is_inside_header(admin_client):
+    """Push-настройка не должна становиться отдельным grid-элементом мессенджера."""
+    html = admin_client.get("/messenger/").get_data(as_text=True)
+    header_start = html.index('<header class="tg-sidebar__header">')
+    header_end = html.index("</header>", header_start)
+    control = html.index('class="tg-push-control"')
+    assert header_start < control < header_end
+    assert "Уведомления выключены." not in html
+    assert 'id="pushEnableButton"' in html
+
+
+def test_messenger_push_script_binds_once_and_requests_permission_on_click():
+    from pathlib import Path
+
+    script = (Path(__file__).parents[1] / "app/static/js/opora-push.js").read_text(encoding="utf-8")
+    assert 'root.dataset.pushBound === "1"' in script
+    assert 'button.addEventListener("click"' in script
+    assert 'Notification.requestPermission()' in script
+    assert script.index('button.addEventListener("click"') < script.index('Notification.requestPermission()')
+
+
 def test_executor_denied_reports(client):
     client.post(
         "/auth/login",
