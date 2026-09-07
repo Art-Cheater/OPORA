@@ -108,6 +108,8 @@ def _payload_from_form(form: DefectForm, entity=None) -> DefectPayload:
         longitude=coord("longitude"),
         responsible_id=_uuid_or_none(str(field("responsible_id", form.responsible_id.data, default="") or "")),
         pp=(field("pp", form.pp.data, default="") or "").strip() or None,
+        reported_date=form.reported_date.data,
+        reported_time=form.reported_time.data,
     )
 
 
@@ -183,6 +185,10 @@ def create():
     _prepare_form(form)
     if request.method == "GET":
         form.number.data = DefectRepository.next_number()
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        now = datetime.now(ZoneInfo("Europe/Moscow"))
+        form.reported_date.data, form.reported_time.data = now.date(), now.time().replace(second=0, microsecond=0)
     if form.validate_on_submit():
         try:
             item = DefectService.create(_payload_from_form(form), current_user.id)
@@ -228,6 +234,8 @@ def detail(defect_id: uuid.UUID):
     ]
     history = list(item.history)[:50]
     back_url, back_label = back_navigation(fallback="/requests/?tab=defects")
+    from app.modules.work_orders.plan_service import ENTITY_DEFECT, WorkPlanService
+    active_assignments = WorkPlanService.active_assignments(ENTITY_DEFECT, item.id)
     return render_template(
         "defects/detail.html",
         item=item,
@@ -239,6 +247,7 @@ def detail(defect_id: uuid.UUID):
         history=history,
         back_url=back_url,
         back_label=back_label,
+        active_assignments=active_assignments,
     )
 
 

@@ -245,11 +245,15 @@ def tracking():
     master_id = _uuid_or_none(request.args.get("master_id"))
     date_from = WorkPlanService.parse_filter_date(request.args.get("date_from"))
     date_to = WorkPlanService.parse_filter_date(request.args.get("date_to"))
+    work_type = (request.args.get("work_type") or "").strip()
+    district = (request.args.get("district") or "").strip()
     data = WorkPlanService.tracking(
         status=status,
         master_id=master_id,
         date_from=date_from,
         date_to=date_to,
+        work_type=work_type,
+        district=district,
     )
     return render_template(
         "work_orders/tracking.html",
@@ -259,6 +263,8 @@ def tracking():
             "master_id": str(master_id) if master_id else "",
             "date_from": date_from.isoformat() if date_from else "",
             "date_to": date_to.isoformat() if date_to else "",
+            "work_type": work_type,
+            "district": district,
         },
     )
 

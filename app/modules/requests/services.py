@@ -198,6 +198,23 @@ class RequestService:
         from app.modules.requests.address_format import address_expression_anchor, format_address, split_address_query
 
         current_address = (payload.address or "").strip()
+        # Village journals deliberately keep dispatcher-entered address raw.
+        # Never send an uncertain village address through Kirov autocomplete/geocoding.
+        journal = RequestRepository.get_journal(getattr(payload, "journal_id", None))
+        from app.modules.requests.journals import (
+            JOURNAL_LENINSKY_VILLAGES,
+            JOURNAL_NOVOVYATSKY_VILLAGES,
+            JOURNAL_OKTYABRSKY_VILLAGES,
+        )
+        if journal and journal.code in {JOURNAL_OKTYABRSKY_VILLAGES, JOURNAL_NOVOVYATSKY_VILLAGES, JOURNAL_LENINSKY_VILLAGES}:
+            payload.original_address = current_address
+            payload.address = current_address[:500]
+            payload.normalized_address = current_address[:1000]
+            payload.region = payload.settlement = payload.street = payload.house = None
+            payload.address_source = "village_manual"
+            payload.address_external_id = None
+            payload.latitude = payload.longitude = None
+            return
         anchor = address_expression_anchor(current_address)
         if anchor:
             # «Лепсе 12, 15» и «Лепсе 12-15» — выражения пользователя,

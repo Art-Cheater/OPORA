@@ -13,6 +13,15 @@ window.OporaRequestsJournal = {
         const open = form.classList.toggle("is-extra-open");
         extraBtn.setAttribute("aria-expanded", open ? "true" : "false");
       }, { signal: abort.signal });
+      form.querySelector("[data-request-filter-reset]")?.addEventListener("click", () => {
+        window.setTimeout(() => {
+          form.querySelectorAll("input:not([type='hidden']), select").forEach((field) => {
+            if (field.type === "checkbox") field.checked = false;
+            else if (!field.disabled) field.value = "";
+          });
+          form.requestSubmit();
+        });
+      }, { signal: abort.signal });
     });
   },
 };

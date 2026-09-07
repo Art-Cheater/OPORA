@@ -27,6 +27,7 @@ pypdf==5.4.0
 pymupdf==1.25.5
 pytesseract==0.3.13
 Pillow==11.1.0
+pywebpush==2.0.3
 
 # Testing / load
 pytest==8.3.5

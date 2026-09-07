@@ -2,10 +2,12 @@
 
 from flask_wtf import FlaskForm
 from wtforms import (
+    DateField,
     HiddenField,
     MultipleFileField,
     SelectField,
     StringField,
+    TimeField,
     SubmitField,
     TextAreaField,
 )
@@ -46,6 +48,8 @@ class DefectFilterForm(FlaskForm):
 class DefectForm(FlaskForm):
     number = StringField("Номер", validators=[DataRequired(), Length(max=50)])
     description = TextAreaField("Описание", validators=[DataRequired(), Length(max=10000)])
+    reported_date = DateField("Дата", format="%Y-%m-%d", validators=[Optional()])
+    reported_time = TimeField("Время", format="%H:%M", validators=[Optional()])
     category_id = SelectField("Категория", choices=[], validators=[DataRequired()], validate_choice=False)
     address = StringField("Адрес", validators=[DataRequired(), Length(max=500)])
     address_selection_token = HiddenField(validators=[Optional()])

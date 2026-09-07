@@ -10,6 +10,7 @@ window.OporaOpsMap = {
   _onClick: null,
   _paint: null,
   _selectedMarker: null,
+  _hasFitted: false,
 
   destroy() {
     if (this._resizeObs) {
@@ -37,6 +38,7 @@ window.OporaOpsMap = {
     this._paint = null;
     this._points = [];
     this._selectedMarker = null;
+    this._hasFitted = false;
   },
 
   init() {
@@ -209,11 +211,13 @@ window.OporaOpsMap = {
       if (self._kind === "route" && line.length > 1) {
         L.polyline(line, { color: COLORS.route, weight: 3, opacity: 0.85 }).addTo(self._layer);
       }
-      if (bounds.length === 1) {
+      if (!self._hasFitted && bounds.length === 1) {
         map.setView(bounds[0], 16);
-      } else if (bounds.length > 1) {
+        self._hasFitted = true;
+      } else if (!self._hasFitted && bounds.length > 1) {
         map.fitBounds(bounds, { padding: [28, 28], maxZoom: 16 });
-      } else {
+        self._hasFitted = true;
+      } else if (!self._hasFitted) {
         map.setView(KIROV, 12);
       }
       refreshSize();

@@ -146,6 +146,9 @@ class Config:
     # Реже опрос непрочитанных — меньше нагрузка на воркеры при открытых вкладках
     # Чаще опрос непрочитанных — звук и тосты приходят быстрее (можно поднять в .env).
     MESSENGER_UNREAD_INTERVAL_MS = int(os.getenv("MESSENGER_UNREAD_INTERVAL_MS", "10000"))
+    WEB_PUSH_VAPID_PUBLIC_KEY = os.getenv("WEB_PUSH_VAPID_PUBLIC_KEY", "").strip()
+    WEB_PUSH_VAPID_PRIVATE_KEY = os.getenv("WEB_PUSH_VAPID_PRIVATE_KEY", "").strip()
+    WEB_PUSH_VAPID_SUBJECT = os.getenv("WEB_PUSH_VAPID_SUBJECT", "").strip()
 
     # Серверные адресные подсказки. Браузер к Nominatim напрямую не обращается.
     GEOCODING_PROVIDER = os.getenv("GEOCODING_PROVIDER", "nominatim").strip().lower()

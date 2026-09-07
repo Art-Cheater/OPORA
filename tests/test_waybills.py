@@ -45,6 +45,7 @@ def test_waybill_create_add_reorder(admin_client, app):
             "description": "Кабель",
             "category_id": category_id,
             "address": "Октябрьский проспект 3",
+            "reported_date": "2026-09-07", "reported_time": "10:00",
             "submit": "Сохранить",
         },
         follow_redirects=False,

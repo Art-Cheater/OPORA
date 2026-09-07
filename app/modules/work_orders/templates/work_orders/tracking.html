@@ -35,6 +35,19 @@
                 <option value="completed" {% if filters.status == 'completed' %}selected{% endif %}>Завершён</option>
             </select>
         </label>
+        <label>Тип работ
+            <select name="work_type">
+                <option value="">Заявки и дефекты</option>
+                <option value="request" {% if filters.work_type == 'request' %}selected{% endif %}>Только заявки</option>
+                <option value="defect" {% if filters.work_type == 'defect' %}selected{% endif %}>Только дефекты</option>
+            </select>
+        </label>
+        <label>Район
+            <select name="district">
+                <option value="">Все районы</option>
+                {% for name in districts %}<option value="{{ name }}" {% if filters.district == name %}selected{% endif %}>{{ name }}</option>{% endfor %}
+            </select>
+        </label>
         <label>Создан с
             <input type="date" name="date_from" value="{{ filters.date_from }}">
         </label>
@@ -50,6 +63,29 @@
         <div class="tracking-stat"><span>В работе</span><strong>{{ stats.in_progress }}</strong></div>
         <div class="tracking-stat"><span>Завершено</span><strong>{{ stats.completed }}</strong></div>
         <div class="tracking-stat"><span>Осталось работ</span><strong>{{ stats.remaining }}</strong></div>
+    </section>
+
+    <section class="row g-3 mb-4" aria-label="Нагрузка и причины исключений">
+        <div class="col-lg-6">
+            <div class="plan-card plan-card--wide h-100">
+                <h2 class="h5">Нагрузка по мастерам</h2>
+                {% for item in master_load %}
+                <div class="d-flex justify-content-between gap-3 border-bottom py-2"><span>{{ item.name }}</span><span>{{ item.active_plans }} активн. планов · {{ item.remaining }} работ осталось</span></div>
+                {% else %}<p class="text-muted mb-0">Данных нет.</p>{% endfor %}
+            </div>
+        </div>
+        <div class="col-lg-3">
+            <div class="plan-card plan-card--wide h-100"><h2 class="h5">Работы по районам</h2>
+                {% for item in district_load %}<div class="d-flex justify-content-between border-bottom py-2"><span>{{ item.name }}</span><strong>{{ item.count }}</strong></div>
+                {% else %}<p class="text-muted mb-0">Район не указан.</p>{% endfor %}
+            </div>
+        </div>
+        <div class="col-lg-3">
+            <div class="plan-card plan-card--wide h-100"><h2 class="h5">Исключено из планов</h2>
+                {% for item in excluded_reasons %}<div class="d-flex justify-content-between border-bottom py-2"><span>{{ item.name }}</span><strong>{{ item.count }}</strong></div>
+                {% else %}<p class="text-muted mb-0">Исключений нет.</p>{% endfor %}
+            </div>
+        </div>
     </section>
 
     {% if plans %}

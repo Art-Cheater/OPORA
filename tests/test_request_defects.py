@@ -33,6 +33,7 @@ def test_manual_request_defect_link_removed(admin_client, app):
             "description": "Без связи",
             "category_id": category_id,
             "address": "Связь не нужна, 2",
+            "reported_date": "2026-09-07", "reported_time": "10:00",
             "submit": "Сохранить",
         },
         follow_redirects=False,

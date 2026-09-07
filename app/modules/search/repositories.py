@@ -50,7 +50,15 @@ class SearchRepository:
             rank_expr = ts_rank(Request.search_vector, tsquery).label("rank")
             stmt = (
                 select(Request, rank_expr)
-                .where(Request.active_filter(), cls._fts_filter(Request, tsquery))
+                .where(
+                    Request.active_filter(),
+                    # Номер — пользовательский ключ. Он обязан находиться даже
+                    # когда search_vector ещё не обновлён для старой записи.
+                    or_(
+                        cls._fts_filter(Request, tsquery),
+                        like_or(Request.number, patterns=like_patterns(query)),
+                    ),
+                )
                 .order_by(rank_expr.desc(), Request.updated_at.desc())
                 .limit(limit)
             )

@@ -17,6 +17,7 @@ from app.models.messenger.messenger_conversation import MessengerConversation
 from app.models.messenger.messenger_message import MessengerMessage
 from app.models.messenger.user_presence import UserPresence
 from app.models.communication.notification import Notification
+from app.models.communication.push_subscription import PushSubscription
 from app.models.contracts.contract import Contract
 from app.models.contracts.contract_contractor import ContractContractor
 from app.models.contracts.contract_document import ContractDocument
@@ -121,6 +122,7 @@ __all__ = [
     "MessengerMessage",
     "UserPresence",
     "Notification",
+    "PushSubscription",
     "Comment",
     "Attachment",
     "PersonalContract",

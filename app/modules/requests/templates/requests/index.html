@@ -70,11 +70,7 @@
             {{ filter_form.status_id(class="form-select") }}
         </div>
         <div class="journal-filters__actions">
-            {% if current_user.has_permission('waybills.view') %}
-            <a href="{{ url_for('work_orders.index') }}" class="btn btn-outline-primary journal-filters__collect">
-                Сбор
-            </a>
-            {% endif %}
+            <button type="reset" class="btn btn-outline-primary journal-filters__collect" data-request-filter-reset>Сброс</button>
             <button type="button" class="btn btn-outline-secondary journal-filters__more" id="requestFilterExtra" title="Дополнительные фильтры" aria-expanded="false">
                 <i class="bi bi-sliders"></i>
             </button>

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date, time
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Index, Numeric, String, Text
+from sqlalchemy import Date, ForeignKey, Index, Numeric, String, Text, Time
 from app.models.types import GUID, SearchVectorType
 from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
@@ -54,6 +55,8 @@ class Defect(BaseModel):
     address_external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
+    reported_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    reported_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     search_vector: Mapped[str | None] = deferred(
         mapped_column(SearchVectorType, nullable=True)
     )

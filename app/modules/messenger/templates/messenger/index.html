@@ -15,6 +15,7 @@
      data-current-user-name="{{ current_user.full_name }}"
      data-poll-interval="{{ messenger_poll_interval_ms }}"
      data-unread-interval="{{ messenger_unread_interval_ms }}">
+    <div class="tg-push-control"><button type="button" id="pushEnableButton" class="btn btn-outline-secondary btn-sm">Включить системные уведомления</button><small id="pushStatus">Уведомления выключены.</small></div>
     <aside class="tg-sidebar">
         <header class="tg-sidebar__header">
             <a href="{{ url_for('main.index') }}" class="tg-sidebar__back" title="В систему">
@@ -129,4 +130,5 @@
 
 {% block extra_js %}
 <script src="{{ static_url('js/messenger.js') }}"></script>
+<script src="{{ static_url('js/opora-push.js') }}"></script>
 {% endblock %}

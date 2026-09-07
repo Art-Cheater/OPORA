@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date, time
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -44,6 +45,8 @@ class DefectPayload:
     longitude: Decimal | None
     responsible_id: uuid.UUID | None
     pp: str | None = None
+    reported_date: date | None = None
+    reported_time: time | None = None
 
 
 class DefectService:
@@ -113,20 +116,24 @@ class DefectService:
         }
 
     @classmethod
-    def validate_payload(cls, payload: DefectPayload) -> None:
+    def validate_payload(cls, payload: DefectPayload, *, require_reported_at: bool = False) -> None:
         if not payload.number.strip():
             raise ValidationError("Номер дефекта обязателен.")
         if not (payload.description or "").strip():
             raise ValidationError("Описание обязательно.")
         if not (payload.address or "").strip():
             raise ValidationError("Адрес обязателен.")
+        if require_reported_at and payload.reported_date is None:
+            raise ValidationError("Укажите дату дефекта.")
+        if require_reported_at and payload.reported_time is None:
+            raise ValidationError("Укажите время дефекта.")
         RequestService._prepare_address(payload)
         if payload.category_id is None:
             raise ValidationError("Укажите категорию дефекта.")
 
     @classmethod
     def create(cls, payload: DefectPayload, user_id: uuid.UUID) -> Defect:
-        cls.validate_payload(payload)
+        cls.validate_payload(payload, require_reported_at=True)
         exists = db.session.scalar(
             db.select(Defect.id).where(Defect.number == payload.number.strip()).limit(1)
         )
@@ -150,6 +157,8 @@ class DefectService:
             address_external_id=payload.address_external_id,
             latitude=payload.latitude,
             longitude=payload.longitude,
+            reported_date=payload.reported_date,
+            reported_time=payload.reported_time,
             category_id=payload.category_id,
             responsible_id=payload.responsible_id,
             pp=(payload.pp or "").strip() or None,
@@ -186,6 +195,8 @@ class DefectService:
         item.address_external_id = payload.address_external_id
         item.latitude = payload.latitude
         item.longitude = payload.longitude
+        item.reported_date = payload.reported_date
+        item.reported_time = payload.reported_time
         item.category_id = payload.category_id
         item.responsible_id = payload.responsible_id
         item.pp = (payload.pp or "").strip() or None

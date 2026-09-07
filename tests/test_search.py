@@ -128,3 +128,27 @@ def test_search_by_surname_includes_related(admin_client, app):
         h["title"] for c in data["categories"] if c["key"] == "requests" for h in c["hits"]
     )
     assert "Сидорова" in req_titles or "Сидоров" in str(data)
+
+
+def test_global_search_finds_visible_request_by_number(admin_client, app):
+    """Номер работает без зависимости от актуальности FTS-вектора (672/709 regression)."""
+    from app.extensions import db
+    from app.models.enums import Priority
+    from app.models.requests.request import Request
+    from app.models.requests.request_status import RequestStatus
+    from app.modules.requests.repositories import RequestRepository
+
+    with app.app_context():
+        status = db.session.scalar(db.select(RequestStatus).where(RequestStatus.code == "new"))
+        journal = RequestRepository.get_default_journal()
+        rows = [
+            Request(number="26-672", title="Проверка 672", address="ул. Поисковая, 672", applicant_name="Тест", priority=Priority.MEDIUM.value, status_id=status.id, journal_id=journal.id),
+            Request(number="26-709", title="Проверка 709", address="ул. Поисковая, 709", applicant_name="Тест", priority=Priority.MEDIUM.value, status_id=status.id, journal_id=journal.id),
+        ]
+        db.session.add_all(rows)
+        db.session.commit()
+
+    for number in ("672", "709"):
+        data = admin_client.get(f"/search/api?q={number}").get_json()
+        titles = [hit["title"] for category in data["categories"] for hit in category["hits"]]
+        assert any(number in title for title in titles)

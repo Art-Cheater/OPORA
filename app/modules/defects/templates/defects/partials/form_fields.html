@@ -2,6 +2,8 @@
 {{ form_errors_alert(form) }}
 <div class="row g-3">
     {{ modal_field(form.number, col=4, module='defects') }}
+    <div class="col-md-2">{{ form.reported_date.label(class="form-label") }}{{ form.reported_date(class="form-control", type="date", required=(mode == 'create')) }}</div>
+    <div class="col-md-2">{{ form.reported_time.label(class="form-label") }}{{ form.reported_time(class="form-control", type="time", required=(mode == 'create')) }}</div>
     {{ modal_field(form.category_id, col=4, module='defects') }}
     {{ modal_field(form.responsible_id, col=4, module='defects') }}
     {% if mode == 'edit' and current_user.has_permission('defects.status_change') %}

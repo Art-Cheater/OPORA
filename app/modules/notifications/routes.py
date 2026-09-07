@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from flask import jsonify
+from flask import current_app, jsonify, request
 from flask_login import current_user, login_required
 from sqlalchemy import func, select
 
@@ -12,6 +12,37 @@ from app.extensions import db
 from app.models.base import utcnow
 from app.models.communication.notification import Notification
 from app.modules.notifications.blueprint import notifications_bp
+from app.modules.notifications.push_service import PushNotificationService
+
+
+@notifications_bp.route("/push/config")
+@login_required
+def push_config():
+    configured = PushNotificationService.is_configured()
+    return jsonify({"configured": configured, "public_key": current_app.config.get("WEB_PUSH_VAPID_PUBLIC_KEY", "") if configured else ""})
+
+
+@notifications_bp.route("/push/subscribe", methods=["POST"])
+@login_required
+def push_subscribe():
+    if not PushNotificationService.is_configured():
+        return jsonify({"ok": False, "message": "Системные push-уведомления не настроены на сервере."}), 503
+    try:
+        PushNotificationService.subscribe(current_user.id, request.get_json(silent=True) or {}, request.headers.get("User-Agent"))
+    except PermissionError:
+        return jsonify({"ok": False, "message": "Подписка принадлежит другому пользователю."}), 403
+    except ValueError as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 400
+    return jsonify({"ok": True})
+
+
+@notifications_bp.route("/push/unsubscribe", methods=["POST"])
+@login_required
+def push_unsubscribe():
+    endpoint = str((request.get_json(silent=True) or {}).get("endpoint") or "")
+    if not endpoint:
+        return jsonify({"ok": False, "message": "Не указан endpoint."}), 400
+    return jsonify({"ok": PushNotificationService.unsubscribe(current_user.id, endpoint)})
 
 
 @notifications_bp.route("/api/unread")

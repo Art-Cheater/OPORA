@@ -1,6 +1,6 @@
 """Маршруты главного модуля."""
 
-from flask import current_app, render_template
+from flask import current_app, render_template, send_from_directory
 from flask_login import current_user, login_required
 
 from app.modules.main.blueprint import main_bp
@@ -33,6 +33,14 @@ def health():
         200,
         {"Cache-Control": "no-store"},
     )
+
+
+@main_bp.route("/service-worker.js")
+def service_worker():
+    response = send_from_directory(current_app.static_folder, "service-worker.js", mimetype="application/javascript")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Service-Worker-Allowed"] = "/"
+    return response
 
 
 @main_bp.route("/about")

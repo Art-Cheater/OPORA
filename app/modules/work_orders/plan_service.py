@@ -680,6 +680,8 @@ class WorkPlanService:
         master_id: uuid.UUID | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
+        work_type: str = "",
+        district: str = "",
     ) -> dict:
         """Сводка WorkPlan для директорского контроля без изменения планов."""
         conditions = [WorkPlan.active_filter()]
@@ -711,7 +713,37 @@ class WorkPlanService:
                 )
             ).unique()
         )
+        if work_type in {ENTITY_REQUEST, ENTITY_DEFECT} or district:
+            def matches(plan: WorkPlan) -> bool:
+                return any(
+                    item.deleted_at is None
+                    and (not work_type or item.entity_type == work_type)
+                    and (not district or (item.district_snapshot or "") == district)
+                    for item in plan.items
+                )
+            plans = [plan for plan in plans if matches(plan)]
+
         rows = [cls.serialize_plan_summary(plan) for plan in plans]
+        master_load: dict[str, dict] = {}
+        district_load: dict[str, int] = {}
+        excluded_reasons: dict[str, int] = {}
+        for plan, row in zip(plans, rows):
+            key = str(plan.master_id)
+            load = master_load.setdefault(key, {
+                "name": row["master"] or "Исполнитель не указан", "plans": 0,
+                "active_plans": 0, "works": 0, "remaining": 0, "done": 0,
+            })
+            load["plans"] += 1
+            load["active_plans"] += int(plan.status in {PLAN_DRAFT, PLAN_IN_PROGRESS})
+            load["works"] += row["total"]
+            load["remaining"] += row["remaining"]
+            load["done"] += row["done"]
+            for item in cls._active_items(plan):
+                if item.district_snapshot:
+                    district_load[item.district_snapshot] = district_load.get(item.district_snapshot, 0) + 1
+                if item.result == ITEM_EXCLUDED:
+                    label = EXCLUDE_REASON_LABELS.get(item.exclude_reason or "", "Причина не указана")
+                    excluded_reasons[label] = excluded_reasons.get(label, 0) + 1
         masters = list(
             db.session.scalars(
                 select(User)
@@ -724,6 +756,16 @@ class WorkPlanService:
         return {
             "plans": rows,
             "masters": masters,
+            "districts": sorted(district_load),
+            "master_load": sorted(master_load.values(), key=lambda item: (-item["remaining"], item["name"])),
+            "district_load": sorted(
+                ({"name": name, "count": count} for name, count in district_load.items()),
+                key=lambda item: (-item["count"], item["name"]),
+            ),
+            "excluded_reasons": sorted(
+                ({"name": name, "count": count} for name, count in excluded_reasons.items()),
+                key=lambda item: (-item["count"], item["name"]),
+            ),
             "stats": {
                 "total": len(rows),
                 "draft": sum(1 for row in rows if row["status"] == PLAN_DRAFT),
@@ -734,6 +776,34 @@ class WorkPlanService:
                 "remaining": sum(row["remaining"] for row in rows),
             },
         }
+
+    @classmethod
+    def active_assignments(cls, entity_type: str, entity_id: uuid.UUID) -> list[dict]:
+        """Планы, в которых работа действительно находится у мастера сейчас."""
+        column = WorkPlanItem.request_id if entity_type == ENTITY_REQUEST else WorkPlanItem.defect_id
+        rows = list(db.session.scalars(
+            select(WorkPlanItem)
+            .join(WorkPlan, WorkPlan.id == WorkPlanItem.plan_id)
+            .options(joinedload(WorkPlanItem.plan).joinedload(WorkPlan.master))
+            .where(
+                WorkPlanItem.active_filter(),
+                column == entity_id,
+                WorkPlanItem.result == ITEM_ACTIVE,
+                WorkPlan.active_filter(),
+                WorkPlan.status.in_((PLAN_DRAFT, PLAN_IN_PROGRESS)),
+            )
+            .order_by(WorkPlan.created_at.desc())
+        ).unique())
+        return [
+            {
+                "master": item.plan.master.full_name if item.plan and item.plan.master else "Исполнитель не указан",
+                "number": item.plan.number or "—",
+                "date": cls._fmt_date(item.plan.created_at),
+                "status": PLAN_STATUS_LABELS.get(item.plan.status, item.plan.status),
+                "url": url_for("work_orders.plan_page", plan_id=item.plan_id),
+            }
+            for item in rows
+        ]
 
     @classmethod
     def serialize_plan_summary(cls, plan: WorkPlan) -> dict:

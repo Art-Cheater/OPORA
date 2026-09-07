@@ -35,6 +35,7 @@ def test_defect_crud_without_request(admin_client, app):
             "description": "Не горит светильник",
             "category_id": category_id,
             "address": "ул. Ленина, 10",
+            "reported_date": "2026-09-07", "reported_time": "10:00",
             "district": "Ленинский",
             "submit": "Сохранить",
         },
@@ -61,6 +62,20 @@ def test_defect_crud_without_request(admin_client, app):
         assert audit is not None
 
 
+def test_defect_requires_report_date_and_time(admin_client, app):
+    category_id = _category_id(app)
+    base = {
+        "number": "DF-26-REPORTED", "description": "Проверка времени",
+        "category_id": category_id, "address": "ул. Тестовая, 1", "submit": "Сохранить",
+    }
+    missing_date = admin_client.post("/defects/new", data={**base, "reported_time": "10:00"})
+    missing_time = admin_client.post("/defects/new", data={**base, "number": "DF-26-REPORTED-2", "reported_date": "2026-09-07"})
+    assert missing_date.status_code == 200
+    assert "Укажите дату дефекта" in missing_date.get_data(as_text=True)
+    assert missing_time.status_code == 200
+    assert "Укажите время дефекта" in missing_time.get_data(as_text=True)
+
+
 def test_defect_status_change(admin_client, app):
     category_id = _category_id(app)
     created = admin_client.post(
@@ -70,6 +85,7 @@ def test_defect_status_change(admin_client, app):
             "description": "Опора наклонена",
             "category_id": category_id,
             "address": "ул. Попова, 5",
+            "reported_date": "2026-09-07", "reported_time": "10:00",
             "submit": "Сохранить",
         },
         follow_redirects=False,
@@ -96,6 +112,7 @@ def test_defect_status_can_be_changed_in_edit_form(admin_client, app):
             "description": "Статус меняется вместе с карточкой",
             "category_id": category_id,
             "address": "ул. Производственная, 1",
+            "reported_date": "2026-09-07", "reported_time": "10:00",
             "district": "Ленинский",
             "submit": "Сохранить",
         },
@@ -113,6 +130,7 @@ def test_defect_status_can_be_changed_in_edit_form(admin_client, app):
             "description": "Статус изменён из формы",
             "category_id": category_id,
             "address": "ул. Производственная, 1",
+            "reported_date": "2026-09-07", "reported_time": "10:00",
             "district": "Ленинский",
             "status_code": STATUS_IN_PROGRESS,
             "submit": "Сохранить",
@@ -135,6 +153,7 @@ def test_defect_list_status_action_and_permission(admin_client, client, app):
             "description": "Кабель повреждён",
             "category_id": category_id,
             "address": "ул. Мира, 3",
+            "reported_date": "2026-09-07", "reported_time": "10:00",
             "submit": "Сохранить",
         },
         follow_redirects=False,
@@ -164,12 +183,13 @@ def test_defect_list_status_action_and_permission(admin_client, client, app):
         )
         assert audit is not None
     _login(client, "executor@test.local")
-    denied = client.post(
+    changed_by_executor = client.post(
         f"/defects/{defect_id}/status",
         json={"status_code": "fixed"},
         headers={"X-Requested-With": "XMLHttpRequest"},
     )
-    assert denied.status_code == 403
+    # Исполнитель с актуальной матрицей requests.* может фиксировать дефект.
+    assert changed_by_executor.status_code == 200
 
 
 def test_defect_files_and_list_shell(admin_client, app):

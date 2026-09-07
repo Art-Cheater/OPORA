@@ -565,6 +565,9 @@ def address_suggestions():
         make_address_selection_token,
     )
 
+    journal = RequestRepository.get_journal(request.args.get("journal_id"))
+    if journal and journal.code.endswith("_villages"):
+        return jsonify({"suggestions": [], "manual": True})
     query = (request.args.get("q") or "").strip()
     if len(query) < 3:
         return jsonify({"suggestions": []})
@@ -823,6 +826,8 @@ def detail(request_id: uuid.UUID):
     dispatcher = db.session.get(User, req.created_by) if req.created_by else None
     lifecycle = lifecycle_progress(req.status.code if req.status else None)
     back_url, back_label = back_navigation(fallback="/requests/")
+    from app.modules.work_orders.plan_service import ENTITY_REQUEST, WorkPlanService
+    active_assignments = WorkPlanService.active_assignments(ENTITY_REQUEST, req.id)
 
     photos = [f for f in attachments if (f.mime_type or "").startswith("image/")]
     documents = [f for f in attachments if not (f.mime_type or "").startswith("image/")]
@@ -865,6 +870,7 @@ def detail(request_id: uuid.UUID):
             actions=actions,
             dispatcher=dispatcher,
             lifecycle=lifecycle,
+            active_assignments=active_assignments,
             comment_form=comment_form,
             **custom_field_detail_context(_CF, req.id, current_user),
         )
@@ -880,6 +886,7 @@ def detail(request_id: uuid.UUID):
         comment_form=comment_form,
         material_form=material_form,
         attachment_form=attachment_form,
+        active_assignments=active_assignments,
         assign_form=assign_form,
         actions=actions,
         dispatcher=dispatcher,

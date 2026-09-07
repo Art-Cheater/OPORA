@@ -37,6 +37,12 @@
                 <span>Работа с заявками</span>
             </a>
             {% endif %}
+            {% if current_user.has_any_role('admin', 'director') %}
+            <a href="{{ url_for('work_orders.tracking') }}"
+               class="sidebar__link {% if request.endpoint == 'work_orders.tracking' %}active{% endif %}">
+                <i class="bi bi-bar-chart-line"></i><span>Отслеживание работы</span>
+            </a>
+            {% endif %}
             {% if current_user.has_permission('objects.view') %}
             <a href="{{ url_for('objects.index') }}"
                class="sidebar__link {% if request.endpoint and request.endpoint.startswith('objects.') %}active{% endif %}"

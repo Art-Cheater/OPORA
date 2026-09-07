@@ -234,6 +234,27 @@
     let sequence = 0;
     const status = form.querySelector("[data-address-status]");
     const list = form.querySelector("[data-address-suggestions]");
+    const journal = form.querySelector("[name='journal_id']");
+    const syncVillageMode = () => {
+      const village = journal?.selectedOptions?.[0]?.textContent?.includes("деревнях");
+      if (!village) return false;
+      controller?.abort();
+      if (list) { list.replaceChildren(); list.classList.add("d-none"); }
+      input.placeholder = "Населённый пункт, улица, дом";
+      input.setAttribute("aria-expanded", "false");
+      if (status) {
+        status.classList.remove("text-success", "text-warning");
+        status.textContent = "Для деревень адрес сохраняется как введён, без автозамены.";
+      }
+      return true;
+    };
+    journal?.addEventListener("change", () => {
+      if (!syncVillageMode()) {
+        input.placeholder = "Начните вводить адрес";
+        if (status) status.textContent = "Введите не менее трёх символов для подсказки адреса.";
+      }
+    });
+    syncVillageMode();
 
     input.addEventListener("input", () => {
       clearTimeout(timer);
@@ -254,13 +275,14 @@
             ? "Введите не менее трёх символов."
             : "Ищем адрес… Сохранение формы не блокируется.";
       }
+      if (syncVillageMode()) return;
       if (input.value.trim().length < 3) return;
 
       const requestSequence = sequence;
       timer = setTimeout(async () => {
         controller = new AbortController();
         try {
-          const params = new URLSearchParams({ q: input.value.trim() });
+          const params = new URLSearchParams({ q: input.value.trim(), journal_id: journal?.value || "" });
           const response = await fetch(`/requests/api/address-suggestions?${params}`, {
             headers: { "X-Requested-With": "XMLHttpRequest" },
             signal: controller.signal,

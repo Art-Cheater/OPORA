@@ -14,6 +14,7 @@ from app.core.upload_utils import resolve_storage_path
 from app.extensions import db
 from app.models.messenger.messenger_conversation import MessengerConversation
 from app.models.messenger.messenger_message import MessengerMessage
+from app.models.auth.user import User
 from app.modules.messenger.repositories import MessengerRepository
 
 
@@ -28,8 +29,26 @@ class MessengerService:
         if card_title:
             return card_title[:200]
         if file_name:
-            return f"📎 {file_name}"
+            return "вложение"
         return "Сообщение"
+
+    @classmethod
+    def _push_recipient(cls, conversation: MessengerConversation, sender_id: uuid.UUID, message: MessengerMessage) -> None:
+        """Best-effort push: ошибка провайдера не отменяет уже сохранённое сообщение."""
+        recipient_id = conversation.other_user_id(sender_id)
+        if recipient_id == sender_id:
+            return
+        sender = db.session.get(User, sender_id)
+        name = (sender.full_name if sender else "Пользователь").strip()
+        preview = cls._preview(message.body, message.file_name, message.card_title)[:110]
+        from app.modules.notifications.push_service import PushNotificationService
+        PushNotificationService.send_to_user(
+            recipient_id,
+            title="Новое сообщение",
+            body=f"{name}: {preview}",
+            url=f"/messenger/?c={conversation.id}",
+            icon="/static/favicon.png",
+        )
 
     @classmethod
     def ensure_access(cls, conversation_id: uuid.UUID, user_id: uuid.UUID) -> MessengerConversation:
@@ -73,7 +92,9 @@ class MessengerService:
         conversation.last_message_preview = cls._preview(body, None)
         conversation.updated_by = sender_id
         db.session.commit()
-        return MessengerRepository.get_message(message.id) or message
+        message = MessengerRepository.get_message(message.id) or message
+        cls._push_recipient(conversation, sender_id, message)
+        return message
 
     @classmethod
     def send_file(
@@ -119,7 +140,9 @@ class MessengerService:
         conversation.last_message_preview = cls._preview(None, saved.file_name)
         conversation.updated_by = sender_id
         db.session.commit()
-        return MessengerRepository.get_message(message.id) or message
+        message = MessengerRepository.get_message(message.id) or message
+        cls._push_recipient(conversation, sender_id, message)
+        return message
 
     @classmethod
     def send_card(
@@ -165,7 +188,9 @@ class MessengerService:
         conversation.last_message_preview = cls._preview(comment, None, title)
         conversation.updated_by = sender_id
         db.session.commit()
-        return MessengerRepository.get_message(message.id) or message
+        message = MessengerRepository.get_message(message.id) or message
+        cls._push_recipient(conversation, sender_id, message)
+        return message
 
     @classmethod
     def mark_read(cls, conversation: MessengerConversation, user_id: uuid.UUID) -> int:

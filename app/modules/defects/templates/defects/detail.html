@@ -22,6 +22,22 @@
 
 {% block content %}
 <div class="row g-4">
+    {% if active_assignments %}
+    <div class="col-12">
+        <section class="card border-primary mb-0" aria-label="Работа у мастера">
+            <div class="card-header"><i class="bi bi-person-workspace"></i> В работе у мастера</div>
+            <div class="card-body py-3">
+                {% for assignment in active_assignments %}
+                <div class="d-flex flex-wrap align-items-center gap-2 {% if not loop.last %}mb-2{% endif %}">
+                    <strong>С этим дефектом работает мастер: {{ assignment.master }}</strong>
+                    <span class="text-muted">План №{{ assignment.number }} от {{ assignment.date }} · {{ assignment.status }}</span>
+                    <a class="btn btn-sm btn-outline-primary" href="{{ assignment.url }}">Открыть план</a>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+    {% endif %}
     <div class="col-xl-8">
         <div class="card mb-4">
             <div class="card-header">Основные данные</div>

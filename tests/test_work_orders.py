@@ -100,13 +100,13 @@ def test_work_orders_access(client):
     assert "Тип работы" in html
     assert "Из деревень" in html
     assert "Мои планы" in html
-    assert "Создать план" in html
+    assert "Создать план" not in html
     assert "Создать путевой лист" not in html
     assert "js/work-orders.js" in html
     assert 'id="opsMap"' in html
     assert "js/ops-map.js" in html
     assert "vendor/leaflet/leaflet.js" in html
-    assert "/work-orders/plans/new" in html
+    assert "/work-orders/plans/new" not in html
     _login(client, "executor@test.local")
     assert client.get("/work-orders/").status_code == 200
     denied = client.post("/work-orders/plan/add", json={"entity_type": "defect", "entity_id": "00000000-0000-0000-0000-000000000001"})
@@ -697,9 +697,34 @@ def test_director_tracking_filters_plans(client, app):
     assert "В работе" in html
     assert 'name="master_id"' in html
     assert 'name="date_from"' in html
+    assert 'name="work_type"' in html
+    assert 'name="district"' in html
+    assert "Нагрузка по мастерам" in html
+    assert "Работы по районам" in html
 
     _login(client, "master@test.local")
     assert client.get("/work-orders/tracking/").status_code == 403
+
+
+def test_request_detail_shows_only_active_master_plan(client, app):
+    request_id, _, _, _, _ = _seed_work(app, suffix="74")
+    _login(client, "master@test.local")
+    created = client.post(
+        "/work-orders/plans/",
+        json={"items": [{"entity_type": "request", "entity_id": request_id}]},
+    )
+    assert created.status_code == 200
+    plan_id = created.get_json()["plan"]["id"]
+    detail = client.get(f"/requests/{request_id}")
+    assert detail.status_code == 200
+    assert "С этой заявкой работает мастер: Мастер QA" in detail.get_data(as_text=True)
+
+    with app.app_context():
+        plan = db.session.get(WorkPlan, plan_id)
+        plan.status = "completed"
+        db.session.commit()
+    detail = client.get(f"/requests/{request_id}")
+    assert "С этой заявкой работает мастер" not in detail.get_data(as_text=True)
 
 
 
