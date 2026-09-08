@@ -4,6 +4,23 @@ Valhalla — опциональный внутренний сервис доро
 `docker-compose.yml` намеренно не запускает его: OPORA остаётся доступной без
 маршрутов, а маршрут не подменяется прямой линией.
 
+## Обычный запуск без маршрутизации
+
+Для восстановления OPORA не нужны ни PBF, ни `docker-compose.routing.yml`.
+Временно удалите или закомментируйте в `.env` параметры `ROUTING_PROVIDER`,
+`VALHALLA_BASE_URL` и `ROUTING_BASE_URL`, затем используйте обычный deploy:
+
+```bash
+cd /opt/opora
+git pull origin main
+sudo docker compose up -d --build
+sudo docker compose ps
+sudo docker compose logs --tail=100 web
+```
+
+`data/valhalla/` исключён из Docker build context: PBF и tiles не должны
+увеличивать сборку `web` или `nginx`.
+
 Используется официальный образ `ghcr.io/valhalla/valhalla-scripted:3.8.3`.
 Он читает OSM PBF и создаёт tiles в `data/valhalla/`. PBF, tiles, архивы и
 служебные базы исключены из Git.

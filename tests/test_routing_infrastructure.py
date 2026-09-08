@@ -32,9 +32,18 @@ def test_routing_override_uses_private_pinned_official_valhalla_image():
 
 def test_valhalla_data_and_osm_extracts_are_ignored():
     ignored = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    docker_ignored = (ROOT / ".dockerignore").read_text(encoding="utf-8")
     assert "/data/valhalla/*" in ignored
     assert "*.osm.pbf" in ignored
+    assert "data/" in docker_ignored
+    assert "*.osm.pbf" in docker_ignored
     assert (ROOT / "scripts/valhalla/prepare-valhalla.sh").is_file()
+
+
+def test_main_compose_has_no_valhalla_hard_dependency():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "valhalla:" not in compose
+    assert "VALHALLA_BASE_URL" not in compose
 
 
 def test_valhalla_provider_uses_internal_url_and_returns_geojson(app, monkeypatch):
