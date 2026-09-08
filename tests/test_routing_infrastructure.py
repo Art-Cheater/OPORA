@@ -49,10 +49,10 @@ def test_main_compose_has_no_valhalla_hard_dependency():
 def test_web_gunicorn_command_keeps_shell_command_as_single_argument():
     """The entrypoint uses ``exec \"$@\"``, so ``sh -c`` needs one command string."""
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "    command:\n      - sh\n      - -c\n      - >-\n        exec gunicorn" in compose
+    assert "    command:\n      - sh\n      - -c\n      - >-\n        exec gunicorn wsgi:app" in compose
     assert "$${WEB_CONCURRENCY:-3}" in compose
     assert "$${GUNICORN_THREADS:-8}" in compose
-    assert "        wsgi:app" in compose
+    assert "exec gunicorn --bind" not in compose
 
 
 def test_valhalla_provider_uses_internal_url_and_returns_geojson(app, monkeypatch):
