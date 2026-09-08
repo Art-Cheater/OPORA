@@ -188,11 +188,11 @@ class Config:
     MAPLIBRE_STYLE_URL = os.getenv(
         "MAPLIBRE_STYLE_URL", "https://tiles.openfreemap.org/styles/liberty"
     ).strip()
-    # Routing выключен, пока production не укажет совместимый backend.
-    ROUTING_PROVIDER = os.getenv("ROUTING_PROVIDER", "osrm").strip().lower()
+    # Routing выключен, пока production явно не укажет provider и внутренний URL.
+    ROUTING_PROVIDER = os.getenv("ROUTING_PROVIDER", "").strip().lower()
     ROUTING_BASE_URL = os.getenv("ROUTING_BASE_URL", "").strip()
     VALHALLA_BASE_URL = os.getenv("VALHALLA_BASE_URL", "").strip()
-    ROUTING_TIMEOUT_SECONDS = float(os.getenv("ROUTING_TIMEOUT_SECONDS", "1.5"))
+    ROUTING_TIMEOUT_SECONDS = float(os.getenv("ROUTING_TIMEOUT_SECONDS", "8"))
     ROUTING_RETRIES = int(os.getenv("ROUTING_RETRIES", "1"))
     ROUTING_CACHE_TTL_SECONDS = int(os.getenv("ROUTING_CACHE_TTL_SECONDS", "900"))
     ROUTING_CACHE_MAX_SIZE = int(os.getenv("ROUTING_CACHE_MAX_SIZE", "512"))

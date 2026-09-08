@@ -308,26 +308,38 @@ window.OporaWorkOrders = {
     });
 
     routeBtn?.addEventListener("click", () => {
-      fetch(root.dataset.routeUrl, { headers: headers() })
+      if (routeBtn.disabled) return;
+      const initialLabel = routeBtn.textContent;
+      routeBtn.disabled = true;
+      routeBtn.setAttribute("aria-busy", "true");
+      routeBtn.textContent = "Строим маршрут…";
+      fetch(root.dataset.routeUrl, { method: "POST", headers: headers(true), body: JSON.stringify({}) })
         .then((res) => res.json())
         .then((data) => {
-          window.OporaOpsMap?.init?.();
-          const count = window.OporaOpsMap?.setRoute?.(data.points || [], data.geometry || data.route?.geometry || null) || 0;
-          const missing = Number(data.missing || 0);
+          const count = (data.points || []).filter((point) => point.lat != null && point.lng != null).length;
+          const excluded = Array.isArray(data.excluded) ? data.excluded : [];
           const geometry = data.geometry || data.route?.geometry;
-          const hasRoadGeometry = Array.isArray(geometry)
-            ? geometry.length > 1
-            : geometry?.type === "LineString" && Array.isArray(geometry.coordinates) && geometry.coordinates.length > 1;
+          const hasRoadGeometry = ["LineString", "MultiLineString"].includes(geometry?.type) && Array.isArray(geometry.coordinates) && geometry.coordinates.length > 1;
           if (!data.ok || count < 2 || !hasRoadGeometry) {
-            toast(data.message || (count < 2 ? "Для маршрута нужно минимум две точки с координатами." : "Не удалось построить дорожный маршрут. Проверьте подключение сервиса маршрутизации."), false);
+            window.OporaOpsMap?.clearRoute?.();
+            const missingText = excluded.length ? ` Не вошли в маршрут без координат: ${excluded.map((item) => `№${item.number || "—"}`).join(", ")}.` : "";
+            toast((data.message || (count < 2 ? "Для маршрута нужно минимум две точки с координатами." : "Не удалось построить дорожный маршрут.")) + missingText, false);
           } else {
+            window.OporaOpsMap?.init?.();
+            window.OporaOpsMap?.setRoute?.(data.points || [], geometry);
             const distance = Number(data.distance_m || data.route?.distance_m || 0);
             const duration = Number(data.duration_s || data.route?.duration_s || 0);
             const meta = `${distance ? ` · ${(distance / 1000).toFixed(1).replace('.', ',')} км` : ""}${duration ? ` · ${Math.ceil(duration / 60)} мин.` : ""}`;
-            toast(missing ? `Маршрут построен по ${count} точкам. Без координат: ${missing}.${meta}` : `Маршрут построен по ${count} точкам.${meta}`);
+            const missingText = excluded.length ? ` Не вошли в маршрут без координат: ${excluded.map((item) => `№${item.number || "—"}`).join(", ")}.` : "";
+            toast(`Маршрут построен по ${count} точкам.${meta}${missingText}`);
           }
         })
-        .catch(() => toast("Не удалось построить маршрут.", false));
+        .catch(() => toast("Не удалось построить маршрут.", false))
+        .finally(() => {
+          routeBtn.disabled = plan.stops.filter((stop) => stop.lat != null && stop.lng != null).length < 2;
+          routeBtn.removeAttribute("aria-busy");
+          routeBtn.textContent = initialLabel;
+        });
     });
 
     root.addEventListener("opora:add-to-plan", (event) => {

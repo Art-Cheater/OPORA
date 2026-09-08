@@ -8,7 +8,8 @@ import re
 
 MAX_RANGE_HOUSES = 20
 _RANGE = re.compile(r"(?:дом\s+)?(\d{1,4})\s*-\s*(\d{1,4})\s*$", re.I)
-_HOUSE_LIST = re.compile(r"^(.*?\D)\s+(\d{1,4}[а-яa-z]?)(?:\s*,\s*(\d{1,4}[а-яa-z]?)){1,}$", re.I)
+_HOUSE = r"\d{1,4}(?:[а-яёa-z]|/\d{1,4}(?:[а-яёa-z])?|\s*к\s*\d{1,3}|\s*стр\.?\s*\d{1,3})?"
+_HOUSE_LIST = re.compile(rf"^(?P<prefix>.*?\D)\s+(?P<houses>{_HOUSE}(?:\s*[,;.]+\s*{_HOUSE})+)$", re.I)
 
 
 def split_map_address_parts(address: str) -> tuple[list[str], str | None]:
@@ -26,9 +27,9 @@ def split_map_address_parts(address: str) -> tuple[list[str], str | None]:
     # Список домов распознаём только в хвосте после названия улицы; обычный
     # «Киров, улица Ленина, дом 15» этому шаблону не соответствует.
     tail = _HOUSE_LIST.match(raw)
-    if tail and "дом " not in raw.casefold():
-        prefix = tail.group(1).rstrip(" ,")
-        houses = re.findall(r"\d{1,4}[а-яa-z]?", raw[tail.start(2):], re.I)
+    if tail:
+        prefix = tail.group("prefix").rstrip(" ,;.")
+        houses = [part.strip().replace(" ", "") for part in re.split(r"\s*[,;.]+\s*", tail.group("houses"))]
         if 1 < len(houses) <= MAX_RANGE_HOUSES:
             return [f"{prefix}, дом {house}" for house in houses], None
     return [raw], None

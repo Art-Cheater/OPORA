@@ -178,6 +178,7 @@ python -m flask init-db
 - [Установка на сервер](docs/SERVER_SETUP.md)
 - [Процесс разработки](docs/DEV_PROCESS.md)
 - [Производительность](docs/PERFORMANCE.md)
+- [Дорожные маршруты (Valhalla)](docs/ROUTING_SETUP.md)
 
 ## Лицензия
 

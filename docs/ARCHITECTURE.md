@@ -259,11 +259,11 @@ limiter. Signed token защищает выбранную suggestion. District a
 
 ## Карты
 
-Leaflet используется в Defects, Work Orders, Waybills и Agreements.
-`ops-map.js` общий для очереди и маршрута. Nearby учитывает PP, distance, exact
-address и district. Нельзя оставлять две Leaflet instances на одном container.
-Переход к MapLibre / Photon / Valhalla описан в `docs/MAPS_ROADMAP.md`; Leaflet
-и Nominatim не удаляются до завершения поэтапного перехода.
+MapLibre используется для Requests, Defects и Work Orders; `ops-map.js` общий
+для очереди и дорожного маршрута. Nearby учитывает PP, distance, exact address
+и district. Маршрут вызывается только по кнопке через backend `RoutingService`:
+без доступного provider прямая линия не рисуется. Valhalla включается только
+отдельным `docker-compose.routing.yml`; инструкция — `docs/ROUTING_SETUP.md`.
 
 ## Поиск
 

@@ -34,4 +34,9 @@ terminals
 # PBF extracts or generated graph tiles to the OPORA web/nginx Docker builds.
 data/
 *.osm.pbf
+*.pbf
+*.mbtiles
+*.pmtiles
+*.osrm*
+valhalla_tiles/
 valhalla_tiles.tar

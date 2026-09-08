@@ -88,10 +88,9 @@ def test_check_routing_prints_clear_message_when_url_is_missing(app):
     with app.app_context():
         app.config.update(ROUTING_PROVIDER="valhalla", VALHALLA_BASE_URL="", ROUTING_BASE_URL="")
         result = app.test_cli_runner().invoke(args=["check-routing"])
-    assert result.exit_code != 0
-    assert "Провайдер: valhalla" in result.output
-    assert "Адрес сервиса: не задан" in result.output
-    assert "VALHALLA_BASE_URL" in result.output
+    assert result.exit_code == 0
+    assert "Routing: disabled" in result.output
+    assert "ROUTING_PROVIDER and ROUTING_BASE_URL" in result.output
 
 
 def test_check_routing_hides_connection_traceback(app, monkeypatch):
@@ -102,5 +101,47 @@ def test_check_routing_hides_connection_traceback(app, monkeypatch):
         monkeypatch.setattr(routing, "urlopen", lambda *_args, **_kwargs: (_ for _ in ()).throw(URLError("connection refused")))
         result = app.test_cli_runner().invoke(args=["check-routing"])
     assert result.exit_code != 0
-    assert "valhalla недоступен" in result.output
+    assert "routing_unavailable" in result.output
     assert "Traceback" not in result.output
+
+
+def test_routing_uses_primary_url_and_never_fakes_a_straight_line(app):
+    from app.core.routing import RoutingError, RoutingService
+
+    with app.app_context():
+        app.config.update(ROUTING_PROVIDER="valhalla", ROUTING_BASE_URL="", VALHALLA_BASE_URL="")
+        assert RoutingService.is_configured() is False
+        try:
+            RoutingService.build_route([(58.6, 49.6), (58.61, 49.61)])
+        except RoutingError as exc:
+            assert exc.code == "routing_not_configured"
+        else:
+            raise AssertionError("маршрут не должен подменяться прямой линией")
+
+
+def test_map_address_parser_handles_lists_ranges_and_regular_address():
+    from app.core.address.map_points import split_map_address_parts
+
+    assert len(split_map_address_parts("Лепсе 12, 23, 34")[0]) == 3
+    assert len(split_map_address_parts("Лепсе 12. 23. 34")[0]) == 3
+    assert len(split_map_address_parts("Лепсе 12; 23; 34")[0]) == 3
+    assert len(split_map_address_parts("Даниловский проезд 7, 9, 9а, 11, 11а")[0]) == 5
+    assert len(split_map_address_parts("Рейдовая 1-4")[0]) == 4
+    assert split_map_address_parts("Киров, ул. Ленина, 15")[0] == ["Киров, ул. Ленина, 15"]
+
+
+def test_routing_setup_is_separate_from_deploy_and_data_is_excluded():
+    prepare = ROOT / "scripts/routing/prepare-routing.sh"
+    assert prepare.is_file()
+    assert "scripts/routing/prepare-routing.sh" not in (ROOT / "scripts/deploy.sh").read_text(encoding="utf-8")
+    ignored = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert "/data/routing/*" in ignored and "/data/osrm/*" in ignored and "*.osrm*" in ignored
+
+
+def test_map_stats_reports_coordinate_coverage(app):
+    with app.app_context():
+        result = app.test_cli_runner().invoke(args=["map-stats"])
+    assert result.exit_code == 0
+    assert "requests: total=" in result.output
+    assert "defects: total=" in result.output
+    assert "works_not_routable=" in result.output

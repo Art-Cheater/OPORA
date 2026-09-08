@@ -749,24 +749,45 @@ def _register_cli_commands(app: Flask) -> None:
         """Проверить конфигурацию и дорожный маршрут Valhalla/OSRM без записи в БД."""
         from app.core.routing import RoutingService
 
-        provider = app.config.get("ROUTING_PROVIDER", "osrm")
+        provider = app.config.get("ROUTING_PROVIDER") or "не выбран"
         base = RoutingService._base_url()
+        if not RoutingService.is_configured():
+            click.echo("Routing: disabled")
+            click.echo("Set ROUTING_PROVIDER and ROUTING_BASE_URL. OPORA works without routing.")
+            return
+        health = RoutingService.check_health()
         click.echo(f"Провайдер: {provider}")
-        click.echo(f"Адрес сервиса: {base or 'не задан'}")
-        if not base:
-            raise click.ClickException(
-                "Маршрутизация не настроена: задайте VALHALLA_BASE_URL "
-                "(ROUTING_PROVIDER=valhalla) или ROUTING_BASE_URL."
-            )
-        route = RoutingService.route([(58.6035, 49.6680), (58.6070, 49.6750)])
-        if not route or not route.get("geometry", {}).get("coordinates"):
-            raise click.ClickException(
-                f"{provider} недоступен, ещё строит tiles или вернул некорректный маршрут: {base}"
-            )
-        click.echo(
-            f"OK: {provider} {base}; {route['distance_m']} м, {route['duration_s']} с, "
-            f"геометрия: {len(route['geometry']['coordinates'])} точек."
-        )
+        click.echo(f"ROUTING_BASE_URL: {base}")
+        if not health["ok"]:
+            raise click.ClickException(f"{health['code']}: {health['message']}")
+        click.echo(f"OK: {health['provider']}; {health['distance_m']} м, {health['duration_s']} с.")
+
+    @app.cli.command("map-stats")
+    def map_stats():
+        """Краткая диагностика покрытия активных работ координатами и map points."""
+        from sqlalchemy import func
+        from app.models.defects.defect import Defect
+        from app.models.maps.work_map_point import WorkMapPoint
+        from app.models.requests.request import Request
+
+        def stats(model, entity_type: str) -> tuple[int, int, int, int]:
+            total = db.session.scalar(db.select(func.count()).select_from(model).where(model.active_filter())) or 0
+            with_coords = db.session.scalar(db.select(func.count()).select_from(model).where(model.active_filter(), model.latitude.isnot(None), model.longitude.isnot(None))) or 0
+            point_counts = dict(db.session.execute(
+                db.select(WorkMapPoint.entity_id, func.count())
+                .where(WorkMapPoint.entity_type == entity_type, WorkMapPoint.active_filter())
+                .group_by(WorkMapPoint.entity_id)
+            ).all())
+            one = sum(1 for count in point_counts.values() if count == 1)
+            multiple = sum(1 for count in point_counts.values() if count > 1)
+            return total, with_coords, one, multiple
+
+        req_total, req_coords, req_one, req_multi = stats(Request, "request")
+        def_total, def_coords, def_one, def_multi = stats(Defect, "defect")
+        map_total = db.session.scalar(db.select(func.count()).select_from(WorkMapPoint).where(WorkMapPoint.active_filter())) or 0
+        click.echo(f"requests: total={req_total} with_coordinates={req_coords} without_coordinates={req_total - req_coords} one_point={req_one} multiple_points={req_multi}")
+        click.echo(f"defects: total={def_total} with_coordinates={def_coords} without_coordinates={def_total - def_coords} one_point={def_one} multiple_points={def_multi}")
+        click.echo(f"map_points: returned={map_total} works_not_routable={req_total + def_total - req_coords - def_coords}")
 
     @app.cli.command("init-db")
     def init_db():

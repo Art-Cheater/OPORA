@@ -67,7 +67,15 @@ docker-data/
 !/data/valhalla/.gitkeep
 /data/osm/*
 !/data/osm/.gitkeep
+/data/routing/*
+!/data/routing/.gitkeep
+/data/osrm/*
+!/data/osrm/.gitkeep
 *.osm.pbf
+*.pbf
+*.mbtiles
+*.pmtiles
+*.osrm*
 /data/valhalla/valhalla_tiles.tar
 /data/valhalla/valhalla.json
 /data/valhalla/*.sqlite

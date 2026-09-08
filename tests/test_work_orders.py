@@ -242,10 +242,12 @@ def test_route_api_validates_points_and_keeps_geojson_contract(admin_client, app
     assert invalid.status_code == 400
     assert invalid.get_json()["error"] == "invalid_points"
 
-    monkeypatch.setattr(RoutingService, "route", lambda points: {
+    monkeypatch.setattr(RoutingService, "build_route", lambda points: {
         "geometry": {"type": "LineString", "coordinates": [[lng, lat] for lat, lng in points]},
         "distance_m": 1200,
         "duration_s": 180,
+        "provider": "valhalla",
+        "warnings": [],
     })
     response = admin_client.post("/work-orders/route.json", json={"points": [{"lat": 58.60, "lng": 49.67}, {"lat": 58.61, "lng": 49.68}]})
     assert response.status_code == 200
@@ -253,6 +255,18 @@ def test_route_api_validates_points_and_keeps_geojson_contract(admin_client, app
     assert body["ok"] is True
     assert body["geometry"]["type"] == "LineString"
     assert body["geometry"]["coordinates"] == [[49.67, 58.60], [49.68, 58.61]]
+    assert body["provider"] == "valhalla"
+
+
+def test_route_api_without_provider_returns_safe_error(admin_client, app):
+    with app.app_context():
+        app.config.update(ROUTING_PROVIDER="", ROUTING_BASE_URL="", VALHALLA_BASE_URL="")
+    response = admin_client.post("/work-orders/route.json", json={"points": [{"lat": 58.60, "lng": 49.67}, {"lat": 58.61, "lng": 49.68}]})
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["ok"] is False
+    assert body["code"] == "routing_not_configured"
+    assert "Карта и план работ доступны" in body["message"]
 
 
 def test_work_orders_plan_nearby_reorder_route(client, app):
