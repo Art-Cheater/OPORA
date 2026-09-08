@@ -718,7 +718,11 @@ def route_json():
     route = RoutingService.route([(point["lat"], point["lng"]) for point in points])
     if route is None:
         configured = bool(RoutingService._base_url())
-        message = "Не удалось построить дорожный маршрут. Проверьте подключение сервиса маршрутизации." if configured else "Маршрутизация не настроена на сервере. Укажите VALHALLA_BASE_URL или ROUTING_BASE_URL."
+        message = (
+            "Дорожные маршруты пока не настроены. Обратитесь к администратору."
+            if not configured
+            else "Не удалось построить дорожный маршрут. Обратитесь к администратору."
+        )
         return jsonify({"ok": False, "error": "routing_unavailable", "message": message, "points": points, "missing": max(len(payload["stops"]) - len(points), 0), "route": None})
     return jsonify({"ok": True, "points": points, "missing": max(len(payload["stops"]) - len(points), 0), "route": route, "geometry": route["geometry"], "distance_m": route["distance_m"], "duration_s": route["duration_s"]})
 

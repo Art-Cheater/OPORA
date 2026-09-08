@@ -750,6 +750,8 @@ def _register_cli_commands(app: Flask) -> None:
 
         provider = app.config.get("ROUTING_PROVIDER", "osrm")
         base = RoutingService._base_url()
+        click.echo(f"Провайдер: {provider}")
+        click.echo(f"Адрес сервиса: {base or 'не задан'}")
         if not base:
             raise click.ClickException(
                 "Маршрутизация не настроена: задайте VALHALLA_BASE_URL "
@@ -757,7 +759,9 @@ def _register_cli_commands(app: Flask) -> None:
             )
         route = RoutingService.route([(58.6035, 49.6680), (58.6070, 49.6750)])
         if not route or not route.get("geometry", {}).get("coordinates"):
-            raise click.ClickException(f"{provider} не ответил корректным маршрутом: {base}")
+            raise click.ClickException(
+                f"{provider} недоступен, ещё строит tiles или вернул некорректный маршрут: {base}"
+            )
         click.echo(
             f"OK: {provider} {base}; {route['distance_m']} м, {route['duration_s']} с, "
             f"геометрия: {len(route['geometry']['coordinates'])} точек."

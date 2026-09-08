@@ -1,4 +1,5 @@
-# Локальный пример: не подключается к production docker-compose.yml.
+# Локальный пример Photon. Для дорожных маршрутов используйте
+# docker-compose.routing.yml: он содержит закреплённый официальный Valhalla.
 services:
   photon:
     image: komoot/photon:latest
@@ -7,10 +8,3 @@ services:
       - ./data/photon:/photon/photon_data
     ports:
       - "2322:2322"
-  valhalla:
-    image: ghcr.io/gis-ops/docker-valhalla/valhalla:latest
-    profiles: ["maps"]
-    volumes:
-      - ./data/valhalla:/custom_files
-    ports:
-      - "8002:8002"

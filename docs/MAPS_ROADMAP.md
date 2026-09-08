@@ -85,10 +85,15 @@ VALHALLA_BASE_URL=http://valhalla:8002
 существующий `WorkPlanItem.sequence`. Пока road route не сохраняется, migration
 ради этих полей не нужна.
 
-## Локальная инфраструктура (не production deploy)
+## Локальная и production-инфраструктура
 
-Тяжёлые Photon/Valhalla контейнеры намеренно не добавлены в
-`docker-compose.yml`. Для локального стенда нужен отдельный override:
+Тяжёлые Photon/Valhalla контейнеры намеренно не добавлены в основной
+`docker-compose.yml`. Valhalla включается явно через
+`docker-compose.routing.yml`; он использует внутренний Docker DNS
+`http://valhalla:8002`, не публикует порт наружу и не делает web зависимым от
+routing. Полная серверная инструкция: [VALHALLA_SETUP.md](VALHALLA_SETUP.md).
+
+Photon остаётся отдельным локальным примером:
 
 ```yaml
 services:
@@ -96,17 +101,11 @@ services:
     image: komoot/photon:latest
     volumes:
       - ./data/photon:/photon/photon_data
-  valhalla:
-    image: ghcr.io/gis-ops/docker-valhalla/valhalla:latest
-    volumes:
-      - ./data/valhalla:/custom_files
 ```
 
-Перед запуском загрузить OSM extract Кировской области согласно документации
-выбранного образа, подготовить tiles (`valhalla_build_tiles`) и проверить health
-запросами `/api?q=Киров` (Photon) и `/route` (Valhalla). В production контейнеры,
-OSM data volume и публичные URL вводятся только отдельным решением; в текущем
-пакете deploy не выполняется.
+Перед запуском Valhalla вручную положите OSM extract Кировской области в
+`data/valhalla/`, затем выполните `bash scripts/valhalla/prepare-valhalla.sh`.
+PBF и generated tiles не хранятся в Git. В текущем пакете deploy не выполняется.
 
 ## Конфигурация
 

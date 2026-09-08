@@ -62,6 +62,17 @@ data/zakupki/*.json
 # Docker
 docker-data/
 
+# Valhalla / OpenStreetMap: данные графа могут занимать гигабайты.
+/data/valhalla/*
+!/data/valhalla/.gitkeep
+/data/osm/*
+!/data/osm/.gitkeep
+*.osm.pbf
+/data/valhalla/valhalla_tiles.tar
+/data/valhalla/valhalla.json
+/data/valhalla/*.sqlite
+/data/valhalla/*.bin
+
 # Testing
 .pytest_cache/
 .coverage

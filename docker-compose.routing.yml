@@ -1,0 +1,23 @@
+# Опциональный routing override. Основной сайт запускается и без него.
+# Запуск: docker compose -f docker-compose.yml -f docker-compose.routing.yml up -d
+services:
+  valhalla:
+    # Official Valhalla scripted image; fixed version makes tile builds reproducible.
+    image: ghcr.io/valhalla/valhalla-scripted:3.8.3
+    restart: unless-stopped
+    expose:
+      - "8002"
+    volumes:
+      # PBF и сгенерированные tiles лежат здесь, но никогда не попадают в Git.
+      - ./data/valhalla:/custom_files
+    environment:
+      # Контейнер собирает graph tiles из вручную положенного в /custom_files PBF.
+      # URL намеренно не задан: большие OSM-данные автоматически не скачиваются.
+      force_rebuild: "False"
+      use_tiles_ignore_pbf: "True"
+      build_elevation: "False"
+      build_admins: "True"
+      build_time_zones: "True"
+      build_transit: "False"
+      server_threads: "${VALHALLA_SERVER_THREADS:-4}"
+      update_existing_config: "False"
