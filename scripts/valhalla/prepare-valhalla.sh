@@ -39,7 +39,7 @@ esac
 
 "${COMPOSE[@]}" config --quiet
 echo "Запуск Valhalla. При первом запуске container соберёт tiles из: $PBF_PATH"
-"${COMPOSE[@]}" up -d valhalla
+"${COMPOSE[@]}" up -d --force-recreate valhalla
 echo
 echo "Сборка может занять заметное время. Следите за журналом:"
 echo "  ${COMPOSE[*]} logs -f valhalla"
