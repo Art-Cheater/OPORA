@@ -48,7 +48,7 @@ services:
       - sh
       - -c
       - >-
-        exec gunicorn wsgi:app --bind 0.0.0.0:5000 --worker-class gthread
+        unset GUNICORN_CMD_ARGS; exec gunicorn wsgi:app --bind 0.0.0.0:5000 --worker-class gthread
         --workers $${WEB_CONCURRENCY:-3}
         --threads $${GUNICORN_THREADS:-8}
         --timeout $${GUNICORN_TIMEOUT:-120}
