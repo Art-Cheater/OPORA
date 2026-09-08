@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from pathlib import Path
 from urllib.error import URLError
 
@@ -145,3 +146,109 @@ def test_map_stats_reports_coordinate_coverage(app):
     assert "requests: total=" in result.output
     assert "defects: total=" in result.output
     assert "works_not_routable=" in result.output
+
+
+def _missing_coordinate_request(app, *, number="26-9950", address="Лепсе 12, 13", village=False):
+    from app.extensions import db
+    from app.models.requests.request import Request
+    from app.models.requests.request_journal import RequestJournal
+    from app.models.requests.request_status import RequestStatus
+
+    with app.app_context():
+        journal = db.session.scalar(
+            db.select(RequestJournal).where(
+                RequestJournal.code == ("oktyabrsky_villages" if village else "requests")
+            )
+        )
+        status = db.session.scalar(db.select(RequestStatus).where(RequestStatus.deleted_at.is_(None)))
+        request = Request(
+            number=number,
+            title="repair QA",
+            address=address,
+            normalized_address=address,
+            applicant_name="QA",
+            priority="medium",
+            status_id=status.id,
+            journal_id=journal.id,
+            address_source="village_manual" if village else None,
+        )
+        db.session.add(request)
+        db.session.commit()
+        return request.id
+
+
+def test_coordinate_repair_dry_run_prints_progress_and_does_not_write(app):
+    request_id = _missing_coordinate_request(app)
+    with app.app_context():
+        result = app.test_cli_runner().invoke(
+            args=["repair-work-coordinates", "--entity", "requests", "--only-missing", "--build-points", "--dry-run", "--verbose"]
+        )
+        from app.extensions import db
+        from app.models.requests.request import Request
+
+        request = db.session.get(Request, request_id)
+    assert result.exit_code == 0
+    assert "[1/1] request 26-9950: parsed:" in result.output
+    assert "would_attempt_geocode" in result.output
+    assert "would_create_points" in result.output
+    assert "dry_run=1" in result.output
+    assert request.latitude is None and request.longitude is None
+
+
+def test_coordinate_repair_limits_parts_and_no_geocode_never_calls_provider(app, monkeypatch):
+    _missing_coordinate_request(app, address="Лепсе 12, 13, 14, 15")
+    monkeypatch.setattr(
+        "app.modules.requests.services.RequestService._geocode_latlng",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("network call")),
+    )
+    with app.app_context():
+        result = app.test_cli_runner().invoke(
+            args=["repair-work-coordinates", "--entity", "requests", "--only-missing", "--build-points", "--no-geocode", "--max-geocode-parts", "3"]
+        )
+    assert result.exit_code == 0
+    assert "geocode parts limited: 3/4" in result.output
+    assert "skipped: no_geocode" in result.output
+    assert "no_geocode=1" in result.output
+
+
+def test_coordinate_repair_creates_multiple_points_without_repeating_geocoding(app, monkeypatch):
+    request_id = _missing_coordinate_request(app)
+    calls = []
+
+    def geocode(part, *, timeout_seconds=None):
+        calls.append((part, timeout_seconds))
+        return (Decimal("58.6000000"), Decimal("49.6700000"))
+
+    monkeypatch.setattr("app.modules.requests.services.RequestService._geocode_latlng", geocode)
+    with app.app_context():
+        result = app.test_cli_runner().invoke(
+            args=["repair-work-coordinates", "--entity", "requests", "--only-missing", "--build-points", "--verbose"]
+        )
+        from app.extensions import db
+        from app.models.maps.work_map_point import WorkMapPoint
+        from app.models.requests.request import Request
+
+        request = db.session.get(Request, request_id)
+        points = list(db.session.scalars(db.select(WorkMapPoint).where(WorkMapPoint.entity_id == request_id)))
+    assert result.exit_code == 0
+    assert "created map_points=2" in result.output
+    assert len(calls) == 2
+    assert len(points) == 2
+    assert request.latitude == Decimal("58.6000000")
+
+
+def test_coordinate_repair_skips_village_free_text_and_timeout(app, monkeypatch):
+    _missing_coordinate_request(app, number="26-9951", address="д. Башарово, Центральная 12", village=True)
+    _missing_coordinate_request(app, number="26-9952", address="Лепсе 12")
+
+    def timeout(*_args, **_kwargs):
+        raise TimeoutError()
+
+    monkeypatch.setattr("app.modules.requests.services.RequestService._geocode_latlng", timeout)
+    with app.app_context():
+        result = app.test_cli_runner().invoke(
+            args=["repair-work-coordinates", "--entity", "requests", "--only-missing", "--build-points"]
+        )
+    assert result.exit_code == 0
+    assert "request 26-9951: skipped: village_free_text" in result.output
+    assert "request 26-9952: skipped: geocoder_timeout" in result.output

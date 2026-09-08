@@ -696,10 +696,28 @@ def _register_cli_commands(app: Flask) -> None:
     @click.option("--entity", type=click.Choice(["requests", "defects", "all"]), default="all", show_default=True)
     @click.option("--only-missing", is_flag=True, help="Обрабатывать только записи без пары координат")
     @click.option("--dry-run", is_flag=True, help="Проверить без записи в БД")
-    @click.option("--build-points", is_flag=True, help="Распознать части сложного адреса (пока сохраняется только anchor)")
+    @click.option("--build-points", is_flag=True, help="Создать точки для уверенно найденных частей сложного адреса")
     @click.option("--limit", default=0, show_default=True, help="Максимум записей каждого типа (0 = все)")
-    def repair_work_coordinates(entity: str, only_missing: bool, dry_run: bool, build_points: bool, limit: int):
+    @click.option("--verbose", is_flag=True, help="Показывать parsed address и детали обработки")
+    @click.option("--no-geocode", is_flag=True, help="Не обращаться к геокодеру; только безопасная диагностика")
+    @click.option("--timeout", "geocode_timeout", type=click.FloatRange(0.3, 5.0), default=3.0, show_default=True, help="Таймаут одного запроса к геокодеру в секундах")
+    @click.option("--max-geocode-parts", type=click.IntRange(1, 5), default=3, show_default=True, help="Максимум частей адреса для геокодирования одной работы")
+    def repair_work_coordinates(
+        entity: str,
+        only_missing: bool,
+        dry_run: bool,
+        build_points: bool,
+        limit: int,
+        verbose: bool,
+        no_geocode: bool,
+        geocode_timeout: float,
+        max_geocode_parts: int,
+    ):
         """Безопасно дополнить координаты заявок и дефектов по сохранённому адресу."""
+        from collections import Counter, defaultdict
+        import re
+        import time
+
         from app.models.defects.defect import Defect
         from app.models.requests.request import Request
         from app.modules.requests.services import RequestService
@@ -707,42 +725,160 @@ def _register_cli_commands(app: Flask) -> None:
         from app.core.address.work_map_point_service import WorkMapPointService
         from app.models.maps.work_map_point import WorkMapPoint
 
+        def emit(message: str) -> None:
+            # Click flushes stdout itself; явный flush нужен и для pipe/docker exec.
+            click.echo(message)
+            click.get_text_stream("stdout").flush()
+
+        def short(value: str, size: int = 100) -> str:
+            value = " ".join((value or "").split())
+            return value if len(value) <= size else f"{value[:size - 1]}…"
+
+        free_text_settlement = re.compile(
+            r"(?:^|[\s,])(?:д\.|деревня|с\.|село|п\.|пос\.|сл\.|н\.?вятск|нововятск)(?:\s|,|$)", re.I
+        )
+
+        def skip_reason(label, item, has_points: bool) -> str | None:
+            if has_points:
+                return "unchanged_existing_points"
+            if getattr(item, "coordinates_source", None) == "manual":
+                return "already_has_coordinates"
+            if not (getattr(item, "normalized_address", None) or getattr(item, "address", None) or "").strip():
+                return "no_address"
+            journal = getattr(item, "journal", None)
+            journal_code = getattr(journal, "code", "") or ""
+            raw_address = getattr(item, "address", "") or ""
+            if (
+                getattr(item, "address_source", None) == "village_manual"
+                or journal_code.endswith("_villages")
+                or free_text_settlement.search(raw_address)
+            ):
+                return "village_free_text"
+            return None
+
         models = []
         if entity in {"requests", "all"}:
             models.append(("request", Request))
         if entity in {"defects", "all"}:
             models.append(("defect", Defect))
-        updated = skipped = 0
+        rows: list[tuple[str, object]] = []
         for label, model in models:
             stmt = db.select(model).where(model.active_filter()).order_by(model.created_at.desc())
             if only_missing:
                 stmt = stmt.where((model.latitude.is_(None)) | (model.longitude.is_(None)))
             if limit > 0:
                 stmt = stmt.limit(limit)
-            for item in db.session.scalars(stmt):
-                if only_missing and db.session.scalar(db.select(WorkMapPoint.id).where(WorkMapPoint.entity_type == label, WorkMapPoint.entity_id == item.id, WorkMapPoint.active_filter()).limit(1)):
-                    skipped += 1
-                    continue
-                if getattr(item, "coordinates_source", None) == "manual":
-                    skipped += 1
-                    continue
-                query = (item.normalized_address or item.address or "").strip()
-                parts, warning = split_map_address_parts(query) if build_points else ([query], None)
-                if dry_run and build_points:
-                    click.echo(f"{label} {item.number}: parsed: {', '.join(parts)}" + (f"; {warning}" if warning else ""))
-                coords = next((found for part in parts if (found := RequestService._geocode_latlng(part))), None)
-                if not coords:
-                    skipped += 1
-                    continue
-                if not dry_run:
-                    item.latitude, item.longitude = coords
-                    if build_points:
-                        WorkMapPointService.sync(item, label, RequestService._geocode_latlng)
-                updated += 1
-            if not dry_run:
-                db.session.commit()
-            click.echo(f"{label}: обновлено {updated}, пропущено {skipped}")
-        click.echo("Проверка завершена." if dry_run else "Координаты сохранены.")
+            rows.extend((label, item) for item in db.session.scalars(stmt))
+
+        reasons: Counter[str] = Counter()
+        examples: dict[str, list[str]] = defaultdict(list)
+        processed = updated = created_points = skipped = limited_parts = 0
+        total = len(rows)
+
+        def note(reason: str, label: str, item, prefix: str) -> None:
+            nonlocal skipped
+            reasons[reason] += 1
+            skipped += 1
+            identity = f"{label} {item.number}"
+            examples[reason].append(f"{identity}, \"{short(getattr(item, 'address', ''))}\"")
+            emit(f"{prefix} skipped: {reason}")
+
+        for index, (label, item) in enumerate(rows, 1):
+            processed += 1
+            prefix = f"[{index}/{total}] {label} {item.number}:"
+            has_points = db.session.scalar(
+                db.select(WorkMapPoint.id)
+                .where(
+                    WorkMapPoint.entity_type == label,
+                    WorkMapPoint.entity_id == item.id,
+                    WorkMapPoint.active_filter(),
+                )
+                .limit(1)
+            ) is not None
+            reason = skip_reason(label, item, has_points)
+            if reason:
+                note(reason, label, item, prefix)
+                continue
+
+            query = (item.normalized_address or item.address or "").strip()
+            parts, warning = split_map_address_parts(query) if build_points else ([query], None)
+            if verbose:
+                emit(f"{prefix} parsed: {short(', '.join(parts))}" + (f"; {warning}" if warning else ""))
+            if not parts:
+                note("no_address", label, item, prefix)
+                continue
+            if all(not any(char.isdigit() for char in part) for part in parts):
+                note("low_confidence", label, item, prefix)
+                continue
+
+            selected_parts = parts[:max_geocode_parts]
+            omitted = max(len(parts) - len(selected_parts), 0)
+            if omitted:
+                limited_parts += omitted
+                emit(f"{prefix} geocode parts limited: {len(selected_parts)}/{len(parts)}")
+            if dry_run:
+                reasons["dry_run"] += 1
+                emit(f"{prefix} would_attempt_geocode: parts={len(selected_parts)} timeout={geocode_timeout:g}s")
+                if build_points:
+                    emit(f"{prefix} would_create_points: up to {len(selected_parts)}")
+                continue
+            if no_geocode:
+                note("no_geocode", label, item, prefix)
+                continue
+
+            resolved: dict[str, object] = {}
+            failed_reason: str | None = None
+            for part_number, part in enumerate(selected_parts, 1):
+                emit(f"{prefix} geocoding {part_number}/{len(selected_parts)}: {short(part, 80)}")
+                try:
+                    started_at = time.monotonic()
+                    coords = RequestService._geocode_latlng(part, timeout_seconds=geocode_timeout)
+                except TimeoutError:
+                    failed_reason = "geocoder_timeout"
+                    break
+                except (ConnectionError, OSError):
+                    failed_reason = "geocoder_unavailable"
+                    break
+                except RuntimeError:
+                    failed_reason = "geocoder_not_configured"
+                    break
+                except Exception:
+                    failed_reason = "error"
+                    break
+                if coords is None and time.monotonic() - started_at >= geocode_timeout * 0.9:
+                    failed_reason = "geocoder_timeout"
+                    break
+                if coords:
+                    resolved[part] = coords
+            if not resolved:
+                note(failed_reason or "geocoder_no_result", label, item, prefix)
+                continue
+
+            primary = next(iter(resolved.values()))
+            item.latitude, item.longitude = primary
+            item.coordinates_source = "geocoder"
+            updated += 1
+            if build_points:
+                # Передаём только уже найденные координаты: sync не делает повторных
+                # сетевых запросов и не выходит за max_geocode_parts.
+                WorkMapPointService.sync(item, label, lambda part: resolved.get(part))
+                created = len(resolved)
+                created_points += created
+                emit(f"{prefix} updated lat={primary[0]} lon={primary[1]}; created map_points={created} primary={short(next(iter(resolved)))}")
+            else:
+                emit(f"{prefix} updated lat={primary[0]} lon={primary[1]}")
+
+        if not dry_run:
+            db.session.commit()
+        emit(
+            f"processed={processed} updated_coordinates={updated} "
+            f"created_map_points={created_points} skipped={skipped} "
+            f"geocode_parts_limited={limited_parts}"
+        )
+        for reason, count in sorted(reasons.items()):
+            sample = "; ".join(examples[reason][:3])
+            emit(f"{reason}={count}" + (f": {sample}" if sample else ""))
+        emit("Проверка завершена без записи в БД." if dry_run else "Координаты сохранены.")
 
     @app.cli.command("check-routing")
     def check_routing():

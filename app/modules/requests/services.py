@@ -336,7 +336,9 @@ class RequestService:
                 payload.coordinates_source = "geocoder"
 
     @staticmethod
-    def _geocode_latlng(query: str) -> tuple[Decimal, Decimal] | None:
+    def _geocode_latlng(
+        query: str, *, timeout_seconds: float | None = None
+    ) -> tuple[Decimal, Decimal] | None:
         """Короткий запрос к Nominatim. Без suggest() — он для домов ждёт до 2.5 с и блокирует воркер."""
         text = (query or "").strip()
         if len(text) < 3:
@@ -353,7 +355,12 @@ class RequestService:
                 regional = f"{text}, Киров, Кировская область"
             old_timeout = service.provider_timeout_seconds
             # Не держим HTTP-воркер: таймаут геокодера жёстко ограничен.
-            service.provider_timeout_seconds = min(max(old_timeout, 0.3), 1.0)
+            # Обычный request workflow сохраняет прежний предел в одну секунду.
+            # Расширенный лимит разрешён только явному maintenance CLI.
+            if timeout_seconds is None:
+                service.provider_timeout_seconds = min(max(old_timeout, 0.3), 1.0)
+            else:
+                service.provider_timeout_seconds = min(max(float(timeout_seconds), 0.3), 5.0)
             try:
                 candidates = service._search_provider(regional, 3) or []
             finally:
