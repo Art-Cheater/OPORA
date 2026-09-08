@@ -43,5 +43,23 @@ else
     echo "$(date -u +%H:%M:%S) Справочники пропускаем (уже в БД). Для сида: OPORA_SEED_ON_START=1"
 fi
 
+if [ "${1:-}" = "gunicorn" ]; then
+    # Gunicorn reads GUNICORN_CMD_ARGS itself.  It is intentionally ignored:
+    # Compose owns its command line, and application environment must not be
+    # reinterpreted as Gunicorn CLI arguments.
+    unset GUNICORN_CMD_ARGS
+    : "${WEB_CONCURRENCY:=3}"
+    : "${GUNICORN_THREADS:=8}"
+    : "${GUNICORN_TIMEOUT:=120}"
+    set -- gunicorn wsgi:app \
+        --bind 0.0.0.0:5000 \
+        --worker-class gthread \
+        --workers "$WEB_CONCURRENCY" \
+        --threads "$GUNICORN_THREADS" \
+        --timeout "$GUNICORN_TIMEOUT" \
+        --graceful-timeout 30 \
+        --keep-alive 5
+fi
+
 echo "$(date -u +%H:%M:%S) Запуск: $*"
 exec "$@"

@@ -40,20 +40,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # `sh -c` receives the complete Gunicorn command as one argument.  Do not
-    # split this into `sh -c exec gunicorn ...`: in that form `exec` becomes
-    # the command string and the remaining values become shell positional args.
-    # Double `$` defers expansion to the container, rather than Compose on host.
-    command:
-      - sh
-      - -c
-      - >-
-        unset GUNICORN_CMD_ARGS; exec gunicorn wsgi:app --bind 0.0.0.0:5000 --worker-class gthread
-        --workers $${WEB_CONCURRENCY:-3}
-        --threads $${GUNICORN_THREADS:-8}
-        --timeout $${GUNICORN_TIMEOUT:-120}
-        --graceful-timeout 30
-        --keep-alive 5
+    # Gunicorn argv is built by the entrypoint.  Do not use `sh -c` here:
+    # environment values must never be interpreted as process arguments.
+    command: ["gunicorn"]
     healthcheck:
       test:
         [

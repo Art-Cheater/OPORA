@@ -46,13 +46,18 @@ def test_main_compose_has_no_valhalla_hard_dependency():
     assert "VALHALLA_BASE_URL" not in compose
 
 
-def test_web_gunicorn_command_keeps_shell_command_as_single_argument():
-    """The entrypoint uses ``exec \"$@\"``, so ``sh -c`` needs one command string."""
+def test_web_gunicorn_command_is_built_by_entrypoint_without_shell_expansion():
+    """Environment values must not be accidentally parsed as Gunicorn CLI args."""
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "    command:\n      - sh\n      - -c\n      - >-\n        unset GUNICORN_CMD_ARGS; exec gunicorn wsgi:app" in compose
-    assert "$${WEB_CONCURRENCY:-3}" in compose
-    assert "$${GUNICORN_THREADS:-8}" in compose
-    assert "exec gunicorn --bind" not in compose
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    entrypoint = (ROOT / "docker/entrypoint.sh").read_text(encoding="utf-8")
+    assert 'command: ["gunicorn"]' in compose
+    assert 'CMD ["gunicorn"]' in dockerfile
+    assert 'command: ["sh", "-c"' not in compose
+    assert "\n      - sh\n      - -c\n" not in compose
+    assert 'if [ "${1:-}" = "gunicorn" ]; then' in entrypoint
+    assert "unset GUNICORN_CMD_ARGS" in entrypoint
+    assert "set -- gunicorn wsgi:app" in entrypoint
 
 
 def test_valhalla_provider_uses_internal_url_and_returns_geojson(app, monkeypatch):
