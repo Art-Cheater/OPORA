@@ -23,6 +23,19 @@ if [[ ! -f "$ROOT/.env" ]]; then
   exit 1
 fi
 
+echo "==> production .env pre-flight"
+if ! python3 scripts/check_env.py "$ROOT/.env"; then
+  echo "==> deploy остановлен до Docker build. Исправьте .env и повторите проверку:"
+  echo "    python3 scripts/check_env.py .env"
+  exit 1
+fi
+
+show_web_failure() {
+  echo "==> web не стал healthy; последние логи и состояние контейнера:"
+  docker compose logs --tail=120 web || true
+  docker inspect opora_web --format 'Path={{.Path}} Args={{json .Args}} State={{.State.Status}} Health={{json .State.Health}}' || true
+}
+
 build_from_local_images() {
   echo "==> Docker Hub недоступен — сборка из локальных образов (код из git)"
   if ! docker image inspect opora-web:latest >/dev/null 2>&1; then
@@ -62,11 +75,20 @@ if ! docker compose build --pull=false web nginx inquiry-sync eis-sync; then
 fi
 
 echo "==> пересоздаём web (миграции в entrypoint), nginx ждёт healthcheck"
-docker compose up -d --no-deps --force-recreate web
-docker compose up -d --force-recreate nginx inquiry-sync eis-sync
+if ! docker compose up -d --no-deps --force-recreate web; then
+  show_web_failure
+  exit 1
+fi
+if ! docker compose up -d --force-recreate nginx inquiry-sync eis-sync; then
+  show_web_failure
+  exit 1
+fi
 
 echo "==> поднимаем остальное"
-docker compose up -d
+if ! docker compose up -d; then
+  show_web_failure
+  exit 1
+fi
 
 echo "==> пересчёт районов заявок по адресу (OSM, с паузой)"
 docker compose exec -T web flask repair-request-districts || echo "WARN: repair-request-districts не выполнился"

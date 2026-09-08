@@ -122,6 +122,50 @@ nano .env
 
 `.env` **не коммитить**.
 
+### Recovery: склеенные переменные в `.env`
+
+Если `web` сообщает об отсутствующем либо стандартном `SECRET_KEY`, а
+`docker compose config` показывает в значении одной переменной другой `KEY=`,
+файл `.env` записан с нарушением формата. Каждая переменная должна занимать
+отдельную строку. Не отключайте production-проверку ключа.
+
+```bash
+cd /opt/opora
+sudo cp .env ".env.backup.$(date +%Y%m%d-%H%M%S)"
+sudo nano .env
+python3 scripts/check_env.py .env
+sudo bash scripts/deploy.sh
+sudo docker compose ps
+sudo docker compose logs --tail=100 web
+```
+
+Для безопасного снимка состояния без вывода `.env` и секретов:
+
+```bash
+bash scripts/diagnose_deploy.sh
+```
+
+Минимальный корректный фрагмент (значения замените своими, секреты не
+публикуйте):
+
+```dotenv
+FLASK_ENV=production
+FLASK_DEBUG=0
+SECRET_KEY=<long-random-value-at-least-32-characters>
+POSTGRES_HOST=db
+POSTGRES_PORT=5432
+POSTGRES_DB=opora
+POSTGRES_USER=opora_user
+POSTGRES_PASSWORD=<password>
+POSTGRES_SCHEMA=opora
+USE_SQLITE=0
+WEB_CONCURRENCY=3
+DB_POOL_SIZE=2
+DB_MAX_OVERFLOW=0
+INQUIRY_SYNC_INTERVAL_SECONDS=300
+EIS_SSL_VERIFY=0
+```
+
 Сделайте скрипты исполняемыми:
 
 ```bash

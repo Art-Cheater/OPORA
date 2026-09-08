@@ -51,6 +51,43 @@ app/modules/<имя>/
 
 Подробно: **[docs/SERVER_SETUP.md](docs/SERVER_SETUP.md)**
 
+### Production recovery: повреждённый `.env`
+
+Если `docker compose config` показывает несколько `KEY=value` внутри значения
+одной переменной или web сообщает о стандартном `SECRET_KEY`, не отключайте
+production-проверку. Сначала сохраните `.env` и исправьте формат: каждая
+переменная должна занимать ровно одну строку.
+
+```bash
+cd /opt/opora
+sudo cp .env ".env.backup.$(date +%Y%m%d-%H%M%S)"
+sudo nano .env
+python3 scripts/check_env.py .env
+sudo bash scripts/deploy.sh
+sudo docker compose ps
+sudo docker compose logs --tail=100 web
+```
+
+Минимальный корректный production-блок (без реальных секретов):
+
+```dotenv
+FLASK_ENV=production
+FLASK_DEBUG=0
+SECRET_KEY=<long-random-value-at-least-32-characters>
+POSTGRES_HOST=db
+POSTGRES_PORT=5432
+POSTGRES_DB=opora
+POSTGRES_USER=opora_user
+POSTGRES_PASSWORD=<password>
+POSTGRES_SCHEMA=opora
+USE_SQLITE=0
+WEB_CONCURRENCY=3
+DB_POOL_SIZE=2
+DB_MAX_OVERFLOW=0
+INQUIRY_SYNC_INTERVAL_SECONDS=300
+EIS_SSL_VERIFY=0
+```
+
 ```bash
 cd /opt/opora
 cp .env.example .env   # один раз, заполнить секреты

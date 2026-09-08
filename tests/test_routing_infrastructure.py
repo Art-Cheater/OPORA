@@ -58,6 +58,9 @@ def test_web_gunicorn_command_is_built_by_entrypoint_without_shell_expansion():
     assert 'if [ "${1:-}" = "gunicorn" ]; then' in entrypoint
     assert 'export GUNICORN_CMD_ARGS=""' in entrypoint
     assert "set -- gunicorn wsgi:app" in entrypoint
+    web_section = compose.split("\n  nginx:", 1)[0]
+    assert "DB_POOL_SIZE" not in web_section
+    assert "EIS_SSL_VERIFY" not in web_section
 
 
 def test_valhalla_provider_uses_internal_url_and_returns_geojson(app, monkeypatch):

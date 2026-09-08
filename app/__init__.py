@@ -56,7 +56,8 @@ _INSECURE_ADMIN_PASSWORDS = {
 def _reject_insecure_production_secrets(app: Flask) -> None:
     if app.testing or app.debug:
         return
-    if (app.config.get("SECRET_KEY") or "") in _INSECURE_SECRET_KEYS:
+    secret_key = (app.config.get("SECRET_KEY") or "")
+    if secret_key in _INSECURE_SECRET_KEYS or secret_key.lower().startswith(("change-me", "dev-secret")):
         raise RuntimeError(
             "В production нельзя оставлять SECRET_KEY по умолчанию. Задайте свой ключ в .env."
         )
