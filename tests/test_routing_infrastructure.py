@@ -56,7 +56,7 @@ def test_web_gunicorn_command_is_built_by_entrypoint_without_shell_expansion():
     assert 'command: ["sh", "-c"' not in compose
     assert "\n      - sh\n      - -c\n" not in compose
     assert 'if [ "${1:-}" = "gunicorn" ]; then' in entrypoint
-    assert "unset GUNICORN_CMD_ARGS" in entrypoint
+    assert 'export GUNICORN_CMD_ARGS=""' in entrypoint
     assert "set -- gunicorn wsgi:app" in entrypoint
 
 

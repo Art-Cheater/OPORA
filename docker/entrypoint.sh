@@ -47,7 +47,9 @@ if [ "${1:-}" = "gunicorn" ]; then
     # Gunicorn reads GUNICORN_CMD_ARGS itself.  It is intentionally ignored:
     # Compose owns its command line, and application environment must not be
     # reinterpreted as Gunicorn CLI arguments.
-    unset GUNICORN_CMD_ARGS
+    # Keep the name present but empty at exec time.  Gunicorn snapshots this
+    # variable during startup and treats an empty value as no extra CLI args.
+    export GUNICORN_CMD_ARGS=""
     : "${WEB_CONCURRENCY:=3}"
     : "${GUNICORN_THREADS:=8}"
     : "${GUNICORN_TIMEOUT:=120}"
