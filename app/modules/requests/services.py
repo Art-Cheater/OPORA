@@ -176,7 +176,7 @@ class RequestService:
             raise ValidationError("Широта должна быть в диапазоне от -90 до 90.")
         if payload.longitude is not None and not Decimal("-180") <= payload.longitude <= Decimal("180"):
             raise ValidationError("Долгота должна быть в диапазоне от -180 до 180.")
-        if payload.coordinates_source not in {None, "manual", "geocoder", "import", "unknown"}:
+        if payload.coordinates_source not in {None, "manual", "cleared", "geocoder", "import", "unknown"}:
             raise ValidationError("Некорректный источник координат.")
         # title заполняется из адреса автоматически
         if not (payload.title or "").strip():
@@ -206,6 +206,7 @@ class RequestService:
             getattr(payload, "coordinates_source", None) == "manual"
             and payload.latitude is not None and payload.longitude is not None
         )
+        coordinate_override = manual_coordinates or getattr(payload, "coordinates_source", None) == "cleared"
         # Village journals deliberately keep dispatcher-entered address raw.
         # Never send an uncertain village address through Kirov autocomplete/geocoding.
         journal = RequestRepository.get_journal(getattr(payload, "journal_id", None))
@@ -221,7 +222,7 @@ class RequestService:
             payload.region = payload.settlement = payload.street = payload.house = None
             payload.address_source = "village_manual"
             payload.address_external_id = None
-            if not manual_coordinates:
+            if not coordinate_override:
                 payload.latitude = payload.longitude = None
             return
         anchor = address_expression_anchor(current_address)
@@ -239,7 +240,7 @@ class RequestService:
             payload.district = normalize_request_district(payload.district)
             payload.address_source = "manual_multi"
             payload.address_external_id = None
-            if not manual_coordinates:
+            if not coordinate_override:
                 payload.latitude = None
                 payload.longitude = None
             return
@@ -266,14 +267,14 @@ class RequestService:
             payload.house = cls._normalize_text(payload.house)
             payload.address_source = cls._normalize_text(payload.address_source) or "selected"
             payload.address_external_id = cls._normalize_text(payload.address_external_id)
-            if not manual_coordinates and (payload.latitude is None or payload.longitude is None):
+            if not coordinate_override and (payload.latitude is None or payload.longitude is None):
                 latlng = cls._geocode_latlng(selected or submitted)
                 if latlng:
                     payload.latitude, payload.longitude = latlng
                     payload.coordinates_source = "geocoder"
             return
 
-        if not manual_coordinates:
+        if not coordinate_override:
             payload.latitude = None
             payload.longitude = None
         from app.core.address import get_address_suggestion_service
@@ -323,12 +324,12 @@ class RequestService:
         payload.house = suggestion.house or house or None
         payload.address_source = suggestion.address_source
         payload.address_external_id = suggestion.address_external_id
-        if not manual_coordinates:
+        if not coordinate_override:
             payload.latitude = suggestion.latitude
             payload.longitude = suggestion.longitude
             if payload.latitude is not None and payload.longitude is not None:
                 payload.coordinates_source = "geocoder"
-        if not manual_coordinates and (payload.latitude is None or payload.longitude is None):
+        if not coordinate_override and (payload.latitude is None or payload.longitude is None):
             latlng = cls._geocode_latlng(payload.normalized_address or submitted)
             if latlng:
                 payload.latitude, payload.longitude = latlng
@@ -573,7 +574,7 @@ class RequestService:
             dispatcher_name=cls._normalize_text(payload.dispatcher_name),
             latitude=payload.latitude,
             longitude=payload.longitude,
-            coordinates_source=payload.coordinates_source or ("geocoder" if payload.latitude is not None and payload.longitude is not None else None),
+            coordinates_source=(None if payload.coordinates_source == "cleared" else payload.coordinates_source) or ("geocoder" if payload.latitude is not None and payload.longitude is not None else None),
             phone=cls._normalize_text(payload.phone),
             applicant_name=(payload.applicant_name or "—").strip(),
             has_barrier=bool(payload.has_barrier),
@@ -656,7 +657,7 @@ class RequestService:
         req.dispatcher_name = cls._normalize_text(payload.dispatcher_name)
         req.latitude = payload.latitude
         req.longitude = payload.longitude
-        req.coordinates_source = payload.coordinates_source or ("geocoder" if payload.latitude is not None and payload.longitude is not None else None)
+        req.coordinates_source = (None if payload.coordinates_source == "cleared" else payload.coordinates_source) or ("geocoder" if payload.latitude is not None and payload.longitude is not None else None)
         req.phone = cls._normalize_text(payload.phone)
         req.applicant_name = (payload.applicant_name or "—").strip()
         req.has_barrier = bool(payload.has_barrier)

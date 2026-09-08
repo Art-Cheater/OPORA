@@ -7,7 +7,7 @@
 {% block page_header %}
 {% call page_header("Сотрудники", "Управление персоналом", "people") %}
 {% if current_user.has_permission('users.create') %}
-{{ create_button("Создать", "plus-lg") }}
+{{ create_button("Добавить сотрудника", "plus-lg", url_for('employees.create')) }}
 {% endif %}
 {% endcall %}
 {% endblock %}

@@ -376,6 +376,12 @@ window.OporaList = (() => {
         return;
       }
 
+      const explicitCreateBtn = e.target.closest("[data-opora-create]");
+      if (explicitCreateBtn?.getAttribute("data-opora-create")) {
+        e.preventDefault();
+        openCreateUrl(explicitCreateBtn.getAttribute("data-opora-create"));
+        return;
+      }
       if (!config.baseUrl) return;
       if (e.target.closest("[data-opora-create]")) {
         e.preventDefault();
@@ -408,6 +414,7 @@ window.OporaList = (() => {
     if (!form) return;
     if (window.OporaPhoneMask) OporaPhoneMask.init(form);
     if (window.OporaRequestsForm) OporaRequestsForm.init(form);
+    window.OporaManualCoordinatePicker?.init?.(form);
     initChoiceSearch(form);
     const firstInvalid = form.querySelector(".is-invalid");
     if (firstInvalid) firstInvalid.focus();
@@ -954,8 +961,18 @@ window.OporaList = (() => {
   }
 
   function bootPage() {
-    initFromConfigElement();
-    initChoiceSearch(document);
+    try {
+      initFromConfigElement();
+      initChoiceSearch(document);
+    } catch (error) {
+      console.error("Не удалось инициализировать список", error);
+      const cfg = document.getElementById("oporaListConfig");
+      const container = cfg ? document.getElementById(cfg.dataset.tableContainerId) : null;
+      if (container) {
+        container.innerHTML = '<div class="alert alert-warning mb-0">Не удалось загрузить список. <button type="button" class="btn btn-sm btn-outline-primary ms-2" data-opora-retry-list>Повторить</button></div>';
+        container.querySelector("[data-opora-retry-list]")?.addEventListener("click", bootPage, { once: true });
+      }
+    }
   }
 
   function initFromConfigElement() {

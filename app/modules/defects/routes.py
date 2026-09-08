@@ -83,7 +83,7 @@ def _payload_from_form(form: DefectForm, entity=None) -> DefectPayload:
         return default
 
     def coord(code):
-        if (form.coordinates_source.data or "").strip() == "manual":
+        if (form.coordinates_source.data or "").strip() in {"manual", "cleared"}:
             value = getattr(form, code).data
             try:
                 return Decimal(str(value)) if value not in (None, "") else None

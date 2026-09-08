@@ -156,7 +156,7 @@ def _request_payload_from_form(form: RequestForm, entity=None) -> RequestPayload
         return default
 
     def signed_coordinate(code):
-        if (form.coordinates_source.data or "").strip() == "manual":
+        if (form.coordinates_source.data or "").strip() in {"manual", "cleared"}:
             raw = getattr(form, code).data
             try:
                 return Decimal(str(raw)) if raw not in (None, "") else None

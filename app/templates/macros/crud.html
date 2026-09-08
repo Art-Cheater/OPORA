@@ -1,7 +1,7 @@
 {# Макросы CRUD: действия в таблице, кнопка создания #}
 
-{% macro create_button(text="Создать", icon="plus-lg") %}
-<button type="button" class="btn btn-primary" data-opora-create data-tour="create">
+{% macro create_button(text="Создать", icon="plus-lg", create_url="") %}
+<button type="button" class="btn btn-primary" data-opora-create{% if create_url %}="{{ create_url }}"{% endif %} data-tour="create">
     <i class="bi bi-{{ icon }}"></i> {{ text }}
 </button>
 {% endmacro %}

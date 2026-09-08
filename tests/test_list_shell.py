@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 
 SHELL_PATHS = (
     "/requests/",
@@ -52,6 +54,29 @@ def test_projects_index_keeps_create_after_user_choices(admin_client):
     table = admin_client.get("/projects/table")
     assert table.status_code == 200
     assert table.get_json()["table_html"]
+
+
+def test_employees_page_keeps_explicit_create_action_and_table_endpoint(admin_client):
+    page = admin_client.get("/employees/")
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert "Добавить сотрудника" in html
+    assert 'data-opora-create="/employees/new"' in html
+
+    table = admin_client.get("/employees/table")
+    assert table.status_code == 200
+    assert table.get_json()["table_html"]
+
+
+def test_coordinate_picker_is_booted_for_modal_forms_and_clear_is_explicit():
+    root = Path(__file__).resolve().parents[1]
+    picker = (root / "app/static/js/manual-coordinate-picker.js").read_text(encoding="utf-8")
+    list_js = (root / "app/static/js/opora-list.js").read_text(encoding="utf-8")
+
+    assert "window.OporaManualCoordinatePicker" in picker
+    assert 'f.source.value = "cleared"' in picker
+    assert "window.OporaManualCoordinatePicker?.init?.(form);" in list_js
+    assert "Карта выбора точки пока недоступна" in picker
 
 
 def test_spa_nav_returns_content_without_shell(admin_client):

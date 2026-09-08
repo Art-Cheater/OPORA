@@ -128,7 +128,7 @@ class DefectService:
             raise ValidationError("Широта должна быть в диапазоне от -90 до 90.")
         if payload.longitude is not None and not Decimal("-180") <= payload.longitude <= Decimal("180"):
             raise ValidationError("Долгота должна быть в диапазоне от -180 до 180.")
-        if payload.coordinates_source not in {None, "manual", "geocoder", "import", "unknown"}:
+        if payload.coordinates_source not in {None, "manual", "cleared", "geocoder", "import", "unknown"}:
             raise ValidationError("Некорректный источник координат.")
         if require_reported_at and payload.reported_date is None:
             raise ValidationError("Укажите дату дефекта.")
@@ -164,7 +164,7 @@ class DefectService:
             address_external_id=payload.address_external_id,
             latitude=payload.latitude,
             longitude=payload.longitude,
-            coordinates_source=payload.coordinates_source or ("geocoder" if payload.latitude is not None and payload.longitude is not None else None),
+            coordinates_source=(None if payload.coordinates_source == "cleared" else payload.coordinates_source) or ("geocoder" if payload.latitude is not None and payload.longitude is not None else None),
             reported_date=payload.reported_date,
             reported_time=payload.reported_time,
             category_id=payload.category_id,
@@ -206,7 +206,7 @@ class DefectService:
         item.address_external_id = payload.address_external_id
         item.latitude = payload.latitude
         item.longitude = payload.longitude
-        item.coordinates_source = payload.coordinates_source or ("geocoder" if payload.latitude is not None and payload.longitude is not None else None)
+        item.coordinates_source = (None if payload.coordinates_source == "cleared" else payload.coordinates_source) or ("geocoder" if payload.latitude is not None and payload.longitude is not None else None)
         item.reported_date = payload.reported_date
         item.reported_time = payload.reported_time
         item.category_id = payload.category_id

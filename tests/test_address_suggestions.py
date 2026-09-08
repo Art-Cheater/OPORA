@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -347,3 +348,30 @@ def test_manual_coordinates_survive_address_preparation(app):
         assert created.latitude == Decimal("58.7000000")
         assert created.longitude == Decimal("49.7000000")
         assert created.coordinates_source == "manual"
+
+
+def test_explicit_coordinate_clear_is_not_replaced_by_geocoding(app):
+    """Очистка точки — намеренное действие, а не отсутствие данных для геокодера."""
+    with app.app_context():
+        user = db.session.scalar(db.select(User).where(User.email == "admin@opora.ru"))
+        status = db.session.scalar(db.select(RequestStatus).where(RequestStatus.code == STATUS_NEW))
+        village_journal = db.session.scalar(
+            db.select(RequestJournal).where(RequestJournal.code == JOURNAL_OKTYABRSKY_VILLAGES)
+        )
+        payload = RequestPayload(
+            number="ADDR-CLEAR-001", title="", description=None, address="д. Башарово, Центральная 12",
+            original_address="д. Башарово, Центральная 12", normalized_address=None, region=None, district=None,
+            settlement=None, street=None, house=None, address_source=None, address_external_id=None, pp=None,
+            received_at=datetime.now(timezone.utc), dispatcher_name="Диспетчер QA", latitude=Decimal("58.7000000"),
+            longitude=Decimal("49.7000000"), phone=None, applicant_name="—", priority="medium", status_id=status.id,
+            responsible_id=None, executor_id=None, journal_id=village_journal.id, coordinates_source="manual",
+        )
+        created = RequestService.create_request(payload, user.id)
+        updated = RequestService.update_request(
+            created,
+            replace(payload, latitude=None, longitude=None, coordinates_source="cleared"),
+            user.id,
+        )
+        assert updated.latitude is None
+        assert updated.longitude is None
+        assert updated.coordinates_source is None
