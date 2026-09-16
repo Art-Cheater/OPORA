@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
+import re
 
 from app.core.address.kirov_streets import KIROV_STREETS
 from app.modules.requests.address_format import CITY, split_address_query
 
 _KIND_RANK = {
-    "улица": 0,
-    "проспект": 1,
+    # При одинаковом названии и неуказанном типе сначала показываем проспект:
+    # это предотвращает подмену «проспекта Строителей» одноимённой улицей.
+    "проспект": 0,
+    "улица": 1,
     "бульвар": 2,
     "площадь": 3,
     "набережная": 4,
@@ -103,12 +106,18 @@ def _name_score(query_name: str, street_name: str) -> int:
         return 0
     if query == street:
         return 100
+    # Совпадение отдельного слова важнее похожей подстроки внутри другого:
+    # «Строителей» не является «Машиностроителей».
+    query_words = tuple(word for word in re.split(r"[^\wа-яё]+", query) if word)
+    street_words = tuple(word for word in re.split(r"[^\wа-яё]+", street) if word)
+    if query_words and all(word in street_words for word in query_words):
+        return 90
     if street.startswith(query) and len(query) >= 3:
         return 92 - min(len(street) - len(query), 20)
     if query.startswith(street) and len(street) >= 4:
         return 84
-    if len(query) >= 4 and query in street:
-        return 72
+    # Не используем `query in street`: это и было причиной ложной замены
+    # точной улицы на более длинное название с тем же суффиксом.
     distance = _levenshtein(query, street)
     if distance == 1 and len(query) >= 4:
         return 88

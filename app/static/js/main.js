@@ -794,7 +794,10 @@ function initInstantNav(sidebar, closeSidebar) {
     function listShellFor(href) {
         const url = new URL(href, window.location.href);
         const path = url.pathname.endsWith("/") ? url.pathname : `${url.pathname}/`;
-        if (path === "/requests/" || path === "/defects/") return null;
+        // Этот список уже содержит server-rendered кнопку создания с RBAC. Не
+        // подменяем его сокращённой SPA-shell, иначе пользователь с users.create
+        // временно (а при ошибке загрузки — постоянно) не видит кнопку.
+        if (path === "/requests/" || path === "/defects/" || path === "/employees/") return null;
         return LIST_SHELLS[path] || null;
     }
 

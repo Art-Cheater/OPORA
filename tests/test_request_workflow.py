@@ -69,7 +69,9 @@ def test_ui_actions_only_complete():
     assert "Выполнено" in labels
     assert "мастеру" not in labels.lower()
     assert "бригад" not in labels.lower()
-    assert available_actions(_Request(STATUS_COMPLETED), user) == []
+    completed_actions = available_actions(_Request(STATUS_COMPLETED), user)
+    assert [action.code for action in completed_actions] == ["complete"]
+    assert completed_actions[0].label == "Изменить выполнение"
 
 
 def test_lifecycle_is_new_then_completed():

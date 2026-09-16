@@ -1,6 +1,40 @@
 /* Read-only карта Request/Defect на MapLibre. */
 window.OporaRequestDetail = (() => {
   let inflight, detailMap;
+  function completion(root = document) {
+    const panel = root.querySelector("[data-request-completion]");
+    const open = root.querySelector("[data-request-completion-open]");
+    if (!panel || panel.dataset.bound === "1") return;
+    panel.dataset.bound = "1";
+    open?.addEventListener("click", () => {
+      panel.hidden = false;
+      panel.querySelector("input, select, textarea")?.focus();
+      panel.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+    panel.querySelector("[data-request-completion-cancel]")?.addEventListener("click", () => { panel.hidden = true; });
+    panel.querySelector("form")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const submit = form.querySelector("button[type='submit'], input[type='submit']");
+      const prior = panel.querySelector(".js-completion-error"); prior?.remove();
+      if (submit) submit.disabled = true;
+      try {
+        const response = await fetch(form.action, {
+          method: "POST", body: new FormData(form), credentials: "same-origin",
+          headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" },
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body.success) throw new Error(body.message || "Не удалось сохранить выполнение");
+        window.OporaNav?.invalidate?.("/requests/");
+        window.OporaNav?.go?.(window.location.href, "Обновление заявки");
+      } catch (error) {
+        const alert = document.createElement("div");
+        alert.className = "alert alert-danger js-completion-error col-12 mb-0";
+        alert.textContent = error?.message || "Не удалось сохранить выполнение";
+        form.prepend(alert);
+      } finally { if (submit) submit.disabled = false; }
+    });
+  }
   function status(text, error = false) { const el = document.getElementById("requestMapStatus"); if (el) { el.textContent = text || ""; el.classList.toggle("text-danger", error); } }
   function external(lat, lng) { const link = document.getElementById("requestMapExternal"); if (link) { link.href = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=17/${lat}/${lng}`; link.classList.remove("d-none"); } }
   async function paint(lat, lng, address) {
@@ -15,6 +49,7 @@ window.OporaRequestDetail = (() => {
   }
   function coords(node) { const lat = Number(node?.dataset.lat), lng = Number(node?.dataset.lng); return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null; }
   async function init() {
+    completion();
     const node = document.getElementById("requestMap"); if (!node || inflight) return;
     const current = coords(node), address = node.dataset.address || "";
     if (current) return paint(current.lat, current.lng, address);

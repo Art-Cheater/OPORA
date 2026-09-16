@@ -68,6 +68,12 @@ class Request(BaseModel):
     latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     coordinates_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    completion_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completion_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    completion_form_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    completion_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     applicant_name: Mapped[str] = mapped_column(String(255), nullable=False)
     has_barrier: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -141,6 +147,9 @@ class Request(BaseModel):
         # select, не selectin: в списке заявок история не нужна
         lazy="select",
         order_by="RequestHistory.created_at.desc()",
+    )
+    completion_by: Mapped[User | None] = relationship(
+        "User", foreign_keys=[completion_by_id]
     )
     materials: Mapped[list[RequestMaterial]] = relationship(
         "RequestMaterial",

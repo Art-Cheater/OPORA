@@ -118,6 +118,39 @@ def test_requests_hide_completed_filter(admin_client, app):
     assert "26-9922" not in hidden
 
 
+def test_unfiltered_request_list_keeps_records_without_map_data_and_resets_stale_page(admin_client, app):
+    """Обычный журнал не должен зависеть от карты или от старого `page` в SPA URL."""
+    numbers = ("26-36", "26-192", "26-328")
+    with app.app_context():
+        journal_id = RequestRepository.get_default_journal().id
+        status = db.session.scalar(db.select(RequestStatus).where(RequestStatus.code == "new"))
+        for number in numbers:
+            db.session.add(
+                Request(
+                    number=number,
+                    title=f"Регрессия {number}",
+                    address="Свободный текст",
+                    applicant_name="QA",
+                    priority=Priority.MEDIUM.value,
+                    status_id=status.id,
+                    journal_id=journal_id,
+                    district=None,
+                    latitude=None,
+                    longitude=None,
+                )
+            )
+        db.session.commit()
+
+    payload = admin_client.get("/requests/table?per_page=100").get_json()
+    assert payload["page"] == 1
+    for number in numbers:
+        assert number in payload["table_html"]
+
+    stale = admin_client.get("/requests/table?page=999&per_page=100").get_json()
+    assert stale["page"] == 1
+    assert "26-328" in stale["table_html"]
+
+
 def test_requests_defects_tab_looks_like_journal(admin_client, app):
     with app.app_context():
         status = db.session.scalar(db.select(DefectStatus).where(DefectStatus.code == "open"))

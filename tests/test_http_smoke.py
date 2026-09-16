@@ -6,9 +6,68 @@ import io
 import uuid
 
 
+def _complete_request(client, app, request_id: str, *, description: str = "Работы выполнены"):
+    """Отправляет ту же форму выполнения, которую видит пользователь."""
+    from app.extensions import db
+    from app.models.auth.user import User
+
+    with app.app_context():
+        performer_id = db.session.scalar(db.select(User.id).where(User.email == "admin@opora.ru"))
+    return client.post(
+        f"/requests/{request_id}/complete",
+        data={
+            "completion_date": "2026-09-16",
+            "completion_time": "14:35",
+            "completion_by_id": str(performer_id),
+            "completion_form_number": "123",
+            "completion_description": description,
+        },
+        follow_redirects=False,
+    )
+
+
 def test_login_required_redirect(client):
     resp = client.get("/requests/", follow_redirects=False)
     assert resp.status_code in (302, 401)
+
+
+def test_request_completion_requires_form_and_persists_details(admin_client, app):
+    created = admin_client.post(
+        "/requests/new",
+        data={
+            "number": f"C-{uuid.uuid4().hex[:8]}",
+            "address": "Киров, улица Лепсе, дом 1",
+            "received_at": "2026-09-16T10:00",
+            "dispatcher_name": "Диспетчер QA",
+            "applicant_name": "Тест",
+            "priority": "medium",
+            "submit": "Сохранить",
+        },
+        follow_redirects=False,
+    )
+    request_id = created.headers["Location"].rstrip("/").split("/")[-1]
+
+    invalid = admin_client.post(f"/requests/{request_id}/complete", data={}, follow_redirects=False)
+    assert invalid.status_code == 302
+    assert "Заявка завершена" not in invalid.headers.get("Location", "")
+
+    completed = _complete_request(admin_client, app, request_id, description="Заменён светильник")
+    assert completed.status_code == 302
+
+    from app.extensions import db
+    from app.models.requests.request import Request
+    from app.models.requests.request_status import RequestStatus
+
+    with app.app_context():
+        item = db.session.get(Request, request_id)
+        assert db.session.get(RequestStatus, item.status_id).code == "completed"
+        assert item.completion_at is not None
+        assert item.completion_by_id is not None
+        assert item.completion_form_number == "123"
+        assert item.completion_description == "Заменён светильник"
+    detail = admin_client.get(f"/requests/{request_id}").get_data(as_text=True)
+    assert "Выполнение заявки" in detail
+    assert "Заменён светильник" in detail
 
 
 def test_admin_pages(admin_client):
@@ -103,9 +162,7 @@ def test_request_lifecycle_and_upload(admin_client, app):
     assert "Выехала аварийная бригада" not in html
     assert "Принята мастером" not in html
 
-    assert admin_client.post(
-        f"/requests/{request_id}/complete", follow_redirects=False
-    ).status_code in (200, 302)
+    assert _complete_request(admin_client, app, request_id).status_code in (200, 302)
 
     from app.extensions import db
     from app.models.requests.request import Request
@@ -136,9 +193,7 @@ def test_edit_completed_request_status_back_to_new(admin_client, app):
     )
     assert created.status_code == 302, created.get_data(as_text=True)[:500]
     request_id = created.headers["Location"].rstrip("/").split("/")[-1]
-    assert admin_client.post(
-        f"/requests/{request_id}/complete", follow_redirects=False
-    ).status_code in (200, 302)
+    assert _complete_request(admin_client, app, request_id).status_code in (200, 302)
 
     from app.extensions import db
     from app.models.requests.request import Request
@@ -186,9 +241,7 @@ def test_edit_completed_request_status_back_to_new(admin_client, app):
         item = db.session.get(Request, request_id)
         assert db.session.get(RequestStatus, item.status_id).code == "new"
 
-    assert admin_client.post(
-        f"/requests/{request_id}/complete", follow_redirects=False
-    ).status_code in (200, 302)
+    assert _complete_request(admin_client, app, request_id).status_code in (200, 302)
     back_to_work = admin_client.post(
         f"/requests/{request_id}/edit",
         data={
@@ -242,7 +295,7 @@ def test_old_request_status_still_completes_without_master(admin_client, app):
     html = admin_client.get(f"/requests/{rid}").get_data(as_text=True)
     assert "Выполнено" in html
     assert "Передать мастеру" not in html
-    assert admin_client.post(f"/requests/{rid}/complete", follow_redirects=False).status_code in (200, 302)
+    assert _complete_request(admin_client, app, rid).status_code in (200, 302)
     with app.app_context():
         item = db.session.get(Request, uuid.UUID(rid))
         status = db.session.get(RequestStatus, item.status_id)

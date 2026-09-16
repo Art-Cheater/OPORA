@@ -68,6 +68,30 @@ def test_employees_page_keeps_explicit_create_action_and_table_endpoint(admin_cl
     assert table.get_json()["table_html"]
 
 
+def test_employees_use_full_partial_instead_of_permissionless_list_shell():
+    root = Path(__file__).resolve().parents[1]
+    main_js = (root / "app/static/js/main.js").read_text(encoding="utf-8")
+    assert 'path === "/employees/"' in main_js
+
+
+def test_pwa_uses_single_push_compatible_worker_and_does_not_cache_private_pages(admin_client):
+    root = Path(__file__).resolve().parents[1]
+    base = (root / "app/templates/layouts/base.html").read_text(encoding="utf-8")
+    manifest = (root / "app/static/manifest.webmanifest").read_text(encoding="utf-8")
+    worker = (root / "app/static/service-worker.js").read_text(encoding="utf-8")
+    register = (root / "app/static/js/pwa.js").read_text(encoding="utf-8")
+
+    assert 'manifest.webmanifest' in base
+    assert '"display": "standalone"' in manifest
+    assert (root / "app/static/favicon.png").is_file()
+    assert (root / "app/static/icons/opora-maskable.svg").is_file()
+    assert 'self.addEventListener("push"' in worker
+    assert 'self.addEventListener("notificationclick"' in worker
+    assert 'url.pathname.startsWith("/static/")' in worker
+    assert 'window.__oporaPwaRegistered' in register
+    assert admin_client.get("/service-worker.js").status_code == 200
+
+
 def test_coordinate_picker_is_booted_for_modal_forms_and_clear_is_explicit():
     root = Path(__file__).resolve().parents[1]
     picker = (root / "app/static/js/manual-coordinate-picker.js").read_text(encoding="utf-8")

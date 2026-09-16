@@ -694,7 +694,12 @@ class WorkOrderService:
 
     @classmethod
     def serialize_queue_item(cls, item: Request, user: User) -> dict:
-        actions = available_actions(item, user)
+        # В карточке Request completed можно уточнить форму выполнения, но
+        # рабочая очередь не должна вновь предлагать «выполнить» её как новую.
+        status_code = item.status.code if item.status else ""
+        can_complete = status_code in OPEN_STATUS_CODES and any(
+            action.code == "complete" for action in available_actions(item, user)
+        )
         return {
             "id": str(item.id),
             "entity_type": "request",
@@ -710,7 +715,7 @@ class WorkOrderService:
             "description": (item.description or item.title or "")[:180],
             "received_at": cls._fmt_dt(item.received_at or item.created_at),
             "dispatcher_name": item.dispatcher_name or "",
-            "can_complete": any(action.code == "complete" for action in actions),
+            "can_complete": can_complete,
         }
 
     @classmethod

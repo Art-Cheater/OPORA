@@ -7,6 +7,7 @@ from decimal import Decimal
 from flask_wtf import FlaskForm
 from wtforms import (
     BooleanField,
+    DateField,
     DateTimeLocalField,
     DecimalField,
     HiddenField,
@@ -17,6 +18,7 @@ from wtforms import (
     SubmitField,
     TelField,
     TextAreaField,
+    TimeField,
 )
 from wtforms.validators import DataRequired, Length, NumberRange, Optional
 
@@ -164,6 +166,31 @@ class AssignMasterForm(FlaskForm):
         validate_choice=False,
     )
     submit = SubmitField("Передать мастеру")
+
+
+class RequestCompletionForm(FlaskForm):
+    completion_date = DateField(
+        "Дата выполнения",
+        format="%Y-%m-%d",
+        validators=[DataRequired(message="Укажите дату выполнения")],
+    )
+    completion_time = TimeField(
+        "Время выполнения",
+        format="%H:%M",
+        validators=[DataRequired(message="Укажите время выполнения")],
+    )
+    completion_by_id = SelectField(
+        "Кто выполнил",
+        choices=[],
+        validators=[DataRequired(message="Выберите исполнителя")],
+        validate_choice=False,
+    )
+    completion_form_number = StringField("Номер бланка", validators=[Optional(), Length(max=100)])
+    completion_description = TextAreaField(
+        "Описание выполнения",
+        validators=[DataRequired(message="Опишите выполненные работы"), Length(max=10000)],
+    )
+    submit = SubmitField("Сохранить выполнение")
 
 
 class RequestCommentForm(FlaskForm):

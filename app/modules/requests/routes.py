@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from flask import (
@@ -54,6 +55,7 @@ from app.modules.requests.forms import (
     DispatcherForm,
     RequestAttachmentForm,
     RequestCommentForm,
+    RequestCompletionForm,
     RequestFilterForm,
     RequestForm,
     RequestMaterialForm,
@@ -279,6 +281,28 @@ def _prepare_assign_master_form(form: AssignMasterForm) -> None:
     ]
 
 
+def _prepare_completion_form(form: RequestCompletionForm, req=None) -> None:
+    users = RequestRepository.get_users()
+    form.completion_by_id.choices = [("", "Выберите исполнителя")] + [
+        (str(item.id), item.full_name) for item in users
+    ]
+    if request.method == "GET":
+        if req and req.completion_at:
+            value = req.completion_at
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=ZoneInfo("UTC"))
+            local_value = value.astimezone(ZoneInfo("Europe/Moscow"))
+            form.completion_date.data = local_value.date()
+            form.completion_time.data = local_value.time().replace(second=0, microsecond=0, tzinfo=None)
+        else:
+            local_now = datetime.now(ZoneInfo("Europe/Moscow")).replace(second=0, microsecond=0)
+            form.completion_date.data = local_now.date()
+            form.completion_time.data = local_now.time().replace(tzinfo=None)
+        form.completion_by_id.data = str(req.completion_by_id) if req and req.completion_by_id else str(current_user.id)
+        form.completion_form_number.data = req.completion_form_number if req else ""
+        form.completion_description.data = req.completion_description if req else ""
+
+
 def _apply_request_create_defaults(form: RequestForm) -> None:
     from datetime import datetime
     from zoneinfo import ZoneInfo
@@ -425,6 +449,16 @@ def table():
         per_page=per_page,
         current_user_id=current_user.id,
     )
+    # `error_out=False` возвращает пустую страницу, если SPA сохранила номер
+    # страницы от прежнего, более узкого фильтра. Вместо пустого списка вернём
+    # пользователя к первой существующей странице того же набора фильтров.
+    if pagination.total and pagination.pages and page > pagination.pages:
+        pagination = RequestRepository.paginated_list(
+            filters,
+            page=1,
+            per_page=per_page,
+            current_user_id=current_user.id,
+        )
     html = render_template(
         "requests/partials/table.html",
         requests_pagination=pagination,
@@ -433,7 +467,14 @@ def table():
         "requests/partials/pagination.html",
         requests_pagination=pagination,
     )
-    return jsonify({"entity": "request", "table_html": html, "pagination_html": pager})
+    return jsonify(
+        {
+            "entity": "request",
+            "table_html": html,
+            "pagination_html": pager,
+            "page": pagination.page,
+        }
+    )
 
 
 @requests_bp.route("/map.json")
@@ -830,6 +871,8 @@ def detail(request_id: uuid.UUID):
     attachment_form = RequestAttachmentForm()
     assign_form = AssignMasterForm()
     _prepare_assign_master_form(assign_form)
+    completion_form = RequestCompletionForm()
+    _prepare_completion_form(completion_form, req)
     actions = available_actions(req, current_user)
     dispatcher = db.session.get(User, req.created_by) if req.created_by else None
     lifecycle = lifecycle_progress(req.status.code if req.status else None)
@@ -892,6 +935,7 @@ def detail(request_id: uuid.UUID):
             active_assignments=active_assignments,
             map_points=map_points,
             comment_form=comment_form,
+            completion_form=completion_form,
             **custom_field_detail_context(_CF, req.id, current_user),
         )
 
@@ -909,6 +953,7 @@ def detail(request_id: uuid.UUID):
         active_assignments=active_assignments,
         map_points=map_points,
         assign_form=assign_form,
+        completion_form=completion_form,
         actions=actions,
         dispatcher=dispatcher,
         lifecycle=lifecycle,
@@ -1075,8 +1120,29 @@ def start_work(request_id: uuid.UUID):
 @login_required
 @any_permission_required(PERM_REQUESTS_EDIT, PERM_REQUESTS_APPROVE, PERM_REQUESTS_DISPATCH)
 def complete_request(request_id: uuid.UUID):
+    req = RequestRepository.get_by_id(request_id)
+    if req is None:
+        if is_ajax():
+            return ajax_error("Заявка не найдена.", status=404)
+        flash("Заявка не найдена.", "danger")
+        return redirect(url_for("requests.index"))
+    form = RequestCompletionForm()
+    _prepare_completion_form(form, req)
+    if not form.validate_on_submit():
+        message = form_errors_message(form)
+        if is_ajax():
+            return ajax_error(message, status=400)
+        flash(message, "danger")
+        return redirect(url_for("requests.detail", request_id=request_id))
     try:
-        req = RequestService.complete_request(request_id, current_user.id)
+        req = RequestService.complete_request(
+            request_id,
+            current_user.id,
+            completion_at=datetime.combine(form.completion_date.data, form.completion_time.data),
+            completion_by_id=_uuid_or_none(form.completion_by_id.data),
+            completion_form_number=form.completion_form_number.data,
+            completion_description=form.completion_description.data,
+        )
         if is_ajax():
             return ajax_ok("Заявка завершена.", id=str(req.id), status_code=req.status.code if req.status else "")
         return _workflow_redirect(req, "Заявка завершена.")

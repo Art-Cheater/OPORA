@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.exc import IntegrityError
 from flask import current_app, request, url_for
@@ -102,6 +104,10 @@ class RequestService:
         "latitude",
         "longitude",
         "coordinates_source",
+        "completion_at",
+        "completion_by_id",
+        "completion_form_number",
+        "completion_description",
         "phone",
         "applicant_name",
         "priority",
@@ -509,6 +515,7 @@ class RequestService:
         details: dict[str, Any] | None = None,
         audit_description: str | None = None,
         enforce_transition: bool = True,
+        old_snapshot_override: dict[str, Any] | None = None,
     ) -> uuid.UUID:
         old_status = req.status
         old_code = old_status.code if old_status else None
@@ -519,7 +526,7 @@ class RequestService:
             )
 
         previous_status_id = req.status_id
-        old_snapshot = cls._snapshot(req)
+        old_snapshot = old_snapshot_override if old_snapshot_override is not None else cls._snapshot(req)
         req.status_id = new_status.id
         req.updated_by = user_id
         new_snapshot = cls._snapshot(req)
@@ -953,23 +960,68 @@ class RequestService:
         request_id: uuid.UUID,
         user_id: uuid.UUID,
         *,
+        completion_at: datetime | None = None,
+        completion_by_id: uuid.UUID | None = None,
+        completion_form_number: str | None = None,
+        completion_description: str | None = None,
         comment: str | None = None,
         commit: bool = True,
     ) -> Request:
-        """Отметить заявку выполненной: текущий открытый статус → completed."""
+        """Сохранить форму выполнения и только затем перевести Request в completed."""
         req = cls._lock_request(request_id)
-        if req.status.code not in OPEN_STATUS_CODES:
+        if req.status.code not in OPEN_STATUS_CODES and req.status.code != STATUS_COMPLETED:
             raise ValidationError("Заявку в этом статусе нельзя отметить выполненной.")
+        # Внутреннее завершение WorkPlan исторически передавало только comment.
+        # Сохраняем совместимость этого уже существующего workflow: исполнителем
+        # становится инициатор закрытия, а временем — текущее московское. HTTP
+        # форма Request сюда не попадает без своих обязательных полей.
+        legacy_comment = (comment or "").strip()
+        if legacy_comment:
+            completion_at = completion_at or datetime.now(ZoneInfo("Europe/Moscow"))
+            completion_by_id = completion_by_id or user_id
+            completion_description = completion_description or legacy_comment
+        if completion_at is None:
+            raise ValidationError("Укажите дату и время выполнения.")
+        if completion_by_id is None:
+            raise ValidationError("Выберите исполнителя.")
+        performer = db.session.get(User, completion_by_id)
+        if performer is None or performer.deleted_at is not None or not performer.is_active or performer.is_blocked:
+            raise ValidationError("Выбранный исполнитель не найден или неактивен.")
+        description = (completion_description or "").strip()
+        if not description:
+            raise ValidationError("Опишите выполненные работы.")
+        if completion_at.tzinfo is None:
+            completion_at = completion_at.replace(tzinfo=ZoneInfo("Europe/Moscow"))
+        completion_at = completion_at.astimezone(timezone.utc)
+        old_snapshot = cls._snapshot(req)
+        req.completion_at = completion_at
+        req.completion_by_id = performer.id
+        req.completion_form_number = cls._normalize_text(completion_form_number)
+        req.completion_description = description
+        details = {
+            "completion_at": completion_at.isoformat(),
+            "completion_by_id": str(performer.id),
+            "completion_by_name": performer.full_name,
+            "completion_form_number": req.completion_form_number,
+            "completion_description": description,
+        }
         new_status = cls.get_status_by_code(STATUS_COMPLETED)
-        history_comment = (comment or "").strip() or "Заявка отмечена выполненной"
-        cls._apply_status(
-            req,
-            new_status,
-            user_id,
-            history_action=HISTORY_COMPLETE,
-            history_comment=history_comment,
-            audit_description=f"Заявка {req.number} выполнена",
-        )
+        history_comment = f"Заявка выполнена: {performer.full_name}"
+        if req.status.code == STATUS_COMPLETED:
+            req.updated_by = user_id
+            cls._log_audit(user_id, AuditAction.UPDATE.value, req.id, f"Уточнено выполнение заявки {req.number}", old_snapshot, cls._snapshot(req))
+            cls._log_history(req, user_id, HISTORY_COMPLETE, history_comment, details, previous_status_id=req.status_id)
+        else:
+            cls._apply_status(
+                req,
+                new_status,
+                user_id,
+                history_action=HISTORY_COMPLETE,
+                history_comment=history_comment,
+                details=details,
+                audit_description=f"Заявка {req.number} выполнена",
+                old_snapshot_override=old_snapshot,
+            )
         if commit:
             db.session.commit()
         return req

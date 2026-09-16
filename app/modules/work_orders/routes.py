@@ -181,7 +181,14 @@ def request_card_json(request_id: uuid.UUID):
 @any_permission_required(PERM_REQUESTS_EDIT, PERM_REQUESTS_APPROVE, PERM_REQUESTS_DISPATCH)
 def complete_request(request_id: uuid.UUID):
     try:
-        req = RequestService.complete_request(request_id, current_user.id)
+        # Это прежний быстрый workflow рабочей очереди. Карточка заявки всегда
+        # использует полную форму выполнения; здесь сохраняем осмысленный
+        # служебный комментарий, чтобы не ломать закрытие из WorkPlan.
+        req = RequestService.complete_request(
+            request_id,
+            current_user.id,
+            comment="Выполнено через рабочую очередь.",
+        )
         return ajax_ok(
             "Заявка отмечена выполненной.",
             item=WorkOrderService.serialize_queue_item(req, current_user),

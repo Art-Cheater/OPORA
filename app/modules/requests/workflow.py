@@ -128,18 +128,26 @@ def lifecycle_progress(status_code: str | None) -> list[dict]:
 
 
 def available_actions(req: Request, user: User) -> list[WorkflowAction]:
-    """Единственное пользовательское действие — «Выполнено»."""
+    """Действие выполнения открывает форму; completed можно уточнить без дубля."""
     if req.status is None or req.deleted_at is not None:
         return []
 
     code = req.status.code
-    if code not in OPEN_STATUS_CODES:
-        return []
-
     has_dispatch = user.has_permission(PERM_REQUESTS_DISPATCH)
     has_approve = user.has_permission(PERM_REQUESTS_APPROVE)
     has_edit = user.has_permission(PERM_REQUESTS_EDIT)
     if not (has_dispatch or has_approve or has_edit):
+        return []
+    if code == STATUS_COMPLETED:
+        return [
+            WorkflowAction(
+                code="complete",
+                label="Изменить выполнение",
+                endpoint="requests.complete_request",
+                style="outline-success",
+            )
+        ]
+    if code not in OPEN_STATUS_CODES:
         return []
 
     return [

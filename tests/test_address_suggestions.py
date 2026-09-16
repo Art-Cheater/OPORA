@@ -203,6 +203,22 @@ def test_catalog_corrects_typos_and_street_type():
     assert all("улица Искожевский" not in (item.street or "") for item in lane)
 
 
+def test_catalog_exact_stroiteley_beats_substring_and_keeps_prospect():
+    from app.core.address.catalog import search_streets
+    from app.modules.requests.address_format import split_address_query
+
+    for query in ("Строителей", "проспект Строителей", "пр-т Строителей"):
+        assert split_address_query(query)[1] == "Строителей"
+        hits = search_streets(query)
+        assert hits, query
+        assert hits[0].kind == "проспект"
+        assert hits[0].name == "Строителей"
+        assert "Машиностроителей" not in hits[0].normalized_address
+
+    machine = search_streets("проспект Машиностроителей")
+    assert machine and machine[0].name == "Машиностроителей"
+
+
 def test_catalog_prefers_primary_district_for_ambiguous_streets():
     from app.core.address.catalog import resolve_catalog_district, search_streets
 

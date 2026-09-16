@@ -149,6 +149,10 @@ window.OporaList = (() => {
       if (!liveTable) return;
       liveTable.innerHTML = data.table_html;
       if (livePager) livePager.innerHTML = data.pagination_html;
+      // Сервер может скорректировать устаревший номер страницы после изменения
+      // фильтра. Сохраняем фактическую страницу, чтобы URL не возвращал пустой
+      // результат при следующей SPA-навигации.
+      if (Number.isInteger(data.page) && data.page > 0) currentPage = data.page;
       config.tableContainerId = tableContainerId;
       config.paginationContainerId = paginationContainerId;
       if (defects) {
@@ -886,27 +890,8 @@ window.OporaList = (() => {
 
   async function completeFromList(id) {
     if (!id) return;
-    if (!window.confirm("Отметить заявку выполненной?")) return;
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
-    try {
-      const response = await fetch(`${config.baseUrl}/${id}/complete`, {
-        method: "POST",
-        headers: {
-          "X-Requested-With": "XMLHttpRequest",
-          Accept: "application/json",
-          ...(csrf ? { "X-CSRFToken": csrf } : {}),
-        },
-        body: csrf ? new URLSearchParams({ csrf_token: csrf }) : undefined,
-      });
-      const data = await parseJsonResponse(response, "Не удалось отметить заявку выполненной");
-      if (!response.ok || data.ok === false) {
-        throw new Error(data.message || "Не удалось отметить заявку выполненной");
-      }
-      showToast(data.message || "Заявка завершена.");
-      loadTable();
-    } catch (err) {
-      showToast(err?.message || "Не удалось отметить заявку выполненной", "danger");
-    }
+    // Статус не меняем из списка: сначала пользователь заполняет форму выполнения.
+    window.OporaNav?.go?.(`${config.baseUrl}/${id}`, "Форма выполнения заявки");
   }
 
   function initFilter() {

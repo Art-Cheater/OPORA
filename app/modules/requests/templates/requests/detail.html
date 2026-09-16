@@ -53,6 +53,21 @@
             </div>
         </div>
     </div>
+    {% if req.completion_at %}
+    <div class="col-12">
+        <section class="card border-success mb-0" aria-label="Выполнение заявки">
+            <div class="card-header text-success"><i class="bi bi-check2-circle"></i> Выполнение заявки</div>
+            <div class="card-body py-3">
+                <div class="row g-3">
+                    <div class="col-md-4"><small class="text-muted">Дата и время</small><div class="fw-medium">{{ req.completion_at|local_dt }}</div></div>
+                    <div class="col-md-4"><small class="text-muted">Кто выполнил</small><div class="fw-medium">{{ req.completion_by.full_name if req.completion_by else "—" }}</div></div>
+                    <div class="col-md-4"><small class="text-muted">Номер бланка</small><div class="fw-medium">{{ req.completion_form_number or "—" }}</div></div>
+                    <div class="col-12"><small class="text-muted">Описание</small><div class="mt-1">{{ req.completion_description }}</div></div>
+                </div>
+            </div>
+        </section>
+    </div>
+    {% endif %}
 
     <div class="col-xl-8">
         <div class="card mb-4">
@@ -182,14 +197,16 @@
                             </form>
                         </div>
                         {% else %}
+                        {% if action.code == 'complete' %}
+                        <button type="button" class="btn btn-{{ action.style }}" data-request-completion-open>
+                            {{ action.label }}
+                        </button>
+                        {% else %}
                         <form method="POST" action="{{ url_for(action.endpoint, request_id=req.id) }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit"
-                                    class="btn btn-{{ action.style }}"
-                                    {% if action.confirm %}onclick="return confirm('{{ action.confirm }}')"{% endif %}>
-                                {{ action.label }}
-                            </button>
+                            <button type="submit" class="btn btn-{{ action.style }}">{{ action.label }}</button>
                         </form>
+                        {% endif %}
                         {% endif %}
                     {% endfor %}
                 </div>
@@ -198,6 +215,41 @@
                 {% endif %}
             </div>
         </div>
+
+        {% if actions %}
+        <section id="requestCompletionPanel" class="card mb-4" hidden data-request-completion>
+            <div class="card-header"><i class="bi bi-check2-square"></i> Форма выполнения заявки</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('requests.complete_request', request_id=req.id) }}" class="row g-3">
+                    {{ completion_form.hidden_tag() }}
+                    <div class="col-md-3">
+                        <label class="form-label" for="{{ completion_form.completion_date.id }}">{{ completion_form.completion_date.label.text }}</label>
+                        {{ completion_form.completion_date(class="form-control") }}
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" for="{{ completion_form.completion_time.id }}">{{ completion_form.completion_time.label.text }}</label>
+                        {{ completion_form.completion_time(class="form-control") }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="{{ completion_form.completion_by_id.id }}">{{ completion_form.completion_by_id.label.text }}</label>
+                        {{ completion_form.completion_by_id(class="form-select") }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="{{ completion_form.completion_form_number.id }}">{{ completion_form.completion_form_number.label.text }}</label>
+                        {{ completion_form.completion_form_number(class="form-control", placeholder="Необязательно") }}
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" for="{{ completion_form.completion_description.id }}">{{ completion_form.completion_description.label.text }}</label>
+                        {{ completion_form.completion_description(class="form-control", rows=3, required=true, placeholder="Что выполнено по заявке") }}
+                    </div>
+                    <div class="col-12 d-flex gap-2">
+                        {{ completion_form.submit(class="btn btn-success") }}
+                        <button type="button" class="btn btn-outline-secondary" data-request-completion-cancel>Отмена</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+        {% endif %}
 
         <div class="card mb-4">
             <div class="card-header"><i class="bi bi-map"></i>Карта</div>
