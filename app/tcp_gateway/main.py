@@ -25,9 +25,18 @@ class Gateway:
         self.connections: dict[str, asyncio.StreamWriter] = {}
         self.stopping = asyncio.Event()
 
-    def _get_device(self, device_id: str) -> Device | None:
+    def _get_authenticated_device_secret(self, device_id: str) -> str | None:
+        """Return an enabled device's decrypted secret inside Flask context."""
         with self.app.app_context():
-            return db.session.scalar(db.select(Device).where(Device.device_id == device_id, Device.active_filter()))
+            device = db.session.scalar(
+                db.select(Device).where(
+                    Device.device_id == device_id,
+                    Device.active_filter(),
+                )
+            )
+            if device is None or not device.enabled:
+                return None
+            return decrypt_device_secret(device.secret_encrypted)
 
     def _set_connection(self, device_id: str, state: str, peer: str | None = None, actual: dict[str, Any] | None = None) -> None:
         with self.app.app_context():
@@ -57,10 +66,10 @@ class Gateway:
             if auth.get("type") != "auth" or auth.get("version") != self.app.config["DEVICE_PROTOCOL_VERSION"]:
                 return
             device_id = str(auth.get("device_id") or "")
-            device = self._get_device(device_id)
-            if not device or not device.enabled:
+            secret = self._get_authenticated_device_secret(device_id)
+            if secret is None:
                 return
-            if not hmac_matches(decrypt_device_secret(device.secret_encrypted), device_id, nonce, str(auth.get("hmac") or "")):
+            if not hmac_matches(secret, device_id, nonce, str(auth.get("hmac") or "")):
                 return
             old = self.connections.get(device_id)
             if old and old is not writer:

@@ -1,6 +1,69 @@
+import asyncio
+
+from cryptography.fernet import Fernet
+
 from app.extensions import db
 from app.models.devices import Device, DeviceCommand
+from app.tcp_gateway.main import Gateway
 from app.tcp_gateway.protocol import calculate_hmac, decode_frame, encode_frame, hmac_matches, new_nonce
+from app.tcp_gateway.secrets import encrypt_device_secret
+
+
+class _GatewayWriter:
+    def __init__(self):
+        self.frames: list[dict] = []
+        self.closed = False
+
+    def get_extra_info(self, name):
+        return ("127.0.0.1", 45678) if name == "peername" else None
+
+    def write(self, data):
+        self.frames.append(decode_frame(data, 8192))
+
+    async def drain(self):
+        return None
+
+    def close(self):
+        self.closed = True
+
+    async def wait_closed(self):
+        return None
+
+
+async def _authenticate(gateway, device_id: str, secret: str):
+    reader = asyncio.StreamReader()
+    writer = _GatewayWriter()
+    task = asyncio.create_task(gateway.handle_connection(reader, writer))
+    while not writer.frames:
+        await asyncio.sleep(0)
+    challenge = writer.frames[0]
+    reader.feed_data(
+        encode_frame(
+            {
+                "type": "auth",
+                "version": gateway.app.config["DEVICE_PROTOCOL_VERSION"],
+                "device_id": device_id,
+                "hmac": calculate_hmac(secret, device_id, challenge["nonce"]),
+            }
+        )
+    )
+    reader.feed_eof()
+    await task
+    return writer.frames
+
+
+def _gateway_device(app, *, device_id="board-01", enabled=True, secret="shared-secret"):
+    with app.app_context():
+        app.config["DEVICE_SECRET_ENCRYPTION_KEY"] = Fernet.generate_key().decode()
+        device = Device(
+            device_id=device_id,
+            name="Test board",
+            secret_encrypted=encrypt_device_secret(secret),
+            enabled=enabled,
+        )
+        db.session.add(device)
+        db.session.commit()
+    return secret
 
 
 def test_gateway_hmac_is_nonce_bound():
@@ -32,3 +95,18 @@ def test_device_command_is_durable_and_starts_pending(app):
         saved = db.session.get(DeviceCommand, command.id)
         assert saved.status == "pending"
         assert saved.command_id
+
+
+def test_gateway_authentication_decrypts_secret_inside_application_context(app):
+    secret = _gateway_device(app)
+    frames = asyncio.run(_authenticate(Gateway(app), "board-01", secret))
+    assert [frame["type"] for frame in frames] == ["challenge", "authenticated"]
+
+
+def test_gateway_rejects_unknown_disabled_and_invalid_hmac_devices(app):
+    secret = _gateway_device(app, enabled=False)
+    assert [frame["type"] for frame in asyncio.run(_authenticate(Gateway(app), "board-01", secret))] == ["challenge"]
+
+    _gateway_device(app, device_id="board-02", secret="other-secret")
+    assert [frame["type"] for frame in asyncio.run(_authenticate(Gateway(app), "unknown", secret))] == ["challenge"]
+    assert [frame["type"] for frame in asyncio.run(_authenticate(Gateway(app), "board-02", secret))] == ["challenge"]
