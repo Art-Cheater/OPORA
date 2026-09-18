@@ -48,3 +48,14 @@ restore в отдельную БД/volume. Секреты VAPID, Turnstile, DB �
 и оба Turnstile ключа, `SESSION_COOKIE_SECURE=True`,
 `REMEMBER_COOKIE_SECURE=True`, `PROXY_FIX_ENABLED=True`, Fernet key gateway,
 занятость портов 80/443/5000, healthchecks и свободное место для backups/tiles.
+
+## После выпуска TLS-сертификата
+
+Certbot на host обновляет файлы в `/etc/letsencrypt`, но nginx читает сертификат
+при запуске. После успешного renew безопасно выполнить на host:
+
+```bash
+docker exec opora_nginx nginx -s reload
+```
+
+Это reload конфигурации, не пересоздание контейнера и не изменение ключей.

@@ -30,9 +30,33 @@ if ! python3 scripts/check_env.py "$ROOT/.env"; then
   exit 1
 fi
 
+# Do not source .env: it can contain shell-significant passwords. Read only the
+# profile key and select an overlay; the main command remains unchanged.
+OPORA_ENV="$(awk -F= '$1 == "OPORA_ENV" { value=$2 } END { print value }' "$ROOT/.env" | tr -d '\r\"' | tr '[:upper:]' '[:lower:]')"
+case "$OPORA_ENV" in
+  production)
+    COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.timeweb.example.yml)
+    BUILD_SERVICES=(web nginx inquiry-sync eis-sync documents-notify tcp-gateway)
+    ;;
+  staging)
+    COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.staging.yml)
+    BUILD_SERVICES=(web nginx)
+    ;;
+  *)
+    echo "OPORA_ENV должен быть staging или production."
+    exit 1
+    ;;
+esac
+
+compose() {
+  docker compose "${COMPOSE_FILES[@]}" "$@"
+}
+
+echo "==> окружение: $OPORA_ENV"
+
 show_web_failure() {
   echo "==> web не стал healthy; последние логи и состояние контейнера:"
-  docker compose logs --tail=120 web || true
+  compose logs --tail=120 web || true
   docker inspect opora_web --format 'Path={{.Path}} Args={{json .Args}} State={{.State.Status}} Health={{json .State.Health}}' || true
 }
 
@@ -68,30 +92,34 @@ EOF
   rm -f "$tmp_web" "$tmp_nginx"
 }
 
-echo "==> docker compose build web nginx inquiry-sync eis-sync"
-if ! docker compose build --pull=false web nginx inquiry-sync eis-sync; then
+echo "==> docker compose build (через overlay $OPORA_ENV)"
+# Debian/Timeweb builds may reject BuildKit's --allow capability. Retry only
+# the build with classic builder; running containers are not changed by it.
+if ! compose build --pull=false "${BUILD_SERVICES[@]}"; then
   echo "==> обычная сборка не удалась, пробуем без Docker Hub"
-  build_from_local_images
+  if ! DOCKER_BUILDKIT=0 compose build --pull=false "${BUILD_SERVICES[@]}"; then
+    build_from_local_images
+  fi
 fi
 
 echo "==> пересоздаём web (миграции в entrypoint), nginx ждёт healthcheck"
-if ! docker compose up -d --no-deps --force-recreate web; then
+if ! compose up -d --no-deps --force-recreate web; then
   show_web_failure
   exit 1
 fi
-if ! docker compose up -d --force-recreate nginx inquiry-sync eis-sync; then
+if ! compose up -d --force-recreate nginx; then
   show_web_failure
   exit 1
 fi
 
 echo "==> поднимаем остальное"
-if ! docker compose up -d; then
+if ! compose up -d; then
   show_web_failure
   exit 1
 fi
 
 echo "==> пересчёт районов заявок по адресу (OSM, с паузой)"
-docker compose exec -T web flask repair-request-districts || echo "WARN: repair-request-districts не выполнился"
+compose exec -T web flask repair-request-districts || echo "WARN: repair-request-districts не выполнился"
 
 echo "==> Готово. Проверка: curl -s http://127.0.0.1:5000/health"
-docker compose ps
+compose ps

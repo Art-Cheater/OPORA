@@ -115,6 +115,7 @@ class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
     APP_NAME = os.getenv("APP_NAME", "Опора")
     APP_VERSION = os.getenv("APP_VERSION", "0.1.0")
+    OPORA_ENV = os.getenv("OPORA_ENV", "development").strip().lower()
 
     SQLALCHEMY_DATABASE_URI = _DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -155,6 +156,7 @@ class Config:
     DEVICE_PONG_TIMEOUT_SECONDS = int(os.getenv("DEVICE_PONG_TIMEOUT_SECONDS", "15"))
     DEVICE_COMMAND_POLL_SECONDS = float(os.getenv("DEVICE_COMMAND_POLL_SECONDS", "1"))
     DEVICE_COMMAND_TIMEOUT_SECONDS = int(os.getenv("DEVICE_COMMAND_TIMEOUT_SECONDS", "60"))
+    DEVICE_COMMANDS_ENABLED = _env_bool("DEVICE_COMMANDS_ENABLED", True)
 
     WTF_CSRF_ENABLED = True
     WTF_CSRF_TIME_LIMIT = 3600

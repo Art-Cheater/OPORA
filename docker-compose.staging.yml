@@ -1,0 +1,16 @@
+# Safe overlay for the office staging host. It never starts the raw TCP gateway
+# and keeps external side-effect loops behind an explicit profile.
+services:
+  web:
+    environment:
+      OPORA_ENV: staging
+      DEVICE_COMMANDS_ENABLED: "0"
+      WEB_PUSH_VAPID_PUBLIC_KEY: ""
+      WEB_PUSH_VAPID_PRIVATE_KEY: ""
+      WEB_PUSH_VAPID_SUBJECT: ""
+  eis-sync:
+    profiles: ["external-sync"]
+  inquiry-sync:
+    profiles: ["external-sync"]
+  documents-notify:
+    profiles: ["external-sync"]

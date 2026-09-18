@@ -19,7 +19,7 @@ INSECURE_SECRETS = {
     "change-me-to-a-random-secret-key",
     "change-me-to-a-long-random-secret",
 }
-REQUIRED = {"ADMIN_EMAIL", "ADMIN_PASSWORD", "FLASK_ENV", "SECRET_KEY", "USE_SQLITE"}
+REQUIRED = {"ADMIN_EMAIL", "ADMIN_PASSWORD", "FLASK_ENV", "SECRET_KEY", "USE_SQLITE", "OPORA_ENV"}
 POSTGRES_REQUIRED = {"POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD"}
 
 
@@ -83,6 +83,9 @@ def validate_env(path: Path) -> list[str]:
         errors.append("FLASK_ENV должен быть ровно production.")
     if values.get("USE_SQLITE") != "0":
         errors.append("USE_SQLITE должен быть равен 0 в production.")
+    opora_env = values.get("OPORA_ENV", "").strip().lower()
+    if opora_env not in {"staging", "production"}:
+        errors.append("OPORA_ENV должен быть staging или production.")
     if values.get("GUNICORN_CMD_ARGS", "").strip():
         errors.append("GUNICORN_CMD_ARGS должен отсутствовать или быть пустым: command line задаёт entrypoint.")
 
@@ -102,6 +105,17 @@ def validate_env(path: Path) -> list[str]:
         for name in ("CAPTCHA_ENABLED", "SESSION_COOKIE_SECURE", "REMEMBER_COOKIE_SECURE", "PROXY_FIX_ENABLED"):
             if values.get(name, "").strip().lower() not in {"1", "true", "yes", "on"}:
                 errors.append(f"Для OPORA_TIMEWEB_PROFILE=1 {name} должен быть включён.")
+
+    if opora_env == "production":
+        if not values.get("TLS_CERTS_DIR", "").strip():
+            errors.append("Для production укажите TLS_CERTS_DIR (например, /etc/letsencrypt).")
+        for name in ("SESSION_COOKIE_SECURE", "REMEMBER_COOKIE_SECURE", "PROXY_FIX_ENABLED"):
+            if values.get(name, "").strip().lower() not in {"1", "true", "yes", "on"}:
+                errors.append(f"Для production {name} должен быть включён.")
+        if values.get("CAPTCHA_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}:
+            for name in ("TURNSTILE_SITE_KEY", "TURNSTILE_SECRET_KEY"):
+                if not values.get(name, "").strip():
+                    errors.append(f"При CAPTCHA_ENABLED=1 нужна переменная {name}.")
 
     return errors
 

@@ -11,6 +11,7 @@ services:
 
   tcp-gateway:
     build: .
+    image: opora-web:latest
     container_name: opora_tcp_gateway
     restart: unless-stopped
     env_file: .env
@@ -34,3 +35,11 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+
+# The restored production uploads volume may pre-date Compose. Declaring it
+# external stops Compose from trying to own/recreate it; base compose still
+# creates uploads_data automatically for fresh/local installations.
+volumes:
+  uploads_data:
+    external: true
+    name: ${OPORA_UPLOADS_VOLUME:-opora_uploads_data}

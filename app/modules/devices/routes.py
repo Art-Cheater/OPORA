@@ -1,5 +1,5 @@
 """Admin UI and durable command queue for device controllers."""
-from flask import abort, flash, redirect, render_template, request, url_for
+from flask import abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.core.audit_service import AuditService
@@ -21,6 +21,8 @@ def index():
 @login_required
 @permission_required("devices.manage")
 def create_command(device_id):
+    if not current_app.config.get("DEVICE_COMMANDS_ENABLED"):
+        abort(403)
     device = db.session.get(Device, device_id)
     if device is None or device.is_deleted:
         abort(404)

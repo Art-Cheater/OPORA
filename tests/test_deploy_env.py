@@ -25,6 +25,7 @@ def _valid_env() -> str:
         [
             "FLASK_ENV=production",
             "FLASK_DEBUG=0",
+            "OPORA_ENV=production",
             "SECRET_KEY=correct-production-secret-key-with-32-chars",
             "USE_SQLITE=0",
             "POSTGRES_HOST=db",
@@ -34,6 +35,10 @@ def _valid_env() -> str:
             "POSTGRES_PASSWORD=not-a-real-password",
             "ADMIN_EMAIL=admin@example.test",
             "ADMIN_PASSWORD=not-a-real-admin-password",
+            "TLS_CERTS_DIR=/etc/letsencrypt",
+            "SESSION_COOKIE_SECURE=True",
+            "REMEMBER_COOKIE_SECURE=True",
+            "PROXY_FIX_ENABLED=True",
             "",
         ]
     )
@@ -89,8 +94,22 @@ def test_deploy_checks_env_before_docker_build_and_reports_unhealthy_web():
     deploy = (ROOT / "scripts" / "deploy.sh").read_text(encoding="utf-8")
     assert deploy.index("python3 scripts/check_env.py") < deploy.index("docker compose build")
     assert "show_web_failure" in deploy
-    assert "docker compose logs --tail=120 web" in deploy
+    assert "compose logs --tail=120 web" in deploy
     assert "docker inspect opora_web" in deploy
+    assert "docker-compose.timeweb.example.yml" in deploy
+    assert "docker-compose.staging.yml" in deploy
+    assert "DOCKER_BUILDKIT=0" in deploy
+
+
+def test_check_env_accepts_staging_without_timeweb_tls(tmp_path):
+    path = tmp_path / ".env"
+    content = _valid_env().replace("OPORA_ENV=production", "OPORA_ENV=staging")
+    content = content.replace("TLS_CERTS_DIR=/etc/letsencrypt\n", "")
+    content = content.replace("SESSION_COOKIE_SECURE=True\n", "")
+    content = content.replace("REMEMBER_COOKIE_SECURE=True\n", "")
+    content = content.replace("PROXY_FIX_ENABLED=True\n", "")
+    path.write_text(content, encoding="utf-8")
+    assert _check_env_module().validate_env(path) == []
 
 
 def test_production_secret_protection_rejects_default_and_accepts_strong_secret():
