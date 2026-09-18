@@ -1,0 +1,36 @@
+# Timeweb production overlay. Keep docker-compose.yml unchanged for the current server.
+services:
+  nginx:
+    # Compose !override prevents retaining the legacy host 5000:80 mapping.
+    ports: !override
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.timeweb.conf:/etc/nginx/nginx.conf:ro
+      - ${TLS_CERTS_DIR:-./data/certbot}:/etc/letsencrypt:ro
+
+  tcp-gateway:
+    build: .
+    container_name: opora_tcp_gateway
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      OPORA_RUN_MIGRATE: "0"
+    command: ["python", "-m", "app.tcp_gateway.main"]
+    ports:
+      - "5000:5000"
+    expose:
+      - "8081"
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.tcp_gateway.main", "--healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

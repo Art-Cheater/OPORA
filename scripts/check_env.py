@@ -93,6 +93,16 @@ def validate_env(path: Path) -> list[str]:
     elif not values.get("POSTGRES_PASSWORD", "").strip():
         errors.append("POSTGRES_PASSWORD должен существовать отдельной переменной.")
 
+    # Optional strict profile for the future HTTPS + TCP Timeweb topology. Keeping
+    # it opt-in preserves the current production deployment during migration.
+    if values.get("OPORA_TIMEWEB_PROFILE") == "1":
+        for name in ("TURNSTILE_SITE_KEY", "TURNSTILE_SECRET_KEY", "DEVICE_SECRET_ENCRYPTION_KEY"):
+            if not values.get(name, "").strip():
+                errors.append(f"Для OPORA_TIMEWEB_PROFILE=1 нужна переменная {name}.")
+        for name in ("CAPTCHA_ENABLED", "SESSION_COOKIE_SECURE", "REMEMBER_COOKIE_SECURE", "PROXY_FIX_ENABLED"):
+            if values.get(name, "").strip().lower() not in {"1", "true", "yes", "on"}:
+                errors.append(f"Для OPORA_TIMEWEB_PROFILE=1 {name} должен быть включён.")
+
     return errors
 
 

@@ -27,6 +27,7 @@ from app.modules.search import search_bp
 from app.modules.tenders import tenders_bp
 from app.modules.wallpapers import wallpapers_bp
 from app.modules.audit import audit_bp
+from app.modules.devices import devices_bp
 
 # Список всех модулей системы.
 ALL_BLUEPRINTS = [
@@ -55,6 +56,7 @@ ALL_BLUEPRINTS = [
     search_bp,
     audit_bp,
     reports_bp,
+    devices_bp,
 ]
 
 

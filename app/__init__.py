@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from flask import Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.config import get_config
 from app.extensions import csrf, db, login_manager, migrate
@@ -24,6 +25,9 @@ def create_app(config_name: str | None = None) -> Flask:
     )
 
     app.config.from_object(get_config(config_name))
+    if app.config.get("PROXY_FIX_ENABLED"):
+        hops = max(1, int(app.config.get("TRUSTED_PROXY_HOPS", 1)))
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=hops, x_proto=hops, x_host=hops)
     _reject_insecure_production_secrets(app)
     _configure_email_validator()
 
@@ -184,6 +188,8 @@ def _init_extensions(app: Flask) -> None:
         UserPresence,
         UserRole,
         Wallpaper,
+        Device,
+        DeviceCommand,
         WorkObject,
     )
 
@@ -194,7 +200,10 @@ def _init_extensions(app: Flask) -> None:
         # CSS/JS не должны грузить RBAC: иначе 304 статики ждут SQLite и висят по 5–6 с.
         if has_request_context() and _is_static_request(request):
             return None
-        return UserRepository.get_by_id(user_id)
+        user = UserRepository.get_by_id(user_id)
+        if user is None or user.is_blocked or not user.is_active:
+            return None
+        return user
 
 
 def _configure_sqlite(app: Flask) -> None:

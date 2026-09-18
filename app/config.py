@@ -1,6 +1,7 @@
 """Конфигурация приложения «Опора»."""
 
 import os
+from datetime import timedelta
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -127,6 +128,33 @@ class Config:
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_NAME = "opora_session"
     REMEMBER_COOKIE_NAME = "opora_remember"
+    REMEMBER_COOKIE_DURATION = timedelta(days=int(os.getenv("REMEMBER_COOKIE_DAYS", "30")))
+    REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SAMESITE = "Lax"
+    # Host-only cookie: COOKIE_DOMAIN deliberately remains unset.
+
+    CAPTCHA_ENABLED = _env_bool("CAPTCHA_ENABLED", False)
+    TURNSTILE_SITE_KEY = os.getenv("TURNSTILE_SITE_KEY", "").strip()
+    TURNSTILE_SECRET_KEY = os.getenv("TURNSTILE_SECRET_KEY", "").strip()
+    TURNSTILE_VERIFY_URL = os.getenv("TURNSTILE_VERIFY_URL", "https://challenges.cloudflare.com/turnstile/v0/siteverify").strip()
+    TURNSTILE_TIMEOUT_SECONDS = float(os.getenv("TURNSTILE_TIMEOUT_SECONDS", "3"))
+    LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("LOGIN_RATE_LIMIT_WINDOW_SECONDS", "300"))
+    LOGIN_RATE_LIMIT_MAX_ATTEMPTS = int(os.getenv("LOGIN_RATE_LIMIT_MAX_ATTEMPTS", "8"))
+    LOGIN_RATE_LIMIT_COOLDOWN_SECONDS = int(os.getenv("LOGIN_RATE_LIMIT_COOLDOWN_SECONDS", "300"))
+    PROXY_FIX_ENABLED = _env_bool("PROXY_FIX_ENABLED", False)
+    TRUSTED_PROXY_HOPS = int(os.getenv("TRUSTED_PROXY_HOPS", "1"))
+
+    DEVICE_GATEWAY_HOST = os.getenv("DEVICE_GATEWAY_HOST", "0.0.0.0")
+    DEVICE_GATEWAY_PORT = int(os.getenv("DEVICE_GATEWAY_PORT", "5000"))
+    DEVICE_HEALTH_PORT = int(os.getenv("DEVICE_HEALTH_PORT", "8081"))
+    DEVICE_PROTOCOL_VERSION = os.getenv("DEVICE_PROTOCOL_VERSION", "1").strip()
+    DEVICE_SECRET_ENCRYPTION_KEY = os.getenv("DEVICE_SECRET_ENCRYPTION_KEY", "").strip()
+    DEVICE_AUTH_TIMEOUT_SECONDS = float(os.getenv("DEVICE_AUTH_TIMEOUT_SECONDS", "10"))
+    DEVICE_MAX_FRAME_BYTES = int(os.getenv("DEVICE_MAX_FRAME_BYTES", "8192"))
+    DEVICE_PING_SECONDS = int(os.getenv("DEVICE_PING_SECONDS", "25"))
+    DEVICE_PONG_TIMEOUT_SECONDS = int(os.getenv("DEVICE_PONG_TIMEOUT_SECONDS", "15"))
+    DEVICE_COMMAND_POLL_SECONDS = float(os.getenv("DEVICE_COMMAND_POLL_SECONDS", "1"))
+    DEVICE_COMMAND_TIMEOUT_SECONDS = int(os.getenv("DEVICE_COMMAND_TIMEOUT_SECONDS", "60"))
 
     WTF_CSRF_ENABLED = True
     WTF_CSRF_TIME_LIMIT = 3600

@@ -1,6 +1,6 @@
 """Маршруты модуля auth."""
 
-from flask import flash, redirect, render_template, request, url_for
+from flask import current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.core.decorators import permission_required
@@ -11,6 +11,8 @@ from app.modules.auth.blueprint import auth_bp
 from app.modules.auth.forms import ChangePasswordForm, LoginForm, ProfileForm
 from app.modules.auth.login_log_service import LoginLogService
 from app.modules.auth.services import AuthService
+from app.modules.auth.captcha import verify_turnstile
+from app.modules.auth.login_throttle import LoginThrottle
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
@@ -21,22 +23,38 @@ def login():
 
     form = LoginForm()
     if form.validate_on_submit():
+        client_ip = request.remote_addr or ""
+        email = form.email.data or ""
+        if LoginThrottle.retry_after(client_ip, email):
+            flash("Слишком много попыток входа. Подождите несколько минут и повторите.", "danger")
+            return render_template("auth/login.html", form=form)
+        if not verify_turnstile(request.form.get("cf-turnstile-response"), client_ip):
+            LoginThrottle.record_failure(client_ip, email)
+            flash("Не удалось подтвердить проверку. Повторите попытку.", "danger")
+            return render_template("auth/login.html", form=form)
         try:
             AuthService.authenticate(
                 email=form.email.data,
                 password=form.password.data,
                 remember=form.remember.data,
             )
-            flash("Вход кайф!", "success")
+            LoginThrottle.clear_success(client_ip, email)
+            flash("Вход выполнен.", "success")
             next_page = request.args.get("next")
             # Только относительные URL (защита от open redirect)
             if next_page and next_page.startswith("/") and not next_page.startswith("//"):
                 return redirect(next_page)
             return redirect(url_for("main.index"))
         except AuthenticationError as exc:
+            LoginThrottle.record_failure(client_ip, email)
             flash(exc.message, "danger")
 
-    return render_template("auth/login.html", form=form)
+    return render_template(
+        "auth/login.html",
+        form=form,
+        captcha_enabled=bool(current_app.config.get("CAPTCHA_ENABLED")),
+        turnstile_site_key=current_app.config.get("TURNSTILE_SITE_KEY", ""),
+    )
 
 
 @auth_bp.route("/logout", methods=["GET", "POST"])

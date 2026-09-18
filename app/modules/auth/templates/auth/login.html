@@ -41,6 +41,14 @@
                     {{ form.remember.label(class="form-check-label") }}
                 </div>
 
+                {% if captcha_enabled %}
+                    {% if turnstile_site_key %}
+                        <div class="mb-4"><div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}"></div></div>
+                    {% else %}
+                        <div class="alert alert-danger">Проверка входа на сервере не настроена. Обратитесь к администратору.</div>
+                    {% endif %}
+                {% endif %}
+
                 <div class="d-grid">
                     {{ form.submit(class="btn btn-primary btn-lg") }}
                 </div>
@@ -48,4 +56,10 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if captcha_enabled and turnstile_site_key %}
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+{% endif %}
 {% endblock %}

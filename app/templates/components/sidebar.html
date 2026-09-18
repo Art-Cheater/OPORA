@@ -132,6 +132,11 @@
                 <span>Личные документы</span>
             </a>
             {% endif %}
+            {% if current_user.has_permission('devices.view') %}
+            <a href="{{ url_for('devices.index') }}" class="sidebar__link {% if request.endpoint and request.endpoint.startswith('devices.') %}active{% endif %}">
+                <i class="bi bi-cpu"></i><span>Удалённые платы</span>
+            </a>
+            {% endif %}
             {% if current_user.has_permission('users.view') %}
             <a href="{{ url_for('employees.index') }}"
                class="sidebar__link {% if request.endpoint and request.endpoint.startswith('employees.') %}active{% endif %}"

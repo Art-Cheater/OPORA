@@ -26,6 +26,7 @@ SYSTEM_MODULES = [
     ("profile", "Профиль", "person", 100, "Личный профиль"),
     ("auth", "Безопасность", "shield-check", 110, "Журнал входов"),
     ("search", "Поиск", "search", 120, "Глобальный поиск"),
+    ("devices", "Удалённые платы", "cpu", 125, "Контроль TCP-устройств"),
 ]
 
 # module_code -> [(field_code, field_name, sort_order)]
@@ -292,6 +293,8 @@ SPECIAL_PERMISSIONS = [
     ("eis", "run", "Запуск импорта ЕИС"),
     ("inquiries", "sync", "Забор писем с почты"),
     ("wallpapers", "manage", "Управление обоями интерфейса"),
+    ("devices", "view", "Просмотр удалённых плат"),
+    ("devices", "manage", "Управление удалёнными платами"),
 ]
 
 ACTION_LABELS = {
