@@ -21,8 +21,8 @@ class DeviceCommand(BaseModel):
             "uq_device_commands_one_active_per_device",
             "device_id",
             unique=True,
-            sqlite_where=text("deleted_at IS NULL AND status IN ('pending', 'sent')"),
-            postgresql_where=text("deleted_at IS NULL AND status IN ('pending', 'sent')"),
+            sqlite_where=text("deleted_at IS NULL AND (status IN ('pending', 'sent') OR (status = 'acknowledged' AND state_confirmed_at IS NULL))"),
+            postgresql_where=text("deleted_at IS NULL AND (status IN ('pending', 'sent') OR (status = 'acknowledged' AND state_confirmed_at IS NULL))"),
         ),
     )
 

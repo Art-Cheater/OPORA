@@ -15,12 +15,13 @@ def normalize_actual_state(actual: dict[str, Any] | None) -> dict[str, Any]:
     output_source = source.get("outputs") if isinstance(source.get("outputs"), dict) else source
     phase_source = source.get("phases") if isinstance(source.get("phases"), dict) else source
     input_source = source.get("inputs") if isinstance(source.get("inputs"), dict) else {}
+    raw_source = source.get("raw") if isinstance(source.get("raw"), dict) else {}
 
     outputs = {key: output_source[key] for key in OUTPUT_RELAYS if key in output_source}
     phases = {key: phase_source[key] for key in PHASES if key in phase_source}
     inputs = dict(input_source)
     for key, value in source.items():
-        if key not in {"outputs", "phases", "inputs", *OUTPUT_RELAYS, *PHASES}:
+        if key not in {"outputs", "phases", "inputs", "raw", *OUTPUT_RELAYS, *PHASES}:
             inputs.setdefault(key, value)
 
     result: dict[str, Any] = {"outputs": outputs}
@@ -28,6 +29,8 @@ def normalize_actual_state(actual: dict[str, Any] | None) -> dict[str, Any]:
         result["phases"] = phases
     if inputs:
         result["inputs"] = inputs
+    if raw_source:
+        result["raw"] = dict(raw_source)
     return result
 
 

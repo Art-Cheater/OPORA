@@ -5,6 +5,7 @@ import uuid
 from collections import defaultdict
 from datetime import timedelta
 
+from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 
 from flask import abort, current_app, flash, jsonify, redirect, render_template, request, url_for
@@ -15,8 +16,9 @@ from app.core.decorators import permission_required
 from app.extensions import db
 from app.models.base import as_utc_aware, utcnow
 from app.models.devices import Device, DeviceCommand
-from app.models.devices.state import OUTPUT_RELAYS, PHASES, normalize_actual_state, payload_matches_actual
+from app.models.devices.state import OUTPUT_RELAYS, normalize_actual_state, payload_matches_actual
 from app.modules.devices.blueprint import devices_bp
+from app.modules.devices.command_service import active_command_query, expire_state_confirmation_timeouts
 from app.modules.devices.forms import DeviceForm
 from app.tcp_gateway.secrets import encrypt_device_secret
 
@@ -45,7 +47,10 @@ def _active_commands_by_device(devices: list[Device]) -> dict[uuid.UUID, DeviceC
     commands = db.session.scalars(
         db.select(DeviceCommand).where(
             DeviceCommand.device_id.in_([item.id for item in devices]),
-            DeviceCommand.status.in_(("pending", "sent")),
+            or_(
+                DeviceCommand.status.in_(("pending", "sent")),
+                and_(DeviceCommand.status == "acknowledged", DeviceCommand.state_confirmed_at.is_(None)),
+            ),
             DeviceCommand.active_filter(),
         )
     ).all()
@@ -88,6 +93,21 @@ def _serialize_device(device: Device, active_command: DeviceCommand | None, late
     stale_after = timedelta(seconds=current_app.config["DEVICE_STATE_STALE_SECONDS"])
     state_stale = device.connection_state != "online" or last_state is None or now - last_state > stale_after
     actual = normalize_actual_state(device.actual_state)
+    commands_enabled = bool(current_app.config.get("DEVICE_COMMANDS_ENABLED"))
+    if not commands_enabled:
+        block_reason = "Отправка команд отключена в этом окружении."
+    elif not device.enabled:
+        block_reason = "Плата деактивирована."
+    elif device.connection_state != "online":
+        block_reason = "Плата OFFLINE."
+    elif active_command is not None:
+        block_reason = (
+            "Ожидание подтверждающего state от платы."
+            if active_command.status == "acknowledged"
+            else "Выполняется другая команда."
+        )
+    else:
+        block_reason = None
     return {
         "device_id": str(device.id),
         "external_device_id": device.device_id,
@@ -101,6 +121,8 @@ def _serialize_device(device: Device, active_command: DeviceCommand | None, late
         "state_stale": state_stale,
         "active_command": _serialize_command(active_command, device),
         "latest_command": _serialize_command(latest_command, device),
+        "can_send_command": block_reason is None,
+        "command_block_reason": block_reason,
     }
 
 
@@ -125,13 +147,10 @@ def _queue_switch_command(device_id: uuid.UUID, payload: dict[str, int]) -> Devi
         abort(404)
     if not device.enabled:
         abort(409, description="Плата деактивирована.")
-    active = db.session.scalar(
-        db.select(DeviceCommand).where(
-            DeviceCommand.device_id == device.id,
-            DeviceCommand.status.in_(("pending", "sent")),
-            DeviceCommand.active_filter(),
-        )
-    )
+    if device.connection_state != "online":
+        abort(409, description="Плата OFFLINE.")
+    expire_state_confirmation_timeouts(device_id=device.id)
+    active = db.session.scalar(active_command_query(device.id))
     if active:
         abort(409, description="Для этой платы уже выполняется команда.")
 
@@ -162,6 +181,8 @@ def _queue_switch_command(device_id: uuid.UUID, payload: dict[str, int]) -> Devi
 @login_required
 @permission_required("devices.view")
 def index():
+    if expire_state_confirmation_timeouts():
+        db.session.commit()
     devices = db.session.scalars(db.select(Device).where(Device.active_filter()).order_by(Device.name)).all()
     commands_by_device = _commands_by_device(devices)
     active_by_device = _active_commands_by_device(devices)
@@ -185,6 +206,8 @@ def index():
 @login_required
 @permission_required("devices.view")
 def status():
+    if expire_state_confirmation_timeouts():
+        db.session.commit()
     devices = db.session.scalars(db.select(Device).where(Device.active_filter()).order_by(Device.name)).all()
     commands_by_device = _commands_by_device(devices)
     active_by_device = _active_commands_by_device(devices)

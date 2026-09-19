@@ -16,6 +16,7 @@ from app.extensions import db
 from app.models.base import as_utc_aware, utcnow
 from app.models.devices import Device, DeviceCommand
 from app.models.devices.state import normalize_actual_state, payload_matches_actual
+from app.modules.devices.command_service import expire_state_confirmation_timeouts
 from app.tcp_gateway.protocol import decode_frame, encode_frame, hmac_matches, new_nonce
 from app.tcp_gateway.secrets import decrypt_device_secret
 
@@ -57,7 +58,6 @@ class Gateway:
                     device.last_ip = peer
                 if actual is not None:
                     device.actual_state = normalize_actual_state(actual)
-                    device.last_state_at = now
                     awaiting_confirmation = db.session.scalars(
                         db.select(DeviceCommand).where(
                             DeviceCommand.device_id == device.id,
@@ -69,6 +69,12 @@ class Gateway:
                     for command in awaiting_confirmation:
                         if payload_matches_actual(command.payload, device.actual_state):
                             command.state_confirmed_at = now
+                        else:
+                            command.status = "failed"
+                            command.failed_at = now
+                            command.error = "State does not match requested outputs"
+                if actual is not None or telemetry is not None:
+                    device.last_state_at = now
                 if isinstance(telemetry, dict):
                     device.telemetry = telemetry
                 db.session.commit()
@@ -159,6 +165,7 @@ class Gateway:
                 stale = db.session.scalars(db.select(DeviceCommand).where(DeviceCommand.status == "sent", DeviceCommand.sent_at < stale_before)).all()
                 for command in stale:
                     command.status, command.failed_at, command.error = "timeout", utcnow(), "ACK timeout"
+                expire_state_confirmation_timeouts()
                 pending = db.session.scalars(db.select(DeviceCommand).join(Device).where(DeviceCommand.status == "pending", Device.active_filter())).all()
                 db.session.commit()
                 outbound = [(item.device_id, item.command_id, item.command_type, item.payload) for item in pending]

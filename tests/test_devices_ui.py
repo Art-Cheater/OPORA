@@ -1,6 +1,9 @@
 from cryptography.fernet import Fernet
 
 from app.extensions import db
+from datetime import timedelta
+from pathlib import Path
+
 from app.models.base import utcnow
 from app.models.auth.permission import Permission
 from app.models.auth.role import Role
@@ -16,7 +19,7 @@ def _login(client, email="admin@opora.ru", password="admin123"):
 def _device(app, key="ipp-001"):
     with app.app_context():
         app.config["DEVICE_SECRET_ENCRYPTION_KEY"] = Fernet.generate_key().decode()
-        device = Device(name="Плата котельной №1", device_id=key, secret_encrypted="placeholder")
+        device = Device(name="Плата котельной №1", device_id=key, secret_encrypted="placeholder", connection_state="online")
         db.session.add(device)
         db.session.commit()
         return str(device.id)
@@ -105,6 +108,7 @@ def test_switch_commands_serialize_and_keep_actual_state_unchanged(app, admin_cl
         command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.device_id == device_id))
         command.status = "acknowledged"
         command.acknowledged_at = utcnow()
+        command.state_confirmed_at = utcnow()
         db.session.commit()
     all_off = admin_client.post(f"/devices/{device_id}/commands", data={"action": "all_off"})
     assert all_off.status_code == 302
@@ -114,7 +118,7 @@ def test_switch_commands_serialize_and_keep_actual_state_unchanged(app, admin_cl
 
 
 def test_terminal_command_statuses_release_device_queue(app, admin_client):
-    for index, terminal_status in enumerate(("acknowledged", "failed", "timeout"), start=1):
+    for index, terminal_status in enumerate(("failed", "timeout"), start=1):
         device_id = _device(app, key=f"ipp-{index:03d}")
         assert admin_client.post(f"/devices/{device_id}/commands", data={"relay": "C7", "value": "1"}).status_code == 302
         with app.app_context():
@@ -124,12 +128,51 @@ def test_terminal_command_statuses_release_device_queue(app, admin_client):
         assert admin_client.post(f"/devices/{device_id}/commands", data={"relay": "C8", "value": "0"}).status_code == 302
 
 
+def test_acknowledged_command_requires_state_confirmation_then_releases(app, admin_client):
+    device_id = _device(app)
+    assert admin_client.post(f"/devices/{device_id}/commands", data={"relay": "C6", "value": "1"}).status_code == 302
+    with app.app_context():
+        command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.device_id == device_id))
+        command.status = "acknowledged"
+        command.acknowledged_at = utcnow()
+        db.session.commit()
+    blocked = admin_client.post(f"/devices/{device_id}/commands", data={"relay": "C7", "value": "1"})
+    assert blocked.status_code == 409
+    with app.app_context():
+        command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.device_id == device_id))
+        command.state_confirmed_at = utcnow()
+        db.session.commit()
+    assert admin_client.post(f"/devices/{device_id}/commands", data={"relay": "C7", "value": "1"}).status_code == 302
+
+
+def test_state_confirmation_timeout_releases_controls_and_reports_reason(app, admin_client):
+    device_id = _device(app)
+    with app.app_context():
+        app.config["DEVICE_STATE_CONFIRM_TIMEOUT_SECONDS"] = 5
+        device = db.session.get(Device, device_id)
+        command = DeviceCommand(
+            device_id=device.id,
+            command_type="switch",
+            payload={"C6": 1},
+            status="acknowledged",
+            acknowledged_at=utcnow() - timedelta(seconds=6),
+        )
+        db.session.add(command)
+        db.session.commit()
+    payload = admin_client.get("/devices/status").get_json()["devices"][0]
+    assert payload["active_command"] is None
+    assert payload["can_send_command"] is True
+    assert payload["latest_command"]["status"] == "failed"
+    assert payload["latest_command"]["error"] == "State confirmation timeout"
+    assert admin_client.post(f"/devices/{device_id}/commands", data={"relay": "C7", "value": "1"}).status_code == 302
+
+
 def test_devices_status_api_reports_state_telemetry_and_active_command(app, admin_client):
     device_id = _device(app)
     with app.app_context():
         device = db.session.get(Device, device_id)
         device.connection_state = "online"
-        device.actual_state = {"C6": 1, "C7": 0, "C8": 1, "phases": {"A": 1, "B": 0}}
+        device.actual_state = {"outputs": {"C6": 1, "C7": 0, "C8": 1}, "inputs": {"SW2": 0}, "raw": {"G1": 1}}
         device.telemetry = {"csq": 20, "voltage": 231}
         device.last_state_at = utcnow()
         db.session.add(DeviceCommand(device_id=device.id, command_type="switch", payload={"C6": 1}))
@@ -139,9 +182,31 @@ def test_devices_status_api_reports_state_telemetry_and_active_command(app, admi
     assert response.status_code == 200
     payload = response.get_json()["devices"][0]
     assert payload["actual_state"]["outputs"] == {"C6": 1, "C7": 0, "C8": 1}
-    assert payload["actual_state"]["phases"] == {"A": 1, "B": 0}
+    assert payload["actual_state"]["inputs"] == {"SW2": 0}
+    assert payload["actual_state"]["raw"] == {"G1": 1}
     assert payload["telemetry"]["csq"] == 20
     assert payload["active_command"]["status"] == "pending"
+    assert payload["can_send_command"] is False
+    assert payload["command_block_reason"] == "Выполняется другая команда."
+
+
+def test_status_contract_blocks_offline_and_frontend_uses_backend_decision(app, admin_client):
+    device_id = _device(app)
+    with app.app_context():
+        device = db.session.get(Device, device_id)
+        device.connection_state = "offline"
+        db.session.commit()
+    payload = admin_client.get("/devices/status").get_json()["devices"][0]
+    assert {
+        "device_id", "connection_state", "last_seen_at", "last_state_at", "last_ip",
+        "desired_state", "actual_state", "telemetry", "active_command",
+        "can_send_command", "command_block_reason",
+    } <= payload.keys()
+    assert payload["can_send_command"] is False
+    assert payload["command_block_reason"] == "Плата OFFLINE."
+    script = Path("app/static/js/devices.js").read_text(encoding="utf-8")
+    assert "const locked = !device.can_send_command;" in script
+    assert "waitingForState" not in script
 
 
 def test_view_only_user_cannot_manage_devices(app, client):

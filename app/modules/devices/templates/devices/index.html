@@ -8,13 +8,6 @@
     {% else %}<span class="text-muted">Нет данных</span>{% endif %}
 {%- endmacro %}
 
-{% macro phase_badge(value, stale=false) -%}
-    {% if stale %}<span class="badge text-bg-secondary">НЕТ ДАННЫХ</span>
-    {% elif value is sameas true or value == 1 %}<span class="badge text-bg-success">ЕСТЬ</span>
-    {% elif value is sameas false or value == 0 %}<span class="badge text-bg-danger">НЕТ</span>
-    {% else %}<span class="badge text-bg-secondary">НЕТ ДАННЫХ</span>{% endif %}
-{%- endmacro %}
-
 {% block title %}Удалённые платы — {{ app_name }}{% endblock %}
 {% block page_header %}
 {% call page_header("Удалённые платы", "Фактическое состояние поступает только от физического контроллера", "cpu") %}
@@ -62,15 +55,11 @@
                     </tbody></table>
                 </div>
                 <div class="col-lg-4">
-                    <h6>Фазы</h6>
-                    <div class="d-flex gap-2 flex-wrap">
-                    {% for phase in ['A', 'B', 'C'] %}
-                        <div class="border rounded px-3 py-2 text-center"><strong>{{ phase }}</strong><div data-phase="{{ phase }}">{{ phase_badge(actual.get('phases', {}).get(phase), status.state_stale) }}</div></div>
-                    {% endfor %}
-                    </div>
+                    <h6>Сырые входы</h6>
+                    <details data-raw-inputs><summary>Показать сигналы платы</summary><dl class="small mt-2 mb-0" data-raw-inputs-list>{% if actual.get('inputs') or actual.get('raw') %}{% for key, value in actual.get('inputs', {}).items() %}<div><dt class="d-inline">{{ key }}:</dt> <dd class="d-inline">{{ value }}</dd></div>{% endfor %}{% for key, value in actual.get('raw', {}).items() %}<div><dt class="d-inline">{{ key }}:</dt> <dd class="d-inline">{{ value }}</dd></div>{% endfor %}{% else %}<span class="text-muted">Нет данных</span>{% endif %}</dl></details>
                 </div>
                 <div class="col-lg-3">
-                    <h6>Telemetry</h6>
+                    <h6>Телеметрия</h6>
                     <dl class="small mb-0" data-telemetry>
                     {% for key, value in status.telemetry.items() %}<div><dt class="d-inline">{{ key }}:</dt> <dd class="d-inline">{{ value }}</dd></div>{% else %}<span class="text-muted">Нет данных</span>{% endfor %}
                     </dl>
@@ -86,20 +75,17 @@
             </div>
 
             {% if current_user.has_permission('devices.manage') %}
-            <div data-device-controls class="d-flex flex-wrap align-items-center gap-2" {% if status.active_command or not config.DEVICE_COMMANDS_ENABLED or not device.enabled %}data-locked="1"{% endif %}>
-                {% if not config.DEVICE_COMMANDS_ENABLED %}
-                    <span class="text-warning">Отправка команд отключена в этом окружении.</span>
-                {% elif not device.enabled %}
-                    <span class="text-muted">Плата деактивирована.</span>
-                {% else %}
+            <div data-device-controls class="d-flex flex-wrap align-items-center gap-2" {% if not status.can_send_command %}data-locked="1"{% endif %}>
+                <span class="small text-muted" data-command-block-reason {% if not status.command_block_reason %}hidden{% endif %}>{{ status.command_block_reason or '' }}</span>
+                {% if device.enabled %}
                     {% for relay in ['C6', 'C7', 'C8'] %}
                     <span class="fw-semibold ms-1">{{ relay }}</span>
-                    <form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" data-device-command-form class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="relay" value="{{ relay }}"><input type="hidden" name="value" value="1"><button class="btn btn-sm btn-success" {% if status.active_command %}disabled{% endif %}>Включить</button></form>
-                    <form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" data-device-command-form class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="relay" value="{{ relay }}"><input type="hidden" name="value" value="0"><button class="btn btn-sm btn-outline-secondary" {% if status.active_command %}disabled{% endif %}>Выключить</button></form>
+                    <form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" data-device-command-form class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="relay" value="{{ relay }}"><input type="hidden" name="value" value="1"><button class="btn btn-sm btn-success" {% if not status.can_send_command %}disabled{% endif %}>Включить</button></form>
+                    <form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" data-device-command-form class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="relay" value="{{ relay }}"><input type="hidden" name="value" value="0"><button class="btn btn-sm btn-outline-secondary" {% if not status.can_send_command %}disabled{% endif %}>Выключить</button></form>
                     {% endfor %}
                     <span class="vr mx-1"></span>
-                    <form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" data-device-command-form data-confirm-message="Включить все три выхода?" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="all_on"><button class="btn btn-sm btn-primary" {% if status.active_command %}disabled{% endif %}>Включить всё</button></form>
-                    <form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" data-device-command-form class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="all_off"><button class="btn btn-sm btn-outline-danger" {% if status.active_command %}disabled{% endif %}>Выключить всё</button></form>
+                    <form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" data-device-command-form data-confirm-message="Включить все три выхода?" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="all_on"><button class="btn btn-sm btn-primary" {% if not status.can_send_command %}disabled{% endif %}>Включить всё</button></form>
+                    <form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" data-device-command-form class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="all_off"><button class="btn btn-sm btn-outline-danger" {% if not status.can_send_command %}disabled{% endif %}>Выключить всё</button></form>
                 {% endif %}
             </div>
             {% endif %}

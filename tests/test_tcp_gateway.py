@@ -26,6 +26,9 @@ class _GatewayWriter:
     def close(self):
         self.closed = True
 
+    def is_closing(self):
+        return self.closed
+
     async def wait_closed(self):
         return None
 
@@ -144,3 +147,65 @@ def test_gateway_state_is_the_only_actual_source_and_confirms_acknowledged_comma
         assert device.telemetry == {"csq": 20}
         assert device.last_state_at is not None
         assert command.state_confirmed_at is not None
+
+
+def test_gateway_dispatches_one_exact_multi_output_command(app):
+    _gateway_device(app)
+    gateway = Gateway(app)
+    writer = _GatewayWriter()
+    with app.app_context():
+        app.config["DEVICE_COMMAND_POLL_SECONDS"] = 0.01
+        device = db.session.scalar(db.select(Device).where(Device.device_id == "board-01"))
+        command = DeviceCommand(
+            device_id=device.id,
+            command_type="switch",
+            payload={"C6": 1, "C7": 1, "C8": 1},
+        )
+        db.session.add(command)
+        db.session.commit()
+        command_id = command.command_id
+    gateway.connections["board-01"] = writer
+
+    async def dispatch_once():
+        task = asyncio.create_task(gateway.dispatch_commands())
+        while not writer.frames:
+            await asyncio.sleep(0.005)
+        gateway.stopping.set()
+        await task
+
+    asyncio.run(dispatch_once())
+    assert writer.frames == [
+        {
+            "type": "command",
+            "command_id": command_id,
+            "command": "switch",
+            "payload": {"C6": 1, "C7": 1, "C8": 1},
+        }
+    ]
+    with app.app_context():
+        command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.command_id == command_id))
+        assert command.status == "sent"
+
+
+def test_gateway_accepts_new_state_shape_without_phases_and_preserves_raw_values(app):
+    _gateway_device(app)
+    gateway = Gateway(app)
+    gateway._set_connection(
+        "board-01",
+        "online",
+        actual={
+            "outputs": {"C6": 1, "C7": 0, "C8": 1},
+            "inputs": {"SW2": 0, "REF": 1},
+            "raw": {"G1": 1, "opaque": {"value": 42}},
+        },
+        telemetry={"csq": 20, "uptime_s": 12345, "custom": "ok"},
+    )
+    with app.app_context():
+        device = db.session.scalar(db.select(Device).where(Device.device_id == "board-01"))
+        assert device.actual_state == {
+            "outputs": {"C6": 1, "C7": 0, "C8": 1},
+            "inputs": {"SW2": 0, "REF": 1},
+            "raw": {"G1": 1, "opaque": {"value": 42}},
+        }
+        assert device.telemetry == {"csq": 20, "uptime_s": 12345, "custom": "ok"}
+        assert device.last_state_at is not None

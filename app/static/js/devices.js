@@ -9,15 +9,6 @@
             : '<span class="badge text-bg-secondary">ВЫКЛ</span>';
     }
 
-    function phaseBadge(value, stale) {
-        if (stale || value === undefined || value === null) {
-            return '<span class="badge text-bg-secondary">НЕТ ДАННЫХ</span>';
-        }
-        return Number(value) === 1 || value === true
-            ? '<span class="badge text-bg-success">ЕСТЬ</span>'
-            : '<span class="badge text-bg-danger">НЕТ</span>';
-    }
-
     function formatDate(value) {
         if (!value) return '—';
         const date = new Date(value);
@@ -60,11 +51,32 @@
         });
     }
 
+    function renderValues(container, groups) {
+        container.replaceChildren();
+        const entries = Object.entries(groups?.inputs || {}).concat(Object.entries(groups?.raw || {}));
+        if (!entries.length) {
+            container.textContent = 'Нет данных';
+            container.classList.add('text-muted');
+            return;
+        }
+        container.classList.remove('text-muted');
+        entries.forEach(([key, value]) => {
+            const row = document.createElement('div');
+            const label = document.createElement('dt');
+            const data = document.createElement('dd');
+            label.className = 'd-inline';
+            data.className = 'd-inline';
+            label.textContent = `${key}:`;
+            data.textContent = ` ${typeof value === 'object' ? JSON.stringify(value) : value}`;
+            row.append(label, data);
+            container.append(row);
+        });
+    }
+
     function renderCard(card, device, commandsEnabled, canManage) {
         const stale = Boolean(device.state_stale);
         const outputs = device.actual_state?.outputs || {};
         const desired = device.desired_state?.outputs || {};
-        const phases = device.actual_state?.phases || {};
         const online = card.querySelector('[data-device-online]');
         online.textContent = device.connection_state === 'online' ? 'ONLINE' : 'OFFLINE';
         online.className = `badge ${device.connection_state === 'online' ? 'text-bg-success' : 'text-bg-secondary'}`;
@@ -75,18 +87,18 @@
             card.querySelector(`[data-output="${relay}"]`).innerHTML = valueBadge(outputs[relay], stale);
             card.querySelector(`[data-desired="${relay}"]`).textContent = desired[relay] ?? '—';
         });
-        ['A', 'B', 'C'].forEach((phase) => {
-            card.querySelector(`[data-phase="${phase}"]`).innerHTML = phaseBadge(phases[phase], stale);
-        });
         renderTelemetry(card.querySelector('[data-telemetry]'), device.telemetry);
+        renderValues(card.querySelector('[data-raw-inputs-list]'), device.actual_state);
 
         const status = card.querySelector('[data-command-status]');
         status.innerHTML = commandMessage(device.active_command, device.latest_command);
         status.className = `alert py-2 mt-3 mb-3 ${device.active_command ? 'alert-warning' : device.latest_command?.confirmation === 'mismatch' || device.latest_command?.status === 'failed' || device.latest_command?.status === 'timeout' ? 'alert-danger' : 'alert-light'}`;
 
         if (!canManage) return;
-        const waitingForState = device.latest_command?.status === 'acknowledged' && !device.latest_command?.state_confirmed_at;
-        const locked = !commandsEnabled || Boolean(device.active_command) || waitingForState;
+        const locked = !device.can_send_command;
+        const reason = card.querySelector('[data-command-block-reason]');
+        reason.textContent = device.command_block_reason || '';
+        reason.hidden = !device.command_block_reason;
         card.querySelectorAll('[data-device-command-form] button').forEach((button) => {
             button.disabled = locked;
         });
