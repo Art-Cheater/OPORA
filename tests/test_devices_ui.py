@@ -1,6 +1,7 @@
 from cryptography.fernet import Fernet
 
 from app.extensions import db
+from app.models.base import utcnow
 from app.models.auth.permission import Permission
 from app.models.auth.role import Role
 from app.models.auth.associations import RolePermission
@@ -74,6 +75,73 @@ def test_switch_commands_are_single_relay_and_staging_guard(app, admin_client):
         app.config["DEVICE_COMMANDS_ENABLED"] = False
     blocked = admin_client.post(f"/devices/{device_id}/commands", data={"relay": "C6", "value": "0"})
     assert blocked.status_code == 403
+
+
+def test_switch_commands_serialize_and_keep_actual_state_unchanged(app, admin_client):
+    device_id = _device(app)
+    with app.app_context():
+        device = db.session.get(Device, device_id)
+        device.actual_state = {"outputs": {"C6": 0, "C7": 0, "C8": 0}}
+        device.last_state_at = utcnow()
+        db.session.commit()
+
+    all_on = admin_client.post(
+        f"/devices/{device_id}/commands",
+        data={"action": "all_on"},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert all_on.status_code == 201
+    with app.app_context():
+        device = db.session.get(Device, device_id)
+        command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.device_id == device.id))
+        assert command.payload == {"C6": 1, "C7": 1, "C8": 1}
+        assert device.actual_state["outputs"] == {"C6": 0, "C7": 0, "C8": 0}
+        assert device.desired_state["outputs"] == {"C6": 1, "C7": 1, "C8": 1}
+    page = admin_client.get("/devices/")
+    assert 'data-locked="1"' in page.get_data(as_text=True)
+
+    assert admin_client.post(f"/devices/{device_id}/commands", data={"action": "all_off"}).status_code == 409
+    with app.app_context():
+        command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.device_id == device_id))
+        command.status = "acknowledged"
+        command.acknowledged_at = utcnow()
+        db.session.commit()
+    all_off = admin_client.post(f"/devices/{device_id}/commands", data={"action": "all_off"})
+    assert all_off.status_code == 302
+    with app.app_context():
+        commands = db.session.scalars(db.select(DeviceCommand).order_by(DeviceCommand.created_at)).all()
+        assert commands[-1].payload == {"C6": 0, "C7": 0, "C8": 0}
+
+
+def test_terminal_command_statuses_release_device_queue(app, admin_client):
+    for index, terminal_status in enumerate(("acknowledged", "failed", "timeout"), start=1):
+        device_id = _device(app, key=f"ipp-{index:03d}")
+        assert admin_client.post(f"/devices/{device_id}/commands", data={"relay": "C7", "value": "1"}).status_code == 302
+        with app.app_context():
+            first = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.device_id == device_id))
+            first.status = terminal_status
+            db.session.commit()
+        assert admin_client.post(f"/devices/{device_id}/commands", data={"relay": "C8", "value": "0"}).status_code == 302
+
+
+def test_devices_status_api_reports_state_telemetry_and_active_command(app, admin_client):
+    device_id = _device(app)
+    with app.app_context():
+        device = db.session.get(Device, device_id)
+        device.connection_state = "online"
+        device.actual_state = {"C6": 1, "C7": 0, "C8": 1, "phases": {"A": 1, "B": 0}}
+        device.telemetry = {"csq": 20, "voltage": 231}
+        device.last_state_at = utcnow()
+        db.session.add(DeviceCommand(device_id=device.id, command_type="switch", payload={"C6": 1}))
+        db.session.commit()
+
+    response = admin_client.get("/devices/status")
+    assert response.status_code == 200
+    payload = response.get_json()["devices"][0]
+    assert payload["actual_state"]["outputs"] == {"C6": 1, "C7": 0, "C8": 1}
+    assert payload["actual_state"]["phases"] == {"A": 1, "B": 0}
+    assert payload["telemetry"]["csq"] == 20
+    assert payload["active_command"]["status"] == "pending"
 
 
 def test_view_only_user_cannot_manage_devices(app, client):

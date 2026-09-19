@@ -1,9 +1,113 @@
 {% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header %}
-{% macro relay_state(device, relay) -%}{% set value = (device.actual_state or {}).get(relay) %}{% if value is sameas true or value == 1 %}<span class="badge text-bg-success">ВКЛ</span>{% elif value is sameas false or value == 0 %}<span class="badge text-bg-secondary">ВЫКЛ</span>{% else %}<span class="text-muted">—</span>{% endif %}{%- endmacro %}
+
+{% macro state_badge(value, stale=false) -%}
+    {% if stale %}<span class="text-muted">Нет данных</span>
+    {% elif value is sameas true or value == 1 %}<span class="badge text-bg-success">ВКЛ</span>
+    {% elif value is sameas false or value == 0 %}<span class="badge text-bg-secondary">ВЫКЛ</span>
+    {% else %}<span class="text-muted">Нет данных</span>{% endif %}
+{%- endmacro %}
+
+{% macro phase_badge(value, stale=false) -%}
+    {% if stale %}<span class="badge text-bg-secondary">НЕТ ДАННЫХ</span>
+    {% elif value is sameas true or value == 1 %}<span class="badge text-bg-success">ЕСТЬ</span>
+    {% elif value is sameas false or value == 0 %}<span class="badge text-bg-danger">НЕТ</span>
+    {% else %}<span class="badge text-bg-secondary">НЕТ ДАННЫХ</span>{% endif %}
+{%- endmacro %}
+
 {% block title %}Удалённые платы — {{ app_name }}{% endblock %}
-{% block page_header %}{% call page_header("Удалённые платы", "Управление контроллерами IPP, подключёнными к OPORA Gateway", "cpu") %}{% if current_user.has_permission('devices.manage') %}<a class="btn btn-primary" href="{{ url_for('devices.create') }}"><i class="bi bi-plus-lg"></i> Добавить плату</a>{% endif %}{% endcall %}{% endblock %}
-{% block content %}
-{% if not devices %}<div class="card"><div class="card-body text-center py-5"><i class="bi bi-cpu fs-1 text-muted"></i><h4 class="mt-3">Удалённые платы ещё не добавлены.</h4><p class="text-muted">Добавьте контроллер, чтобы OPORA Gateway мог его авторизовать.</p>{% if current_user.has_permission('devices.manage') %}<a class="btn btn-primary" href="{{ url_for('devices.create') }}"><i class="bi bi-plus-lg"></i> Добавить первую плату</a>{% endif %}</div></div>
-{% else %}<div class="card"><div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Название</th><th>Device ID</th><th>Статус</th><th>Последняя связь</th><th>IP</th><th>C6</th><th>C7</th><th>C8</th><th>Действия</th></tr></thead><tbody>{% for device in devices %}<tr><td><strong>{{ device.name }}</strong>{% if not device.enabled %}<div><span class="badge text-bg-secondary">Неактивна</span></div>{% endif %}</td><td><code>{{ device.device_id }}</code></td><td>{% if device.connection_state == 'online' %}<span class="badge text-bg-success">ONLINE</span>{% else %}<span class="badge text-bg-secondary">OFFLINE</span>{% endif %}</td><td>{{ device.last_seen_at|local_dt if device.last_seen_at else '—' }}</td><td>{{ device.last_ip or '—' }}</td><td>{{ relay_state(device, 'C6') }}</td><td>{{ relay_state(device, 'C7') }}</td><td>{{ relay_state(device, 'C8') }}</td><td class="text-nowrap">{% if current_user.has_permission('devices.manage') %}<a href="{{ url_for('devices.edit', device_id=device.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a><form class="d-inline" method="post" action="{{ url_for('devices.delete', device_id=device.id) }}" onsubmit="return confirm('Деактивировать и удалить плату из списка?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form>{% endif %}</td></tr>{% if current_user.has_permission('devices.manage') %}<tr><td colspan="9"><div class="d-flex flex-wrap align-items-center gap-2"><strong>Управление:</strong>{% if not config.DEVICE_COMMANDS_ENABLED %}<span class="text-warning">Отправка команд отключена в этом окружении.</span>{% elif not device.enabled %}<span class="text-muted">Плата деактивирована.</span>{% else %}{% for relay in ['C6','C7','C8'] %}<span>{{ relay }}</span><form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="relay" value="{{ relay }}"><input type="hidden" name="value" value="1"><button class="btn btn-sm btn-success">Включить</button></form><form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="relay" value="{{ relay }}"><input type="hidden" name="value" value="0"><button class="btn btn-sm btn-outline-secondary">Выключить</button></form>{% endfor %}{% endif %}</div>{% if commands_by_device.get(device.id) %}<details class="mt-2"><summary>Последние команды</summary><ul class="small mb-0">{% for command in commands_by_device[device.id] %}<li><code>{{ command.command_type }}</code> {{ command.payload }} — <strong>{{ command.status }}</strong>, {{ command.created_at|local_dt }}{% if command.error %}: {{ command.error }}{% endif %}</li>{% endfor %}</ul></details>{% endif %}</td></tr>{% endif %}{% endfor %}</tbody></table></div></div>{% endif %}
+{% block page_header %}
+{% call page_header("Удалённые платы", "Фактическое состояние поступает только от физического контроллера", "cpu") %}
+    {% if current_user.has_permission('devices.manage') %}
+    <a class="btn btn-primary" href="{{ url_for('devices.create') }}"><i class="bi bi-plus-lg"></i> Добавить плату</a>
+    {% endif %}
+{% endcall %}
 {% endblock %}
+
+{% block content %}
+<section id="devicesRoot" data-devices-root data-status-url="{{ url_for('devices.status') }}" data-can-manage="{{ '1' if current_user.has_permission('devices.manage') else '0' }}">
+{% if not devices %}
+    <div class="card"><div class="card-body text-center py-5">
+        <i class="bi bi-cpu fs-1 text-muted"></i>
+        <h4 class="mt-3">Удалённые платы ещё не добавлены.</h4>
+        <p class="text-muted">Добавьте контроллер, чтобы OPORA Gateway мог его авторизовать.</p>
+        {% if current_user.has_permission('devices.manage') %}<a class="btn btn-primary" href="{{ url_for('devices.create') }}">Добавить первую плату</a>{% endif %}
+    </div></div>
+{% else %}
+    {% for device in devices %}
+    {% set status = status_by_device[device.id] %}
+    {% set actual = status.actual_state %}
+    <article class="card mb-4" data-device-card data-device-id="{{ device.id }}">
+        <div class="card-header d-flex flex-wrap align-items-center gap-2 justify-content-between">
+            <div><strong>{{ device.name }}</strong> <code class="ms-1">{{ device.device_id }}</code></div>
+            <div class="d-flex align-items-center gap-2">
+                <span data-device-online class="badge {{ 'text-bg-success' if status.connection_state == 'online' else 'text-bg-secondary' }}">{{ 'ONLINE' if status.connection_state == 'online' else 'OFFLINE' }}</span>
+                {% if current_user.has_permission('devices.manage') %}
+                <a href="{{ url_for('devices.edit', device_id=device.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i> Изменить</a>
+                <form method="post" action="{{ url_for('devices.delete', device_id=device.id) }}" class="d-inline" onsubmit="return confirm('Деактивировать и удалить плату из списка?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="small text-muted mb-3">Последняя связь: <span data-last-seen>{{ device.last_seen_at|local_dt if device.last_seen_at else '—' }}</span> · IP: <span data-last-ip>{{ device.last_ip or '—' }}</span> · Последний state: <span data-last-state>{{ device.last_state_at|local_dt if device.last_state_at else '—' }}</span></div>
+            <div class="row g-3">
+                <div class="col-lg-5">
+                    <h6>Фактические выходы</h6>
+                    <table class="table table-sm mb-0"><tbody>
+                    {% for relay in ['C6', 'C7', 'C8'] %}
+                        <tr><th>{{ relay }}</th><td data-output="{{ relay }}">{{ state_badge(actual.outputs.get(relay), status.state_stale) }}</td><td class="text-muted small">Требуется: <span data-desired="{{ relay }}">{{ status.desired_state.outputs.get(relay, '—') }}</span></td></tr>
+                    {% endfor %}
+                    </tbody></table>
+                </div>
+                <div class="col-lg-4">
+                    <h6>Фазы</h6>
+                    <div class="d-flex gap-2 flex-wrap">
+                    {% for phase in ['A', 'B', 'C'] %}
+                        <div class="border rounded px-3 py-2 text-center"><strong>{{ phase }}</strong><div data-phase="{{ phase }}">{{ phase_badge(actual.get('phases', {}).get(phase), status.state_stale) }}</div></div>
+                    {% endfor %}
+                    </div>
+                </div>
+                <div class="col-lg-3">
+                    <h6>Telemetry</h6>
+                    <dl class="small mb-0" data-telemetry>
+                    {% for key, value in status.telemetry.items() %}<div><dt class="d-inline">{{ key }}:</dt> <dd class="d-inline">{{ value }}</dd></div>{% else %}<span class="text-muted">Нет данных</span>{% endfor %}
+                    </dl>
+                </div>
+            </div>
+
+            <div class="alert {{ 'alert-warning' if status.active_command else 'alert-light' }} py-2 mt-3 mb-3" data-command-status aria-live="polite">
+                {% if status.active_command %}<span class="spinner-border spinner-border-sm me-2"></span>Выполняется команда…
+                {% elif status.latest_command and status.latest_command.confirmation == 'mismatch' %}Команда подтверждена, но state не соответствует требуемому состоянию.
+                {% elif status.latest_command and status.latest_command.confirmation == 'waiting_state' %}Команда подтверждена. Ожидание нового state от платы.
+                {% elif status.latest_command and status.latest_command.confirmation == 'confirmed' %}Выполнено: состояние подтверждено платой.
+                {% else %}Нет выполняемых команд.{% endif %}
+            </div>
+
+            {% if current_user.has_permission('devices.manage') %}
+            <div data-device-controls class="d-flex flex-wrap align-items-center gap-2" {% if status.active_command or not config.DEVICE_COMMANDS_ENABLED or not device.enabled %}data-locked="1"{% endif %}>
+                {% if not config.DEVICE_COMMANDS_ENABLED %}
+                    <span class="text-warning">Отправка команд отключена в этом окружении.</span>
+                {% elif not device.enabled %}
+                    <span class="text-muted">Плата деактивирована.</span>
+                {% else %}
+                    {% for relay in ['C6', 'C7', 'C8'] %}
+                    <span class="fw-semibold ms-1">{{ relay }}</span>
+                    <form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" data-device-command-form class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="relay" value="{{ relay }}"><input type="hidden" name="value" value="1"><button class="btn btn-sm btn-success" {% if status.active_command %}disabled{% endif %}>Включить</button></form>
+                    <form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" data-device-command-form class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="relay" value="{{ relay }}"><input type="hidden" name="value" value="0"><button class="btn btn-sm btn-outline-secondary" {% if status.active_command %}disabled{% endif %}>Выключить</button></form>
+                    {% endfor %}
+                    <span class="vr mx-1"></span>
+                    <form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" data-device-command-form data-confirm-message="Включить все три выхода?" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="all_on"><button class="btn btn-sm btn-primary" {% if status.active_command %}disabled{% endif %}>Включить всё</button></form>
+                    <form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" data-device-command-form class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="all_off"><button class="btn btn-sm btn-outline-danger" {% if status.active_command %}disabled{% endif %}>Выключить всё</button></form>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </article>
+    {% endfor %}
+{% endif %}
+</section>
+{% endblock %}
+
+{% block extra_js %}{{ super() }}<script src="{{ static_url('js/devices.js') }}"></script>{% endblock %}

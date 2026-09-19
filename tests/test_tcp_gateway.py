@@ -110,3 +110,37 @@ def test_gateway_rejects_unknown_disabled_and_invalid_hmac_devices(app):
     _gateway_device(app, device_id="board-02", secret="other-secret")
     assert [frame["type"] for frame in asyncio.run(_authenticate(Gateway(app), "unknown", secret))] == ["challenge"]
     assert [frame["type"] for frame in asyncio.run(_authenticate(Gateway(app), "board-02", secret))] == ["challenge"]
+
+
+def test_gateway_state_is_the_only_actual_source_and_confirms_acknowledged_command(app):
+    secret = _gateway_device(app)
+    gateway = Gateway(app)
+    with app.app_context():
+        device = db.session.scalar(db.select(Device).where(Device.device_id == "board-01"))
+        device.actual_state = {"outputs": {"C6": 0}}
+        command = DeviceCommand(device_id=device.id, command_type="switch", payload={"C6": 1}, status="sent")
+        db.session.add(command)
+        db.session.commit()
+        command_id = command.command_id
+
+    gateway._ack("board-01", command_id, True, "")
+    with app.app_context():
+        device = db.session.scalar(db.select(Device).where(Device.device_id == "board-01"))
+        command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.command_id == command_id))
+        assert command.status == "acknowledged"
+        assert command.state_confirmed_at is None
+        assert device.actual_state == {"outputs": {"C6": 0}}
+
+    gateway._set_connection(
+        "board-01",
+        "online",
+        actual={"C6": 1, "phases": {"A": 1, "B": 0, "C": 1}, "inputs": {"door": 0}},
+        telemetry={"csq": 20},
+    )
+    with app.app_context():
+        device = db.session.scalar(db.select(Device).where(Device.device_id == "board-01"))
+        command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.command_id == command_id))
+        assert device.actual_state == {"outputs": {"C6": 1}, "phases": {"A": 1, "B": 0, "C": 1}, "inputs": {"door": 0}}
+        assert device.telemetry == {"csq": 20}
+        assert device.last_state_at is not None
+        assert command.state_confirmed_at is not None

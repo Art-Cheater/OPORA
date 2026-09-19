@@ -13,8 +13,9 @@ from flask import Flask
 
 from app import create_app
 from app.extensions import db
-from app.models.base import utcnow
+from app.models.base import as_utc_aware, utcnow
 from app.models.devices import Device, DeviceCommand
+from app.models.devices.state import normalize_actual_state, payload_matches_actual
 from app.tcp_gateway.protocol import decode_frame, encode_frame, hmac_matches, new_nonce
 from app.tcp_gateway.secrets import decrypt_device_secret
 
@@ -38,16 +39,38 @@ class Gateway:
                 return None
             return decrypt_device_secret(device.secret_encrypted)
 
-    def _set_connection(self, device_id: str, state: str, peer: str | None = None, actual: dict[str, Any] | None = None) -> None:
+    def _set_connection(
+        self,
+        device_id: str,
+        state: str,
+        peer: str | None = None,
+        actual: dict[str, Any] | None = None,
+        telemetry: dict[str, Any] | None = None,
+    ) -> None:
         with self.app.app_context():
             device = db.session.scalar(db.select(Device).where(Device.device_id == device_id, Device.active_filter()))
             if device:
+                now = utcnow()
                 device.connection_state = state
-                device.last_seen_at = utcnow()
+                device.last_seen_at = now
                 if peer:
                     device.last_ip = peer
                 if actual is not None:
-                    device.actual_state = actual
+                    device.actual_state = normalize_actual_state(actual)
+                    device.last_state_at = now
+                    awaiting_confirmation = db.session.scalars(
+                        db.select(DeviceCommand).where(
+                            DeviceCommand.device_id == device.id,
+                            DeviceCommand.status == "acknowledged",
+                            DeviceCommand.state_confirmed_at.is_(None),
+                            DeviceCommand.active_filter(),
+                        )
+                    ).all()
+                    for command in awaiting_confirmation:
+                        if payload_matches_actual(command.payload, device.actual_state):
+                            command.state_confirmed_at = now
+                if isinstance(telemetry, dict):
+                    device.telemetry = telemetry
                 db.session.commit()
 
     async def _send(self, writer: asyncio.StreamWriter, payload: dict[str, Any]) -> None:
@@ -89,7 +112,14 @@ class Gateway:
                     self._set_connection(device_id, "online", peer_ip)
                 elif kind == "state":
                     state = frame.get("actual")
-                    self._set_connection(device_id, "online", peer_ip, state if isinstance(state, dict) else None)
+                    telemetry = frame.get("telemetry")
+                    self._set_connection(
+                        device_id,
+                        "online",
+                        peer_ip,
+                        state if isinstance(state, dict) else None,
+                        telemetry if isinstance(telemetry, dict) else None,
+                    )
                 elif kind == "ack":
                     self._ack(device_id, str(frame.get("command_id") or ""), bool(frame.get("ok", True)), str(frame.get("error") or "")[:500])
         except (ConnectionError, asyncio.IncompleteReadError, ValueError, TimeoutError):
@@ -112,6 +142,14 @@ class Gateway:
                 command.acknowledged_at = utcnow() if success else None
                 command.failed_at = utcnow() if not success else None
                 command.error = error or None
+                device = db.session.get(Device, command.device_id)
+                state_is_newer = (
+                    device is not None
+                    and device.last_state_at is not None
+                    and as_utc_aware(device.last_state_at) >= as_utc_aware(command.created_at)
+                )
+                if success and state_is_newer and payload_matches_actual(command.payload, device.actual_state):
+                    command.state_confirmed_at = utcnow()
                 db.session.commit()
 
     async def dispatch_commands(self) -> None:
