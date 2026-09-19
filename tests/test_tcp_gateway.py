@@ -1,11 +1,12 @@
 import asyncio
+import json
 
 from cryptography.fernet import Fernet
 
 from app.extensions import db
 from app.models.devices import Device, DeviceCommand
 from app.tcp_gateway.main import Gateway
-from app.tcp_gateway.protocol import calculate_hmac, decode_frame, encode_frame, hmac_matches, new_nonce
+from app.tcp_gateway.protocol import calculate_hmac, decode_frame, decode_v2_frame, encode_frame, encode_v2_frame, hmac_matches, new_nonce, parse_v2_state
 from app.tcp_gateway.secrets import encrypt_device_secret
 
 
@@ -33,6 +34,11 @@ class _GatewayWriter:
         return None
 
 
+class _TextGatewayWriter(_GatewayWriter):
+    def write(self, data):
+        self.frames.append(data.decode("ascii").strip())
+
+
 async def _authenticate(gateway, device_id: str, secret: str):
     reader = asyncio.StreamReader()
     writer = _GatewayWriter()
@@ -50,6 +56,22 @@ async def _authenticate(gateway, device_id: str, secret: str):
             }
         )
     )
+    reader.feed_eof()
+    await task
+    return writer.frames
+
+
+async def _authenticate_v2(gateway, device_id: str, secret: str):
+    reader = asyncio.StreamReader()
+    writer = _TextGatewayWriter()
+    task = asyncio.create_task(gateway.handle_connection(reader, writer))
+    while not writer.frames:
+        await asyncio.sleep(0)
+    challenge = json.loads(writer.frames[0])
+    reader.feed_data(encode_frame({"type": "auth", "version": gateway.app.config["DEVICE_PROTOCOL_VERSION"], "device_id": device_id, "hmac": calculate_hmac(secret, device_id, challenge["nonce"])}))
+    while len(writer.frames) < 3:
+        await asyncio.sleep(0)
+    reader.feed_data(b"PONG\n")
     reader.feed_eof()
     await task
     return writer.frames
@@ -87,6 +109,18 @@ def test_gateway_rejects_invalid_or_oversize_frame():
             raise AssertionError("bad frame was accepted")
 
 
+def test_v2_protocol_parses_ascii_frames_and_decodes_inputs_without_phases():
+    assert encode_v2_frame("SETALL 1") == b"SETALL 1\n"
+    assert decode_v2_frame(b"OK ALL 1\n", 128) == ("OK", ["ALL", "1"])
+    actual, telemetry = parse_v2_state("O=101 U2=0101 U3=10100110 CSQ=20 CREG=1 CGATT=1 TEMP=42".split())
+    assert actual == {
+        "outputs": {"C6": 1, "C7": 0, "C8": 1},
+        "inputs": {"SW2": 1, "SW3": 0, "SW4": 1, "SW5": 0, "REF": 1, "AUX0": 0, "G1": 1, "G2": 1, "G3": 0, "G4": 0, "G5": 1, "AUX6": 0},
+        "raw": {"U2": "0101", "U3": "10100110"},
+    }
+    assert telemetry == {"csq": 20, "creg": 1, "cgatt": 1, "temp": 42}
+
+
 def test_device_command_is_durable_and_starts_pending(app):
     with app.app_context():
         device = Device(device_id="board-01", name="Test board", secret_encrypted="encrypted")
@@ -104,6 +138,17 @@ def test_gateway_authentication_decrypts_secret_inside_application_context(app):
     secret = _gateway_device(app)
     frames = asyncio.run(_authenticate(Gateway(app), "board-01", secret))
     assert [frame["type"] for frame in frames] == ["challenge", "authenticated"]
+
+
+def test_v2_keeps_json_auth_then_switches_to_ascii_authenticated_get_and_pong(app):
+    secret = _gateway_device(app)
+    with app.app_context():
+        device = db.session.scalar(db.select(Device).where(Device.device_id == "board-01"))
+        device.protocol_version = "2"
+        db.session.commit()
+    frames = asyncio.run(_authenticate_v2(Gateway(app), "board-01", secret))
+    assert json.loads(frames[0])["type"] == "challenge"
+    assert frames[1:] == ["AUTHENTICATED 2", "GET"]
 
 
 def test_gateway_rejects_unknown_disabled_and_invalid_hmac_devices(app):
@@ -209,3 +254,54 @@ def test_gateway_accepts_new_state_shape_without_phases_and_preserves_raw_values
         }
         assert device.telemetry == {"csq": 20, "uptime_s": 12345, "custom": "ok"}
         assert device.last_state_at is not None
+
+
+def test_v2_gateway_state_and_ok_complete_command_without_changing_actual(app):
+    _gateway_device(app)
+    gateway = Gateway(app)
+    with app.app_context():
+        device = db.session.scalar(db.select(Device).where(Device.device_id == "board-01"))
+        device.protocol_version = "2"
+        device.actual_state = {"outputs": {"C6": 0, "C7": 0, "C8": 0}}
+        command = DeviceCommand(device_id=device.id, command_type="switch", payload={"C6": 1}, status="sent")
+        db.session.add(command)
+        db.session.commit()
+        command_id = command.command_id
+
+    gateway._handle_v2_frame("board-01", "127.0.0.1", "OK", ["6", "1"])
+    with app.app_context():
+        command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.command_id == command_id))
+        device = db.session.scalar(db.select(Device).where(Device.device_id == "board-01"))
+        assert command.status == "completed"
+        assert command.acknowledged_at is not None
+        assert device.actual_state["outputs"]["C6"] == 0
+
+    gateway._handle_v2_frame("board-01", "127.0.0.1", "STATE", "O=100 U2=0000 U3=00000000 CSQ=20".split())
+    with app.app_context():
+        device = db.session.scalar(db.select(Device).where(Device.device_id == "board-01"))
+        assert device.actual_state["outputs"] == {"C6": 1, "C7": 0, "C8": 0}
+        assert device.telemetry == {"csq": 20}
+
+
+def test_v2_gateway_dispatches_setall_as_one_ascii_command(app):
+    _gateway_device(app)
+    gateway = Gateway(app)
+    writer = _TextGatewayWriter()
+    with app.app_context():
+        app.config["DEVICE_COMMAND_POLL_SECONDS"] = 0.01
+        device = db.session.scalar(db.select(Device).where(Device.device_id == "board-01"))
+        device.protocol_version = "2"
+        command = DeviceCommand(device_id=device.id, command_type="switch", payload={"C6": 0, "C7": 0, "C8": 0})
+        db.session.add(command)
+        db.session.commit()
+    gateway.connections["board-01"] = writer
+
+    async def dispatch_once():
+        task = asyncio.create_task(gateway.dispatch_commands())
+        while not writer.frames:
+            await asyncio.sleep(0.005)
+        gateway.stopping.set()
+        await task
+
+    asyncio.run(dispatch_once())
+    assert writer.frames == ["SETALL 0"]

@@ -17,7 +17,7 @@ from app.models.base import as_utc_aware, utcnow
 from app.models.devices import Device, DeviceCommand
 from app.models.devices.state import normalize_actual_state, payload_matches_actual
 from app.modules.devices.command_service import expire_state_confirmation_timeouts
-from app.tcp_gateway.protocol import decode_frame, encode_frame, hmac_matches, new_nonce
+from app.tcp_gateway.protocol import decode_frame, decode_v2_frame, encode_frame, encode_v2_frame, hmac_matches, new_nonce, parse_v2_state
 from app.tcp_gateway.secrets import decrypt_device_secret
 
 
@@ -25,6 +25,7 @@ class Gateway:
     def __init__(self, app: Flask):
         self.app = app
         self.connections: dict[str, asyncio.StreamWriter] = {}
+        self.connection_protocols: dict[str, str] = {}
         self.stopping = asyncio.Event()
 
     def _get_authenticated_device_secret(self, device_id: str) -> str | None:
@@ -83,6 +84,15 @@ class Gateway:
         writer.write(encode_frame(payload))
         await writer.drain()
 
+    async def _send_v2(self, writer: asyncio.StreamWriter, command: str) -> None:
+        writer.write(encode_v2_frame(command))
+        await writer.drain()
+
+    def _protocol_for_device(self, device_id: str) -> str:
+        with self.app.app_context():
+            device = db.session.scalar(db.select(Device).where(Device.device_id == device_id, Device.active_filter()))
+            return "2" if device is not None and device.protocol_version == "2" else "1"
+
     async def handle_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         peer = writer.get_extra_info("peername")
         peer_ip = peer[0] if isinstance(peer, tuple) else None
@@ -104,30 +114,37 @@ class Gateway:
             if old and old is not writer:
                 old.close()
             self.connections[device_id] = writer
+            protocol_version = self._protocol_for_device(device_id)
+            self.connection_protocols[device_id] = protocol_version
             self._set_connection(device_id, "online", peer_ip)
-            await self._send(writer, {"type": "authenticated", "version": self.app.config["DEVICE_PROTOCOL_VERSION"]})
+            if protocol_version == "2":
+                await self._send_v2(writer, "AUTHENTICATED 2")
+                await self._send_v2(writer, "GET")
+            else:
+                await self._send(writer, {"type": "authenticated", "version": self.app.config["DEVICE_PROTOCOL_VERSION"]})
             while not self.stopping.is_set():
                 try:
                     raw = await asyncio.wait_for(reader.readline(), timeout=self.app.config["DEVICE_PING_SECONDS"])
                 except asyncio.TimeoutError:
-                    await self._send(writer, {"type": "ping"})
+                    if protocol_version == "2":
+                        await self._send_v2(writer, "PING")
+                    else:
+                        await self._send(writer, {"type": "ping"})
                     raw = await asyncio.wait_for(reader.readline(), timeout=self.app.config["DEVICE_PONG_TIMEOUT_SECONDS"])
-                frame = decode_frame(raw, self.app.config["DEVICE_MAX_FRAME_BYTES"])
-                kind = frame.get("type")
-                if kind == "pong":
-                    self._set_connection(device_id, "online", peer_ip)
-                elif kind == "state":
-                    state = frame.get("actual")
-                    telemetry = frame.get("telemetry")
-                    self._set_connection(
-                        device_id,
-                        "online",
-                        peer_ip,
-                        state if isinstance(state, dict) else None,
-                        telemetry if isinstance(telemetry, dict) else None,
-                    )
-                elif kind == "ack":
-                    self._ack(device_id, str(frame.get("command_id") or ""), bool(frame.get("ok", True)), str(frame.get("error") or "")[:500])
+                if protocol_version == "2":
+                    verb, args = decode_v2_frame(raw, self.app.config["DEVICE_MAX_FRAME_BYTES"])
+                    self._handle_v2_frame(device_id, peer_ip, verb, args)
+                else:
+                    frame = decode_frame(raw, self.app.config["DEVICE_MAX_FRAME_BYTES"])
+                    kind = frame.get("type")
+                    if kind == "pong":
+                        self._set_connection(device_id, "online", peer_ip)
+                    elif kind == "state":
+                        state = frame.get("actual")
+                        telemetry = frame.get("telemetry")
+                        self._set_connection(device_id, "online", peer_ip, state if isinstance(state, dict) else None, telemetry if isinstance(telemetry, dict) else None)
+                    elif kind == "ack":
+                        self._ack(device_id, str(frame.get("command_id") or ""), bool(frame.get("ok", True)), str(frame.get("error") or ""), protocol_version="1")
         except (ConnectionError, asyncio.IncompleteReadError, ValueError, TimeoutError):
             pass
         except Exception:
@@ -135,16 +152,42 @@ class Gateway:
         finally:
             if device_id and self.connections.get(device_id) is writer:
                 self.connections.pop(device_id, None)
+                self.connection_protocols.pop(device_id, None)
                 self._set_connection(device_id, "offline")
             writer.close()
             with suppress(Exception):
                 await writer.wait_closed()
 
-    def _ack(self, device_id: str, command_id: str, success: bool, error: str) -> None:
+    def _handle_v2_frame(self, device_id: str, peer_ip: str | None, verb: str, args: list[str]) -> None:
+        if verb == "PONG":
+            self._set_connection(device_id, "online", peer_ip)
+        elif verb == "STATE":
+            actual, telemetry = parse_v2_state(args)
+            self._set_connection(device_id, "online", peer_ip, actual, telemetry)
+        elif verb == "OK":
+            self._ack_latest(device_id, True, "")
+        elif verb == "ERR":
+            self._ack_latest(device_id, False, " ".join(args)[:500] or "Device error")
+        else:
+            raise ValueError("unknown v2 frame")
+
+    def _ack_latest(self, device_id: str, success: bool, error: str) -> None:
+        with self.app.app_context():
+            command = db.session.scalar(
+                db.select(DeviceCommand).join(Device).where(
+                    Device.device_id == device_id,
+                    DeviceCommand.status == "sent",
+                    DeviceCommand.active_filter(),
+                ).order_by(DeviceCommand.sent_at.desc())
+            )
+            command_id = command.command_id if command else ""
+        self._ack(device_id, command_id, success, error, protocol_version="2")
+
+    def _ack(self, device_id: str, command_id: str, success: bool, error: str, *, protocol_version: str = "1") -> None:
         with self.app.app_context():
             command = db.session.scalar(db.select(DeviceCommand).join(Device).where(Device.device_id == device_id, DeviceCommand.command_id == command_id))
             if command and command.status == "sent":
-                command.status = "acknowledged" if success else "failed"
+                command.status = "completed" if success and protocol_version == "2" else ("acknowledged" if success else "failed")
                 command.acknowledged_at = utcnow() if success else None
                 command.failed_at = utcnow() if not success else None
                 command.error = error or None
@@ -154,7 +197,7 @@ class Gateway:
                     and device.last_state_at is not None
                     and as_utc_aware(device.last_state_at) >= as_utc_aware(command.created_at)
                 )
-                if success and state_is_newer and payload_matches_actual(command.payload, device.actual_state):
+                if success and protocol_version == "1" and state_is_newer and payload_matches_actual(command.payload, device.actual_state):
                     command.state_confirmed_at = utcnow()
                 db.session.commit()
 
@@ -173,10 +216,14 @@ class Gateway:
                 with self.app.app_context():
                     device = db.session.get(Device, device_pk)
                     writer = self.connections.get(device.device_id) if device else None
+                    protocol_version = device.protocol_version if device else "1"
                 if not writer or writer.is_closing():
                     continue
                 try:
-                    await self._send(writer, {"type": "command", "command_id": command_id, "command": command_type, "payload": payload or {}})
+                    if protocol_version == "2":
+                        await self._send_v2(writer, self._v2_command(command_type, payload or {}))
+                    else:
+                        await self._send(writer, {"type": "command", "command_id": command_id, "command": command_type, "payload": payload or {}})
                     with self.app.app_context():
                         command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.command_id == command_id))
                         if command and command.status == "pending":
@@ -185,6 +232,20 @@ class Gateway:
                 except ConnectionError:
                     continue
             await asyncio.sleep(self.app.config["DEVICE_COMMAND_POLL_SECONDS"])
+
+    @staticmethod
+    def _v2_command(command_type: str, payload: dict[str, Any]) -> str:
+        """Translate only validated OPORA switch commands into v2 wire text."""
+        if command_type != "switch":
+            raise ValueError("unsupported v2 command")
+        values = {key: int(value) for key, value in payload.items()}
+        if set(values) == {"C6", "C7", "C8"} and len(set(values.values())) == 1 and next(iter(values.values())) in {0, 1}:
+            return f"SETALL {next(iter(values.values()))}"
+        if len(values) == 1:
+            relay, value = next(iter(values.items()))
+            if relay in {"C6", "C7", "C8"} and value in {0, 1}:
+                return f"SET {relay[1:]} {value}"
+        raise ValueError("invalid v2 switch payload")
 
     async def health(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         writer.write(b"ok\n")

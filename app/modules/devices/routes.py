@@ -111,6 +111,7 @@ def _serialize_device(device: Device, active_command: DeviceCommand | None, late
     return {
         "device_id": str(device.id),
         "external_device_id": device.device_id,
+        "protocol_version": device.protocol_version,
         "connection_state": device.connection_state,
         "last_seen_at": _serialize_datetime(device.last_seen_at),
         "last_state_at": _serialize_datetime(device.last_state_at),
@@ -238,7 +239,7 @@ def create():
             form.device_id.errors.append("Плата с таким Device ID уже существует.")
         else:
             try:
-                device = Device(name=form.name.data.strip(), device_id=key, secret_encrypted=encrypt_device_secret(form.secret.data.strip()), enabled=bool(form.enabled.data), connection_state="offline", created_by=current_user.id)
+                device = Device(name=form.name.data.strip(), device_id=key, secret_encrypted=encrypt_device_secret(form.secret.data.strip()), protocol_version=form.protocol_version.data, enabled=bool(form.enabled.data), connection_state="offline", created_by=current_user.id)
             except (RuntimeError, ValueError):
                 flash("Не удалось безопасно сохранить секрет платы. Проверьте настройку gateway.", "danger")
             else:
@@ -259,7 +260,7 @@ def edit(device_id):
     form = DeviceForm(obj=device)
     form.is_edit = True
     if request.method == "GET":
-        form.device_id.data, form.name.data, form.enabled.data = device.device_id, device.name, device.enabled
+        form.device_id.data, form.name.data, form.protocol_version.data, form.enabled.data = device.device_id, device.name, device.protocol_version, device.enabled
     if form.validate_on_submit():
         key = form.device_id.data.strip()
         duplicate = db.session.scalar(db.select(Device.id).where(Device.device_id == key, Device.id != device.id, Device.active_filter()))
@@ -269,7 +270,7 @@ def edit(device_id):
             try:
                 if (form.secret.data or "").strip():
                     device.secret_encrypted = encrypt_device_secret(form.secret.data.strip())
-                device.name, device.device_id, device.enabled, device.updated_by = form.name.data.strip(), key, bool(form.enabled.data), current_user.id
+                device.name, device.device_id, device.protocol_version, device.enabled, device.updated_by = form.name.data.strip(), key, form.protocol_version.data, bool(form.enabled.data), current_user.id
                 AuditService.log(user_id=current_user.id, action="update", entity_type="device", entity_id=device.id, description=f"Изменена плата {device.device_id}")
                 db.session.commit()
             except (RuntimeError, ValueError):

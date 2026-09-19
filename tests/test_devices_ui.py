@@ -209,6 +209,18 @@ def test_status_contract_blocks_offline_and_frontend_uses_backend_decision(app, 
     assert "waitingForState" not in script
 
 
+def test_v2_completed_command_releases_status_controls(app, admin_client):
+    device_id = _device(app)
+    with app.app_context():
+        device = db.session.get(Device, device_id)
+        device.protocol_version = "2"
+        db.session.add(DeviceCommand(device_id=device.id, command_type="switch", payload={"C6": 1}, status="completed", acknowledged_at=utcnow()))
+        db.session.commit()
+    payload = admin_client.get("/devices/status").get_json()["devices"][0]
+    assert payload["active_command"] is None
+    assert payload["can_send_command"] is True
+
+
 def test_view_only_user_cannot_manage_devices(app, client):
     device_id = _device(app)
     with app.app_context():

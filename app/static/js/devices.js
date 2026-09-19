@@ -111,6 +111,7 @@
         const canManage = root.dataset.canManage === '1';
         let stopped = false;
         let timer = null;
+        const pollMs = Math.max(250, Number(root.dataset.pollMs) || 500);
 
         async function refresh() {
             if (stopped) return;
@@ -128,7 +129,7 @@
             } catch {
                 /* A transient network failure must not change displayed actual state. */
             } finally {
-                if (!stopped) timer = window.setTimeout(refresh, 1000);
+                if (!stopped) timer = window.setTimeout(refresh, pollMs);
             }
         }
 

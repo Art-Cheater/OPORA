@@ -265,6 +265,60 @@ MapLibre используется для Requests, Defects и Work Orders; `ops-
 без доступного provider прямая линия не рисуется. Valhalla включается только
 отдельным `docker-compose.routing.yml`; инструкция — `docs/ROUTING_SETUP.md`.
 
+## Удалённые платы и TCP Gateway
+
+`app/tcp_gateway/main.py` — отдельный asyncio-процесс, не Gunicorn. Плата
+аутентифицируется один раз JSON challenge/HMAC; секрет не передаётся и не
+попадает в логи. После аутентификации `Device.protocol_version` выбирает
+рабочий wire protocol: существующий `1` (JSON) либо облегчённый `2` (ASCII).
+
+### Device protocol v2
+
+Все v2 frames — ASCII, строго одна строка, завершённая `\n`. До переключения
+на v2 остаётся JSON handshake v1:
+
+```json
+{"type":"challenge","version":"1","nonce":"..."}
+{"type":"auth","version":"1","device_id":"ipp-001","hmac":"..."}
+```
+
+Для `protocol_version = "2"` Gateway отвечает `AUTHENTICATED 2`, затем `GET`.
+Далее Gateway отправляет только:
+
+```text
+PING
+GET
+SET 6 1
+SET 6 0
+SET 7 1
+SET 7 0
+SET 8 1
+SET 8 0
+SETALL 1
+SETALL 0
+```
+
+Плата отвечает `PONG`, `OK <relay> <value>`, `OK ALL <value>`, `ERR <code>`
+либо extensible state line:
+
+```text
+STATE O=101 U2=0101 U3=10100110 CSQ=20 CREG=1 CGATT=1
+```
+
+`O` имеет порядок `C6 C7 C8`. `U2` декодируется как bit0–3:
+`SW2`, `SW3`, `SW4`, `SW5`; `U3`: bit7 `REF`, bit0 `AUX0`, bit1–5 `G1`–`G5`,
+bit6 `AUX6`. Назначать эти линии фазами A/B/C запрещено без отдельного
+подтверждения. `U2`/`U3` сохраняются в `actual.raw`, расшифрованные значения —
+в `actual.inputs`; остальные `KEY=VALUE` переходят в extensible `telemetry`.
+
+Для v2 `OK` завершает единственную активную команду сразу (`completed`), а
+следующий `STATE` независимо обновляет только `actual_state`. Для v1 сохраняется
+старое ожидание state confirmation. Отсутствие `OK`/`ERR` переводит команду в
+`timeout`. Gateway хранит последний snapshot; отдельной истории на каждый
+snapshot не создаёт. UI опрашивает status пока открыта страница с интервалом
+`DEVICE_STATUS_POLL_MS` (по умолчанию 500 мс); `ONLINE` TCP и `STATE STALE`
+разделены.
+
 ## Поиск
 
 `/search/` и `/search/api` ищут Requests, Defects, Projects, Contracts, Objects,

@@ -18,7 +18,7 @@
 {% endblock %}
 
 {% block content %}
-<section id="devicesRoot" data-devices-root data-status-url="{{ url_for('devices.status') }}" data-can-manage="{{ '1' if current_user.has_permission('devices.manage') else '0' }}">
+<section id="devicesRoot" data-devices-root data-status-url="{{ url_for('devices.status') }}" data-poll-ms="{{ config.DEVICE_STATUS_POLL_MS }}" data-can-manage="{{ '1' if current_user.has_permission('devices.manage') else '0' }}">
 {% if not devices %}
     <div class="card"><div class="card-body text-center py-5">
         <i class="bi bi-cpu fs-1 text-muted"></i>
@@ -32,7 +32,7 @@
     {% set actual = status.actual_state %}
     <article class="card mb-4" data-device-card data-device-id="{{ device.id }}">
         <div class="card-header d-flex flex-wrap align-items-center gap-2 justify-content-between">
-            <div><strong>{{ device.name }}</strong> <code class="ms-1">{{ device.device_id }}</code></div>
+            <div><strong>{{ device.name }}</strong> <code class="ms-1">{{ device.device_id }}</code> <span class="badge text-bg-light">v{{ device.protocol_version }}</span></div>
             <div class="d-flex align-items-center gap-2">
                 <span data-device-online class="badge {{ 'text-bg-success' if status.connection_state == 'online' else 'text-bg-secondary' }}">{{ 'ONLINE' if status.connection_state == 'online' else 'OFFLINE' }}</span>
                 {% if current_user.has_permission('devices.manage') %}
