@@ -147,6 +147,10 @@ services:
     env_file:
       - .env
     environment:
+      POSTGRES_HOST: db
+      DB_HOST: db
+      DB_PORT: "5432"
+      OPORA_RUN_MIGRATE: "0"
       MODEM_GATEWAY_HOST: 0.0.0.0
       MODEM_SNIFFER_PORT: 5009
       MODEM_CONTROL_PORT: 5010
@@ -155,6 +159,9 @@ services:
       - "5009:5009"
     expose:
       - "5010"
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   postgres_data:

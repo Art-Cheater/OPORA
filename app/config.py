@@ -160,6 +160,9 @@ class Config:
     DEVICE_STATE_STALE_SECONDS = int(os.getenv("DEVICE_STATE_STALE_SECONDS", "90"))
     DEVICE_STATUS_POLL_MS = int(os.getenv("DEVICE_STATUS_POLL_MS", "500"))
     DEVICE_COMMANDS_ENABLED = _env_bool("DEVICE_COMMANDS_ENABLED", True)
+    IRZ_GATEWAY_URL = os.getenv("IRZ_GATEWAY_URL", "http://modem-sniffer:5010").strip()
+    IRZ_GATEWAY_TIMEOUT_SECONDS = float(os.getenv("IRZ_GATEWAY_TIMEOUT_SECONDS", "2"))
+    IRZ_POLL_MS = int(os.getenv("IRZ_POLL_MS", "1000"))
 
     WTF_CSRF_ENABLED = True
     WTF_CSRF_TIME_LIMIT = 3600

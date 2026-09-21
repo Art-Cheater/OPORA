@@ -29,7 +29,8 @@ def _wait_for_device(http_port, imei):
 
 
 def test_modem_sniffer_control_api_integration():
-    tcp_server, http_server = create_servers("127.0.0.1", 0, 0)
+    exchanges = []
+    tcp_server, http_server = create_servers("127.0.0.1", 0, 0, lambda imei, direction, data: exchanges.append((imei, direction, data)))
     threads = [
         threading.Thread(target=tcp_server.serve_forever, daemon=True),
         threading.Thread(target=http_server.serve_forever, daemon=True),
@@ -43,13 +44,19 @@ def test_modem_sniffer_control_api_integration():
         assert _request(http_port, "GET", "/health") == (200, {"status": "ok"})
         client.sendall(b"AT$IMEI=123456789012345,TYP=ATM,DEV=ATM21")
         devices = _wait_for_device(http_port, "123456789012345")
-        assert devices == [{"imei": "123456789012345", "ip": "127.0.0.1", "port": client.getsockname()[1]}]
+        assert len(devices) == 1
+        assert devices[0]["imei"] == "123456789012345"
+        assert devices[0]["ip"] == "127.0.0.1"
+        assert devices[0]["port"] == client.getsockname()[1]
+        assert devices[0]["last_seen_at"]
 
         assert _request(http_port, "POST", "/send", {"imei": "123456789012345", "hex": "01 02 FF"}) == (
             200,
             {"status": "sent", "imei": "123456789012345", "bytes": 3},
         )
         assert client.recv(3) == bytes((0x01, 0x02, 0xFF))
+        assert ("123456789012345", "RX", b"AT$IMEI=123456789012345,TYP=ATM,DEV=ATM21") in exchanges
+        assert ("123456789012345", "TX", bytes((0x01, 0x02, 0xFF))) in exchanges
 
         status, payload = _request(http_port, "POST", "/send", {"imei": "123456789012345", "hex": "01 ZZ"})
         assert status == 400

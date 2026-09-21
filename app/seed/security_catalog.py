@@ -27,6 +27,7 @@ SYSTEM_MODULES = [
     ("auth", "Безопасность", "shield-check", 110, "Журнал входов"),
     ("search", "Поиск", "search", 120, "Глобальный поиск"),
     ("devices", "Удалённые платы", "cpu", 125, "Контроль TCP-устройств"),
+    ("irz", "IRZ Console", "terminal", 126, "Диагностика и управление ATM21"),
 ]
 
 # module_code -> [(field_code, field_name, sort_order)]
@@ -295,6 +296,8 @@ SPECIAL_PERMISSIONS = [
     ("wallpapers", "manage", "Управление обоями интерфейса"),
     ("devices", "view", "Просмотр удалённых плат"),
     ("devices", "manage", "Управление удалёнными платами"),
+    ("irz", "view", "Просмотр IRZ Console"),
+    ("irz", "send", "Отправка команд ATM21"),
 ]
 
 ACTION_LABELS = {

@@ -11,7 +11,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
+from typing import Any, Callable
 
 LOG = logging.getLogger("opora.modem_sniffer")
 IMEI_RE = re.compile(rb"AT\$IMEI=(\d{15})(?:,|\s|$)")
@@ -39,7 +39,12 @@ class DeviceConnection:
     send_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def public_dict(self) -> dict[str, Any]:
-        return {"imei": self.imei, "ip": self.remote_ip, "port": self.remote_port}
+        return {
+            "imei": self.imei,
+            "ip": self.remote_ip,
+            "port": self.remote_port,
+            "last_seen_at": self.last_seen_at.isoformat(),
+        }
 
 
 class ConnectionRegistry:
@@ -76,8 +81,9 @@ class ModemTCPServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
 
-    def __init__(self, address: tuple[str, int], registry: ConnectionRegistry):
+    def __init__(self, address: tuple[str, int], registry: ConnectionRegistry, log_exchange: Callable[[str | None, str, bytes], None] | None = None):
         self.registry = registry
+        self.log_exchange = log_exchange
         super().__init__(address, ModemRequestHandler)
 
 
@@ -107,6 +113,8 @@ class ModemRequestHandler(socketserver.BaseRequestHandler):
                         self.server.registry.register(connection)
                 else:
                     self.server.registry.touch(connection)
+                if self.server.log_exchange:
+                    self.server.log_exchange(connection.imei if connection else None, "RX", data)
                 LOG.info("%s", format_chunk(data, imei=connection.imei if connection else None))
         finally:
             if connection:
@@ -117,8 +125,9 @@ class ModemRequestHandler(socketserver.BaseRequestHandler):
 class ControlHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, address: tuple[str, int], registry: ConnectionRegistry):
+    def __init__(self, address: tuple[str, int], registry: ConnectionRegistry, log_exchange: Callable[[str | None, str, bytes], None] | None = None):
         self.registry = registry
+        self.log_exchange = log_exchange
         super().__init__(address, ControlRequestHandler)
 
 
@@ -177,21 +186,38 @@ class ControlRequestHandler(BaseHTTPRequestHandler):
             self.server.registry.remove(connection)
             self._json(503, {"error": "send failed"})
             return
+        if self.server.log_exchange:
+            self.server.log_exchange(imei, "TX", data)
         LOG.info("IRZ TX\nIMEI=%s\nLEN=%s\nHEX=%s", imei, len(data), data.hex(" ").upper())
         self._json(200, {"status": "sent", "imei": imei, "bytes": len(data)})
 
 
-def create_servers(host: str | None = None, tcp_port: int | None = None, http_port: int | None = None) -> tuple[ModemTCPServer, ControlHTTPServer]:
+def create_servers(host: str | None = None, tcp_port: int | None = None, http_port: int | None = None, log_exchange: Callable[[str | None, str, bytes], None] | None = None) -> tuple[ModemTCPServer, ControlHTTPServer]:
     bind_host = host or os.getenv("MODEM_GATEWAY_HOST", "0.0.0.0")
     registry = ConnectionRegistry()
-    tcp_server = ModemTCPServer((bind_host, tcp_port if tcp_port is not None else int(os.getenv("MODEM_SNIFFER_PORT", "5009"))), registry)
-    http_server = ControlHTTPServer((bind_host, http_port if http_port is not None else int(os.getenv("MODEM_CONTROL_PORT", "5010"))), registry)
+    tcp_server = ModemTCPServer((bind_host, tcp_port if tcp_port is not None else int(os.getenv("MODEM_SNIFFER_PORT", "5009"))), registry, log_exchange)
+    http_server = ControlHTTPServer((bind_host, http_port if http_port is not None else int(os.getenv("MODEM_CONTROL_PORT", "5010"))), registry, log_exchange)
     return tcp_server, http_server
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    tcp_server, http_server = create_servers()
+    from app import create_app
+    from app.extensions import db
+    from app.modules.irz.service import record_exchange
+
+    app = create_app()
+
+    def persist_exchange(imei: str | None, direction: str, data: bytes) -> None:
+        try:
+            with app.app_context():
+                record_exchange(imei, direction, data)
+        except Exception:
+            with app.app_context():
+                db.session.rollback()
+            LOG.exception("IRZ LOG STORE FAILED IMEI=%s DIR=%s", imei or "?", direction)
+
+    tcp_server, http_server = create_servers(log_exchange=persist_exchange)
     http_thread = threading.Thread(target=http_server.serve_forever, name="modem-control-api", daemon=True)
     http_thread.start()
     try:

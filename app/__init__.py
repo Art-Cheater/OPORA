@@ -190,6 +190,7 @@ def _init_extensions(app: Flask) -> None:
         Wallpaper,
         Device,
         DeviceCommand,
+        IRZExchangeLog,
         WorkObject,
     )
 

@@ -1,0 +1,12 @@
+.irz-console .card { border-color: var(--bs-border-color); }
+.irz-devices-card, .irz-log-card { min-height: 32rem; }
+.irz-device { cursor: pointer; border-left: 4px solid transparent; }
+.irz-device:hover { background: var(--bs-tertiary-bg); }
+.irz-device.active { border-left-color: var(--bs-primary); background: var(--bs-primary-bg-subtle); color: inherit; }
+.irz-device code { font-size: .82rem; }
+.irz-log-scroll { height: 29rem; overflow: auto; background: #111820; }
+.irz-log-table { --bs-table-bg: #111820; --bs-table-color: #d8e0e8; font-size: .78rem; white-space: nowrap; }
+.irz-log-table thead { position: sticky; top: 0; z-index: 1; }
+.irz-log-table td:nth-child(4) { white-space: normal; min-width: 18rem; word-break: break-word; }
+.irz-dir-rx { color: #62d98b !important; font-weight: 700; }
+.irz-dir-tx { color: #70b7ff !important; font-weight: 700; }

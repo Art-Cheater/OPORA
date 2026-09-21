@@ -137,6 +137,11 @@
                 <i class="bi bi-cpu"></i><span>Удалённые платы</span>
             </a>
             {% endif %}
+            {% if current_user.has_permission('irz.view') %}
+            <a href="{{ url_for('irz.index') }}" class="sidebar__link {% if request.endpoint and request.endpoint.startswith('irz.') %}active{% endif %}">
+                <i class="bi bi-terminal"></i><span>IRZ</span>
+            </a>
+            {% endif %}
             {% if current_user.has_permission('users.view') %}
             <a href="{{ url_for('employees.index') }}"
                class="sidebar__link {% if request.endpoint and request.endpoint.startswith('employees.') %}active{% endif %}"

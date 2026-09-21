@@ -1,0 +1,68 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+
+{% block title %}IRZ Console — {{ app_name }}{% endblock %}
+{% block page_header %}
+{{ page_header("IRZ Console", "Диагностика TCP-обмена ATM21", "terminal") }}
+{% endblock %}
+
+{% block content %}
+<section class="irz-console" data-irz-root
+         data-devices-url="{{ url_for('irz.devices') }}"
+         data-logs-url="{{ url_for('irz.logs') }}"
+         data-send-url="{{ url_for('irz.send') }}"
+         data-poll-ms="{{ config.IRZ_POLL_MS }}"
+         data-can-send="{{ '1' if can_send else '0' }}">
+    <div class="card mb-3">
+        <div class="card-body py-2 d-flex align-items-center gap-3">
+            <strong>Статус шлюза:</strong>
+            <span class="badge text-bg-secondary" data-irz-gateway>ПРОВЕРКА</span>
+            <span class="small text-muted" data-irz-updated></span>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-xl-4">
+            <div class="card irz-devices-card">
+                <div class="card-header fw-semibold">Подключенные ATM21</div>
+                <div class="list-group list-group-flush" data-irz-devices>
+                    <div class="p-4 text-center text-muted">Ожидание данных…</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-8">
+            <div class="card irz-log-card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span class="fw-semibold">LIVE LOG</span>
+                    <code data-irz-selected>Устройство не выбрано</code>
+                </div>
+                <div class="table-responsive irz-log-scroll" data-irz-log-scroll>
+                    <table class="table table-dark table-sm font-monospace mb-0 irz-log-table">
+                        <thead><tr><th>TIME</th><th>DIR</th><th>LEN</th><th>HEX</th><th>ASCII</th></tr></thead>
+                        <tbody data-irz-logs><tr><td colspan="5" class="text-center text-secondary py-5">Лог пуст</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mt-3">
+        <div class="card-header fw-semibold">HEX COMMAND</div>
+        <div class="card-body">
+            <form data-irz-send-form class="d-flex flex-column flex-lg-row gap-2">
+                <input class="form-control font-monospace" data-irz-hex name="hex" autocomplete="off"
+                       placeholder="B5 BC BD BE BF" aria-label="HEX-команда" {% if not can_send %}disabled{% endif %}>
+                <button class="btn btn-primary px-4" type="submit" data-irz-send {% if not can_send %}disabled{% endif %}>
+                    <i class="bi bi-send"></i> SEND
+                </button>
+            </form>
+            <div class="small mt-2" data-irz-message aria-live="polite">
+                {% if not can_send %}<span class="text-muted">Нет права irz.send.</span>{% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_css %}{{ super() }}<link href="{{ static_url('css/irz.css') }}" rel="stylesheet">{% endblock %}
+{% block extra_js %}{{ super() }}<script src="{{ static_url('js/irz.js') }}"></script>{% endblock %}
