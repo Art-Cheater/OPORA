@@ -1,13 +1,15 @@
 import socket
 import threading
 import time
+import csv
+import io
 from pathlib import Path
 
 from app.extensions import db
 from app.models.auth.associations import RolePermission
 from app.models.auth.permission import Permission
 from app.models.auth.role import Role
-from app.models.irz import IRZExchangeLog
+from app.models.irz import IRZExchangeLog, IRZExperiment
 from app.modules.auth.services import AuthService
 from app.modules.irz import service
 from app.modem_gateway.sniffer import create_servers
@@ -134,3 +136,51 @@ def test_irz_gateway_client_uses_modem_sniffer_http_api(app):
         http_server.server_close()
         for thread in threads:
             thread.join(timeout=2)
+
+
+def test_irz_crc_generation_and_suffixes():
+    assert service.modbus_crc16(b"123456789") == bytes.fromhex("37 4B")
+    assert service.mercury_crc(b"123456789") == bytes.fromhex("37 4B")
+    assert service.build_test_command("01 03 00 00 00 10", "modbus", "0d0a") == bytes.fromhex(
+        "01 03 00 00 00 10 44 06 0D 0A"
+    )
+    assert service.build_test_command("01 03", "MERCURY CRC", "0D 0A").endswith(bytes.fromhex("0D 0A"))
+
+
+def test_irz_test_command_logs_experiment(app, admin_client, monkeypatch):
+    monkeypatch.setattr(
+        service,
+        "_gateway_request",
+        lambda *args, **kwargs: {
+            "status": "response",
+            "response_hex": "01 03 02 12 34 B5 33",
+            "response_ascii": "....4.3",
+            "success": True,
+        },
+    )
+    response = admin_client.post(
+        "/irz/api/test-command",
+        json={"imei": "123456789012345", "hex": "01 03 00 00 00 10", "crc": "modbus", "append": "none"},
+    )
+    assert response.status_code == 200
+    assert response.get_json()["success"] is True
+    with app.app_context():
+        experiment = db.session.scalar(db.select(IRZExperiment))
+        assert experiment.command_hex == "01 03 00 00 00 10 44 06"
+        assert experiment.response_hex == "01 03 02 12 34 B5 33"
+        assert experiment.response_ascii == "....4.3"
+        assert experiment.success is True
+
+
+def test_irz_session_csv_export(app, admin_client):
+    with app.app_context():
+        db.session.add(IRZExchangeLog(imei="123456789012345", direction="RX", raw_hex="01 02", raw_ascii="..", raw_length=2))
+        db.session.commit()
+    response = admin_client.get("/irz/api/export?imei=123456789012345")
+    assert response.status_code == 200
+    assert response.mimetype == "text/csv"
+    text = response.get_data(as_text=True).lstrip("\ufeff")
+    rows = list(csv.DictReader(io.StringIO(text)))
+    assert rows[0]["direction"] == "RX"
+    assert rows[0]["hex"] == "01 02"
+    assert rows[0]["ascii"] == ".."

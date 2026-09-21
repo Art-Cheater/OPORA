@@ -191,6 +191,7 @@ def _init_extensions(app: Flask) -> None:
         Device,
         DeviceCommand,
         IRZExchangeLog,
+        IRZExperiment,
         WorkObject,
     )
 

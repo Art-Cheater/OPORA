@@ -86,3 +86,53 @@ def test_raw_tcp_sniffer_formats_bytes():
     assert "IMEI=123456789012345" in rendered
     assert "LEN=4" in rendered
     assert "HEX=01 02 03 04" in rendered
+
+
+def test_protocol_test_waits_for_next_device_response():
+    tcp_server, http_server = create_servers("127.0.0.1", 0, 0)
+    threads = [
+        threading.Thread(target=tcp_server.serve_forever, daemon=True),
+        threading.Thread(target=http_server.serve_forever, daemon=True),
+    ]
+    for thread in threads:
+        thread.start()
+    client = socket.create_connection(("127.0.0.1", tcp_server.server_address[1]), timeout=2)
+    result = []
+    try:
+        client.sendall(b"AT$IMEI=123456789012345,TYP=ATM,DEV=ATM21")
+        _wait_for_device(http_server.server_address[1], "123456789012345")
+        request_thread = threading.Thread(
+            target=lambda: result.append(
+                _request(
+                    http_server.server_address[1],
+                    "POST",
+                    "/test-command",
+                    {"imei": "123456789012345", "hex": "01 03 00 00"},
+                )
+            )
+        )
+        request_thread.start()
+        assert client.recv(4) == bytes.fromhex("01 03 00 00")
+        client.sendall(bytes.fromhex("01 03 02 12 34 B5 33"))
+        request_thread.join(timeout=2)
+        assert result == [
+            (
+                200,
+                {
+                    "status": "response",
+                    "imei": "123456789012345",
+                    "bytes": 4,
+                    "response_hex": "01 03 02 12 34 B5 33",
+                    "response_ascii": "....4.3",
+                    "success": True,
+                },
+            )
+        ]
+    finally:
+        client.close()
+        tcp_server.shutdown()
+        http_server.shutdown()
+        tcp_server.server_close()
+        http_server.server_close()
+        for thread in threads:
+            thread.join(timeout=2)

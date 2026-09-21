@@ -11,6 +11,9 @@
          data-devices-url="{{ url_for('irz.devices') }}"
          data-logs-url="{{ url_for('irz.logs') }}"
          data-send-url="{{ url_for('irz.send') }}"
+         data-test-url="{{ url_for('irz.test_command') }}"
+         data-experiments-url="{{ url_for('irz.experiments') }}"
+         data-export-url="{{ url_for('irz.export_session') }}"
          data-poll-ms="{{ config.IRZ_POLL_MS }}"
          data-can-send="{{ '1' if can_send else '0' }}">
     <div class="card mb-3">
@@ -34,7 +37,13 @@
             <div class="card irz-log-card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span class="fw-semibold">LIVE LOG</span>
-                    <code data-irz-selected>Устройство не выбрано</code>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-light" data-irz-listen>START LISTEN</button>
+                        <a class="btn btn-sm btn-outline-light" data-irz-export href="{{ url_for('irz.export_session') }}">
+                            <i class="bi bi-download"></i> DOWNLOAD SESSION
+                        </a>
+                        <code data-irz-selected>Устройство не выбрано</code>
+                    </div>
                 </div>
                 <div class="table-responsive irz-log-scroll" data-irz-log-scroll>
                     <table class="table table-dark table-sm font-monospace mb-0 irz-log-table">
@@ -59,6 +68,69 @@
             <div class="small mt-2" data-irz-message aria-live="polite">
                 {% if not can_send %}<span class="text-muted">Нет права irz.send.</span>{% endif %}
             </div>
+        </div>
+    </div>
+
+    <div class="card mt-3">
+        <div class="card-header fw-semibold">PROTOCOL LAB</div>
+        <div class="card-body">
+            <form data-irz-test-form>
+                <div class="row g-3">
+                    <div class="col-lg-4">
+                        <label class="form-label" for="irzLabDevice">ATM21</label>
+                        <select class="form-select font-monospace" id="irzLabDevice" data-irz-lab-device {% if not can_send %}disabled{% endif %}>
+                            <option value="">Устройство не выбрано</option>
+                        </select>
+                    </div>
+                    <div class="col-lg-4">
+                        <label class="form-label" for="irzPreset">Protocol tests</label>
+                        <select class="form-select" id="irzPreset" data-irz-preset>
+                            <option value="">— выбрать эксперимент —</option>
+                            <option value="01 08 00">A) Mercury info</option>
+                            <option value="01 08 16 11">B) Mercury voltage</option>
+                            <option value="01 05 00 00">C) Mercury energy</option>
+                            <option value="01 2B 0E 01 00">D) Modbus device info</option>
+                            <option value="01 03 00 00 00 14">E) Modbus holding registers 0-20</option>
+                        </select>
+                    </div>
+                    <div class="col-lg-4">
+                        <label class="form-label" for="irzLabHex">HEX COMMAND</label>
+                        <input class="form-control font-monospace" id="irzLabHex" data-irz-lab-hex autocomplete="off" placeholder="01 03 00 00 00 10" {% if not can_send %}disabled{% endif %}>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label" for="irzCrc">CHECKSUM</label>
+                        <select class="form-select" id="irzCrc" data-irz-crc {% if not can_send %}disabled{% endif %}>
+                            <option value="none">NONE</option>
+                            <option value="modbus">MODBUS CRC16</option>
+                            <option value="mercury">MERCURY CRC</option>
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label" for="irzAppend">END BYTE</label>
+                        <select class="form-select" id="irzAppend" data-irz-append {% if not can_send %}disabled{% endif %}>
+                            <option value="none">none</option>
+                            <option value="0d">0D</option>
+                            <option value="0a">0A</option>
+                            <option value="0d0a">0D 0A</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button class="btn btn-warning w-100" type="submit" data-irz-test-send {% if not can_send %}disabled{% endif %}>SEND TEST</button>
+                    </div>
+                </div>
+            </form>
+            <div class="small mt-2 text-muted">Пресеты экспериментальные и не подтверждают корректность команды для конкретного счётчика.</div>
+            <div class="small mt-2" data-irz-test-message aria-live="polite"></div>
+        </div>
+    </div>
+
+    <div class="card mt-3">
+        <div class="card-header fw-semibold">IRZ experiments</div>
+        <div class="table-responsive">
+            <table class="table table-sm font-monospace mb-0">
+                <thead><tr><th>TIME</th><th>IMEI</th><th>COMMAND</th><th>RESPONSE</th><th>ASCII</th><th>RESULT</th></tr></thead>
+                <tbody data-irz-experiments><tr><td colspan="6" class="text-center text-muted py-4">Экспериментов нет</td></tr></tbody>
+            </table>
         </div>
     </div>
 </section>

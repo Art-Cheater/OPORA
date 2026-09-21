@@ -8,6 +8,7 @@ import re
 import socket
 import socketserver
 import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -37,6 +38,25 @@ class DeviceConnection:
     last_seen_at: datetime
     socket: socket.socket
     send_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    response_condition: threading.Condition = field(default_factory=threading.Condition, repr=False)
+    response_sequence: int = field(default=0, repr=False)
+    last_response: bytes | None = field(default=None, repr=False)
+
+    def publish_response(self, data: bytes) -> None:
+        with self.response_condition:
+            self.last_response = data
+            self.response_sequence += 1
+            self.response_condition.notify_all()
+
+    def wait_for_response(self, previous_sequence: int, timeout: float) -> bytes | None:
+        deadline = time.monotonic() + timeout
+        with self.response_condition:
+            while self.response_sequence <= previous_sequence:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return None
+                self.response_condition.wait(remaining)
+            return self.last_response
 
     def public_dict(self) -> dict[str, Any]:
         return {
@@ -113,6 +133,8 @@ class ModemRequestHandler(socketserver.BaseRequestHandler):
                         self.server.registry.register(connection)
                 else:
                     self.server.registry.touch(connection)
+                if connection:
+                    connection.publish_response(data)
                 if self.server.log_exchange:
                     self.server.log_exchange(connection.imei if connection else None, "RX", data)
                 LOG.info("%s", format_chunk(data, imei=connection.imei if connection else None))
@@ -154,7 +176,7 @@ class ControlRequestHandler(BaseHTTPRequestHandler):
             self._json(404, {"error": "not found"})
 
     def do_POST(self) -> None:
-        if self.path != "/send":
+        if self.path not in {"/send", "/test-command"}:
             self._json(404, {"error": "not found"})
             return
         try:
@@ -181,14 +203,32 @@ class ControlRequestHandler(BaseHTTPRequestHandler):
             return
         try:
             with connection.send_lock:
+                with connection.response_condition:
+                    response_sequence = connection.response_sequence
                 connection.socket.sendall(data)
+                if self.server.log_exchange:
+                    self.server.log_exchange(imei, "TX", data)
+                LOG.info("IRZ TX\nIMEI=%s\nLEN=%s\nHEX=%s", imei, len(data), data.hex(" ").upper())
+                response = connection.wait_for_response(response_sequence, 5.0) if self.path == "/test-command" else None
         except OSError:
             self.server.registry.remove(connection)
             self._json(503, {"error": "send failed"})
             return
-        if self.server.log_exchange:
-            self.server.log_exchange(imei, "TX", data)
-        LOG.info("IRZ TX\nIMEI=%s\nLEN=%s\nHEX=%s", imei, len(data), data.hex(" ").upper())
+        if self.path == "/test-command":
+            response = response or b""
+            ascii_value = "".join(chr(byte) if 32 <= byte < 127 else "." for byte in response)
+            self._json(
+                200,
+                {
+                    "status": "response" if response else "timeout",
+                    "imei": imei,
+                    "bytes": len(data),
+                    "response_hex": response.hex(" ").upper(),
+                    "response_ascii": ascii_value,
+                    "success": bool(response),
+                },
+            )
+            return
         self._json(200, {"status": "sent", "imei": imei, "bytes": len(data)})
 
 
