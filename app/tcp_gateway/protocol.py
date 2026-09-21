@@ -67,10 +67,15 @@ def decode_v2_frame(raw: bytes, max_size: int) -> tuple[str, list[str]]:
     return parts[0].upper(), parts[1:]
 
 
-def _parse_bitmask(value: str, width: int) -> int:
-    if len(value) != width or any(bit not in "01" for bit in value):
-        raise ValueError("invalid bitmask")
-    return int(value, 2)
+def _parse_hex_byte(value: str) -> tuple[int, str]:
+    """Accept exactly one byte from the compact v2 wire protocol."""
+    encoded = value.upper()
+    if len(encoded) != 2:
+        raise ValueError("invalid hex byte")
+    try:
+        return int(encoded, 16), encoded
+    except ValueError as exc:
+        raise ValueError("invalid hex byte") from exc
 
 
 def parse_v2_state(args: list[str]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -87,21 +92,22 @@ def parse_v2_state(args: list[str]) -> tuple[dict[str, Any], dict[str, Any]]:
 
     outputs: dict[str, int] = {}
     if "O" in values:
-        output_bits = values.pop("O")
-        if len(output_bits) != 3 or any(bit not in "01" for bit in output_bits):
-            raise ValueError("invalid output bitmask")
-        outputs = {relay: int(bit) for relay, bit in zip(("C6", "C7", "C8"), output_bits, strict=True)}
+        try:
+            output_mask = int(values.pop("O"), 10)
+        except ValueError as exc:
+            raise ValueError("invalid output mask") from exc
+        if not 0 <= output_mask <= 7:
+            raise ValueError("invalid output mask")
+        outputs = {"C6": (output_mask >> 2) & 1, "C7": (output_mask >> 1) & 1, "C8": output_mask & 1}
 
     inputs: dict[str, int] = {}
     raw: dict[str, str] = {}
     if "U2" in values:
-        encoded = values.pop("U2")
-        mask = _parse_bitmask(encoded, 4)
+        mask, encoded = _parse_hex_byte(values.pop("U2"))
         raw["U2"] = encoded
         inputs.update({name: (mask >> bit) & 1 for bit, name in enumerate(("SW2", "SW3", "SW4", "SW5"))})
     if "U3" in values:
-        encoded = values.pop("U3")
-        mask = _parse_bitmask(encoded, 8)
+        mask, encoded = _parse_hex_byte(values.pop("U3"))
         raw["U3"] = encoded
         mapping = {7: "REF", 0: "AUX0", 1: "G1", 2: "G2", 3: "G3", 4: "G4", 5: "G5", 6: "AUX6"}
         inputs.update({name: (mask >> bit) & 1 for bit, name in mapping.items()})

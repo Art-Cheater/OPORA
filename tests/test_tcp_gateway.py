@@ -112,13 +112,23 @@ def test_gateway_rejects_invalid_or_oversize_frame():
 def test_v2_protocol_parses_ascii_frames_and_decodes_inputs_without_phases():
     assert encode_v2_frame("SETALL 1") == b"SETALL 1\n"
     assert decode_v2_frame(b"OK ALL 1\n", 128) == ("OK", ["ALL", "1"])
-    actual, telemetry = parse_v2_state("O=101 U2=0101 U3=10100110 CSQ=20 CREG=1 CGATT=1 TEMP=42".split())
+    actual, telemetry = parse_v2_state("O=5 U2=EF U3=A6 CSQ=20 CREG=1 CGATT=1 TEMP=42".split())
     assert actual == {
         "outputs": {"C6": 1, "C7": 0, "C8": 1},
-        "inputs": {"SW2": 1, "SW3": 0, "SW4": 1, "SW5": 0, "REF": 1, "AUX0": 0, "G1": 1, "G2": 1, "G3": 0, "G4": 0, "G5": 1, "AUX6": 0},
-        "raw": {"U2": "0101", "U3": "10100110"},
+        "inputs": {"SW2": 1, "SW3": 1, "SW4": 1, "SW5": 1, "REF": 1, "AUX0": 0, "G1": 1, "G2": 1, "G3": 0, "G4": 0, "G5": 1, "AUX6": 0},
+        "raw": {"U2": "EF", "U3": "A6"},
     }
     assert telemetry == {"csq": 20, "creg": 1, "cgatt": 1, "temp": 42}
+
+
+def test_v2_protocol_rejects_invalid_output_and_hex_masks():
+    for args in (["O=8"], ["O=-1"], ["U2=GG"], ["U3=1FF"]):
+        try:
+            parse_v2_state(args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"invalid v2 state was accepted: {args}")
 
 
 def test_device_command_is_durable_and_starts_pending(app):
@@ -276,7 +286,7 @@ def test_v2_gateway_state_and_ok_complete_command_without_changing_actual(app):
         assert command.acknowledged_at is not None
         assert device.actual_state["outputs"]["C6"] == 0
 
-    gateway._handle_v2_frame("board-01", "127.0.0.1", "STATE", "O=100 U2=0000 U3=00000000 CSQ=20".split())
+    gateway._handle_v2_frame("board-01", "127.0.0.1", "STATE", "O=4 U2=00 U3=00 CSQ=20".split())
     with app.app_context():
         device = db.session.scalar(db.select(Device).where(Device.device_id == "board-01"))
         assert device.actual_state["outputs"] == {"C6": 1, "C7": 0, "C8": 0}

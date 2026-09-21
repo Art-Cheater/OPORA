@@ -302,10 +302,11 @@ SETALL 0
 либо extensible state line:
 
 ```text
-STATE O=101 U2=0101 U3=10100110 CSQ=20 CREG=1 CGATT=1
+STATE O=5 U2=EF U3=A6 CSQ=20 CREG=1 CGATT=1
 ```
 
-`O` имеет порядок `C6 C7 C8`. `U2` декодируется как bit0–3:
+`O` — десятичная маска `0..7`: bit2 `C6`, bit1 `C7`, bit0 `C8`. `U2` и `U3`
+— HEX bytes `00..FF`. `U2` декодируется как bit0–3:
 `SW2`, `SW3`, `SW4`, `SW5`; `U3`: bit7 `REF`, bit0 `AUX0`, bit1–5 `G1`–`G5`,
 bit6 `AUX6`. Назначать эти линии фазами A/B/C запрещено без отдельного
 подтверждения. `U2`/`U3` сохраняются в `actual.raw`, расшифрованные значения —
