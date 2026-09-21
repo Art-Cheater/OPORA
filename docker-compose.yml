@@ -148,10 +148,13 @@ services:
       - .env
     environment:
       MODEM_GATEWAY_HOST: 0.0.0.0
-      MODEM_SNIFFER_PORT: ${MODEM_SNIFFER_PORT:-5009}
+      MODEM_SNIFFER_PORT: 5009
+      MODEM_CONTROL_PORT: 5010
     command: ["python", "-m", "app.modem_gateway.sniffer"]
     ports:
-      - "${MODEM_SNIFFER_PORT:-5009}:5009"
+      - "5009:5009"
+    expose:
+      - "5010"
 
 volumes:
   postgres_data:

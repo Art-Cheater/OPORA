@@ -36,7 +36,7 @@ OPORA_ENV="$(awk -F= '$1 == "OPORA_ENV" { value=$2 } END { print value }' "$ROOT
 case "$OPORA_ENV" in
   production)
     COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.timeweb.example.yml)
-    BUILD_SERVICES=(web nginx inquiry-sync eis-sync documents-notify tcp-gateway)
+    BUILD_SERVICES=(web nginx inquiry-sync eis-sync documents-notify tcp-gateway modem-sniffer)
     ;;
   staging)
     COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.staging.yml)
@@ -88,6 +88,7 @@ EOF
   docker build -f "$tmp_web" -t opora-web:latest .
   docker tag opora-web:latest opora-eis-sync:latest
   docker tag opora-web:latest opora-inquiry-sync:latest
+  docker tag opora-web:latest opora-modem-sniffer:latest
   docker build -f "$tmp_nginx" -t opora-nginx:latest .
   rm -f "$tmp_web" "$tmp_nginx"
 }
