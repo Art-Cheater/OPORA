@@ -140,6 +140,19 @@ services:
       web:
         condition: service_healthy
 
+  modem-sniffer:
+    build: .
+    container_name: opora_modem_sniffer
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MODEM_GATEWAY_HOST: 0.0.0.0
+      MODEM_SNIFFER_PORT: ${MODEM_SNIFFER_PORT:-5009}
+    command: ["python", "-m", "app.modem_gateway.sniffer"]
+    ports:
+      - "${MODEM_SNIFFER_PORT:-5009}:5009"
+
 volumes:
   postgres_data:
   uploads_data:
