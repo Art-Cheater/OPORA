@@ -47,6 +47,12 @@ def test_create_encrypts_secret_and_never_renders_it(app, admin_client):
     assert "plain-secret" not in response.get_data(as_text=True)
 
 
+def test_device_form_exposes_diagnostic_mode_toggle(app, admin_client):
+    response = admin_client.get("/devices/new")
+    assert response.status_code == 200
+    assert "Диагностический режим" in response.get_data(as_text=True)
+
+
 def test_duplicate_edit_secret_and_soft_delete(app, admin_client):
     device_id = _device(app)
     with app.app_context():
