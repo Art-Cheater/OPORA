@@ -15,7 +15,7 @@ from app.core.audit_service import AuditService
 from app.core.decorators import permission_required
 from app.extensions import db
 from app.models.base import as_utc_aware, utcnow
-from app.models.devices import Device, DeviceCommand
+from app.models.devices import Device, DeviceCommand, DeviceDiagnosticEvent, DeviceDiagnosticSample
 from app.models.devices.state import OUTPUT_RELAYS, normalize_actual_state, payload_matches_actual
 from app.modules.devices.blueprint import devices_bp
 from app.modules.devices.command_service import active_command_query, expire_state_confirmation_timeouts
@@ -227,6 +227,30 @@ def status():
     )
 
 
+@devices_bp.route("/<uuid:device_id>/diagnostic-data")
+@login_required
+@permission_required("devices.view")
+def diagnostic_data(device_id):
+    device = _device_or_404(device_id)
+    samples = db.session.scalars(db.select(DeviceDiagnosticSample).where(DeviceDiagnosticSample.device_id == device.id, DeviceDiagnosticSample.active_filter()).order_by(DeviceDiagnosticSample.created_at.desc()).limit(50)).all()
+    events = db.session.scalars(db.select(DeviceDiagnosticEvent).where(DeviceDiagnosticEvent.device_id == device.id, DeviceDiagnosticEvent.active_filter()).order_by(DeviceDiagnosticEvent.created_at.desc()).limit(50)).all()
+    actual = normalize_actual_state(device.actual_state)
+    return jsonify({"connection_state": device.connection_state, "last_state_at": _serialize_datetime(device.last_state_at), "actual_state": actual, "telemetry": device.telemetry or {}, "samples": [{"created_at": _serialize_datetime(item.created_at), "outputs_mask": item.outputs_mask, "raw_u2": item.raw_u2, "raw_u3": item.raw_u3, "csq": item.csq, "creg": item.creg, "cgatt": item.cgatt} for item in samples], "events": [{"created_at": _serialize_datetime(item.created_at), "text": item.text} for item in events]})
+
+
+@devices_bp.route("/<uuid:device_id>/diagnostic-events", methods=["POST"])
+@login_required
+@permission_required("devices.manage")
+def create_diagnostic_event(device_id):
+    device = _device_or_404(device_id)
+    text = (request.form.get("text") or "").strip()
+    if not text or len(text) > 500:
+        abort(400, description="Укажите метку длиной до 500 символов.")
+    db.session.add(DeviceDiagnosticEvent(device_id=device.id, text=text, created_by=current_user.id))
+    db.session.commit()
+    return jsonify({"ok": True}), 201
+
+
 @devices_bp.route("/new", methods=["GET", "POST"])
 @login_required
 @permission_required("devices.manage")
@@ -239,7 +263,7 @@ def create():
             form.device_id.errors.append("Плата с таким Device ID уже существует.")
         else:
             try:
-                device = Device(name=form.name.data.strip(), device_id=key, secret_encrypted=encrypt_device_secret(form.secret.data.strip()), protocol_version=form.protocol_version.data, enabled=bool(form.enabled.data), connection_state="offline", created_by=current_user.id)
+                device = Device(name=form.name.data.strip(), device_id=key, secret_encrypted=encrypt_device_secret(form.secret.data.strip()), protocol_version=form.protocol_version.data, diagnostic_mode=bool(form.diagnostic_mode.data), enabled=bool(form.enabled.data), connection_state="offline", created_by=current_user.id)
             except (RuntimeError, ValueError):
                 flash("Не удалось безопасно сохранить секрет платы. Проверьте настройку gateway.", "danger")
             else:
@@ -260,7 +284,7 @@ def edit(device_id):
     form = DeviceForm(obj=device)
     form.is_edit = True
     if request.method == "GET":
-        form.device_id.data, form.name.data, form.protocol_version.data, form.enabled.data = device.device_id, device.name, device.protocol_version, device.enabled
+        form.device_id.data, form.name.data, form.protocol_version.data, form.diagnostic_mode.data, form.enabled.data = device.device_id, device.name, device.protocol_version, device.diagnostic_mode, device.enabled
     if form.validate_on_submit():
         key = form.device_id.data.strip()
         duplicate = db.session.scalar(db.select(Device.id).where(Device.device_id == key, Device.id != device.id, Device.active_filter()))
@@ -270,7 +294,7 @@ def edit(device_id):
             try:
                 if (form.secret.data or "").strip():
                     device.secret_encrypted = encrypt_device_secret(form.secret.data.strip())
-                device.name, device.device_id, device.protocol_version, device.enabled, device.updated_by = form.name.data.strip(), key, form.protocol_version.data, bool(form.enabled.data), current_user.id
+                device.name, device.device_id, device.protocol_version, device.diagnostic_mode, device.enabled, device.updated_by = form.name.data.strip(), key, form.protocol_version.data, bool(form.diagnostic_mode.data), bool(form.enabled.data), current_user.id
                 AuditService.log(user_id=current_user.id, action="update", entity_type="device", entity_id=device.id, description=f"Изменена плата {device.device_id}")
                 db.session.commit()
             except (RuntimeError, ValueError):

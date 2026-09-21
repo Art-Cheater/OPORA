@@ -22,6 +22,7 @@ class Device(BaseModel):
     secret_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     protocol_version: Mapped[str] = mapped_column(String(32), nullable=False, default="1")
+    diagnostic_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     connection_state: Mapped[str] = mapped_column(String(24), nullable=False, default="offline")
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)

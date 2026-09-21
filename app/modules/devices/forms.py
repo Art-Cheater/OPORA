@@ -10,6 +10,7 @@ class DeviceForm(FlaskForm):
     device_id = StringField("Device ID", validators=[DataRequired(message="Укажите Device ID."), Length(max=100), Regexp(r"^[A-Za-z0-9][A-Za-z0-9._-]*$", message="Используйте буквы, цифры, точку, дефис или подчёркивание.")])
     secret = PasswordField("Device Secret", validators=[Optional(), Length(max=512)])
     protocol_version = SelectField("Протокол", choices=[("1", "v1: JSON"), ("2", "v2: text")], default="1", validators=[DataRequired()])
+    diagnostic_mode = BooleanField("Диагностический режим", default=False)
     enabled = BooleanField("Активна", default=True)
     submit = SubmitField("Сохранить")
     is_edit = False

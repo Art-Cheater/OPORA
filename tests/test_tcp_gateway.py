@@ -4,7 +4,7 @@ import json
 from cryptography.fernet import Fernet
 
 from app.extensions import db
-from app.models.devices import Device, DeviceCommand
+from app.models.devices import Device, DeviceCommand, DeviceDiagnosticSample
 from app.tcp_gateway.main import Gateway
 from app.tcp_gateway.protocol import calculate_hmac, decode_frame, decode_v2_frame, encode_frame, encode_v2_frame, hmac_matches, new_nonce, parse_v2_state
 from app.tcp_gateway.secrets import encrypt_device_secret
@@ -315,3 +315,18 @@ def test_v2_gateway_dispatches_setall_as_one_ascii_command(app):
 
     asyncio.run(dispatch_once())
     assert writer.frames == ["SETALL 0"]
+
+
+def test_diagnostic_state_samples_are_opt_in(app):
+    _gateway_device(app)
+    gateway = Gateway(app)
+    gateway._handle_v2_frame("board-01", None, "STATE", "O=5 U2=EF U3=FB CSQ=27 CREG=1 CGATT=1".split())
+    with app.app_context():
+        assert db.session.scalar(db.select(DeviceDiagnosticSample)) is None
+        device = db.session.scalar(db.select(Device).where(Device.device_id == "board-01"))
+        device.diagnostic_mode = True
+        db.session.commit()
+    gateway._handle_v2_frame("board-01", None, "STATE", "O=5 U2=EF U3=FB CSQ=27 CREG=1 CGATT=1".split())
+    with app.app_context():
+        sample = db.session.scalar(db.select(DeviceDiagnosticSample))
+        assert (sample.outputs_mask, sample.raw_u2, sample.raw_u3, sample.csq) == (5, "EF", "FB", "27")

@@ -14,7 +14,7 @@ from flask import Flask
 from app import create_app
 from app.extensions import db
 from app.models.base import as_utc_aware, utcnow
-from app.models.devices import Device, DeviceCommand
+from app.models.devices import Device, DeviceCommand, DeviceDiagnosticSample
 from app.models.devices.state import normalize_actual_state, payload_matches_actual
 from app.modules.devices.command_service import expire_state_confirmation_timeouts
 from app.tcp_gateway.protocol import decode_frame, decode_v2_frame, encode_frame, encode_v2_frame, hmac_matches, new_nonce, parse_v2_state
@@ -26,6 +26,7 @@ class Gateway:
         self.app = app
         self.connections: dict[str, asyncio.StreamWriter] = {}
         self.connection_protocols: dict[str, str] = {}
+        self.last_diagnostic_get: dict[str, float] = {}
         self.stopping = asyncio.Event()
 
     def _get_authenticated_device_secret(self, device_id: str) -> str | None:
@@ -78,6 +79,9 @@ class Gateway:
                     device.last_state_at = now
                 if isinstance(telemetry, dict):
                     device.telemetry = telemetry
+                if device.diagnostic_mode and actual is not None:
+                    outputs, raw = (device.actual_state or {}).get("outputs", {}), (device.actual_state or {}).get("raw", {})
+                    db.session.add(DeviceDiagnosticSample(device_id=device.id, outputs_mask=(int(outputs.get("C6", 0)) << 2) | (int(outputs.get("C7", 0)) << 1) | int(outputs.get("C8", 0)), raw_u2=raw.get("U2"), raw_u3=raw.get("U3"), csq=str((telemetry or {}).get("csq")) if (telemetry or {}).get("csq") is not None else None, creg=str((telemetry or {}).get("creg")) if (telemetry or {}).get("creg") is not None else None, cgatt=str((telemetry or {}).get("cgatt")) if (telemetry or {}).get("cgatt") is not None else None))
                 db.session.commit()
 
     async def _send(self, writer: asyncio.StreamWriter, payload: dict[str, Any]) -> None:
@@ -212,6 +216,7 @@ class Gateway:
                 pending = db.session.scalars(db.select(DeviceCommand).join(Device).where(DeviceCommand.status == "pending", Device.active_filter())).all()
                 db.session.commit()
                 outbound = [(item.device_id, item.command_id, item.command_type, item.payload) for item in pending]
+                diagnostic = [(item.id, item.device_id) for item in db.session.scalars(db.select(Device).where(Device.diagnostic_mode.is_(True), Device.protocol_version == "2", Device.connection_state == "online", Device.active_filter())).all()]
             for device_pk, command_id, command_type, payload in outbound:
                 with self.app.app_context():
                     device = db.session.get(Device, device_pk)
@@ -231,6 +236,18 @@ class Gateway:
                             db.session.commit()
                 except ConnectionError:
                     continue
+            now_loop = asyncio.get_running_loop().time()
+            busy_ids = {device_pk for device_pk, *_ in outbound}
+            for device_pk, external_id in diagnostic:
+                if device_pk in busy_ids or now_loop - self.last_diagnostic_get.get(external_id, 0) < 1:
+                    continue
+                writer = self.connections.get(external_id)
+                if writer and not writer.is_closing():
+                    try:
+                        await self._send_v2(writer, "GET")
+                        self.last_diagnostic_get[external_id] = now_loop
+                    except ConnectionError:
+                        continue
             await asyncio.sleep(self.app.config["DEVICE_COMMAND_POLL_SECONDS"])
 
     @staticmethod
