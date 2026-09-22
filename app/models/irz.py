@@ -13,16 +13,15 @@ from app.models.types import GUID, JSONType
 class IRZDevice(BaseModel):
     __tablename__ = "irz_devices"
     __table_args__ = (
-        CheckConstraint("transport_type IN ('SERIAL', 'TCP')", name="ck_irz_devices_transport"),
-        CheckConstraint("connection_state IN ('DISCONNECTED', 'CONNECTING', 'CONNECTED', 'BUSY', 'ERROR')", name="ck_irz_devices_state"),
         Index("ix_irz_devices_enabled_name", "enabled", "name"),
     )
 
+    imei: Mapped[str | None] = mapped_column(String(15), nullable=True, unique=True, index=True)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
-    model: Mapped[str] = mapped_column(String(40), nullable=False, default="Mercury V2")
+    model: Mapped[str] = mapped_column(String(40), nullable=False, default="ATM21")
     serial_number: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    network_address: Mapped[int] = mapped_column(Integer, nullable=False)
-    transport_type: Mapped[str] = mapped_column(String(10), nullable=False)
+    network_address: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    transport_type: Mapped[str | None] = mapped_column(String(10), nullable=True)
     serial_port: Mapped[str | None] = mapped_column(String(255), nullable=True)
     host: Mapped[str | None] = mapped_column(String(253), nullable=True)
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -36,6 +35,17 @@ class IRZDevice(BaseModel):
     last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    device_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    firmware_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    firmware_revision: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    firmware_build: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    hardware_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    sim: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    csq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    atp: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    interfaces: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    last_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class IRZOperationLog(BaseModel):
@@ -73,6 +83,7 @@ class IRZExchangeLog(BaseModel):
     raw_hex: Mapped[str] = mapped_column(Text, nullable=False)
     raw_ascii: Mapped[str] = mapped_column(Text, nullable=False)
     raw_length: Mapped[int] = mapped_column(Integer, nullable=False)
+    packet_type: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
 
 
 class IRZExperiment(BaseModel):

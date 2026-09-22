@@ -52,6 +52,7 @@ def logs():
                 "hex": item.raw_hex,
                 "ascii": item.raw_ascii,
                 "length": item.raw_length,
+                "packet_type": item.packet_type,
             }
             for item in service.recent_logs(limit=limit, imei=imei)
         ]
@@ -179,21 +180,11 @@ def _error_response(exc):
 @login_required
 @permission_required("irz.view")
 def mercury_devices():
-    items = service.list_mercury_devices()
-    return jsonify([service.serialize_device(item) for item in items])
-
-
-@irz_bp.post("/api/mercury/devices")
-@login_required
-@permission_required("irz.admin")
-def mercury_device_create():
     try:
-        device = service.save_device(request.get_json(silent=True), user_id=current_user.id)
-    except ValueError as exc:
+        items, online, runtime = service.list_mercury_devices()
+    except (service.GatewayUnavailable, service.GatewayResponseError) as exc:
         return _error_response(exc)
-    AuditService.log(user_id=current_user.id, action="create", entity_type="irz_device", entity_id=device.id, description=f"Добавлен Mercury: {device.name}")
-    db.session.commit()
-    return jsonify(service.serialize_device(device)), 201
+    return jsonify([service.serialize_device(item, online=item.imei in online, runtime=runtime.get(item.imei, {})) for item in items])
 
 
 @irz_bp.get("/api/mercury/devices/<device_id>")
@@ -201,85 +192,39 @@ def mercury_device_create():
 @permission_required("irz.view")
 def mercury_device_detail(device_id):
     try:
-        return jsonify(service.serialize_device(service.get_device(device_id)))
+        device = service.get_device(device_id)
+        live = {item["imei"]: item for item in service.get_devices()}
+        return jsonify(service.serialize_device(device, online=device.imei in live, runtime=live.get(device.imei, {})))
     except (ValueError, LookupError, service.GatewayUnavailable, service.GatewayResponseError) as exc:
         return _error_response(exc)
 
 
-@irz_bp.put("/api/mercury/devices/<device_id>")
+@irz_bp.patch("/api/mercury/devices/<device_id>")
 @login_required
-@permission_required("irz.admin")
+@permission_required("irz.control")
 def mercury_device_update(device_id):
     try:
         device = service.get_device(device_id)
-        device = service.save_device(request.get_json(silent=True), user_id=current_user.id, device=device)
-    except (ValueError, LookupError, service.GatewayUnavailable, service.GatewayResponseError) as exc:
+        payload = request.get_json(silent=True) or {}
+        service.set_network_address(device, payload.get("network_address"))
+    except (ValueError, LookupError) as exc:
         return _error_response(exc)
-    AuditService.log(user_id=current_user.id, action="update", entity_type="irz_device", entity_id=device.id, description=f"Изменён Mercury: {device.name}")
+    AuditService.log(user_id=current_user.id, action="update", entity_type="irz_device", entity_id=device.id,
+                     description=f"Изменён сетевой адрес Mercury за ATM21 {device.imei}", new_values={"network_address": device.network_address})
     db.session.commit()
     return jsonify(service.serialize_device(device))
-
-
-@irz_bp.delete("/api/mercury/devices/<device_id>")
-@login_required
-@permission_required("irz.admin")
-def mercury_device_delete(device_id):
-    try:
-        device = service.get_device(device_id)
-        if device.connection_state != "DISCONNECTED":
-            service.disconnect_device(device)
-    except (ValueError, LookupError, service.GatewayUnavailable, service.GatewayResponseError) as exc:
-        return _error_response(exc)
-    device.soft_delete(current_user.id)
-    AuditService.log(user_id=current_user.id, action="soft_delete", entity_type="irz_device", entity_id=device.id, description=f"Удалён Mercury: {device.name}")
-    db.session.commit()
-    return "", 204
-
-
-def _device_action(device_id, action):
-    try:
-        device = service.get_device(device_id)
-        if action == "connect":
-            result = service.connect_device(device)
-        elif action == "reconnect":
-            result = service.connect_device(device, reconnect=True)
-        elif action == "disconnect":
-            result = service.disconnect_device(device)
-        else:
-            result = service.execute_device_command(device, "serial_and_manufacture", user_id=current_user.id, operation="TEST")
-    except (ValueError, LookupError, service.GatewayUnavailable, service.GatewayResponseError) as exc:
-        return _error_response(exc)
-    AuditService.log(user_id=current_user.id, action="update", entity_type="irz_device", entity_id=device.id, description=f"IRZ: {action} для {device.name}")
-    db.session.commit()
-    return jsonify(result)
-
-
-@irz_bp.post("/api/mercury/devices/<device_id>/connect")
-@login_required
-@permission_required("irz.control")
-def mercury_connect(device_id):
-    return _device_action(device_id, "connect")
-
-
-@irz_bp.post("/api/mercury/devices/<device_id>/disconnect")
-@login_required
-@permission_required("irz.control")
-def mercury_disconnect(device_id):
-    return _device_action(device_id, "disconnect")
-
-
-@irz_bp.post("/api/mercury/devices/<device_id>/reconnect")
-@login_required
-@permission_required("irz.control")
-def mercury_reconnect(device_id):
-    return _device_action(device_id, "reconnect")
 
 
 @irz_bp.post("/api/mercury/devices/<device_id>/test")
 @login_required
 @permission_required("irz.view")
 def mercury_test(device_id):
-    return _device_action(device_id, "test")
+    try:
+        device = service.get_device(device_id)
+        result = service.execute_device_command(device, "serial_and_manufacture", user_id=current_user.id, operation="TEST")
+    except (ValueError, LookupError, service.GatewayUnavailable, service.GatewayResponseError) as exc:
+        return _error_response(exc)
+    return jsonify(result)
 
 
 @irz_bp.get("/api/mercury/devices/<device_id>/commands")
@@ -336,8 +281,10 @@ def mercury_exchange_log(device_id):
         device = service.get_device(device_id)
     except (ValueError, LookupError) as exc:
         return _error_response(exc)
-    items = service.operation_logs(device, limit=request.args.get("limit", 100, type=int), status=request.args.get("status"))
-    return jsonify([
+    limit = min(max(request.args.get("limit", 100, type=int), 1), 200)
+    status = request.args.get("status")
+    items = service.operation_logs(device, limit=limit, status=status)
+    structured = [
         {
             "id": str(item.id), "created_at": item.created_at.isoformat(), "command_id": item.command_id,
             "mercury_command": item.mercury_command, "operation": item.operation, "status": item.status,
@@ -345,4 +292,14 @@ def mercury_exchange_log(device_id):
             "duration_ms": item.duration_ms, "tx_raw": item.tx_raw, "rx_raw": item.rx_raw,
         }
         for item in items
-    ])
+    ]
+    if not status:
+        for item in service.recent_logs(limit=limit, imei=device.imei):
+            structured.append({"id": str(item.id), "created_at": item.created_at.isoformat(),
+                               "command_id": item.packet_type or "UNKNOWN_RAW", "operation": item.direction,
+                               "status": "SUCCESS", "result": item.raw_ascii, "error_code": None,
+                               "error_message": None, "duration_ms": None,
+                               "tx_raw": item.raw_hex if item.direction == "TX" else None,
+                               "rx_raw": item.raw_hex if item.direction == "RX" else None})
+    structured.sort(key=lambda item: item["created_at"], reverse=True)
+    return jsonify(structured[:limit])

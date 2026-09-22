@@ -23,13 +23,14 @@ def test_irz_page_opens_and_appears_in_menu(admin_client):
     response = admin_client.get("/irz")
     assert response.status_code == 200
     html = response.get_data(as_text=True)
-    assert "IRZ · Управление приборами" in html
+    assert "IRZ · Подключения" in html
     assert 'href="/irz"' in html
     assert 'id="irzOperatorShell"' in html
     assert "Операторская панель" in html
-    assert "Опросить счётчик" in html
+    assert "Проверить Mercury" in html
     assert "Инженерный режим" in html
-    assert "Нет настроенных Mercury устройств" in html
+    assert "Нет подключённых IRZ" in html
+    assert "Добавить устройство" not in html
     assert 'class="tab-pane fade show active" id="irzOperatorPane"' in html
     assert 'class="tab-pane fade" id="irzLegacyPane"' in html
     assert "/static/js/irz.js?v=" in html

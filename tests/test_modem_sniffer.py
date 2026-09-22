@@ -4,7 +4,12 @@ import socket
 import threading
 import time
 
-from app.modem_gateway.sniffer import create_servers, format_chunk
+import pytest
+
+from app.modem_gateway.sniffer import HEARTBEAT, ConnectionRegistry, DeviceConnection, create_servers, format_chunk, parse_identification, utcnow
+from app.modem_gateway.mercury import MercurySessionManager
+from modbus_crc import add_crc
+from types import SimpleNamespace
 
 
 def _request(port, method, path, payload=None):
@@ -88,8 +93,67 @@ def test_raw_tcp_sniffer_formats_bytes():
     assert "HEX=01 02 03 04" in rendered
 
 
-def test_protocol_test_waits_for_next_device_response():
+def test_real_session_fixture_identification_and_heartbeat_are_classified():
+    import csv
+    from pathlib import Path
+    rows = list(csv.DictReader((Path(__file__).parent / "fixtures" / "irz_atm21_session.csv").open(encoding="utf-8")))
+    identification = bytes.fromhex(rows[0]["hex"])
+    metadata = parse_identification(identification[:18] + identification[18:])
+    assert metadata == {"imei": "868441036775234", "typ": "ATM", "dev": "ATM21", "ver": "01", "rev": "04",
+                        "bld": "024.254", "hdw": "2.0", "sim": "0", "csq": "16", "atp": "1.2", "int": "485+232"}
+    assert bytes.fromhex(rows[1]["hex"]) == HEARTBEAT
+    assert bytes.fromhex(rows[2]["hex"]) == bytes.fromhex("01 08 00 27 C0")
+
+
+def test_registry_supports_two_sessions_and_reconnect_same_imei():
+    class Sock:
+        def __init__(self): self.shutdown_called = False
+        def shutdown(self, _how): self.shutdown_called = True
+    registry = ConnectionRegistry(); now = utcnow()
+    first = DeviceConnection("111111111111111", "1.1.1.1", 1, now, now, Sock())
+    second = DeviceConnection("222222222222222", "2.2.2.2", 2, now, now, Sock())
+    replacement = DeviceConnection(first.imei, "3.3.3.3", 3, now, now, Sock())
+    registry.register(first); registry.register(second)
+    assert {item["imei"] for item in registry.devices()} == {first.imei, second.imei}
+    registry.register(replacement)
+    assert registry.get(first.imei) is replacement and first.socket.shutdown_called
+    registry.remove(first)
+    assert registry.get(first.imei) is replacement
+
+
+def test_pending_lock_is_released_after_timeout_and_next_command_works():
+    server_socket, client_socket = socket.socketpair()
+    now = utcnow()
+    session = DeviceConnection("123456789012345", "127.0.0.1", 1, now, now, server_socket)
+    try:
+        with pytest.raises(TimeoutError):
+            session.ask_mercury(bytes.fromhex("01 08 00 27 C0"), 0.02)
+        assert client_socket.recv(5) == bytes.fromhex("01 08 00 27 C0")
+        result = []
+        thread = threading.Thread(target=lambda: result.append(session.ask_mercury(bytes.fromhex("01 08 00 27 C0"), 1)))
+        thread.start(); assert client_socket.recv(5) == bytes.fromhex("01 08 00 27 C0")
+        response = add_crc(bytes.fromhex("01 12 34"))
+        session.feed_mercury_candidate(response)
+        thread.join(1)
+        assert result == [response]
+    finally:
+        server_socket.close(); client_socket.close()
+
+
+def _fake_mercury():
+    driver = SimpleNamespace(prepare_address=int, format_address=lambda value: bytes((value,)),
+                             extract_address=lambda packet: packet[0], extract_data=lambda packet: list(packet[1:-2]))
+    class Commands:
+        @staticmethod
+        def get_serial_number_and_date_of_manufacture(meter):
+            return {"serial_number": "".join(f"{x:02X}" for x in meter.send_command(0x08, 0x00))}
+    driver.commands = Commands
+    return SimpleNamespace(mercury_v2=driver)
+
+
+def test_inbound_session_mercury_acceptance_with_fragmentation_and_heartbeat():
     tcp_server, http_server = create_servers("127.0.0.1", 0, 0)
+    http_server.mercury_manager = MercurySessionManager(tcp_server.registry, _fake_mercury)
     threads = [
         threading.Thread(target=tcp_server.serve_forever, daemon=True),
         threading.Thread(target=http_server.serve_forever, daemon=True),
@@ -99,35 +163,36 @@ def test_protocol_test_waits_for_next_device_response():
     client = socket.create_connection(("127.0.0.1", tcp_server.server_address[1]), timeout=2)
     result = []
     try:
-        client.sendall(b"AT$IMEI=123456789012345,TYP=ATM,DEV=ATM21")
-        _wait_for_device(http_server.server_address[1], "123456789012345")
+        client.sendall(b"AT$IMEI=1234567")
+        client.sendall(b"89012345,PSW=***,TYP=ATM,DEV=ATM21,VER=01,REV=04,BLD=024.254,HDW=2.0,SIM=0,CSQ=16,ATP=1.2,INT=485+232,")
+        devices = _wait_for_device(http_server.server_address[1], "123456789012345")
+        assert devices[0]["dev"] == "ATM21"
+        assert devices[0]["csq"] == "16"
         request_thread = threading.Thread(
             target=lambda: result.append(
                 _request(
                     http_server.server_address[1],
                     "POST",
-                    "/test-command",
-                    {"imei": "123456789012345", "hex": "01 03 00 00"},
+                    "/mercury/command",
+                    {"imei": "123456789012345", "network_address": 1, "command_id": "serial_and_manufacture"},
                 )
             )
         )
         request_thread.start()
-        assert client.recv(4) == bytes.fromhex("01 03 00 00")
-        client.sendall(bytes.fromhex("01 03 02 12 34 B5 33"))
+        assert client.recv(5) == bytes.fromhex("01 08 00 27 C0")
+        client.sendall(bytes.fromhex("B5 BC BD BE BF"))
+        response = add_crc(bytes.fromhex("01 12 34 56 78"))
+        client.sendall(response[:3])
+        client.sendall(response[3:] + bytes.fromhex("B5 BC BD BE BF"))
         request_thread.join(timeout=2)
-        assert result == [
-            (
-                200,
-                {
-                    "status": "response",
-                    "imei": "123456789012345",
-                    "bytes": 4,
-                    "response_hex": "01 03 02 12 34 B5 33",
-                    "response_ascii": "....4.3",
-                    "success": True,
-                },
-            )
-        ]
+        assert result[0][0] == 200
+        assert result[0][1]["data"]["serial_number"] == "12345678"
+        client.shutdown(socket.SHUT_RDWR)
+        client.close()
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline and _request(http_server.server_address[1], "GET", "/devices")[1]:
+            time.sleep(0.01)
+        assert _request(http_server.server_address[1], "GET", "/devices") == (200, [])
     finally:
         client.close()
         tcp_server.shutdown()
