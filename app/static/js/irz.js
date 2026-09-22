@@ -10,6 +10,7 @@
         const commandsNode = q('[data-command-list]');
         const logNode = q('[data-operation-log]');
         const pollButton = q('[data-device-poll]');
+        const renameButton = q('[data-device-rename]');
         const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
         let devices = [], selected = null, commands = [], rawMode = false, stopped = false, timer = null, viewCleared = false, operationBusy = false;
 
@@ -65,6 +66,13 @@
             const badge = q('[data-device-state]'); badge.textContent = state; badge.className = `badge text-bg-${stateClass(state)}`;
             q('[data-status-dot]').className = `irz-status-dot bg-${stateClass(state)}`;
             q('[data-device-summary]').textContent = selected ? `IMEI ${selected.imei} · ${selected.device_type || 'ATM21'} · ${selected.ip || 'IP неизвестен'} · CSQ ${text(selected.csq)}` : '—';
+            if (renameButton) renameButton.disabled = !selected;
+            const meterBox = q('[data-meter-identity]');
+            if (meterBox) {
+                meterBox.hidden = !selected?.meter;
+                q('[data-meter-title]').textContent = selected?.meter?.display_name || '';
+                q('[data-meter-summary]').textContent = selected?.meter ? `${selected.meter.model || 'Модель не определена'} · № ${selected.meter.serial_number}` : '';
+            }
             if (selected) q('[data-connection-details]').textContent = `IP ${selected.ip || '—'}:${selected.port || '—'}\nПодключён: ${fmtTime(selected.connected_at)}\nПоследний пакет: ${fmtTime(selected.last_seen_at)}\nINT: ${text(selected.interfaces)}\nVER/REV/BLD: ${text(selected.firmware_version)}/${text(selected.firmware_revision)}/${text(selected.firmware_build)}`;
             const atmOnline = Boolean(selected?.online);
             q('[data-atm-status]').textContent = atmOnline ? 'ONLINE' : 'OFFLINE';
@@ -177,6 +185,21 @@
             setBusy(true, 'Выполняется комплексный опрос…');
             try { const result = await api(endpoint('/poll'), { method: 'POST', body: '{}' }); renderMetrics(result.results); setMessage(result.partial ? `Опрос завершён частично: ошибок ${result.errors.length}` : 'Опрос успешно завершён.', result.partial ? 'warning' : 'success'); }
             catch (error) { setMessage(error.message, 'danger'); } finally { setBusy(false); await reload(); }
+        });
+        renameButton?.addEventListener('click', async () => {
+            const value = window.prompt('Название IRZ', selected?.name || '');
+            if (value === null) return;
+            try { await api(endpoint('/identity'), { method: 'PATCH', body: JSON.stringify({ name: value }) }); await reload(); }
+            catch (error) { setMessage(error.message, 'danger'); }
+        });
+        q('[data-meter-rename]')?.addEventListener('click', async () => {
+            if (!selected?.meter) return;
+            const customName = window.prompt('Название счётчика', selected.meter.custom_name || '');
+            if (customName === null) return;
+            const model = window.prompt('Точная модель Mercury (пусто, если неизвестна)', selected.meter.model || '');
+            if (model === null) return;
+            try { await api(endpoint('/meter'), { method: 'PATCH', body: JSON.stringify({ custom_name: customName, model }) }); await reload(); }
+            catch (error) { setMessage(error.message, 'danger'); }
         });
         q('[data-log-filter]').addEventListener('change', () => { viewCleared = false; refreshLog(); });
         root.querySelectorAll('[data-log-mode]').forEach((button) => button.addEventListener('click', () => { rawMode = button.dataset.logMode === 'raw'; root.querySelectorAll('[data-log-mode]').forEach((item) => item.classList.toggle('active', item === button)); refreshLog(); }));

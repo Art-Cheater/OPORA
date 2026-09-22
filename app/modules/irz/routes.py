@@ -215,6 +215,41 @@ def mercury_device_update(device_id):
     return jsonify(service.serialize_device(device))
 
 
+@irz_bp.patch("/api/mercury/devices/<device_id>/identity")
+@login_required
+@permission_required("irz.admin")
+def mercury_device_identity(device_id):
+    try:
+        device = service.get_device(device_id)
+        payload = request.get_json(silent=True) or {}
+        old_name = device.name
+        service.rename_device(device, payload.get("name"), user_id=current_user.id)
+    except (ValueError, LookupError) as exc:
+        return _error_response(exc)
+    AuditService.log(user_id=current_user.id, action="update", entity_type="irz_device", entity_id=device.id,
+                     description=f"Переименован IRZ {device.imei}", old_values={"name": old_name},
+                     new_values={"name": device.name})
+    db.session.commit()
+    return jsonify(service.serialize_device(device))
+
+
+@irz_bp.patch("/api/mercury/devices/<device_id>/meter")
+@login_required
+@permission_required("irz.admin")
+def mercury_meter_identity(device_id):
+    try:
+        device = service.get_device(device_id)
+        payload = request.get_json(silent=True) or {}
+        meter = service.update_meter_identity(device, payload, user_id=current_user.id)
+    except (ValueError, LookupError) as exc:
+        return _error_response(exc)
+    AuditService.log(user_id=current_user.id, action="update", entity_type="irz_meter", entity_id=meter.id,
+                     description=f"Изменены реквизиты Mercury {meter.serial_number}",
+                     new_values={"custom_name": meter.custom_name, "model": meter.model})
+    db.session.commit()
+    return jsonify(service.serialize_meter(meter))
+
+
 @irz_bp.post("/api/mercury/devices/<device_id>/test")
 @login_required
 @permission_required("irz.view")

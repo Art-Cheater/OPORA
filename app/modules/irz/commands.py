@@ -21,6 +21,12 @@ class CommandSpec:
     available: bool = True
     limitation: str | None = None
     poll: bool = False
+    command_code: int = 0x08
+    subcommand: int | None = None
+    units: str | None = None
+    safe_read_only: bool = True
+    fixture_tested: bool = False
+    physical_verified: bool = False
 
     def public_dict(self) -> dict[str, Any]:
         value = asdict(self)
@@ -36,6 +42,9 @@ COMMANDS: dict[str, CommandSpec] = {
         mercury_command="get_serial_number_and_date_of_manufacture",
         description="Чтение серийного номера и даты изготовления.",
         poll=True,
+        subcommand=0x00,
+        fixture_tested=True,
+        physical_verified=True,
     ),
     "transformation_ratios": CommandSpec(
         id="transformation_ratios",
@@ -44,6 +53,9 @@ COMMANDS: dict[str, CommandSpec] = {
         description="Коэффициенты трансформации напряжения и тока.",
         category="Параметры",
         poll=True,
+        subcommand=0x02,
+        fixture_tested=True,
+        physical_verified=True,
     ),
     "firmware_version": CommandSpec(
         id="firmware_version",
@@ -52,6 +64,9 @@ COMMANDS: dict[str, CommandSpec] = {
         description="Версия встроенного программного обеспечения.",
         category="Диагностика",
         poll=True,
+        subcommand=0x03,
+        fixture_tested=True,
+        physical_verified=True,
     ),
     "additional_timeout_multiplier": CommandSpec(
         id="additional_timeout_multiplier",
@@ -60,6 +75,7 @@ COMMANDS: dict[str, CommandSpec] = {
         description="Служебный множитель дополнительного тайм-аута.",
         category="Диагностика",
         poll=True,
+        subcommand=0x04,
     ),
     "main_timeout_multiplier": CommandSpec(
         id="main_timeout_multiplier",
@@ -68,6 +84,7 @@ COMMANDS: dict[str, CommandSpec] = {
         description="Служебный множитель основного тайм-аута.",
         category="Диагностика",
         poll=True,
+        subcommand=0x1D,
     ),
     "passport": CommandSpec(
         id="passport",
@@ -76,6 +93,7 @@ COMMANDS: dict[str, CommandSpec] = {
         description="Паспортные данные прибора.",
         available=False,
         limitation="mercury-base 1.6 передаёт 0x0100 в bytes() и команда завершается ValueError",
+        subcommand=0x0100,
     ),
     "device_info": CommandSpec(
         id="device_info",
@@ -84,6 +102,7 @@ COMMANDS: dict[str, CommandSpec] = {
         description="Определение модели и возможностей.",
         available=False,
         limitation="парсер ответа в mercury-base 1.6 не реализован (TODO)",
+        subcommand=0x12,
     ),
 }
 

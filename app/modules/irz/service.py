@@ -11,7 +11,7 @@ from urllib.request import Request, urlopen
 from flask import current_app
 
 from app.extensions import db
-from app.models.irz import IRZDevice, IRZExchangeLog, IRZExperiment, IRZOperationLog
+from app.models.irz import IRZDevice, IRZExchangeLog, IRZExperiment, IRZMeter, IRZOperationLog
 from app.modules.irz.commands import command_list, get_command
 
 
@@ -247,6 +247,10 @@ def list_mercury_devices() -> tuple[list[IRZDevice], set[str], dict[str, dict]]:
 
 def serialize_device(device: IRZDevice, *, online: bool = False, runtime: dict | None = None) -> dict:
     runtime = runtime or {}
+    meter = db.session.scalar(
+        db.select(IRZMeter).where(IRZMeter.active_filter(), IRZMeter.irz_device_id == device.id)
+        .order_by(IRZMeter.last_seen_at.desc())
+    )
     return {
         "id": str(device.id),
         "name": device.name,
@@ -282,7 +286,69 @@ def serialize_device(device: IRZDevice, *, online: bool = False, runtime: dict |
             "firmware_version": device.last_firmware_version,
             "transformation_ratios": device.last_transformation_ratios,
         },
+        "meter": serialize_meter(meter) if meter else None,
     }
+
+
+def serialize_meter(meter: IRZMeter) -> dict:
+    return {
+        "id": str(meter.id), "serial_number": meter.serial_number, "custom_name": meter.custom_name,
+        "display_name": meter.custom_name or f"Mercury {meter.serial_number}", "model": meter.model,
+        "model_source": meter.model_source,
+        "manufacture_date": meter.manufacture_date.isoformat() if meter.manufacture_date else None,
+        "firmware_version": meter.firmware_version,
+        "last_seen_at": meter.last_seen_at.isoformat() if meter.last_seen_at else None,
+        "last_poll_at": meter.last_poll_at.isoformat() if meter.last_poll_at else None,
+        "last_poll_status": meter.last_poll_status, "latest_snapshot": meter.latest_snapshot or {},
+    }
+
+
+def rename_device(device: IRZDevice, value: object, *, user_id) -> None:
+    name = str(value or "").strip()
+    if not 1 <= len(name) <= 160:
+        raise ValueError("INVALID_NAME")
+    device.name = name
+    device.updated_by = user_id
+    db.session.commit()
+
+
+def update_meter_identity(device: IRZDevice, payload: dict, *, user_id) -> IRZMeter:
+    meter = db.session.scalar(db.select(IRZMeter).where(IRZMeter.active_filter(), IRZMeter.irz_device_id == device.id))
+    if meter is None:
+        raise LookupError("meter not discovered")
+    if "custom_name" in payload:
+        name = str(payload.get("custom_name") or "").strip()
+        if len(name) > 160:
+            raise ValueError("INVALID_NAME")
+        meter.custom_name = name or None
+    if "model" in payload:
+        model = str(payload.get("model") or "").strip()
+        if len(model) > 80:
+            raise ValueError("INVALID_MODEL")
+        meter.model = model or None
+        meter.model_source = "MANUAL" if model else None
+    meter.updated_by = user_id
+    db.session.commit()
+    return meter
+
+
+def _upsert_meter(device: IRZDevice, data: dict, now: datetime, user_id) -> IRZMeter | None:
+    serial = str(data.get("serial_number") or "").strip()
+    if not serial:
+        return None
+    meter = db.session.scalar(db.select(IRZMeter).where(IRZMeter.serial_number == serial))
+    if meter is None:
+        meter = IRZMeter(irz_device_id=device.id, serial_number=serial, created_by=user_id, updated_by=user_id)
+        db.session.add(meter)
+    else:
+        meter.irz_device_id = device.id
+        meter.updated_by = user_id
+    raw_date = data.get("date_of_manufacture")
+    if raw_date:
+        try: meter.manufacture_date = datetime.fromisoformat(str(raw_date)).date()
+        except ValueError: pass
+    meter.last_seen_at = now
+    return meter
 
 
 def set_network_address(device: IRZDevice, value: object) -> None:
@@ -338,10 +404,18 @@ def _store_operation(device: IRZDevice, user_id, command_id: str, operation: str
             if raw_date:
                 try: device.last_manufacture_date = datetime.fromisoformat(str(raw_date)).date()
                 except ValueError: pass
+            _upsert_meter(device, result["data"], now, user_id)
         elif command_id == "firmware_version" and result.get("data") is not None:
             device.last_firmware_version = str(result["data"])
         elif command_id == "transformation_ratios" and isinstance(result.get("data"), dict):
             device.last_transformation_ratios = result["data"]
+        meter = db.session.scalar(db.select(IRZMeter).where(IRZMeter.active_filter(), IRZMeter.irz_device_id == device.id))
+        if meter:
+            if command_id == "firmware_version": meter.firmware_version = str(result.get("data"))
+            snapshot = dict(meter.latest_snapshot or {})
+            snapshot[command_id] = {"timestamp": now.isoformat(), "value": result.get("data")}
+            meter.latest_snapshot = snapshot
+            meter.last_seen_at = now
     elif error:
         device.last_error_at = datetime.now(timezone.utc)
         device.last_error = error_message
@@ -378,6 +452,10 @@ def poll_device(device: IRZDevice, *, user_id) -> dict:
         gateway_error = GatewayResponseError(error.get("message", "Ошибка опроса"), 502, error.get("error_code", "PROTOCOL_ERROR"), error)
         _store_operation(device, user_id, error.get("command", "poll"), "POLL", error=gateway_error)
     device.last_polled_at = datetime.now(timezone.utc)
+    meter = db.session.scalar(db.select(IRZMeter).where(IRZMeter.active_filter(), IRZMeter.irz_device_id == device.id))
+    if meter:
+        meter.last_poll_at = device.last_polled_at
+        meter.last_poll_status = "PARTIAL" if result.get("partial") else ("SUCCESS" if result.get("success") else "ERROR")
     db.session.commit()
     return result
 

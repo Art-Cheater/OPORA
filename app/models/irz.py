@@ -52,6 +52,28 @@ class IRZDevice(BaseModel):
     last_mercury_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class IRZMeter(BaseModel):
+    """A Mercury meter physically discovered behind an ATM21 session."""
+    __tablename__ = "irz_meters"
+    __table_args__ = (
+        Index("ix_irz_meters_device_seen", "irz_device_id", "last_seen_at"),
+    )
+
+    irz_device_id: Mapped[Any] = mapped_column(
+        GUID(), ForeignKey("irz_devices.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    serial_number: Mapped[str] = mapped_column(String(40), nullable=False, unique=True, index=True)
+    custom_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    model_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    manufacture_date: Mapped[Any | None] = mapped_column(Date, nullable=True)
+    firmware_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_poll_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_poll_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    latest_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
+
+
 class IRZOperationLog(BaseModel):
     __tablename__ = "irz_operation_logs"
     __table_args__ = (

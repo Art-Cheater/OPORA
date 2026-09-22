@@ -5,7 +5,7 @@ from modbus_crc import add_crc
 
 from app.extensions import db
 from app.models.irz import IRZOperationLog
-from app.models.irz import IRZDevice
+from app.models.irz import IRZDevice, IRZMeter
 from app.modem_gateway.mercury import MercuryGatewayError, MercurySessionManager
 from app.modules.irz import service
 from app.modules.irz.commands import COMMANDS, normalize_result
@@ -108,6 +108,28 @@ def test_web_devices_derive_from_gateway_and_command_targets_imei(app, admin_cli
     refreshed = admin_client.get("/irz/api/mercury/devices").get_json()[0]
     assert refreshed["mercury_responding"] is True
     assert refreshed["last_values"]["firmware_version"] == "1.2.3"
+
+
+def test_irz_and_discovered_meter_can_be_renamed(app, admin_client):
+    with app.app_context():
+        device = IRZDevice(imei="123456789012345", name="ATM21 123456789012345", model="ATM21", enabled=True)
+        db.session.add(device); db.session.flush()
+        db.session.commit()
+        service._store_operation(device, None, "serial_and_manufacture", "COMMAND", result={
+            "data": {"serial_number": 36790160, "date_of_manufacture": "2019-02-10"},
+            "duration_ms": 1200, "tx_raw": "00 08 00 76 00", "rx_raw": "00 24 4F 01 3C 0A 02 13 7B 09",
+        })
+        meter = db.session.scalar(db.select(IRZMeter).where(IRZMeter.serial_number == "36790160"))
+        assert meter is not None
+        device_id = str(device.id)
+    response = admin_client.patch(f"/irz/api/mercury/devices/{device_id}/identity", json={"name": "Котельная №3"})
+    assert response.status_code == 200
+    assert response.get_json()["name"] == "Котельная №3"
+    response = admin_client.patch(f"/irz/api/mercury/devices/{device_id}/meter",
+                                  json={"custom_name": "Главный ввод", "model": "Mercury 230 ART"})
+    assert response.status_code == 200
+    assert response.get_json()["display_name"] == "Главный ввод"
+    assert response.get_json()["model_source"] == "MANUAL"
 
 
 def test_manual_mercury_crud_is_not_exposed(admin_client):

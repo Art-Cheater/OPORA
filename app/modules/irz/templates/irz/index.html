@@ -67,6 +67,9 @@
                                 <button class="btn btn-primary" data-device-poll disabled>
                                     <i class="bi bi-arrow-repeat"></i> Опросить счётчик
                                 </button>
+                                {% if can_admin %}<button class="btn btn-outline-secondary" data-device-rename disabled>
+                                    <i class="bi bi-pencil"></i> Переименовать IRZ
+                                </button>{% endif %}
                             </div>
                         </div>
                         <div class="alert alert-secondary py-2" data-operation-message>Выберите ATM21 слева.</div>
@@ -81,7 +84,13 @@
                         </div>
                         <div class="card mb-3">
                             <div class="card-header fw-semibold">Основная информация</div>
-                            <div class="card-body"><div class="row g-2" data-metrics><div class="col text-muted">Результаты появятся после опроса.</div></div></div>
+                            <div class="card-body">
+                                <div class="mb-3" data-meter-identity hidden>
+                                    <strong data-meter-title></strong><span class="text-muted ms-2" data-meter-summary></span>
+                                    {% if can_admin %}<button class="btn btn-sm btn-link" data-meter-rename>Настроить название/модель</button>{% endif %}
+                                </div>
+                                <div class="row g-2" data-metrics><div class="col text-muted">Результаты появятся после опроса.</div></div>
+                            </div>
                         </div>
                         <div class="card mb-3">
                             <div class="card-header fw-semibold">Команды</div>

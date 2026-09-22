@@ -1,5 +1,14 @@
 # IRZ / ATM21 / Mercury
 
+Реестр команд, источники протокола и статусы проверки находятся в
+[`MERCURY_V2_COMMANDS.md`](MERCURY_V2_COMMANDS.md).
+
+IMEI является постоянной identity IRZ. Пользовательское имя хранится в уже
+существующем `IRZDevice.name`; online определяется только live socket. Mercury
+создаётся в `IRZMeter` только после физически успешного чтения серийного номера.
+Неизвестную модель разрешено указать администратору вручную; такое значение
+помечается `model_source=MANUAL` и не считается автоматическим определением.
+
 ## Architecture and ports
 
 The production path is physically verified:
