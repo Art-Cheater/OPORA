@@ -1,5 +1,6 @@
 import http.client
 import json
+import logging
 import socket
 import threading
 import time
@@ -197,3 +198,73 @@ def test_inbound_session_mercury_acceptance_with_fragmentation_and_heartbeat():
         http_server.server_close()
         for thread in threads:
             thread.join(timeout=2)
+
+
+def test_client_reader_stays_alive_after_mercury_timeout(caplog):
+    """The handler remains the sole reader and a command timeout must not close it."""
+    exchanges = []
+    tcp_server, http_server = create_servers(
+        "127.0.0.1",
+        0,
+        0,
+        lambda imei, direction, data, packet_type=None: exchanges.append(
+            (imei, direction, data, packet_type)
+        ),
+    )
+    threads = [
+        threading.Thread(target=tcp_server.serve_forever, daemon=True),
+        threading.Thread(target=http_server.serve_forever, daemon=True),
+    ]
+    for thread in threads:
+        thread.start()
+    client = socket.create_connection(("127.0.0.1", tcp_server.server_address[1]), timeout=2)
+    imei = "123456789012345"
+    try:
+        with caplog.at_level(logging.INFO, logger="opora.modem_sniffer"):
+            client.sendall(f"AT$IMEI={imei},TYP=ATM,DEV=ATM21,".encode())
+            _wait_for_device(http_server.server_address[1], imei)
+            session = tcp_server.registry.get(imei)
+            assert session is not None
+
+            timed_out = []
+            command_thread = threading.Thread(
+                target=lambda: _capture_timeout(
+                    timed_out,
+                    session,
+                    bytes.fromhex("00 08 03 36 01"),
+                )
+            )
+            command_thread.start()
+            assert client.recv(5) == bytes.fromhex("00 08 03 36 01")
+            command_thread.join(timeout=1)
+            assert timed_out == [True]
+
+            client.sendall(HEARTBEAT)
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                if any(item[3] == "ATM21_HEARTBEAT" for item in exchanges):
+                    break
+                time.sleep(0.01)
+            assert any(item[3] == "ATM21_HEARTBEAT" for item in exchanges)
+            assert any(item["imei"] == imei for item in tcp_server.registry.devices())
+
+        messages = [record.getMessage() for record in caplog.records]
+        assert any("CLIENT HANDLER START" in message for message in messages)
+        assert any("RECV bytes=" in message for message in messages)
+        assert any("IDENTIFICATION DETECTED" in message for message in messages)
+        assert any("IMEI REGISTERED" in message for message in messages)
+    finally:
+        client.close()
+        tcp_server.shutdown()
+        http_server.shutdown()
+        tcp_server.server_close()
+        http_server.server_close()
+        for thread in threads:
+            thread.join(timeout=2)
+
+
+def _capture_timeout(result, session, package):
+    try:
+        session.ask_mercury(package, 0.05)
+    except TimeoutError:
+        result.append(True)

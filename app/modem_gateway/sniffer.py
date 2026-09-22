@@ -203,17 +203,28 @@ class ModemRequestHandler(socketserver.BaseRequestHandler):
         remote_ip, remote_port = self.client_address[:2]
         connection = None
         identification_buffer = bytearray()
+        close_reason = "handler completed"
         LOG.info("MODEM CONNECT IP=%s PORT=%s", remote_ip, remote_port)
+        LOG.info("CLIENT HANDLER START IP=%s PORT=%s", remote_ip, remote_port)
         try:
-            while data := self.request.recv(4096):
+            while True:
+                LOG.info("RECV WAIT IP=%s PORT=%s TIMEOUT=%s", remote_ip, remote_port, self.request.gettimeout())
+                data = self.request.recv(4096)
+                if not data:
+                    close_reason = "EOF"
+                    LOG.info("EOF IP=%s PORT=%s", remote_ip, remote_port)
+                    break
+                LOG.info("RECV bytes=%s hex=%s", len(data), data.hex(" ").upper())
                 if connection is None:
                     identification_buffer.extend(data)
                     identification_buffer[:] = identification_buffer[-8192:]
                     metadata = parse_identification(bytes(identification_buffer))
                     if metadata:
+                        LOG.info("IDENTIFICATION DETECTED IMEI=%s IP=%s PORT=%s", metadata["imei"], remote_ip, remote_port)
                         connection = DeviceConnection(metadata["imei"], str(remote_ip), int(remote_port), utcnow(), utcnow(), self.request,
                                                       metadata=metadata, log_exchange=self.server.log_exchange)
                         self.server.registry.register(connection)
+                        LOG.info("IMEI REGISTERED IMEI=%s IP=%s PORT=%s", connection.imei, remote_ip, remote_port)
                         emit_exchange(self.server.log_exchange, connection.imei, "RX", b"", "CONNECT")
                         if self.server.identification_callback:
                             self.server.identification_callback(connection.public_dict())
@@ -232,11 +243,19 @@ class ModemRequestHandler(socketserver.BaseRequestHandler):
                         packet_type = self._classify(connection, data)
                 emit_exchange(self.server.log_exchange, connection.imei if connection else None, "RX", data, packet_type)
                 LOG.info("IRZ TYPE=%s\n%s", packet_type, format_chunk(data, imei=connection.imei if connection else None))
+        except socket.timeout:
+            close_reason = "SOCKET TIMEOUT"
+            LOG.exception("SOCKET TIMEOUT IP=%s PORT=%s", remote_ip, remote_port)
+        except Exception as exc:
+            close_reason = f"EXCEPTION {type(exc).__name__}: {exc}"
+            LOG.exception("EXCEPTION IP=%s PORT=%s", remote_ip, remote_port)
         finally:
             if connection:
                 connection.disconnect_pending()
                 self.server.registry.remove(connection)
                 emit_exchange(self.server.log_exchange, connection.imei, "RX", b"", "DISCONNECT")
+            LOG.info("SESSION CLOSED IMEI=%s IP=%s PORT=%s REASON=%s",
+                     connection.imei if connection else "?", remote_ip, remote_port, close_reason)
             LOG.info("MODEM DISCONNECT IP=%s PORT=%s", remote_ip, remote_port)
 
     def _classify(self, connection: DeviceConnection, data: bytes) -> str:
