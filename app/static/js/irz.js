@@ -1,242 +1,162 @@
 (function () {
     function boot() {
-        const root = document.querySelector('[data-irz-root]');
+        const root = document.querySelector('[data-irz-operator-root]');
         if (!root || root.dataset.bound === '1') return;
         root.dataset.bound = '1';
+        const q = (selector) => root.querySelector(selector);
+        const devicesNode = q('[data-mercury-devices]');
+        const message = q('[data-operation-message]');
+        const metrics = q('[data-metrics]');
+        const commandsNode = q('[data-command-list]');
+        const logNode = q('[data-operation-log]');
+        const pollButton = q('[data-device-poll]');
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+        let devices = [], selected = null, commands = [], rawMode = false, stopped = false, timer = null, viewCleared = false;
 
-        const devicesNode = root.querySelector('[data-irz-devices]');
-        const logsNode = root.querySelector('[data-irz-logs]');
-        const gatewayNode = root.querySelector('[data-irz-gateway]');
-        const selectedNode = root.querySelector('[data-irz-selected]');
-        const messageNode = root.querySelector('[data-irz-message]');
-        const form = root.querySelector('[data-irz-send-form]');
-        const input = root.querySelector('[data-irz-hex]');
-        const sendButton = root.querySelector('[data-irz-send]');
-        const listenButton = root.querySelector('[data-irz-listen]');
-        const exportLink = root.querySelector('[data-irz-export]');
-        const labDevice = root.querySelector('[data-irz-lab-device]');
-        const preset = root.querySelector('[data-irz-preset]');
-        const labHex = root.querySelector('[data-irz-lab-hex]');
-        const crc = root.querySelector('[data-irz-crc]');
-        const append = root.querySelector('[data-irz-append]');
-        const testForm = root.querySelector('[data-irz-test-form]');
-        const testButton = root.querySelector('[data-irz-test-send]');
-        const testMessage = root.querySelector('[data-irz-test-message]');
-        const experimentsNode = root.querySelector('[data-irz-experiments]');
-        const canSend = root.dataset.canSend === '1';
-        const pollMs = Math.max(1000, Number(root.dataset.pollMs) || 1000);
-        let selectedImei = null;
-        let stopped = false;
-        let timer = null;
-        let rawMode = false;
+        const endpoint = (suffix = '') => root.dataset.deviceUrlTemplate.replace('DEVICE_ID', selected?.id || '') + suffix;
+        const stateClass = (state) => ({ CONNECTED: 'success', BUSY: 'warning', ERROR: 'danger' }[state] || 'secondary');
+        const text = (value) => value === null || value === undefined || value === '' ? '—' : String(value);
+        const fmtTime = (value) => value ? new Date(value).toLocaleString('ru-RU') : '—';
 
-        function escapeText(value) {
-            const span = document.createElement('span');
-            span.textContent = value ?? '';
-            return span.innerHTML;
+        async function api(url, options = {}) {
+            const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-CSRFToken': csrf, ...(options.headers || {}) }, ...options });
+            const payload = response.status === 204 ? null : await response.json();
+            if (!response.ok) throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
+            return payload;
         }
 
-        function formatTime(value) {
-            const date = new Date(value);
-            return Number.isNaN(date.getTime()) ? '—' : date.toLocaleTimeString('ru-RU', { hour12: false });
+        function setMessage(value, kind = 'secondary') {
+            message.className = `alert alert-${kind} py-2`;
+            message.textContent = value;
         }
 
-        function updateSendState(online) {
-            const enabled = canSend && online && Boolean(selectedImei);
-            input.disabled = !enabled;
-            sendButton.disabled = !enabled;
-            labDevice.disabled = !canSend || !online;
-            labHex.disabled = !enabled;
-            crc.disabled = !enabled;
-            append.disabled = !enabled;
-            testButton.disabled = !enabled;
-        }
-
-        function renderDevices(devices, online) {
-            if (devices.length === 1) selectedImei = devices[0].imei;
-            if (selectedImei && !devices.some((item) => item.imei === selectedImei)) selectedImei = null;
+        function renderDevices() {
             devicesNode.replaceChildren();
-            labDevice.replaceChildren(new Option('Устройство не выбрано', ''));
+            const emptyState = q('[data-device-empty]');
+            emptyState.hidden = devices.length > 0;
+            devicesNode.hidden = devices.length === 0;
             if (!devices.length) {
-                const empty = document.createElement('div');
-                empty.className = 'p-4 text-center text-muted';
-                empty.textContent = online ? 'Нет подключенных устройств' : 'Шлюз недоступен';
-                devicesNode.append(empty);
+                return;
             }
             devices.forEach((device) => {
-                labDevice.add(new Option(device.imei, device.imei, false, device.imei === selectedImei));
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = `list-group-item list-group-item-action irz-device ${device.imei === selectedImei ? 'active' : ''}`;
-                button.innerHTML = `<div class="fw-semibold">IMEI <code>${escapeText(device.imei)}</code></div>`
-                    + `<div class="small mt-1">IP ${escapeText(device.ip)} · PORT ${escapeText(device.port)}</div>`
-                    + `<div class="small text-muted mt-1">LAST SEEN ${escapeText(device.last_seen_at ? new Date(device.last_seen_at).toLocaleString('ru-RU') : '—')}</div>`;
-                button.addEventListener('click', () => { selectedImei = device.imei; refresh(); });
-                devicesNode.append(button);
-            });
-            selectedNode.textContent = rawMode ? 'RAW · ALL DEVICES' : (selectedImei || 'Устройство не выбрано');
-            const exportUrl = new URL(root.dataset.exportUrl, window.location.origin);
-            if (!rawMode && selectedImei) exportUrl.searchParams.set('imei', selectedImei);
-            exportLink.href = exportUrl.toString();
-            updateSendState(online);
-        }
-
-        function renderLogs(logs) {
-            logsNode.replaceChildren();
-            if (!logs.length) {
-                const row = document.createElement('tr');
-                row.innerHTML = '<td colspan="5" class="text-center text-secondary py-5">Лог пуст</td>';
-                logsNode.append(row);
-                return;
-            }
-            logs.forEach((item) => {
-                const row = document.createElement('tr');
-                row.innerHTML = `<td>${escapeText(formatTime(item.created_at))}</td>`
-                    + `<td class="${item.direction === 'RX' ? 'irz-dir-rx' : 'irz-dir-tx'}">${escapeText(item.direction)}</td>`
-                    + `<td>${escapeText(item.length)}</td><td>${escapeText(item.hex)}</td><td>${escapeText(item.ascii)}</td>`;
-                logsNode.append(row);
-            });
-            const scroller = root.querySelector('[data-irz-log-scroll]');
-            scroller.scrollTop = scroller.scrollHeight;
-        }
-
-        function renderExperiments(experiments) {
-            experimentsNode.replaceChildren();
-            if (!experiments.length) {
-                const row = document.createElement('tr');
-                row.innerHTML = '<td colspan="6" class="text-center text-muted py-4">Экспериментов нет</td>';
-                experimentsNode.append(row);
-                return;
-            }
-            experiments.forEach((item) => {
-                const row = document.createElement('tr');
-                row.innerHTML = `<td>${escapeText(formatTime(item.created_at))}</td><td>${escapeText(item.imei)}</td>`
-                    + `<td>${escapeText(item.command_hex)}</td><td>${escapeText(item.response_hex || '—')}</td>`
-                    + `<td>${escapeText(item.response_ascii || '—')}</td>`
-                    + `<td><span class="badge ${item.success ? 'text-bg-success' : 'text-bg-warning'}">${item.success ? 'RESPONSE' : 'TIMEOUT'}</span></td>`;
-                experimentsNode.append(row);
+                const button = document.createElement('button'); button.type = 'button';
+                button.className = `list-group-item list-group-item-action irz-device ${selected?.id === device.id ? 'active' : ''}`;
+                const title = document.createElement('div'); title.className = 'd-flex justify-content-between gap-2';
+                const name = document.createElement('strong'); name.textContent = device.name;
+                const badge = document.createElement('span'); badge.className = `badge text-bg-${stateClass(device.connection_state)}`; badge.textContent = device.connection_state;
+                title.append(name, badge);
+                const detail = document.createElement('div'); detail.className = 'small text-muted mt-1'; detail.textContent = `${device.model} · адрес ${device.network_address}`;
+                const polled = document.createElement('div'); polled.className = 'small text-muted'; polled.textContent = `Опрос: ${fmtTime(device.last_polled_at)}`;
+                button.append(title, detail, polled); button.addEventListener('click', () => selectDevice(device.id)); devicesNode.append(button);
             });
         }
 
-        async function refresh() {
-            if (stopped) return;
-            if (timer) {
-                window.clearTimeout(timer);
-                timer = null;
-            }
-            try {
-                const logsUrl = new URL(root.dataset.logsUrl, window.location.origin);
-                const experimentsUrl = new URL(root.dataset.experimentsUrl, window.location.origin);
-                logsUrl.searchParams.set('limit', '200');
-                if (!rawMode && selectedImei) logsUrl.searchParams.set('imei', selectedImei);
-                if (selectedImei) experimentsUrl.searchParams.set('imei', selectedImei);
-                const [devicesResponse, logsResponse, experimentsResponse] = await Promise.all([
-                    fetch(root.dataset.devicesUrl, { headers: { Accept: 'application/json' }, cache: 'no-store' }),
-                    fetch(logsUrl, { headers: { Accept: 'application/json' }, cache: 'no-store' }),
-                    fetch(experimentsUrl, { headers: { Accept: 'application/json' }, cache: 'no-store' }),
-                ]);
-                const devicesPayload = await devicesResponse.json();
-                const online = devicesResponse.ok && devicesPayload.status === 'online';
-                gatewayNode.textContent = online ? 'ONLINE' : 'OFFLINE';
-                gatewayNode.className = `badge ${online ? 'text-bg-success' : 'text-bg-danger'}`;
-                renderDevices(devicesPayload.devices || [], online);
-                if (logsResponse.ok) renderLogs(await logsResponse.json());
-                if (experimentsResponse.ok) renderExperiments(await experimentsResponse.json());
-                root.querySelector('[data-irz-updated]').textContent = `Обновлено ${new Date().toLocaleTimeString('ru-RU')}`;
-            } catch {
-                gatewayNode.textContent = 'OFFLINE';
-                gatewayNode.className = 'badge text-bg-danger';
-                renderDevices([], false);
-            } finally {
-                if (!stopped) timer = window.setTimeout(refresh, pollMs);
-            }
+        function renderSelected() {
+            const panel = q('[data-connection-panel]'); panel.hidden = !selected;
+            q('[data-device-title]').textContent = selected?.name || 'Выберите прибор';
+            const state = selected?.connection_state || 'DISCONNECTED';
+            const badge = q('[data-device-state]'); badge.textContent = state; badge.className = `badge text-bg-${stateClass(state)}`;
+            q('[data-status-dot]').className = `irz-status-dot bg-${stateClass(state)}`;
+            q('[data-device-summary]').textContent = selected ? `${selected.model} · ${selected.serial_number ? `№ ${selected.serial_number} · ` : ''}${selected.transport_type === 'TCP' ? `TCP ${selected.host}:${selected.port}` : `${selected.serial_port} @ ${selected.baudrate}`} · ответ ${text(selected.last_latency_ms)} мс` : '—';
+            if (selected) q('[data-connection-details]').textContent = selected.transport_type === 'TCP' ? `TCP/IP ${selected.host}:${selected.port}\nСетевой адрес: ${selected.network_address}` : `Serial ${selected.serial_port}\n${selected.baudrate} бод · адрес ${selected.network_address}`;
+            const busy = state === 'BUSY'; pollButton.disabled = !selected || busy || !selected.enabled;
+            root.querySelectorAll('[data-device-action]').forEach((button) => { button.disabled = !selected || busy || (root.dataset.canControl !== '1' && button.dataset.deviceAction !== 'test'); });
         }
 
-        form.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            messageNode.textContent = '';
-            if (!selectedImei) { messageNode.textContent = 'Устройство offline.'; messageNode.className = 'small mt-2 text-danger'; return; }
-            sendButton.disabled = true;
+        async function selectDevice(id) {
+            selected = devices.find((item) => item.id === id) || null; viewCleared = false; renderDevices(); renderSelected();
+            if (!selected) return;
             try {
-                const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
-                const response = await fetch(root.dataset.sendUrl, {
-                    method: 'POST', credentials: 'same-origin',
-                    headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRFToken': csrf },
-                    body: JSON.stringify({ imei: selectedImei, hex: input.value }),
-                });
-                const payload = await response.json();
-                if (!response.ok) throw new Error(payload.error || 'Не удалось отправить команду.');
-                input.value = '';
-                messageNode.textContent = `Отправлено ${payload.bytes} байт.`;
-                messageNode.className = 'small mt-2 text-success';
-                await refresh();
-            } catch (error) {
-                messageNode.textContent = error.message || 'gateway unavailable';
-                messageNode.className = 'small mt-2 text-danger';
-            } finally {
-                sendButton.disabled = !canSend || !selectedImei;
-            }
-        });
+                [commands] = await Promise.all([api(endpoint('/commands')), refreshLog()]);
+                renderCommands();
+            } catch (error) { setMessage(error.message, 'danger'); }
+        }
 
-        labDevice.addEventListener('change', () => {
-            selectedImei = labDevice.value || null;
-            refresh();
-        });
+        function renderCommands() {
+            commandsNode.replaceChildren();
+            commands.forEach((command) => {
+                const col = document.createElement('div'); col.className = 'col-md-6 col-xxl-4';
+                const button = document.createElement('button'); button.type = 'button'; button.className = `btn w-100 text-start ${command.available ? 'btn-outline-primary' : 'btn-outline-secondary'}`; button.disabled = !command.available || selected?.connection_state === 'BUSY';
+                const title = document.createElement('strong'); title.textContent = command.title;
+                const detail = document.createElement('small'); detail.className = 'd-block text-muted mt-1'; detail.textContent = command.available ? `${command.category} · ${command.mercury_command}` : command.limitation;
+                button.append(title, detail); if (command.available) button.addEventListener('click', () => executeCommand(command)); col.append(button); commandsNode.append(col);
+            });
+        }
 
-        preset.addEventListener('change', () => {
-            if (preset.value) labHex.value = preset.value;
-        });
+        function renderMetrics(results) {
+            metrics.replaceChildren();
+            Object.entries(results || {}).forEach(([id, item]) => {
+                const spec = commands.find((value) => value.id === id);
+                const col = document.createElement('div'); col.className = 'col-md-6 col-xxl-4';
+                const card = document.createElement('div'); card.className = 'border rounded p-3 h-100';
+                const label = document.createElement('div'); label.className = 'small text-muted'; label.textContent = spec?.title || id;
+                const value = document.createElement('pre'); value.className = 'irz-result mb-0 mt-2'; value.textContent = JSON.stringify(item.data, null, 2);
+                card.append(label, value); col.append(card); metrics.append(col);
+            });
+            if (!metrics.children.length) metrics.textContent = 'Данные не получены.';
+        }
 
-        listenButton.addEventListener('click', () => {
-            rawMode = !rawMode;
-            listenButton.textContent = rawMode ? 'STOP LISTEN' : 'START LISTEN';
-            listenButton.classList.toggle('btn-danger', rawMode);
-            listenButton.classList.toggle('btn-outline-light', !rawMode);
-            selectedNode.textContent = rawMode ? 'RAW · ALL DEVICES' : (selectedImei || 'Устройство не выбрано');
-            refresh();
-        });
-
-        testForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            testMessage.textContent = '';
-            if (!selectedImei) {
-                testMessage.textContent = 'Устройство offline.';
-                testMessage.className = 'small mt-2 text-danger';
-                return;
-            }
-            testButton.disabled = true;
-            testButton.textContent = 'WAITING…';
+        async function executeCommand(command) {
+            if (command.dangerous && !window.confirm(`Опасная команда: ${command.title}\nУстройство: ${selected.name}\nПродолжить?`)) return;
+            setBusy(true, `Выполняется: ${command.title}…`);
             try {
-                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
-                const response = await fetch(root.dataset.testUrl, {
-                    method: 'POST', credentials: 'same-origin',
-                    headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRFToken': csrfToken },
-                    body: JSON.stringify({ imei: selectedImei, hex: labHex.value, crc: crc.value, append: append.value }),
-                });
-                const payload = await response.json();
-                if (!response.ok) throw new Error(payload.error || 'Не удалось выполнить тест.');
-                testMessage.textContent = payload.success
-                    ? `RX: ${payload.response_hex || 'пусто'}`
-                    : 'Ответ не получен за 5 секунд.';
-                testMessage.className = `small mt-2 ${payload.success ? 'text-success' : 'text-warning'}`;
-                await refresh();
-            } catch (error) {
-                testMessage.textContent = error.message || 'gateway unavailable';
-                testMessage.className = 'small mt-2 text-danger';
-            } finally {
-                testButton.textContent = 'SEND TEST';
-                testButton.disabled = !canSend || !selectedImei;
-            }
-        });
+                const url = root.dataset.commandUrlTemplate.replace('DEVICE_ID', selected.id).replace('COMMAND_ID', command.id);
+                const result = await api(url, { method: 'POST', body: JSON.stringify({ confirm: command.dangerous === true }) });
+                renderMetrics({ [command.id]: result }); setMessage(`${command.title}: выполнено за ${result.duration_ms} мс`, 'success');
+            } catch (error) { setMessage(error.message, 'danger'); } finally { setBusy(false); await reload(); }
+        }
 
-        window.addEventListener('opora:before-navigate', () => {
-            stopped = true;
-            if (timer) window.clearTimeout(timer);
-        }, { once: true });
-        refresh();
+        function setBusy(busy, label) {
+            if (selected) selected.connection_state = busy ? 'BUSY' : selected.connection_state;
+            pollButton.disabled = busy || !selected; if (label) setMessage(label, 'info'); renderSelected(); renderCommands();
+        }
+
+        async function refreshLog() {
+            if (!selected || viewCleared) { logNode.innerHTML = '<div class="p-4 text-muted text-center">Журнал пуст</div>'; return; }
+            const url = new URL(endpoint('/exchange-log'), window.location.origin); url.searchParams.set('limit', '100'); const filter = q('[data-log-filter]').value; if (['SUCCESS', 'ERROR', 'TIMEOUT'].includes(filter)) url.searchParams.set('status', filter);
+            const entries = await api(url); logNode.replaceChildren();
+            entries.forEach((entry) => {
+                const row = document.createElement('div'); row.className = `irz-operation irz-operation-${entry.status.toLowerCase()}`;
+                const head = document.createElement('div'); head.className = 'd-flex justify-content-between gap-2';
+                const summary = document.createElement('strong'); summary.textContent = `${fmtTime(entry.created_at)} ${entry.status === 'SUCCESS' ? '←' : '✕'} ${entry.command_id}`;
+                const duration = document.createElement('span'); duration.className = 'text-muted'; duration.textContent = entry.duration_ms === null ? '' : `${entry.duration_ms} мс`; head.append(summary, duration);
+                const body = document.createElement('pre'); body.className = 'mb-0 mt-1';
+                const rawText = filter === 'RAW_TX' ? `TX ${text(entry.tx_raw)}` : (filter === 'RAW_RX' ? `RX ${text(entry.rx_raw)}` : `TX ${text(entry.tx_raw)}\nRX ${text(entry.rx_raw)}`);
+                body.textContent = rawMode || filter.startsWith('RAW_') ? rawText : (entry.error_message || JSON.stringify(entry.result, null, 2));
+                row.append(head, body);
+                if (rawMode || filter.startsWith('RAW_')) { const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'btn btn-sm btn-link px-0'; copy.textContent = 'Копировать RAW'; copy.addEventListener('click', () => navigator.clipboard?.writeText(rawText)); row.append(copy); }
+                logNode.append(row);
+            });
+            if (!entries.length) logNode.innerHTML = '<div class="p-4 text-muted text-center">Журнал пуст</div>';
+        }
+
+        async function reload() {
+            devices = await api(root.dataset.mercuryDevicesUrl); if (selected) selected = devices.find((item) => item.id === selected.id) || null;
+            renderDevices(); renderSelected(); if (selected) await refreshLog();
+        }
+
+        root.querySelectorAll('[data-device-action]').forEach((button) => button.addEventListener('click', async () => {
+            const action = button.dataset.deviceAction; setBusy(true, `${button.textContent.trim()}…`);
+            try { await api(endpoint(`/${action}`), { method: 'POST', body: '{}' }); setMessage('Операция выполнена.', 'success'); }
+            catch (error) { setMessage(error.message, 'danger'); } finally { setBusy(false); await reload(); }
+        }));
+        pollButton.addEventListener('click', async () => {
+            setBusy(true, 'Выполняется комплексный опрос…');
+            try { const result = await api(endpoint('/poll'), { method: 'POST', body: '{}' }); renderMetrics(result.results); setMessage(result.partial ? `Опрос завершён частично: ошибок ${result.errors.length}` : 'Опрос успешно завершён.', result.partial ? 'warning' : 'success'); }
+            catch (error) { setMessage(error.message, 'danger'); } finally { setBusy(false); await reload(); }
+        });
+        q('[data-log-filter]').addEventListener('change', () => { viewCleared = false; refreshLog(); });
+        root.querySelectorAll('[data-log-mode]').forEach((button) => button.addEventListener('click', () => { rawMode = button.dataset.logMode === 'raw'; root.querySelectorAll('[data-log-mode]').forEach((item) => item.classList.toggle('active', item === button)); refreshLog(); }));
+        q('[data-clear-view]').addEventListener('click', () => { viewCleared = true; refreshLog(); });
+
+        const dialog = q('[data-device-dialog]'); const form = q('[data-device-form]');
+        function toggleTransport() { if (!form) return; const serial = form.elements.transport_type.value === 'SERIAL'; root.querySelectorAll('[data-field-serial]').forEach((node) => { node.hidden = !serial; }); root.querySelectorAll('[data-field-tcp]').forEach((node) => { node.hidden = serial; }); }
+        function openForm(device = null) { form.reset(); form.dataset.deviceId = device?.id || ''; form.elements.name.value = device?.name || ''; form.elements.model.value = device?.model || 'Mercury V2'; form.elements.network_address.value = device?.network_address || ''; form.elements.transport_type.value = device?.transport_type || 'TCP'; form.elements.host.value = device?.host || ''; form.elements.port.value = device?.port || ''; form.elements.serial_port.value = device?.serial_port || ''; form.elements.baudrate.value = device?.baudrate || 9600; form.elements.timeout.value = device?.connection_params?.timeout || 5; form.elements.enabled.checked = device?.enabled ?? true; toggleTransport(); dialog.showModal(); }
+        q('[data-device-new]')?.addEventListener('click', () => openForm()); q('[data-device-empty-add]')?.addEventListener('click', () => openForm()); q('[data-device-edit]')?.addEventListener('click', () => openForm(selected)); root.querySelectorAll('[data-dialog-close]').forEach((button) => button.addEventListener('click', () => dialog.close())); form?.elements.transport_type.addEventListener('change', toggleTransport);
+        form?.addEventListener('submit', async (event) => { event.preventDefault(); const values = Object.fromEntries(new FormData(form)); values.enabled = form.elements.enabled.checked; try { const id = form.dataset.deviceId; await api(id ? root.dataset.deviceUrlTemplate.replace('DEVICE_ID', id) : root.dataset.mercuryDevicesUrl, { method: id ? 'PUT' : 'POST', body: JSON.stringify(values) }); dialog.close(); await reload(); } catch (error) { q('[data-form-error]').textContent = error.message; } });
+
+        async function tick() { try { await reload(); } catch (error) { devices = []; selected = null; renderDevices(); renderSelected(); setMessage(`Не удалось загрузить устройства: ${error.message}`, 'danger'); } finally { if (!stopped) timer = window.setTimeout(tick, Math.max(1000, Number(root.dataset.pollMs) || 1000)); } }
+        window.addEventListener('opora:before-navigate', () => { stopped = true; if (timer) window.clearTimeout(timer); }, { once: true }); tick();
     }
-
-    document.addEventListener('DOMContentLoaded', boot);
-    window.addEventListener('opora:navigated', boot);
-    window.OporaIRZ = { init: boot };
+    document.addEventListener('DOMContentLoaded', boot); window.addEventListener('opora:navigated', boot); window.OporaIRZOperator = { init: boot };
 })();

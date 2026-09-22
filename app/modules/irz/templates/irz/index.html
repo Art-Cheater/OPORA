@@ -1,140 +1,168 @@
 {% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header %}
 
-{% block title %}IRZ Console — {{ app_name }}{% endblock %}
-{% block page_header %}
-{{ page_header("IRZ Console", "Диагностика TCP-обмена ATM21", "terminal") }}
-{% endblock %}
+{% block title %}IRZ · Управление приборами — {{ app_name }}{% endblock %}
+{% block page_header %}{{ page_header("IRZ · Управление приборами", "Связь с Mercury и инженерная диагностика ATM21", "terminal") }}{% endblock %}
 
 {% block content %}
-<section class="irz-console" data-irz-root
-         data-devices-url="{{ url_for('irz.devices') }}"
-         data-logs-url="{{ url_for('irz.logs') }}"
-         data-send-url="{{ url_for('irz.send') }}"
-         data-test-url="{{ url_for('irz.test_command') }}"
-         data-experiments-url="{{ url_for('irz.experiments') }}"
-         data-export-url="{{ url_for('irz.export_session') }}"
-         data-poll-ms="{{ config.IRZ_POLL_MS }}"
-         data-can-send="{{ '1' if can_send else '0' }}">
-    <div class="card mb-3">
-        <div class="card-body py-2 d-flex align-items-center gap-3">
-            <strong>Статус шлюза:</strong>
-            <span class="badge text-bg-secondary" data-irz-gateway>ПРОВЕРКА</span>
-            <span class="small text-muted" data-irz-updated></span>
-        </div>
-    </div>
+<div class="irz-workspace" data-irz-workspace>
+    <ul class="nav nav-tabs mb-3" role="tablist" aria-label="Режим IRZ">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="irzOperatorTab" data-bs-toggle="tab" data-bs-target="#irzOperatorPane"
+                    type="button" role="tab" aria-controls="irzOperatorPane" aria-selected="true">
+                <i class="bi bi-speedometer2 me-1"></i> Операторская панель
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="irzLegacyTab" data-bs-toggle="tab" data-bs-target="#irzLegacyPane"
+                    type="button" role="tab" aria-controls="irzLegacyPane" aria-selected="false">
+                <i class="bi bi-tools me-1"></i> Инженерный режим
+            </button>
+        </li>
+    </ul>
 
-    <div class="row g-3">
-        <div class="col-xl-4">
-            <div class="card irz-devices-card">
-                <div class="card-header fw-semibold">Подключенные ATM21</div>
-                <div class="list-group list-group-flush" data-irz-devices>
-                    <div class="p-4 text-center text-muted">Ожидание данных…</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-8">
-            <div class="card irz-log-card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span class="fw-semibold">LIVE LOG</span>
-                    <div class="d-flex align-items-center gap-2">
-                        <button type="button" class="btn btn-sm btn-outline-light" data-irz-listen>START LISTEN</button>
-                        <a class="btn btn-sm btn-outline-light" data-irz-export href="{{ url_for('irz.export_session') }}">
-                            <i class="bi bi-download"></i> DOWNLOAD SESSION
-                        </a>
-                        <code data-irz-selected>Устройство не выбрано</code>
-                    </div>
-                </div>
-                <div class="table-responsive irz-log-scroll" data-irz-log-scroll>
-                    <table class="table table-dark table-sm font-monospace mb-0 irz-log-table">
-                        <thead><tr><th>TIME</th><th>DIR</th><th>LEN</th><th>HEX</th><th>ASCII</th></tr></thead>
-                        <tbody data-irz-logs><tr><td colspan="5" class="text-center text-secondary py-5">Лог пуст</td></tr></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="card mt-3">
-        <div class="card-header fw-semibold">HEX COMMAND</div>
-        <div class="card-body">
-            <form data-irz-send-form class="d-flex flex-column flex-lg-row gap-2">
-                <input class="form-control font-monospace" data-irz-hex name="hex" autocomplete="off"
-                       placeholder="B5 BC BD BE BF" aria-label="HEX-команда" {% if not can_send %}disabled{% endif %}>
-                <button class="btn btn-primary px-4" type="submit" data-irz-send {% if not can_send %}disabled{% endif %}>
-                    <i class="bi bi-send"></i> SEND
-                </button>
-            </form>
-            <div class="small mt-2" data-irz-message aria-live="polite">
-                {% if not can_send %}<span class="text-muted">Нет права irz.send.</span>{% endif %}
-            </div>
-        </div>
-    </div>
-
-    <div class="card mt-3">
-        <div class="card-header fw-semibold">PROTOCOL LAB</div>
-        <div class="card-body">
-            <form data-irz-test-form>
+    <div class="tab-content">
+        <section class="tab-pane fade show active" id="irzOperatorPane" role="tabpanel" aria-labelledby="irzOperatorTab">
+            <div id="irzOperatorShell" class="irz-console" data-irz-operator-root
+                 data-mercury-devices-url="{{ url_for('irz.mercury_devices') }}"
+                 data-device-url-template="{{ url_for('irz.mercury_device_detail', device_id='DEVICE_ID') }}"
+                 data-command-url-template="{{ url_for('irz.mercury_command', device_id='DEVICE_ID', command_id='COMMAND_ID') }}"
+                 data-poll-ms="{{ config.IRZ_POLL_MS }}"
+                 data-can-control="{{ '1' if can_control else '0' }}"
+                 data-can-admin="{{ '1' if can_admin else '0' }}">
                 <div class="row g-3">
-                    <div class="col-lg-4">
-                        <label class="form-label" for="irzLabDevice">ATM21</label>
-                        <select class="form-select font-monospace" id="irzLabDevice" data-irz-lab-device {% if not can_send %}disabled{% endif %}>
-                            <option value="">Устройство не выбрано</option>
-                        </select>
-                    </div>
-                    <div class="col-lg-4">
-                        <label class="form-label" for="irzPreset">Protocol tests</label>
-                        <select class="form-select" id="irzPreset" data-irz-preset>
-                            <option value="">— выбрать эксперимент —</option>
-                            <option value="01 08 00">A) Mercury info</option>
-                            <option value="01 08 16 11">B) Mercury voltage</option>
-                            <option value="01 05 00 00">C) Mercury energy</option>
-                            <option value="01 2B 0E 01 00">D) Modbus device info</option>
-                            <option value="01 03 00 00 00 14">E) Modbus holding registers 0-20</option>
-                        </select>
-                    </div>
-                    <div class="col-lg-4">
-                        <label class="form-label" for="irzLabHex">HEX COMMAND</label>
-                        <input class="form-control font-monospace" id="irzLabHex" data-irz-lab-hex autocomplete="off" placeholder="01 03 00 00 00 10" {% if not can_send %}disabled{% endif %}>
-                    </div>
-                    <div class="col-md-5">
-                        <label class="form-label" for="irzCrc">CHECKSUM</label>
-                        <select class="form-select" id="irzCrc" data-irz-crc {% if not can_send %}disabled{% endif %}>
-                            <option value="none">NONE</option>
-                            <option value="modbus">MODBUS CRC16</option>
-                            <option value="mercury">MERCURY CRC</option>
-                        </select>
-                    </div>
-                    <div class="col-md-5">
-                        <label class="form-label" for="irzAppend">END BYTE</label>
-                        <select class="form-select" id="irzAppend" data-irz-append {% if not can_send %}disabled{% endif %}>
-                            <option value="none">none</option>
-                            <option value="0d">0D</option>
-                            <option value="0a">0A</option>
-                            <option value="0d0a">0D 0A</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2 d-flex align-items-end">
-                        <button class="btn btn-warning w-100" type="submit" data-irz-test-send {% if not can_send %}disabled{% endif %}>SEND TEST</button>
+                    <aside class="col-xl-3">
+                        <div class="card irz-panel-sticky">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <strong>Устройства</strong>
+                                {% if can_admin %}<button class="btn btn-sm btn-primary" data-device-new><i class="bi bi-plus-lg"></i> Добавить</button>{% endif %}
+                            </div>
+                            <div class="list-group list-group-flush" data-mercury-devices>
+                                <div class="p-4 text-muted text-center">Загрузка устройств…</div>
+                            </div>
+                            <div class="card-body text-center irz-empty-state" data-device-empty hidden>
+                                <i class="bi bi-speedometer irz-empty-icon"></i>
+                                <h6 class="mt-3">Нет настроенных Mercury устройств</h6>
+                                <p class="small text-muted">Добавьте первое устройство, чтобы начать работу.</p>
+                                {% if can_admin %}<button class="btn btn-primary btn-sm" data-device-empty-add>Добавить устройство</button>{% endif %}
+                            </div>
+                        </div>
+                        <div class="card mt-3" data-connection-panel hidden>
+                            <div class="card-header fw-semibold">Соединение</div>
+                            <div class="card-body small">
+                                <div data-connection-details></div>
+                                <div class="d-grid gap-2 mt-3">
+                                    <button class="btn btn-success btn-sm" data-device-action="connect">Подключиться</button>
+                                    <button class="btn btn-outline-dark btn-sm" data-device-action="test">Проверить связь</button>
+                                    <button class="btn btn-outline-primary btn-sm" data-device-action="reconnect">Переподключиться</button>
+                                    <button class="btn btn-outline-secondary btn-sm" data-device-action="disconnect">Отключиться</button>
+                                    {% if can_admin %}<button class="btn btn-outline-secondary btn-sm" data-device-edit>Настроить</button>{% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <div class="col-xl-9">
+                        <div class="card mb-3">
+                            <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
+                                <div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="irz-status-dot" data-status-dot></span>
+                                        <h5 class="mb-0" data-device-title>Выберите Mercury</h5>
+                                        <span class="badge text-bg-secondary" data-device-state>DISCONNECTED</span>
+                                    </div>
+                                    <div class="small text-muted mt-1" data-device-summary>Устройство не выбрано</div>
+                                </div>
+                                <button class="btn btn-primary btn-lg" data-device-poll disabled>
+                                    <i class="bi bi-arrow-repeat"></i> Опросить счётчик
+                                </button>
+                            </div>
+                        </div>
+                        <div class="alert alert-secondary py-2" data-operation-message>Выберите устройство слева.</div>
+                        <div class="card mb-3">
+                            <div class="card-header fw-semibold">Основная информация</div>
+                            <div class="card-body"><div class="row g-3" data-metrics><div class="col text-muted">Результаты появятся после опроса.</div></div></div>
+                        </div>
+                        <div class="card mb-3">
+                            <div class="card-header fw-semibold">Команды Mercury V2</div>
+                            <div class="card-body"><div class="row g-2" data-command-list><div class="col text-muted">Выберите устройство.</div></div></div>
+                        </div>
                     </div>
                 </div>
-            </form>
-            <div class="small mt-2 text-muted">Пресеты экспериментальные и не подтверждают корректность команды для конкретного счётчика.</div>
-            <div class="small mt-2" data-irz-test-message aria-live="polite"></div>
-        </div>
-    </div>
 
-    <div class="card mt-3">
-        <div class="card-header fw-semibold">IRZ experiments</div>
-        <div class="table-responsive">
-            <table class="table table-sm font-monospace mb-0">
-                <thead><tr><th>TIME</th><th>IMEI</th><th>COMMAND</th><th>RESPONSE</th><th>ASCII</th><th>RESULT</th></tr></thead>
-                <tbody data-irz-experiments><tr><td colspan="6" class="text-center text-muted py-4">Экспериментов нет</td></tr></tbody>
-            </table>
-        </div>
+                <div class="card mt-3">
+                    <div class="card-header d-flex flex-wrap justify-content-between gap-2 align-items-center">
+                        <strong>Журнал обмена</strong>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-secondary active" data-log-mode="normal">Обычный</button>
+                            <button class="btn btn-outline-secondary" data-log-mode="raw">RAW</button>
+                            <button class="btn btn-outline-secondary" data-clear-view>Очистить экран</button>
+                        </div>
+                    </div>
+                    <div class="card-body py-2 d-flex gap-2">
+                        <select class="form-select form-select-sm w-auto" data-log-filter>
+                            <option value="">Все</option><option value="SUCCESS">Успешные</option>
+                            <option value="ERROR">Ошибки</option><option value="TIMEOUT">Тайм-ауты</option>
+                            <option value="RAW_TX">Только TX</option><option value="RAW_RX">Только RX</option>
+                        </select>
+                        <span class="small text-muted align-self-center">Очистка экрана не удаляет audit log.</span>
+                    </div>
+                    <div class="irz-operation-log" data-operation-log><div class="p-4 text-muted text-center">Журнал пуст</div></div>
+                </div>
+
+                {% if can_admin %}
+                <dialog class="irz-device-dialog" data-device-dialog>
+                    <form data-device-form class="card border-0" method="dialog">
+                        <div class="card-header d-flex justify-content-between"><strong>Устройство Mercury</strong><button type="button" class="btn-close" data-dialog-close></button></div>
+                        <div class="card-body"><div class="row g-3">
+                            <div class="col-md-7"><label class="form-label">Название</label><input class="form-control" name="name" maxlength="160" required></div>
+                            <div class="col-md-5"><label class="form-label">Модель</label><input class="form-control" name="model" value="Mercury V2" maxlength="40" required></div>
+                            <div class="col-md-6"><label class="form-label">Сетевой адрес</label><input class="form-control" name="network_address" type="number" min="1" max="99999999" required></div>
+                            <div class="col-md-6"><label class="form-label">Тип соединения</label><select class="form-select" name="transport_type"><option value="TCP">TCP/IP</option><option value="SERIAL">Serial / RS485</option></select></div>
+                            <div class="col-md-8" data-field-tcp><label class="form-label">IP / hostname</label><input class="form-control" name="host"></div>
+                            <div class="col-md-4" data-field-tcp><label class="form-label">TCP port</label><input class="form-control" name="port" type="number" min="1" max="65535"></div>
+                            <div class="col-md-8" data-field-serial hidden><label class="form-label">Последовательный порт</label><input class="form-control" name="serial_port" placeholder="/dev/ttyUSB0"></div>
+                            <div class="col-md-4" data-field-serial hidden><label class="form-label">Baudrate</label><select class="form-select" name="baudrate"><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select></div>
+                            <div class="col-md-4"><label class="form-label">Тайм-аут, с</label><input class="form-control" name="timeout" type="number" min="0.2" max="30" step="0.1" value="5"></div>
+                            <div class="col-md-4 d-flex align-items-end"><div class="form-check"><input class="form-check-input" name="enabled" type="checkbox" checked><label class="form-check-label">Активно</label></div></div>
+                        </div><div class="text-danger small mt-2" data-form-error></div></div>
+                        <div class="card-footer text-end"><button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button> <button class="btn btn-primary" type="submit">Сохранить</button></div>
+                    </form>
+                </dialog>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="tab-pane fade" id="irzLegacyPane" role="tabpanel" aria-labelledby="irzLegacyTab">
+            <div class="irz-legacy" data-irz-legacy-root data-devices-url="{{ url_for('irz.devices') }}"
+                 data-logs-url="{{ url_for('irz.logs') }}" data-send-url="{{ url_for('irz.send') }}"
+                 data-test-url="{{ url_for('irz.test_command') }}" data-experiments-url="{{ url_for('irz.experiments') }}"
+                 data-export-url="{{ url_for('irz.export_session') }}" data-poll-ms="{{ config.IRZ_POLL_MS }}"
+                 data-can-send="{{ '1' if can_send else '0' }}">
+                <div class="card mb-3"><div class="card-body py-2 d-flex gap-3"><strong>Modem-sniffer:</strong><span class="badge text-bg-secondary" data-irz-gateway>ПРОВЕРКА</span><span class="small text-muted" data-irz-updated></span></div></div>
+                <div class="row g-3">
+                    <div class="col-xl-4"><div class="card irz-devices-card"><div class="card-header fw-semibold">Подключенные ATM21</div><div class="list-group list-group-flush" data-irz-devices><div class="p-4 text-center text-muted">Ожидание данных…</div></div></div></div>
+                    <div class="col-xl-8"><div class="card irz-log-card"><div class="card-header d-flex justify-content-between"><strong>LIVE LOG</strong><div><button class="btn btn-sm btn-outline-light" data-irz-listen>START LISTEN</button> <a class="btn btn-sm btn-outline-light" data-irz-export>DOWNLOAD SESSION</a> <code data-irz-selected>Устройство не выбрано</code></div></div><div class="table-responsive irz-log-scroll" data-irz-log-scroll><table class="table table-dark table-sm font-monospace mb-0 irz-log-table"><thead><tr><th>TIME</th><th>DIR</th><th>LEN</th><th>HEX</th><th>ASCII</th></tr></thead><tbody data-irz-logs><tr><td colspan="5" class="text-center text-secondary py-5">Лог пуст</td></tr></tbody></table></div></div></div>
+                </div>
+                <div class="card mt-3"><div class="card-header fw-semibold">HEX COMMAND</div><div class="card-body"><form data-irz-send-form class="d-flex gap-2"><input class="form-control font-monospace" data-irz-hex placeholder="B5 BC BD BE BF"><button class="btn btn-primary" data-irz-send>SEND</button></form><div class="small mt-2" data-irz-message></div></div></div>
+                <div class="card mt-3"><div class="card-header fw-semibold">PROTOCOL LAB</div><div class="card-body"><form data-irz-test-form><div class="row g-3">
+                    <div class="col-lg-3"><label class="form-label">ATM21</label><select class="form-select" data-irz-lab-device><option value="">Не выбрано</option></select></div>
+                    <div class="col-lg-3"><label class="form-label">Protocol tests</label><select class="form-select" data-irz-preset><option value="">— выбрать —</option><option value="01 08 00">Mercury info</option><option value="01 08 16 11">Mercury voltage</option><option value="01 05 00 00">Mercury energy</option><option value="01 2B 0E 01 00">Modbus device info</option><option value="01 03 00 00 00 14">Modbus registers 0-20</option></select></div>
+                    <div class="col-lg-6"><label class="form-label">HEX COMMAND</label><input class="form-control font-monospace" data-irz-lab-hex></div>
+                    <div class="col-md-4"><label class="form-label">CHECKSUM</label><select class="form-select" data-irz-crc><option value="none">NONE</option><option value="modbus">MODBUS CRC16</option><option value="mercury">MERCURY CRC</option></select></div>
+                    <div class="col-md-4"><label class="form-label">END BYTE</label><select class="form-select" data-irz-append><option value="none">none</option><option value="0d">0D</option><option value="0a">0A</option><option value="0d0a">0D 0A</option></select></div>
+                    <div class="col-md-4 d-flex align-items-end"><button class="btn btn-warning w-100" data-irz-test-send>SEND TEST</button></div>
+                </div></form><div class="small mt-2" data-irz-test-message></div></div></div>
+                <div class="card mt-3"><div class="card-header fw-semibold">IRZ experiments</div><div class="table-responsive"><table class="table table-sm font-monospace mb-0"><thead><tr><th>TIME</th><th>IMEI</th><th>COMMAND</th><th>RESPONSE</th><th>ASCII</th><th>RESULT</th></tr></thead><tbody data-irz-experiments><tr><td colspan="6" class="text-center text-muted py-4">Экспериментов нет</td></tr></tbody></table></div></div>
+            </div>
+        </section>
     </div>
-</section>
+</div>
 {% endblock %}
 
 {% block extra_css %}{{ super() }}<link href="{{ static_url('css/irz.css') }}" rel="stylesheet">{% endblock %}
-{% block extra_js %}{{ super() }}<script src="{{ static_url('js/irz.js') }}"></script>{% endblock %}
+{% block extra_js %}
+{{ super() }}
+<script src="{{ static_url('js/irz.js') }}"></script>
+<script src="{{ static_url('js/irz-legacy.js') }}"></script>
+{% endblock %}

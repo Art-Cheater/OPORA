@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
 
+from app.modem_gateway.mercury import MercuryConnectionManager, MercuryGatewayError
+
 LOG = logging.getLogger("opora.modem_sniffer")
 IMEI_RE = re.compile(rb"AT\$IMEI=(\d{15})(?:,|\s|$)")
 
@@ -147,9 +149,10 @@ class ModemRequestHandler(socketserver.BaseRequestHandler):
 class ControlHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, address: tuple[str, int], registry: ConnectionRegistry, log_exchange: Callable[[str | None, str, bytes], None] | None = None):
+    def __init__(self, address: tuple[str, int], registry: ConnectionRegistry, log_exchange: Callable[[str | None, str, bytes], None] | None = None, mercury_manager: MercuryConnectionManager | None = None):
         self.registry = registry
         self.log_exchange = log_exchange
+        self.mercury_manager = mercury_manager or MercuryConnectionManager()
         super().__init__(address, ControlRequestHandler)
 
 
@@ -172,10 +175,18 @@ class ControlRequestHandler(BaseHTTPRequestHandler):
             self._json(200, {"status": "ok"})
         elif self.path == "/devices":
             self._json(200, self.server.registry.devices())
+        elif self.path == "/mercury/status":
+            self._json(200, self.server.mercury_manager.statuses())
+        elif self.path.startswith("/mercury/status/"):
+            device_id = self.path.removeprefix("/mercury/status/")
+            self._json(200, self.server.mercury_manager.status(device_id))
         else:
             self._json(404, {"error": "not found"})
 
     def do_POST(self) -> None:
+        if self.path.startswith("/mercury/"):
+            self._handle_mercury()
+            return
         if self.path not in {"/send", "/test-command"}:
             self._json(404, {"error": "not found"})
             return
@@ -231,12 +242,45 @@ class ControlRequestHandler(BaseHTTPRequestHandler):
             return
         self._json(200, {"status": "sent", "imei": imei, "bytes": len(data)})
 
+    def _handle_mercury(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length <= 0 or length > 64 * 1024:
+                raise ValueError
+            payload = json.loads(self.rfile.read(length))
+            if not isinstance(payload, dict) or not isinstance(payload.get("device_id"), str):
+                raise ValueError
+        except (ValueError, TypeError, json.JSONDecodeError):
+            self._json(400, {"success": False, "error_code": "INVALID_PARAMETERS", "message": "Некорректный запрос"})
+            return
+        action = self.path.removeprefix("/mercury/")
+        device_id = payload["device_id"]
+        try:
+            if action in {"connect", "reconnect"}:
+                result = self.server.mercury_manager.connect(device_id, payload.get("config") or {})
+            elif action == "disconnect":
+                result = self.server.mercury_manager.disconnect(device_id)
+            elif action == "test":
+                result = self.server.mercury_manager.execute(device_id, "serial_and_manufacture")
+            elif action == "command":
+                result = self.server.mercury_manager.execute(device_id, payload.get("command_id"))
+            elif action == "poll":
+                result = self.server.mercury_manager.poll(device_id)
+            else:
+                self._json(404, {"success": False, "error_code": "NOT_FOUND", "message": "not found"})
+                return
+        except MercuryGatewayError as exc:
+            LOG.warning("MERCURY %s DEVICE=%s CODE=%s MESSAGE=%s", action.upper(), device_id, exc.code, exc)
+            self._json(exc.status, {"success": False, "error_code": exc.code, "message": str(exc), "duration_ms": exc.duration_ms, "tx_raw": exc.tx_raw, "rx_raw": exc.rx_raw})
+            return
+        self._json(200, result)
 
-def create_servers(host: str | None = None, tcp_port: int | None = None, http_port: int | None = None, log_exchange: Callable[[str | None, str, bytes], None] | None = None) -> tuple[ModemTCPServer, ControlHTTPServer]:
+
+def create_servers(host: str | None = None, tcp_port: int | None = None, http_port: int | None = None, log_exchange: Callable[[str | None, str, bytes], None] | None = None, mercury_manager: MercuryConnectionManager | None = None) -> tuple[ModemTCPServer, ControlHTTPServer]:
     bind_host = host or os.getenv("MODEM_GATEWAY_HOST", "0.0.0.0")
     registry = ConnectionRegistry()
     tcp_server = ModemTCPServer((bind_host, tcp_port if tcp_port is not None else int(os.getenv("MODEM_SNIFFER_PORT", "5009"))), registry, log_exchange)
-    http_server = ControlHTTPServer((bind_host, http_port if http_port is not None else int(os.getenv("MODEM_CONTROL_PORT", "5010"))), registry, log_exchange)
+    http_server = ControlHTTPServer((bind_host, http_port if http_port is not None else int(os.getenv("MODEM_CONTROL_PORT", "5010"))), registry, log_exchange, mercury_manager)
     return tcp_server, http_server
 
 

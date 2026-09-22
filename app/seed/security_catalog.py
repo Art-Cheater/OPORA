@@ -298,6 +298,8 @@ SPECIAL_PERMISSIONS = [
     ("devices", "manage", "Управление удалёнными платами"),
     ("irz", "view", "Просмотр IRZ Console"),
     ("irz", "send", "Отправка команд ATM21"),
+    ("irz", "control", "Управление и команды Mercury"),
+    ("irz", "admin", "Настройка устройств Mercury"),
 ]
 
 ACTION_LABELS = {

@@ -23,9 +23,17 @@ def test_irz_page_opens_and_appears_in_menu(admin_client):
     response = admin_client.get("/irz")
     assert response.status_code == 200
     html = response.get_data(as_text=True)
-    assert "IRZ Console" in html
+    assert "IRZ · Управление приборами" in html
     assert 'href="/irz"' in html
-    assert "data-irz-root" in html
+    assert 'id="irzOperatorShell"' in html
+    assert "Операторская панель" in html
+    assert "Опросить счётчик" in html
+    assert "Инженерный режим" in html
+    assert "Нет настроенных Mercury устройств" in html
+    assert 'class="tab-pane fade show active" id="irzOperatorPane"' in html
+    assert 'class="tab-pane fade" id="irzLegacyPane"' in html
+    assert "/static/js/irz.js?v=" in html
+    assert "/static/js/irz-legacy.js?v=" in html
     partial = admin_client.get("/irz", headers={"X-Opora-Nav": "1"})
     assert partial.status_code == 200
     assert "appShell" not in partial.get_data(as_text=True)
@@ -33,6 +41,16 @@ def test_irz_page_opens_and_appears_in_menu(admin_client):
     assert "DOMContentLoaded" in script
     assert "opora:navigated" in script
     assert "opora:before-navigate" in script
+
+
+def test_irz_has_one_real_entrypoint_and_operator_assets(app):
+    rules = [rule for rule in app.url_map.iter_rules() if rule.rule == "/irz"]
+    assert [(rule.endpoint, sorted(rule.methods - {"HEAD", "OPTIONS"})) for rule in rules] == [("irz.index", ["GET"])]
+    operator = Path("app/static/js/irz.js").read_text(encoding="utf-8")
+    legacy = Path("app/static/js/irz-legacy.js").read_text(encoding="utf-8")
+    assert "data-irz-operator-root" in operator
+    assert "data-irz-legacy-root" not in operator
+    assert "data-irz-legacy-root" in legacy
 
 
 def test_irz_permissions_separate_view_and_send(app, client, monkeypatch):
