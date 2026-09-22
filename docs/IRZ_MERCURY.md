@@ -1,56 +1,118 @@
 # IRZ / ATM21 / Mercury
 
-Production data path:
+## Architecture and ports
+
+The production path is physically verified:
 
 ```text
-Mercury -- RS-485 --> ATM21 -- outbound TCP --> modem-sniffer:5009
-                                      web --> modem-sniffer:5010
+Mercury <-- RS-485 --> ATM21 -- inbound TCP session --> modem-sniffer :5009
+web -------------------------------- internal HTTP --> modem-sniffer :5010
+boards ---------------------------------------------> tcp-gateway :5000
 ```
 
-ATM21 is the TCP client. OPORA never opens a production TCP or serial
-connection to the meter. `modem-sniffer` owns the accepted socket and exposes
-only an internal HTTP control API to Flask workers.
+ATM21 is the TCP client. `modem-sniffer` owns its accepted socket. Flask web
+workers never own or copy sockets, and OPORA never opens a production outbound
+TCP or serial connection to Mercury. Board port 5000 and IRZ port 5009 are
+separate paths.
 
-After the `AT$IMEI` identification packet, the gateway registers the live
-session by IMEI and persists non-secret ATM21 metadata. `ONLINE` means that
-this exact session is currently present in the process-local registry. A
-gateway restart or socket disconnect therefore makes the device offline.
+## ATM21 identification and online state
 
-Mercury V2 commands use `ATM21SessionTransport`, which implements the
-`mercury-base` transport contract over the already accepted socket. Per-session
-locking permits one outstanding Mercury request. Identification messages and
-the observed `B5 BC BD BE BF` heartbeat are not delivered to the Mercury
-parser. A response is accepted only after a valid CRC frame for the configured
-RS-485 network address has accumulated.
+The gateway buffers the TCP stream and parses `AT$IMEI` identification,
+including fragmented packets. It stores IMEI, DEV, VER, REV, BLD, HDW, SIM,
+CSQ, ATP, INT, remote endpoint, connection and last-RX timestamps. Passwords
+are neither persisted nor included in fixtures.
 
-The meaning of `B5 BC BD BE BF` is not documented. Echo/ACK is disabled by
-default and can be enabled for a physical compatibility test with
-`ATM21_HEARTBEAT_ACK=1`.
+`ONLINE` means the IMEI has a live socket in the process-local registry. It is
+not a database boolean. Disconnect or sidecar restart makes the ATM21 offline.
 
-## Diagnostic request
+## Heartbeat
 
-For network address `1`, the safe serial/date request produced by
-`mercury-base` is:
+`B5 BC BD BE BF` is classified as `ATM21_HEARTBEAT` and never passed to the
+Mercury parser. The operator journal hides it by default; engineering RAW and
+the Heartbeat filter retain it. Its exact protocol meaning is unknown. Legacy
+echo is configurable with `ATM21_HEARTBEAT_ACK=1` and disabled by default.
+
+## Mercury universal address 0
+
+The installed meter physically answers read-only Mercury V2 commands at
+network address `0`. Address zero is therefore the operator default. It is not
+approved for write/control commands. Engineering mode explains that `0` is the
+universal/read address and `1..N` is a specific meter address.
+
+## Physically verified commands
+
+### Serial number and manufacture date
 
 ```text
-01 08 00 27 C0
+TX 00 08 00 76 00
+RX 00 24 4F 01 3C 0A 02 13 7B 09
+serial_number = 36790160
+date_of_manufacture = 2019-02-10
 ```
 
-`01` is the RS-485 address, `08 00` is the V2 operation/parameter, and
-`27 C0` is the valid Modbus-style CRC emitted by the library. A timeout proves
-only that no CRC-valid response for address 1 reached OPORA during the wait.
-It does not prove the configured meter address, ATM21 transparent framing,
-RS-485 baud/parity/stop bits, or protocol version are correct.
+### Transformation ratios
 
-## Physical test
+```text
+TX 00 08 02 F7 C1
+RX 00 00 01 00 01 B4
+voltage = 1
+current = 0
+```
 
-1. Configure ATM21 to connect to OPORA TCP port 5009 and confirm its IMEI is
-   `ONLINE` on `/irz`.
-2. Verify ATM21 RS-485 mode and the meter's baud, parity, stop bits and network
-   address locally.
-3. Save that network address in the selected ATM21 card.
-4. Run “Проверить Mercury”; confirm the journal and sidecar stdout contain the
-   exact TX bytes.
-5. Observe all RX during the five-second window. Compare once with heartbeat
-   ACK disabled and, only if required by device documentation/known behavior,
-   with `ATM21_HEARTBEAT_ACK=1`.
+These are the unmodified `mercury-base 1.6` parser values. The suspicious
+`current=0` is deliberately not rescaled or hidden without protocol evidence.
+
+### Firmware
+
+```text
+TX 00 08 03 36 01
+RX 00 02 03 05 61 17
+firmware_version = 2.3.5
+```
+
+The additional (`08 04`) and main (`08 1D`) timeout multipliers are implemented
+by the library and included in polling, but still require physical verification
+on this meter.
+
+## Transport, timeout, and correlation
+
+`ATM21SessionTransport` supplies `mercury-base` with the already accepted
+ATM21 socket. A per-session lock permits one Mercury command at a time. The
+default command timeout is five seconds; a complete poll is bounded by the web
+request timeout. Timeout, disconnect, CRC failure, wrong address, and incomplete
+response clear pending state so a later command can proceed.
+
+Responses must have the expected address, a minimum CRC frame length, and valid
+CRC. Mercury V2 responses do not echo the request opcode, so command correlation
+is provided by the one-pending-command rule rather than a fictitious echoed
+command field.
+
+## Operator and RAW modes
+
+The operator page shows ATM21 connectivity separately from the last successful
+Mercury response, persists the last serial/date, firmware, ratios and poll time,
+and groups TX/RX/result as one logical operation. Heartbeats and duplicate raw
+transport events are hidden by default.
+
+Engineering mode retains manual HEX, Protocol Lab, full heartbeat traffic,
+internal command IDs, CSV export, and network address diagnostics.
+
+## Known mercury-base 1.6 limitations
+
+- `get_passport` calls `send_command(0x08, 0x0100)`; `bytes(params)` rejects
+  `0x0100`, so it is disabled.
+- `get_info` sends `08 12 00`, but its parser is a TODO returning
+  `model=unknown` and an empty feature list; it is disabled.
+- Voltage, current, power, frequency, cos phi, energy, tariffs, event journal,
+  and meter time are not implemented for V2 by this dependency. No speculative
+  production commands are exposed.
+
+## How to add a read command
+
+1. Identify the exact physical meter model or obtain an authoritative protocol.
+2. Record command bytes, response length/shape, CRC, and address behavior.
+3. Implement missing behavior in a project-local extension module, never in
+   site-packages.
+4. Add real TX/RX fixtures and parser/CRC/timeout tests.
+5. Expose it as read-only in the allow-list, then verify physically before
+   enabling it for polling.

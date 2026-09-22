@@ -33,6 +33,11 @@ class ATM21SessionTransport:
             error = MercuryGatewayError("MERCURY_TIMEOUT", "Mercury не ответил за установленное время", 504)
             error.tx_raw = self.tx_raw.hex(" ").upper()
             raise error from exc
+        except RuntimeError as exc:
+            code = getattr(exc, "code", "PROTOCOL_ERROR")
+            messages = {"CRC_ERROR": "Некорректный CRC ответа Mercury", "WRONG_ADDRESS": "Получен ответ от другого адреса",
+                        "INCOMPLETE_RESPONSE": "Получен неполный ответ Mercury"}
+            raise MercuryGatewayError(code, messages.get(code, "Ошибка протокола Mercury"), 502) from exc
         except OSError as exc:
             raise MercuryGatewayError("DEVICE_OFFLINE", "ATM21 отключён", 409) from exc
         return self.rx_raw
@@ -100,5 +105,6 @@ class MercurySessionManager:
             try:
                 results[command.id] = self.execute(imei, address, command.id)
             except MercuryGatewayError as exc:
-                errors.append({"command": command.id, "error_code": exc.code, "message": str(exc)})
+                errors.append({"command": command.id, "error_code": exc.code, "message": str(exc),
+                               "duration_ms": exc.duration_ms, "tx_raw": exc.tx_raw, "rx_raw": exc.rx_raw})
         return {"success": bool(results), "partial": bool(results) and bool(errors), "results": results, "errors": errors}

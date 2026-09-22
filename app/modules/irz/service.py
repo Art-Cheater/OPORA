@@ -206,7 +206,7 @@ def upsert_atm21(metadata: dict) -> IRZDevice:
         raise ValueError("invalid IMEI")
     device = db.session.scalar(db.select(IRZDevice).where(IRZDevice.imei == imei))
     if device is None:
-        device = IRZDevice(imei=imei, name=f"ATM21 {imei}", model="ATM21", network_address=None,
+        device = IRZDevice(imei=imei, name=f"ATM21 {imei}", model="ATM21", network_address=0,
                            transport_type=None, enabled=True)
         db.session.add(device)
     mapping = {"dev": "device_type", "ver": "firmware_version", "rev": "firmware_revision",
@@ -252,7 +252,7 @@ def serialize_device(device: IRZDevice, *, online: bool = False, runtime: dict |
         "name": device.name,
         "model": device.model,
         "serial_number": device.serial_number,
-        "network_address": device.network_address,
+        "network_address": device.network_address if device.network_address is not None else 0,
         "imei": device.imei,
         "device_type": device.device_type,
         "firmware_version": device.firmware_version,
@@ -274,6 +274,14 @@ def serialize_device(device: IRZDevice, *, online: bool = False, runtime: dict |
         "last_error_at": device.last_error_at.isoformat() if device.last_error_at else None,
         "last_latency_ms": device.last_latency_ms,
         "last_error": device.last_error,
+        "last_mercury_seen_at": device.last_mercury_seen_at.isoformat() if device.last_mercury_seen_at else None,
+        "mercury_responding": bool(device.last_mercury_seen_at and (not device.last_error_at or device.last_mercury_seen_at.timestamp() >= device.last_error_at.timestamp())),
+        "last_values": {
+            "serial_number": device.serial_number,
+            "date_of_manufacture": device.last_manufacture_date.isoformat() if device.last_manufacture_date else None,
+            "firmware_version": device.last_firmware_version,
+            "transformation_ratios": device.last_transformation_ratios,
+        },
     }
 
 
@@ -319,11 +327,21 @@ def _store_operation(device: IRZDevice, user_id, command_id: str, operation: str
     )
     db.session.add(log)
     if result:
-        device.last_success_at = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)
+        device.last_success_at = now
+        device.last_mercury_seen_at = now
         device.last_latency_ms = result.get("duration_ms")
         device.last_error = None
         if command_id == "serial_and_manufacture" and isinstance(result.get("data"), dict):
             device.serial_number = str(result["data"].get("serial_number") or device.serial_number or "") or None
+            raw_date = result["data"].get("date_of_manufacture")
+            if raw_date:
+                try: device.last_manufacture_date = datetime.fromisoformat(str(raw_date)).date()
+                except ValueError: pass
+        elif command_id == "firmware_version" and result.get("data") is not None:
+            device.last_firmware_version = str(result["data"])
+        elif command_id == "transformation_ratios" and isinstance(result.get("data"), dict):
+            device.last_transformation_ratios = result["data"]
     elif error:
         device.last_error_at = datetime.now(timezone.utc)
         device.last_error = error_message
@@ -335,12 +353,11 @@ def execute_device_command(device: IRZDevice, command_id: str, *, user_id, opera
     if not device.enabled:
         raise ValueError("DEVICE_DISABLED")
     get_command(command_id)
-    if device.network_address is None:
-        raise ValueError("MERCURY_ADDRESS_REQUIRED")
+    address = device.network_address if device.network_address is not None else 0
     try:
         result = _gateway_request(
             "/mercury/command" if operation == "COMMAND" else "/mercury/test",
-            payload={"imei": device.imei, "network_address": device.network_address, "command_id": command_id},
+            payload={"imei": device.imei, "network_address": address, "command_id": command_id},
             timeout=7,
         )
     except (GatewayResponseError, GatewayUnavailable) as exc:
@@ -353,9 +370,8 @@ def execute_device_command(device: IRZDevice, command_id: str, *, user_id, opera
 def poll_device(device: IRZDevice, *, user_id) -> dict:
     if not device.enabled:
         raise ValueError("DEVICE_DISABLED")
-    if device.network_address is None:
-        raise ValueError("MERCURY_ADDRESS_REQUIRED")
-    result = _gateway_request("/mercury/poll", payload={"imei": device.imei, "network_address": device.network_address}, timeout=35)
+    address = device.network_address if device.network_address is not None else 0
+    result = _gateway_request("/mercury/poll", payload={"imei": device.imei, "network_address": address}, timeout=35)
     for command_id, command_result in result.get("results", {}).items():
         _store_operation(device, user_id, command_id, "POLL", result=command_result)
     for error in result.get("errors", []):

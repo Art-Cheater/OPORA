@@ -62,6 +62,13 @@ class PendingMercury:
     address_byte: int
     data: bytearray = field(default_factory=bytearray)
     response: bytes | None = None
+    disconnected: bool = False
+
+
+class PendingResponseError(RuntimeError):
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
 
 
 @dataclass(slots=True)
@@ -121,14 +128,29 @@ class DeviceConnection:
                     while self.pending and self.pending.response is None:
                         remaining = deadline - time.monotonic()
                         if remaining <= 0:
+                            if self.pending.data:
+                                if self.pending.data[0] != address_byte:
+                                    raise PendingResponseError("WRONG_ADDRESS")
+                                if len(self.pending.data) < 3:
+                                    raise PendingResponseError("INCOMPLETE_RESPONSE")
+                                raise PendingResponseError("CRC_ERROR")
                             raise TimeoutError
                         self.response_condition.wait(remaining)
                     if self.pending is None or self.pending.response is None:
                         raise TimeoutError
+                    if self.pending.disconnected:
+                        raise OSError("ATM21 disconnected")
                     return self.pending.response
             finally:
                 with self.response_condition:
                     self.pending = None
+
+    def disconnect_pending(self) -> None:
+        with self.response_condition:
+            if self.pending:
+                self.pending.disconnected = True
+                self.pending.response = b""
+                self.response_condition.notify_all()
 
 
 class ConnectionRegistry:
@@ -212,6 +234,7 @@ class ModemRequestHandler(socketserver.BaseRequestHandler):
                 LOG.info("IRZ TYPE=%s\n%s", packet_type, format_chunk(data, imei=connection.imei if connection else None))
         finally:
             if connection:
+                connection.disconnect_pending()
                 self.server.registry.remove(connection)
                 emit_exchange(self.server.log_exchange, connection.imei, "RX", b"", "DISCONNECT")
             LOG.info("MODEM DISCONNECT IP=%s PORT=%s", remote_ip, remote_port)

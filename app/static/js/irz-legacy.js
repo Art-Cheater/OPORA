@@ -72,7 +72,13 @@
             catch (error) { message.className = 'small mt-2 text-danger'; message.textContent = error.message; }
         });
         labDevice.addEventListener('change', () => { selectedImei = labDevice.value || null; refresh(); });
-        q('[data-irz-preset]').addEventListener('change', (event) => { if (event.target.value) q('[data-irz-lab-hex]').value = event.target.value; });
+        function applyLabAddress(hexValue) {
+            const parts = String(hexValue || '').trim().split(/\s+/); if (!parts[0]) return '';
+            const address = Math.min(239, Math.max(0, Number(q('[data-irz-network-address]').value) || 0));
+            parts[0] = address.toString(16).padStart(2, '0').toUpperCase(); return parts.join(' ');
+        }
+        q('[data-irz-preset]').addEventListener('change', (event) => { if (event.target.value) q('[data-irz-lab-hex]').value = applyLabAddress(event.target.value); });
+        q('[data-irz-network-address]').addEventListener('change', () => { const input = q('[data-irz-lab-hex]'); if (input.value.trim()) input.value = applyLabAddress(input.value); });
         q('[data-irz-listen]').addEventListener('click', (event) => { rawMode = !rawMode; event.currentTarget.textContent = rawMode ? 'STOP LISTEN' : 'START LISTEN'; refresh(); });
         q('[data-irz-test-form]').addEventListener('submit', async (event) => {
             event.preventDefault(); const button = q('[data-irz-test-send]'); const message = q('[data-irz-test-message]'); button.disabled = true; button.textContent = 'WAITING…';

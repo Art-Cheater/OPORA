@@ -235,7 +235,7 @@ def mercury_commands(device_id):
         service.get_device(device_id)
     except (ValueError, LookupError) as exc:
         return _error_response(exc)
-    return jsonify(service.command_list())
+    return jsonify(service.command_list(include_unavailable=False))
 
 
 @irz_bp.post("/api/mercury/devices/<device_id>/commands/<command_id>")
@@ -290,6 +290,7 @@ def mercury_exchange_log(device_id):
             "mercury_command": item.mercury_command, "operation": item.operation, "status": item.status,
             "result": item.result, "error_code": item.error_code, "error_message": item.error_message,
             "duration_ms": item.duration_ms, "tx_raw": item.tx_raw, "rx_raw": item.rx_raw,
+            "crc_ok": True if item.status == "SUCCESS" and item.rx_raw else (False if item.error_code == "CRC_ERROR" else None),
         }
         for item in items
     ]
@@ -300,6 +301,6 @@ def mercury_exchange_log(device_id):
                                "status": "SUCCESS", "result": item.raw_ascii, "error_code": None,
                                "error_message": None, "duration_ms": None,
                                "tx_raw": item.raw_hex if item.direction == "TX" else None,
-                               "rx_raw": item.raw_hex if item.direction == "RX" else None})
+                               "rx_raw": item.raw_hex if item.direction == "RX" else None, "crc_ok": None})
     structured.sort(key=lambda item: item["created_at"], reverse=True)
     return jsonify(structured[:limit])

@@ -1,8 +1,8 @@
 {% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header %}
 
-{% block title %}IRZ · Подключения — {{ app_name }}{% endblock %}
-{% block page_header %}{{ page_header("IRZ · Подключения", "Входящие ATM21 и Mercury по RS-485", "terminal") }}{% endblock %}
+{% block title %}IRZ · Управление приборами — {{ app_name }}{% endblock %}
+{% block page_header %}{{ page_header("IRZ · Управление приборами", "ATM21 и счётчик Mercury", "terminal") }}{% endblock %}
 
 {% block content %}
 <div class="irz-workspace" data-irz-workspace>
@@ -64,23 +64,27 @@
                                     </div>
                                     <div class="small text-muted mt-1" data-device-summary>Устройство не выбрано</div>
                                 </div>
-                                <button class="btn btn-primary btn-lg" data-device-poll disabled>
-                                    <i class="bi bi-arrow-repeat"></i> Проверить Mercury
+                                <button class="btn btn-primary" data-device-poll disabled>
+                                    <i class="bi bi-arrow-repeat"></i> Опросить счётчик
                                 </button>
                             </div>
                         </div>
                         <div class="alert alert-secondary py-2" data-operation-message>Выберите ATM21 слева.</div>
-                        <div class="card mb-3"><div class="card-body d-flex align-items-end gap-3">
-                            <div><label class="form-label">Mercury network address</label><input class="form-control" type="number" min="0" max="99999999" data-network-address></div>
-                            {% if can_control %}<button class="btn btn-outline-primary" data-save-address>Сохранить адрес</button>{% endif %}
-                            <span class="small text-muted">Адрес RS-485, не IP-адрес.</span>
-                        </div></div>
-                        <div class="card mb-3">
-                            <div class="card-header fw-semibold">Основная информация</div>
-                            <div class="card-body"><div class="row g-3" data-metrics><div class="col text-muted">Результаты появятся после опроса.</div></div></div>
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6"><div class="card h-100"><div class="card-body py-3">
+                                <div class="small text-muted">ATM21</div><div class="d-flex align-items-center gap-2 mt-1"><span class="irz-status-dot" data-atm-status-dot></span><strong data-atm-status>OFFLINE</strong></div>
+                            </div></div></div>
+                            <div class="col-md-6"><div class="card h-100"><div class="card-body py-3">
+                                <div class="small text-muted">Mercury</div><div class="d-flex align-items-center gap-2 mt-1"><span class="irz-status-dot" data-mercury-status-dot></span><strong data-mercury-status>нет ответа</strong></div>
+                                <div class="small text-muted mt-1">Последний ответ: <span data-mercury-last>—</span></div>
+                            </div></div></div>
                         </div>
                         <div class="card mb-3">
-                            <div class="card-header fw-semibold">Команды Mercury V2</div>
+                            <div class="card-header fw-semibold">Основная информация</div>
+                            <div class="card-body"><div class="row g-2" data-metrics><div class="col text-muted">Результаты появятся после опроса.</div></div></div>
+                        </div>
+                        <div class="card mb-3">
+                            <div class="card-header fw-semibold">Команды</div>
                             <div class="card-body"><div class="row g-2" data-command-list><div class="col text-muted">Выберите устройство.</div></div></div>
                         </div>
                     </div>
@@ -97,9 +101,9 @@
                     </div>
                     <div class="card-body py-2 d-flex gap-2">
                         <select class="form-select form-select-sm w-auto" data-log-filter>
-                            <option value="">Все</option><option value="ATM21">ATM21</option>
-                            <option value="MERCURY">Mercury</option><option value="ERROR">Ошибки</option>
-                            <option value="RAW">RAW</option>
+                            <option value="">Команды</option><option value="ERROR">Ошибки</option>
+                            <option value="ATM21">ATM21</option><option value="HEARTBEAT">Heartbeat</option>
+                            <option value="ALL">Все</option><option value="RAW">RAW</option>
                         </select>
                         <span class="small text-muted align-self-center">Очистка экрана не удаляет audit log.</span>
                     </div>
@@ -125,6 +129,7 @@
                     <div class="col-lg-3"><label class="form-label">ATM21</label><select class="form-select" data-irz-lab-device><option value="">Не выбрано</option></select></div>
                     <div class="col-lg-3"><label class="form-label">Protocol tests</label><select class="form-select" data-irz-preset><option value="">— выбрать —</option><option value="01 08 00">Mercury info</option><option value="01 08 16 11">Mercury voltage</option><option value="01 05 00 00">Mercury energy</option><option value="01 2B 0E 01 00">Modbus device info</option><option value="01 03 00 00 00 14">Modbus registers 0-20</option></select></div>
                     <div class="col-lg-6"><label class="form-label">HEX COMMAND</label><input class="form-control font-monospace" data-irz-lab-hex></div>
+                    <div class="col-md-4"><label class="form-label">Mercury network address</label><input class="form-control" type="number" min="0" max="239" value="0" data-irz-network-address><div class="form-text">0 — universal/read address; 1..N — адрес прибора.</div></div>
                     <div class="col-md-4"><label class="form-label">CHECKSUM</label><select class="form-select" data-irz-crc><option value="none">NONE</option><option value="modbus">MODBUS CRC16</option><option value="mercury">MERCURY CRC</option></select></div>
                     <div class="col-md-4"><label class="form-label">END BYTE</label><select class="form-select" data-irz-append><option value="none">none</option><option value="0d">0D</option><option value="0a">0A</option><option value="0d0a">0D 0A</option></select></div>
                     <div class="col-md-4 d-flex align-items-end"><button class="btn btn-warning w-100" data-irz-test-send>SEND TEST</button></div>

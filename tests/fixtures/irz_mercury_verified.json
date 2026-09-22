@@ -1,0 +1,20 @@
+[
+  {
+    "command": "serial_and_manufacture",
+    "tx": "00 08 00 76 00",
+    "rx": "00 24 4F 01 3C 0A 02 13 7B 09",
+    "expected": {"serial_number": 36790160, "date_of_manufacture": "2019-02-10"}
+  },
+  {
+    "command": "transformation_ratios",
+    "tx": "00 08 02 F7 C1",
+    "rx": "00 00 01 00 01 B4",
+    "expected": {"voltage": 1, "current": 0}
+  },
+  {
+    "command": "firmware_version",
+    "tx": "00 08 03 36 01",
+    "rx": "00 02 03 05 61 17",
+    "expected": "2.3.5"
+  }
+]

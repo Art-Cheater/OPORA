@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import BaseModel
@@ -46,6 +46,10 @@ class IRZDevice(BaseModel):
     interfaces: Mapped[str | None] = mapped_column(String(40), nullable=True)
     last_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_manufacture_date: Mapped[Any | None] = mapped_column(Date, nullable=True)
+    last_firmware_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    last_transformation_ratios: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
+    last_mercury_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class IRZOperationLog(BaseModel):

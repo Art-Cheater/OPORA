@@ -7,9 +7,7 @@ import time
 import pytest
 
 from app.modem_gateway.sniffer import HEARTBEAT, ConnectionRegistry, DeviceConnection, create_servers, format_chunk, parse_identification, utcnow
-from app.modem_gateway.mercury import MercurySessionManager
 from modbus_crc import add_crc
-from types import SimpleNamespace
 
 
 def _request(port, method, path, payload=None):
@@ -140,20 +138,8 @@ def test_pending_lock_is_released_after_timeout_and_next_command_works():
         server_socket.close(); client_socket.close()
 
 
-def _fake_mercury():
-    driver = SimpleNamespace(prepare_address=int, format_address=lambda value: bytes((value,)),
-                             extract_address=lambda packet: packet[0], extract_data=lambda packet: list(packet[1:-2]))
-    class Commands:
-        @staticmethod
-        def get_serial_number_and_date_of_manufacture(meter):
-            return {"serial_number": "".join(f"{x:02X}" for x in meter.send_command(0x08, 0x00))}
-    driver.commands = Commands
-    return SimpleNamespace(mercury_v2=driver)
-
-
 def test_inbound_session_mercury_acceptance_with_fragmentation_and_heartbeat():
     tcp_server, http_server = create_servers("127.0.0.1", 0, 0)
-    http_server.mercury_manager = MercurySessionManager(tcp_server.registry, _fake_mercury)
     threads = [
         threading.Thread(target=tcp_server.serve_forever, daemon=True),
         threading.Thread(target=http_server.serve_forever, daemon=True),
@@ -174,19 +160,29 @@ def test_inbound_session_mercury_acceptance_with_fragmentation_and_heartbeat():
                     http_server.server_address[1],
                     "POST",
                     "/mercury/command",
-                    {"imei": "123456789012345", "network_address": 1, "command_id": "serial_and_manufacture"},
+                    {"imei": "123456789012345", "network_address": 0, "command_id": "serial_and_manufacture"},
                 )
             )
         )
         request_thread.start()
-        assert client.recv(5) == bytes.fromhex("01 08 00 27 C0")
+        assert client.recv(5) == bytes.fromhex("00 08 00 76 00")
         client.sendall(bytes.fromhex("B5 BC BD BE BF"))
-        response = add_crc(bytes.fromhex("01 12 34 56 78"))
+        response = bytes.fromhex("00 24 4F 01 3C 0A 02 13 7B 09")
         client.sendall(response[:3])
         client.sendall(response[3:] + bytes.fromhex("B5 BC BD BE BF"))
         request_thread.join(timeout=2)
         assert result[0][0] == 200
-        assert result[0][1]["data"]["serial_number"] == "12345678"
+        assert result[0][1]["data"] == {"serial_number": 36790160, "date_of_manufacture": "2019-02-10"}
+
+        firmware_result = []
+        firmware_thread = threading.Thread(target=lambda: firmware_result.append(_request(
+            http_server.server_address[1], "POST", "/mercury/command",
+            {"imei": "123456789012345", "network_address": 0, "command_id": "firmware_version"})))
+        firmware_thread.start()
+        assert client.recv(5) == bytes.fromhex("00 08 03 36 01")
+        client.sendall(bytes.fromhex("00 02 03 05 61 17"))
+        firmware_thread.join(timeout=2)
+        assert firmware_result[0][1]["data"] == "2.3.5"
         client.shutdown(socket.SHUT_RDWR)
         client.close()
         deadline = time.monotonic() + 2

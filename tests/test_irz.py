@@ -23,14 +23,19 @@ def test_irz_page_opens_and_appears_in_menu(admin_client):
     response = admin_client.get("/irz")
     assert response.status_code == 200
     html = response.get_data(as_text=True)
-    assert "IRZ · Подключения" in html
+    assert "IRZ · Управление приборами" in html
     assert 'href="/irz"' in html
     assert 'id="irzOperatorShell"' in html
     assert "Операторская панель" in html
-    assert "Проверить Mercury" in html
+    assert "Опросить счётчик" in html
     assert "Инженерный режим" in html
     assert "Нет подключённых IRZ" in html
     assert "Добавить устройство" not in html
+    assert "Mercury network address" in html  # engineering tab only
+    assert "0 — universal/read address" in html
+    assert "Опросить счётчик" in html
+    assert '<option value="">Команды</option>' in html
+    assert '<option value="HEARTBEAT">Heartbeat</option>' in html
     assert 'class="tab-pane fade show active" id="irzOperatorPane"' in html
     assert 'class="tab-pane fade" id="irzLegacyPane"' in html
     assert "/static/js/irz.js?v=" in html
@@ -42,6 +47,8 @@ def test_irz_page_opens_and_appears_in_menu(admin_client):
     assert "DOMContentLoaded" in script
     assert "opora:navigated" in script
     assert "opora:before-navigate" in script
+    assert "operationBusy" in script
+    assert "ATM21_HEARTBEAT" in script
 
 
 def test_irz_has_one_real_entrypoint_and_operator_assets(app):
