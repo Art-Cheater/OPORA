@@ -654,6 +654,27 @@ def _register_cli_commands(app: Flask) -> None:
             return
         click.echo(run_once())
 
+    @app.cli.command("irz-verify")
+    @click.option("--imei", required=True, help="IMEI подключённого ATM21")
+    @click.option("--address", default=0, show_default=True, help="Сетевой адрес Mercury")
+    @click.option("--command", "commands", multiple=True, default=("all",), show_default=True,
+                  help="ID команды (можно несколько) или all")
+    @click.option("--save", "save_path", default="", help="Сохранить fixture JSON (без IMEI)")
+    def irz_verify(imei: str, address: int, commands: tuple[str, ...], save_path: str):
+        """Физическая проверка read-only команд Mercury 230 через живую сессию ATM21."""
+        import json as json_module
+
+        from app.modules.irz import verify
+
+        command_ids = verify.available_commands() if "all" in commands else list(commands)
+        report = verify.run(imei, address, command_ids)
+        for entry in report:
+            click.echo(verify.format_entry(entry))
+        if save_path:
+            with open(save_path, "w", encoding="utf-8") as handle:
+                json_module.dump(verify.fixture(address, report), handle, ensure_ascii=False, indent=2, default=str)
+            click.echo(f"Fixture сохранён: {save_path}")
+
     @app.cli.command("repair-request-districts")
     @click.option("--dry-run", is_flag=True, help="Только показать, без записи в БД")
     @click.option("--limit", default=0, show_default=True, help="Максимум заявок (0 = все)")

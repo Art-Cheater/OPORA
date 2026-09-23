@@ -37,7 +37,7 @@ def fake_mercury_module():
 class FakeSession:
     imei = "123456789012345"
     def __init__(self, response=None): self.response, self.requests = response, []
-    def ask_mercury(self, package, timeout):
+    def ask_mercury(self, package, timeout, expected_length=None, log_package=None):
         self.requests.append(package)
         if self.response is None: raise TimeoutError
         return self.response
@@ -69,11 +69,19 @@ def test_command_results_are_mapped_to_monitoring_keys_without_losing_zero():
         "reactive_power": {"data": {"a": "6.86"}},
         "power_factor": {"data": {"a": "0.000"}},
         "frequency": {"data": {"value": "49.99"}},
+        "phase_angles": {"data": {"ab": "120", "ac": "240", "bc": "120"}},
+        "energy_current": {"data": {"a_plus": 13868, "a_minus": None, "r_plus": 1839, "r_minus": 0}},
+        "meter_time": {"data": {"value": "2026-09-23T12:00:00", "season": "summer"}},
     }})
-    assert values["u_a"] == "231.83" and values["u_c"] == "234.29"
-    assert values["i_a"] == 0 and values["i_b"] == "0"
-    assert values["p_total"] == "3.52" and values["q_a"] == "6.86"
-    assert values["cos_phi_a"] == "0.000" and values["frequency"] == "49.99"
+    assert values["u_a"] == 231.83 and values["u_c"] == 234.29
+    assert values["i_a"] == 0 and values["i_b"] == 0 and values["i_c"] == 1.25
+    assert values["p_total"] == 3.52 and values["q_a"] == 6.86
+    assert values["cos_phi_a"] == 0 and values["frequency"] == 49.99
+    assert values["phase_angle_ab"] == 120 and values["phase_angle_ac"] == 240 and values["phase_angle_bc"] == 120
+    assert values["energy_a_plus_total"] == 13868 and values["energy_a_minus_total"] is None
+    assert values["energy_r_minus_total"] == 0
+    assert values["meter_time"] == "2026-09-23T12:00:00" and isinstance(values["drift_seconds"], int)
+    assert all(not isinstance(value, str) for key, value in values.items() if key[:2] in {"u_", "i_", "p_", "q_"})
 
 
 def test_manager_uses_existing_session_and_exact_known_tx():
@@ -271,3 +279,174 @@ def test_poll_persists_each_result_and_survives_individual_errors(app, admin_cli
         if result["results"]:
             assert stored.last_firmware_version == "2.3.5"
         assert db.session.scalar(db.select(db.func.count(IRZOperationLog.id))) == len(result["results"]) + len(result["errors"])
+
+
+def _energy(a_plus):
+    return {"a_plus": a_plus, "a_minus": 0, "r_plus": 10, "r_minus": None}
+
+
+def full_poll():
+    return {"success": True, "partial": False, "errors": [], "results": {
+        "serial_and_manufacture": {"data": {"serial_number": 36790160, "date_of_manufacture": "2019-02-10"}, "duration_ms": 300},
+        "firmware_version": {"data": "2.3.5", "duration_ms": 280},
+        "transformation_ratios": {"data": {"voltage": 1, "current": 1}},
+        "voltage_phases": {"data": {"a": "230.1", "b": "229.5", "c": "231"}},
+        "current_phases": {"data": {"a": "1.234", "b": "0", "c": "0.5"}},
+        "frequency": {"data": {"value": "49.99"}},
+        "active_power": {"data": {"total": "350.5", "a": "200", "b": "0", "c": "150.5"}},
+        "reactive_power": {"data": {"total": "-10", "a": "-10", "b": "0", "c": "0"}},
+        "apparent_power": {"data": {"total": "360", "a": "210", "b": "0", "c": "150"}},
+        "power_factor": {"data": {"total": "0.97", "a": "0.95", "b": "0", "c": "1"}},
+        "phase_angles": {"data": {"ab": "120", "ac": "240", "bc": "120"}},
+        "energy_current": {"data": {"a_plus": 13868, "a_minus": None, "r_plus": 1839, "r_minus": 0}},
+        "energy_tariffs": {"data": {"t1": _energy(10000), "t2": _energy(3868), "t3": None, "t4": _energy(0)}},
+        "meter_time": {"data": {"value": "2026-09-23T15:00:30", "weekday": 3, "season": "winter"},
+                       "received_at": "2026-09-23T12:00:00+00:00"},
+        "status_word": {"data": {"raw": "00 00 00 00 01 00", "ok": False, "errors": [{"code": "E-01", "text": "Напряжение батареи"}]}},
+    }}
+
+
+def failed_poll(code="MERCURY_TIMEOUT", commands=None):
+    from app.modules.irz.commands import poll_commands
+    ids = commands or [command.id for command in poll_commands()]
+    return {"success": False, "partial": False, "results": {},
+            "errors": [{"command": command_id, "error_code": code, "message": "Mercury не ответил"} for command_id in ids]}
+
+
+def test_full_poll_produces_every_canonical_key():
+    values = service.normalize_poll_values(full_poll())
+    for prefix in ("p", "q", "s", "cos_phi"):
+        assert all(f"{prefix}_{phase}" in values for phase in ("a", "b", "c", "total"))
+    assert all(f"{prefix}_{phase}" in values for prefix in ("u", "i") for phase in ("a", "b", "c"))
+    assert values["q_total"] == -10 and values["p_b"] == 0 and values["cos_phi_c"] == 1
+    assert values["energy_a_plus_total"] == 13868 and values["energy_a_plus_t1"] == 10000
+    assert values["energy_a_plus_t3"] is None and values["energy_r_minus_t1"] is None
+    assert values["drift_seconds"] == 30
+    assert values["diagnostics"][0]["code"] == "E-01" and values["diagnostics_ok"] is False
+    assert values["transformation_current"] == 1 and values["serial_number"] == 36790160
+
+
+def _device(app, **kwargs):
+    device = IRZDevice(imei="123456789012345", name="ТП-1", model="ATM21", enabled=True, network_address=0, **kwargs)
+    db.session.add(device); db.session.commit()
+    return device
+
+
+def test_auto_poll_discovers_meter_and_failed_poll_keeps_values_as_stale(app, monkeypatch):
+    with app.app_context():
+        device = _device(app)
+        responses = [full_poll(), failed_poll()]
+        monkeypatch.setattr(service, "_gateway_request", lambda *a, **k: responses.pop(0))
+        result = service.poll_device(device, user_id=None, source="AUTO", log_operations=False)
+        assert result["quality"] == "GOOD"
+        meter = db.session.scalar(db.select(IRZMeter))
+        assert meter is not None and meter.serial_number == "36790160" and meter.firmware_version == "2.3.5"
+        assert device.last_success_at is not None
+        service.poll_device(device, user_id=None, source="AUTO", log_operations=False)
+        snapshots = list(db.session.scalars(db.select(IRZMeterSnapshot).order_by(IRZMeterSnapshot.captured_at)))
+        assert [(item.status, item.quality, item.source) for item in snapshots] == [("SUCCESS", "GOOD", "AUTO"), ("ERROR", "STALE", "AUTO")]
+        current = service.serialize_current(meter)
+        assert current["values"]["u_a"] == 230.1 and current["values"]["i_b"] == 0
+        assert current["quality"]["u_a"] == "STALE" and current["quality"]["energy_a_plus_t1"] == "STALE"
+        payload = service.serialize_device(device)
+        assert payload["data_state"] == "STALE" and payload["current"]["values"]["p_total"] == 350.5
+        assert db.session.scalar(db.select(db.func.count(IRZOperationLog.id))) == 0
+
+
+def test_partial_poll_marks_only_failed_fields_stale(app, monkeypatch):
+    with app.app_context():
+        device = _device(app)
+        partial = full_poll()
+        partial["results"] = {key: value for key, value in partial["results"].items() if key != "current_phases"}
+        partial["results"]["voltage_phases"] = {"data": {"a": "225", "b": "226", "c": "227"}}
+        partial.update(partial=True, errors=[{"command": "current_phases", "error_code": "CRC_ERROR", "message": "CRC"}])
+        responses = [full_poll(), partial]
+        monkeypatch.setattr(service, "_gateway_request", lambda *a, **k: responses.pop(0))
+        service.poll_device(device, user_id=None, source="AUTO", log_operations=False)
+        result = service.poll_device(device, user_id=None, source="MANUAL", log_operations=False)
+        assert result["quality"] == "PARTIAL" and result["snapshot"]["status"] == "PARTIAL"
+        current = service.serialize_current(db.session.scalar(db.select(IRZMeter)))
+        assert current["values"]["u_a"] == 225 and current["quality"]["u_a"] == "GOOD"
+        assert current["values"]["i_a"] == 1.234 and current["quality"]["i_a"] == "STALE"
+
+
+def test_unreachable_gateway_still_records_the_poll(app, monkeypatch):
+    with app.app_context():
+        device = _device(app)
+        monkeypatch.setattr(service, "_gateway_request", lambda *a, **k: full_poll())
+        service.poll_device(device, user_id=None)
+        monkeypatch.setattr(service, "_gateway_request", lambda *a, **k: (_ for _ in ()).throw(service.GatewayUnavailable("down")))
+        with pytest.raises(service.GatewayUnavailable):
+            service.poll_device(device, user_id=None)
+        meter = db.session.scalar(db.select(IRZMeter))
+        assert meter.last_poll_status == "ERROR"
+        current = service.serialize_current(meter)
+        assert current["values"]["frequency"] == 49.99 and current["quality"]["frequency"] == "STALE"
+        assert db.session.scalar(db.select(db.func.count(IRZMeterSnapshot.id))) == 2
+
+
+def test_poll_quality_classification():
+    assert service.poll_quality(failed_poll("CRC_ERROR", ["voltage_phases"])) == "CRC_ERROR"
+    assert service.poll_quality(failed_poll("UNSUPPORTED", ["frequency"])) == "UNSUPPORTED"
+    assert service.poll_quality(failed_poll("UNKNOWN_RESPONSE_FORMAT", ["frequency"])) == "INVALID"
+    assert service.poll_quality(failed_poll()) == "STALE"
+    ok = full_poll(); ok["errors"] = [{"command": "energy_tariffs", "error_code": "UNSUPPORTED"}]
+    assert service.poll_quality(ok) == "GOOD"
+
+
+def test_scheduler_polls_each_device_once_per_slot(app, monkeypatch):
+    from app.modules.irz import scheduler
+    base = 1_800_000_000 - 1_800_000_000 % 600
+    now = datetime.fromtimestamp(base + 100, timezone.utc)
+    with app.app_context():
+        first = IRZDevice(imei="100000000000001", name="A", model="ATM21", enabled=True)
+        second = IRZDevice(imei="100000000000002", name="B", model="ATM21", enabled=True)
+        offline = IRZDevice(imei="100000000000003", name="C", model="ATM21", enabled=True)
+        db.session.add_all([first, second, offline]); db.session.commit()
+        online = {first.imei, second.imei}
+        assert {item.imei for item in scheduler.due_devices(now, online)} == online
+        first.last_polled_at = second.last_polled_at = datetime.fromtimestamp(base - 250, timezone.utc)
+        db.session.commit()
+        assert [item.imei for item in scheduler.due_devices(now, online)] == [first.imei]
+        polled = []
+        monkeypatch.setattr(service, "get_devices", lambda: [{"imei": imei} for imei in online])
+        monkeypatch.setattr(service, "poll_device", lambda device, **kwargs: polled.append((device.imei, kwargs["source"])))
+        assert scheduler.run_once(now)["polled"] == 1
+        assert polled == [(first.imei, "AUTO")]
+
+
+def test_events_and_energy_archive_endpoints_are_read_only_and_validated(app, admin_client, monkeypatch):
+    with app.app_context():
+        _device(app)
+    calls = []
+    def gateway(path, **kwargs):
+        calls.append((path, kwargs.get("payload"), kwargs.get("timeout")))
+        return {"success": True, "data": {"journals": []}, "duration_ms": 10}
+    monkeypatch.setattr(service, "_gateway_request", gateway)
+    assert admin_client.post("/irz/api/devices/123456789012345/events", json={}).status_code == 200
+    assert calls[-1][1]["command_id"] == "events" and calls[-1][2] == 90
+    bad = admin_client.post("/irz/api/devices/123456789012345/energy-archive", json={"period": "week"})
+    assert bad.status_code == 400 and bad.get_json()["error_code"] == "INVALID_PARAMETERS"
+    assert admin_client.post("/irz/api/devices/123456789012345/energy-archive", json={"period": "month", "month": "x"}).status_code == 400
+    ok = admin_client.post("/irz/api/devices/123456789012345/energy-archive", json={"period": "month", "month": 3, "tariff": 1})
+    assert ok.status_code == 200
+    assert calls[-1][1]["params"] == {"period": "month", "month": 3, "tariff": 1}
+
+
+def test_frontend_contract_uses_canonical_keys_and_hides_only_missing_values():
+    script = Path("app/static/js/irz.js").read_text(encoding="utf-8")
+    template = Path("app/modules/irz/templates/irz/index.html").read_text(encoding="utf-8")
+    values = service.normalize_poll_values(full_poll())
+    for prefix in service.PHASE_PREFIXES.values():
+        assert f"['{prefix}'," in script
+    for key in ("frequency", "meter_time", "drift_seconds", "diagnostics", "transformation_voltage", "transformation_current"):
+        assert key in values and key in script
+    assert "phase_angle_${k}" in script and all(f"phase_angle_{k}" in values for k in ("ab", "ac", "bc"))
+    assert "energy_${key}_${tariff}" in script
+    assert all(f"['{tariff}'," in script for tariff in ("total", "t1", "t2", "t3", "t4"))
+    assert "Number.isNaN" in script and "'—'" in script and "?? null" in script
+    assert "setInterval" not in script and "location.reload" not in script
+    for header in ("U, В", "I, А", "P, кВт", "Q, квар", "S, кВА", "cos φ", "Прочитать журналы"):
+        assert header in template
+    for forbidden in ("Protocol Lab", "PROTOCOL LAB", "HEX", "RAW", "Инженерный"):
+        assert forbidden not in template

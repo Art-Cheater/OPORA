@@ -268,3 +268,87 @@ def _capture_timeout(result, session, package):
         session.ask_mercury(package, 0.05)
     except TimeoutError:
         result.append(True)
+
+
+def _fake_atm21(client, stop, received):
+    """Replies like a Mercury 230 at address 0; fragments answers and injects heartbeats."""
+    frame = lambda value: add_crc(bytes.fromhex(value))
+    replies = {
+        bytes.fromhex("00 08 00 76 00"): [bytes.fromhex("00 24 4F"), HEARTBEAT, bytes.fromhex("01 3C 0A 02 13 7B 09")],
+        frame("00 01 01 01 01 01 01 01 01"): [frame("00 00")],
+        bytes.fromhex("00 08 03 36 01"): [bytes.fromhex("00 02 03 05 61 17")],
+        bytes.fromhex("00 08 02 F7 C1"): [bytes.fromhex("00 00 01 00 01 B4"), bytes.fromhex("00")],
+        frame("00 08 16 11"): [frame("00 00 D8 59 00 D8 59 00 00 00")[:5], HEARTBEAT, frame("00 00 D8 59 00 D8 59 00 00 00")[5:]],
+        frame("00 08 11 40"): [frame("00 00 87 13")],
+    }
+    buffer = b""
+    client.settimeout(0.1)
+    while not stop.is_set():
+        try:
+            chunk = client.recv(64)
+        except socket.timeout:
+            continue
+        except OSError:
+            return
+        if not chunk:
+            return
+        buffer += chunk
+        while len(buffer) >= 4:
+            match = next((tx for tx in replies if buffer.startswith(tx)), None)
+            size = len(match) if match else next((n for n in range(len(buffer), 3, -1) if add_crc(buffer[:n - 2]) == buffer[:n]), 0)
+            if not size:
+                break
+            request, buffer = buffer[:size], buffer[size:]
+            received.append(request)
+            for part in replies.get(request, [frame("00 01")]):
+                client.sendall(part)
+                time.sleep(0.03)
+
+
+def test_full_poll_through_real_sniffer_and_fake_atm21(monkeypatch):
+    monkeypatch.setenv("MERCURY_LEVEL1_PASSWORD", "111111")
+    monkeypatch.setenv("MERCURY_PASSWORD_ENCODING", "hex")
+    exchanges = []
+    tcp_server, http_server = create_servers("127.0.0.1", 0, 0, lambda imei, direction, data, packet_type=None: exchanges.append((direction, data, packet_type)))
+    threads = [threading.Thread(target=tcp_server.serve_forever, daemon=True), threading.Thread(target=http_server.serve_forever, daemon=True)]
+    for thread in threads:
+        thread.start()
+    client = socket.create_connection(("127.0.0.1", tcp_server.server_address[1]), timeout=2)
+    stop, received = threading.Event(), []
+    imei = "123456789012345"
+    try:
+        client.sendall(f"AT$IMEI={imei},TYP=ATM,DEV=ATM21,".encode())
+        _wait_for_device(http_server.server_address[1], imei)
+        atm = threading.Thread(target=_fake_atm21, args=(client, stop, received), daemon=True)
+        atm.start()
+        connection = http.client.HTTPConnection("127.0.0.1", http_server.server_address[1], timeout=60)
+        connection.request("POST", "/mercury/poll", body=json.dumps({"imei": imei, "network_address": 0}),
+                           headers={"Content-Type": "application/json"})
+        response = connection.getresponse()
+        status, result = response.status, json.loads(response.read())
+        connection.close()
+        assert status == 200 and result["success"] is True and result["partial"] is True
+        data = {key: value["data"] for key, value in result["results"].items()}
+        assert data["serial_and_manufacture"] == {"serial_number": 36790160, "date_of_manufacture": "2019-02-10"}
+        assert data["firmware_version"] == "2.3.5"
+        assert data["transformation_ratios"] == {"voltage": 1, "current": 1}
+        assert data["voltage_phases"] == {"a": "230", "b": "230", "c": "0"}
+        assert data["frequency"] == {"value": "49.99"}
+        assert {item["error_code"] for item in result["errors"]} == {"UNSUPPORTED"}
+        assert all(add_crc(item[:-2]) == item for item in received)
+        assert received[0] == bytes.fromhex("00 08 00 76 00")
+        assert sum(1 for item in received if item[1:2] == b"\x01") == 1
+        logged_tx = [data for direction, data, _type in exchanges if direction == "TX"]
+        assert all(b"\x01\x01\x01\x01\x01\x01" not in item for item in logged_tx)
+        assert any(item[3:9] == b"\x2a" * 6 for item in logged_tx)
+        assert sum(1 for _direction, data, packet_type in exchanges if packet_type == "ATM21_HEARTBEAT") >= 2
+        assert tcp_server.registry.get(imei) is not None
+    finally:
+        stop.set()
+        client.close()
+        tcp_server.shutdown()
+        http_server.shutdown()
+        tcp_server.server_close()
+        http_server.server_close()
+        for thread in threads:
+            thread.join(timeout=2)

@@ -5,14 +5,29 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import current_app
 
 from app.extensions import db
 from app.models.irz import IRZDevice, IRZExchangeLog, IRZExperiment, IRZMeter, IRZMeterSnapshot, IRZOperationLog
-from app.modules.irz.commands import command_list, get_command
+from app.modules.irz.commands import COMMANDS, command_list, get_command, poll_commands
+
+PHASE_PREFIXES = {
+    "voltage_phases": "u", "current_phases": "i", "active_power": "p",
+    "reactive_power": "q", "apparent_power": "s", "power_factor": "cos_phi",
+}
+ENERGY_KEYS = ("a_plus", "a_minus", "r_plus", "r_minus")
+QUALITY_BY_ERROR = {
+    "CRC_ERROR": "CRC_ERROR",
+    "UNSUPPORTED": "UNSUPPORTED", "COMMAND_NOT_SUPPORTED": "UNSUPPORTED",
+    "UNKNOWN_RESPONSE_FORMAT": "INVALID", "WRONG_ADDRESS": "INVALID", "INCOMPLETE_RESPONSE": "INVALID",
+    "PROTOCOL_ERROR": "INVALID", "METER_INTERNAL_ERROR": "INVALID",
+}
+COMMAND_TIMEOUTS = {"events": 90}
 
 
 class GatewayUnavailable(RuntimeError):
@@ -262,8 +277,17 @@ def serialize_device(device: IRZDevice, *, online: bool = False, runtime: dict |
         .order_by(IRZMeter.last_seen_at.desc())
     )
     latest = latest_meter_snapshot(meter) if meter else None
+    current = serialize_current(meter) if meter else {"values": {}, "quality": {}, "captured_at": {}, "updated_at": None}
     stale_seconds = int(current_app.config.get("IRZ_DATA_FRESH_SECONDS", 900))
-    is_stale = not latest or (datetime.now(timezone.utc) - _aware(latest.captured_at)).total_seconds() > stale_seconds
+    reference = _parse_time(current.get("updated_at")) or (_aware(latest.captured_at) if latest else None)
+    is_stale = (reference is None or (datetime.now(timezone.utc) - reference).total_seconds() > stale_seconds
+                or bool(latest and latest.status == "ERROR"))
+    if not current["values"] and latest is None:
+        data_state = "NO_DATA"
+    elif is_stale:
+        data_state = "STALE"
+    else:
+        data_state = latest.quality if latest else "GOOD"
     return {
         "id": str(device.id),
         "name": device.name,
@@ -300,9 +324,10 @@ def serialize_device(device: IRZDevice, *, online: bool = False, runtime: dict |
             "transformation_ratios": device.last_transformation_ratios,
         },
         "location": {"latitude": device.latitude, "longitude": device.longitude, "address_text": device.address_text},
-        "data_state": "NO_DATA" if latest is None else ("STALE" if is_stale else latest.status),
+        "data_state": data_state,
         "stale": is_stale,
         "latest": serialize_snapshot(latest, include_delta=True) if latest else None,
+        "current": current,
         "meter": serialize_meter(meter) if meter else None,
     }
 
@@ -345,42 +370,168 @@ def _numeric_delta(current: object, previous: object) -> object:
     return None
 
 
+def _num(value: object) -> object:
+    """Canonical JSON number for a measurement; 0 stays 0, None stays None."""
+    if value is None or isinstance(value, bool) or isinstance(value, (int, float)):
+        return value
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    if isinstance(value, str):
+        try:
+            number = Decimal(value.strip())
+        except InvalidOperation:
+            return value
+        if not number.is_finite():
+            return None
+        return int(number) if "." not in value and "e" not in value.lower() else float(number)
+    return value
+
+
+def _parse_time(value: object) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return _aware(datetime.fromisoformat(str(value)))
+    except ValueError:
+        return None
+
+
+def _meter_timezone() -> ZoneInfo:
+    try:
+        name = current_app.config.get("IRZ_METER_TIMEZONE") or "Europe/Moscow"
+    except RuntimeError:
+        name = "Europe/Moscow"
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError:
+        return ZoneInfo("Europe/Moscow")
+
+
+def normalize_command(command_id: str, data: object, item: dict | None = None) -> dict:
+    """Map one command result to canonical monitoring keys (u_a, p_total, energy_*…)."""
+    values: dict = {}
+    if command_id == "serial_and_manufacture" and isinstance(data, dict):
+        values["serial_number"] = data.get("serial_number")
+        values["manufacture_date"] = data.get("date_of_manufacture")
+    elif command_id == "firmware_version" and data is not None:
+        values["firmware_version"] = data
+    elif command_id == "transformation_ratios" and isinstance(data, dict):
+        values["transformation_voltage"] = _num(data.get("voltage"))
+        values["transformation_current"] = _num(data.get("current"))
+    elif command_id in PHASE_PREFIXES and isinstance(data, dict):
+        prefix = PHASE_PREFIXES[command_id]
+        for phase in ("a", "b", "c", "total"):
+            if phase in data:
+                values[f"{prefix}_{phase}"] = _num(data[phase])
+    elif command_id == "frequency":
+        values["frequency"] = _num(data.get("value") if isinstance(data, dict) else data)
+    elif command_id == "phase_angles" and isinstance(data, dict):
+        for source in ("ab", "ac", "bc"):
+            if source in data:
+                values[f"phase_angle_{source}"] = _num(data[source])
+    elif command_id == "energy_current" and isinstance(data, dict):
+        for key in ENERGY_KEYS:
+            values[f"energy_{key}_total"] = _num(data.get(key))
+    elif command_id == "energy_tariffs" and isinstance(data, dict):
+        for tariff, block in data.items():
+            for key in ENERGY_KEYS:
+                values[f"energy_{key}_{tariff}"] = _num(block.get(key)) if isinstance(block, dict) else None
+    elif command_id == "meter_time" and isinstance(data, dict) and data.get("value"):
+        values["meter_time"] = data["value"]
+        meter_local = _parse_naive_local(data["value"])
+        received = _parse_time((item or {}).get("received_at")) or datetime.now(timezone.utc)
+        if meter_local is not None:
+            values["drift_seconds"] = round((meter_local - received).total_seconds())
+    elif command_id == "status_word" and isinstance(data, dict):
+        values["status_word"] = data.get("raw")
+        values["diagnostics"] = data.get("errors") or []
+        values["diagnostics_ok"] = bool(data.get("ok"))
+    return values
+
+
+def _parse_naive_local(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed.replace(tzinfo=_meter_timezone()) if parsed.tzinfo is None else parsed
+
+
 def normalize_poll_values(result: dict) -> dict:
     """Build the stable monitoring schema from command-oriented gateway results."""
-    command_values = {
-        command_id: item.get("data")
-        for command_id, item in result.get("results", {}).items()
-        if isinstance(item, dict) and "data" in item
-    }
+    items = {command_id: item for command_id, item in result.get("results", {}).items()
+             if isinstance(item, dict) and "data" in item}
     values: dict = dict(result.get("normalized") or {})
-    if command_values:
-        values["commands"] = command_values
-    serial = command_values.get("serial_and_manufacture")
-    if isinstance(serial, dict):
-        values["serial_number"] = serial.get("serial_number")
-        values["manufacture_date"] = serial.get("date_of_manufacture")
-    if "firmware_version" in command_values:
-        values["firmware_version"] = command_values["firmware_version"]
-    ratios = command_values.get("transformation_ratios")
-    if isinstance(ratios, dict):
-        values["transformation_voltage"] = ratios.get("voltage")
-        values["transformation_current"] = ratios.get("current")
-    mappings = {
-        "voltage_phases": "u", "current_phases": "i", "active_power": "p",
-        "reactive_power": "q", "apparent_power": "s", "power_factor": "cos_phi",
-    }
-    for command_id, prefix in mappings.items():
-        data = command_values.get(command_id)
-        if isinstance(data, dict):
-            for phase in ("a", "b", "c", "total"):
-                if phase in data:
-                    values[f"{prefix}_{phase}"] = data[phase]
-    frequency = command_values.get("frequency")
-    if isinstance(frequency, dict) and "value" in frequency:
-        values["frequency"] = frequency["value"]
-    elif frequency is not None:
-        values["frequency"] = frequency
+    if items:
+        values["commands"] = {command_id: item.get("data") for command_id, item in items.items()}
+    for command_id, item in items.items():
+        values.update(normalize_command(command_id, item.get("data"), item))
     return values
+
+
+def command_quality(error_code: object) -> str:
+    return QUALITY_BY_ERROR.get(str(error_code or ""), "STALE")
+
+
+def poll_quality(result: dict) -> str:
+    """GOOD / PARTIAL / STALE / INVALID / CRC_ERROR / UNSUPPORTED for one logical poll."""
+    errors = [item for item in result.get("errors", []) if isinstance(item, dict)]
+    relevant = [item for item in errors if command_quality(item.get("error_code")) != "UNSUPPORTED"]
+    if result.get("results") or result.get("success"):
+        return "PARTIAL" if relevant else "GOOD"
+    qualities = {command_quality(item.get("error_code")) for item in errors} or {"STALE"}
+    if qualities == {"CRC_ERROR"}:
+        return "CRC_ERROR"
+    if qualities == {"UNSUPPORTED"}:
+        return "UNSUPPORTED"
+    return "INVALID" if "INVALID" in qualities else "STALE"
+
+
+def _current_state(raw: object) -> dict:
+    if isinstance(raw, dict) and isinstance(raw.get("values"), dict) and isinstance(raw.get("commands"), dict):
+        return {"values": dict(raw["values"]), "commands": {key: dict(value) for key, value in raw["commands"].items()},
+                "updated_at": raw.get("updated_at")}
+    legacy = {key: value for key, value in (raw or {}).items()
+              if key != "commands" and not (isinstance(value, dict) and "timestamp" in value)} if isinstance(raw, dict) else {}
+    return {"values": legacy, "commands": {}, "updated_at": None}
+
+
+def merge_current(raw: object, results: dict, errors: list, now: datetime) -> dict:
+    """Latest known value per field; failed commands keep old values marked STALE."""
+    state, stamp = _current_state(raw), now.isoformat()
+    for command_id, item in results.items():
+        if not isinstance(item, dict) or "data" not in item:
+            continue
+        fields = normalize_command(command_id, item.get("data"), item)
+        state["values"].update(fields)
+        state["commands"][command_id] = {"captured_at": stamp, "quality": "GOOD", "fields": sorted(fields)}
+        state["updated_at"] = stamp
+    for error in errors:
+        command_id = error.get("command") if isinstance(error, dict) else None
+        if command_id not in COMMANDS:
+            continue
+        meta = state["commands"].get(command_id) or {"fields": []}
+        quality = command_quality(error.get("error_code"))
+        if quality != "UNSUPPORTED" and meta.get("captured_at"):
+            quality = "STALE"
+        meta.update(quality=quality, error_code=error.get("error_code"), failed_at=stamp)
+        state["commands"][command_id] = meta
+    return state
+
+
+def serialize_current(meter: IRZMeter) -> dict:
+    state = _current_state(meter.latest_snapshot)
+    fresh_seconds = int(current_app.config.get("IRZ_DATA_FRESH_SECONDS", 900))
+    now = datetime.now(timezone.utc)
+    quality, captured = {}, {}
+    for meta in state["commands"].values():
+        value_quality, captured_at = meta.get("quality"), meta.get("captured_at")
+        moment = _parse_time(captured_at)
+        if value_quality == "GOOD" and (moment is None or (now - moment).total_seconds() > fresh_seconds):
+            value_quality = "STALE"
+        for field in meta.get("fields", []):
+            quality[field], captured[field] = value_quality, captured_at
+    return {"values": state["values"], "quality": quality, "captured_at": captured, "updated_at": state.get("updated_at")}
 
 
 def serialize_snapshot(snapshot: IRZMeterSnapshot, *, include_delta: bool = False) -> dict:
@@ -486,7 +637,51 @@ def set_network_address(device: IRZDevice, value: object) -> None:
     db.session.commit()
 
 
-def _store_operation(device: IRZDevice, user_id, command_id: str, operation: str, result: dict | None = None, error: GatewayResponseError | GatewayUnavailable | None = None) -> IRZOperationLog:
+def _device_meter(device: IRZDevice) -> IRZMeter | None:
+    return db.session.scalar(
+        db.select(IRZMeter).where(IRZMeter.active_filter(), IRZMeter.irz_device_id == device.id)
+        .order_by(IRZMeter.last_seen_at.desc())
+    )
+
+
+def _apply_results(device: IRZDevice, results: dict, errors: list, now: datetime, user_id) -> IRZMeter | None:
+    """Update device identity and the merged current meter state from command results."""
+    for command_id, item in results.items():
+        data = item.get("data") if isinstance(item, dict) else None
+        if command_id == "serial_and_manufacture" and isinstance(data, dict):
+            device.serial_number = str(data.get("serial_number") or device.serial_number or "") or None
+            raw_date = data.get("date_of_manufacture")
+            if raw_date:
+                try: device.last_manufacture_date = datetime.fromisoformat(str(raw_date)).date()
+                except ValueError: pass
+            _upsert_meter(device, data, now, user_id)
+        elif command_id == "firmware_version" and data is not None:
+            device.last_firmware_version = str(data)
+        elif command_id == "transformation_ratios" and isinstance(data, dict):
+            device.last_transformation_ratios = data
+    if results:
+        durations = [item.get("duration_ms") for item in results.values() if isinstance(item, dict) and item.get("duration_ms") is not None]
+        device.last_success_at = now
+        device.last_mercury_seen_at = now
+        device.last_latency_ms = max(durations) if durations else device.last_latency_ms
+        device.last_error = None
+    elif errors:
+        device.last_error_at = now
+        device.last_error = next((str(item.get("message")) for item in errors if isinstance(item, dict) and item.get("message")), "Ошибка опроса")
+    meter = _device_meter(device)
+    if meter is not None:
+        firmware = (results.get("firmware_version") or {}).get("data") if isinstance(results.get("firmware_version"), dict) else None
+        if firmware is not None:
+            meter.firmware_version = str(firmware)
+        meter.latest_snapshot = merge_current(meter.latest_snapshot, results, errors, now)
+        if results:
+            meter.last_seen_at = now
+    return meter
+
+
+def _store_operation(device: IRZDevice, user_id, command_id: str, operation: str, result: dict | None = None,
+                     error: GatewayResponseError | GatewayUnavailable | None = None, *, apply: bool = True,
+                     parameters: dict | None = None) -> IRZOperationLog:
     status = "SUCCESS"
     error_code = error_message = None
     if error is not None:
@@ -504,7 +699,7 @@ def _store_operation(device: IRZDevice, user_id, command_id: str, operation: str
         command_id=command_id,
         mercury_command=command.mercury_command if command else None,
         operation=operation,
-        request_parameters={},
+        request_parameters=parameters or {},
         status=status,
         result=result.get("data") if result else None,
         error_code=error_code,
@@ -516,61 +711,58 @@ def _store_operation(device: IRZDevice, user_id, command_id: str, operation: str
         updated_by=user_id,
     )
     db.session.add(log)
-    if result:
+    if apply:
         now = datetime.now(timezone.utc)
-        device.last_success_at = now
-        device.last_mercury_seen_at = now
-        device.last_latency_ms = result.get("duration_ms")
-        device.last_error = None
-        if command_id == "serial_and_manufacture" and isinstance(result.get("data"), dict):
-            device.serial_number = str(result["data"].get("serial_number") or device.serial_number or "") or None
-            raw_date = result["data"].get("date_of_manufacture")
-            if raw_date:
-                try: device.last_manufacture_date = datetime.fromisoformat(str(raw_date)).date()
-                except ValueError: pass
-            _upsert_meter(device, result["data"], now, user_id)
-        elif command_id == "firmware_version" and result.get("data") is not None:
-            device.last_firmware_version = str(result["data"])
-        elif command_id == "transformation_ratios" and isinstance(result.get("data"), dict):
-            device.last_transformation_ratios = result["data"]
-        meter = db.session.scalar(db.select(IRZMeter).where(IRZMeter.active_filter(), IRZMeter.irz_device_id == device.id))
-        if meter:
-            if command_id == "firmware_version": meter.firmware_version = str(result.get("data"))
-            snapshot = dict(meter.latest_snapshot or {})
-            snapshot[command_id] = {"timestamp": now.isoformat(), "value": result.get("data")}
-            meter.latest_snapshot = snapshot
-            meter.last_seen_at = now
-    elif error:
-        device.last_error_at = datetime.now(timezone.utc)
-        device.last_error = error_message
+        if result:
+            _apply_results(device, {command_id: result}, [], now, user_id)
+        elif error:
+            _apply_results(device, {}, [{"command": command_id, "error_code": error_code, "message": error_message}], now, user_id)
     db.session.commit()
     return log
 
 
-def execute_device_command(device: IRZDevice, command_id: str, *, user_id, operation: str = "COMMAND") -> dict:
+def execute_device_command(device: IRZDevice, command_id: str, *, user_id, operation: str = "COMMAND",
+                           params: dict | None = None) -> dict:
     if not device.enabled:
         raise ValueError("DEVICE_DISABLED")
     get_command(command_id)
     address = device.network_address if device.network_address is not None else 0
+    payload = {"imei": device.imei, "network_address": address, "command_id": command_id}
+    if params:
+        payload["params"] = params
     try:
         result = _gateway_request(
             "/mercury/command" if operation == "COMMAND" else "/mercury/test",
-            payload={"imei": device.imei, "network_address": address, "command_id": command_id},
-            timeout=7,
+            payload=payload,
+            timeout=COMMAND_TIMEOUTS.get(command_id, 30),
         )
     except (GatewayResponseError, GatewayUnavailable) as exc:
-        _store_operation(device, user_id, command_id, operation, error=exc)
+        _store_operation(device, user_id, command_id, operation, error=exc, parameters=params)
         raise
-    _store_operation(device, user_id, command_id, operation, result=result)
+    _store_operation(device, user_id, command_id, operation, result=result, parameters=params)
     return result
+
+
+def energy_archive_params(payload: dict) -> dict:
+    from app.modem_gateway.mercury230 import ARCHIVE_PERIODS
+    period = str(payload.get("period") or "")
+    try:
+        month = int(payload.get("month") or 0)
+        tariff = int(payload.get("tariff") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("INVALID_PARAMETERS") from exc
+    if period not in ARCHIVE_PERIODS or not 0 <= tariff <= 4 or (period == "month" and not 1 <= month <= 12):
+        raise ValueError("INVALID_PARAMETERS")
+    return {"period": period, "month": month if period == "month" else 0, "tariff": tariff}
 
 
 def _acquire_poll_lease(device: IRZDevice) -> bool:
     now = datetime.now(timezone.utc)
+    lease = int(current_app.config.get("IRZ_POLL_TIMEOUT_SECONDS", 90)) + 30
     result = db.session.execute(db.update(IRZDevice).where(
         IRZDevice.id == device.id,
         db.or_(IRZDevice.poll_lock_until.is_(None), IRZDevice.poll_lock_until < now),
-    ).values(poll_lock_until=now + timedelta(seconds=45)).execution_options(synchronize_session=False))
+    ).values(poll_lock_until=now + timedelta(seconds=lease)).execution_options(synchronize_session=False))
     db.session.commit()
     return result.rowcount == 1
 
@@ -588,40 +780,64 @@ def poll_device(device: IRZDevice, *, user_id, source: str = "MANUAL", log_opera
         raise ValueError("INVALID_POLL_SOURCE")
     if not _acquire_poll_lease(device):
         raise ValueError("POLL_IN_PROGRESS")
+    imei = device.imei
     address = device.network_address if device.network_address is not None else 0
     started = datetime.now(timezone.utc)
+    db.session.commit()
     try:
-        result = _gateway_request("/mercury/poll", payload={"imei": device.imei, "network_address": address}, timeout=35)
+        try:
+            result = _gateway_request("/mercury/poll", payload={"imei": imei, "network_address": address},
+                                      timeout=int(current_app.config.get("IRZ_POLL_TIMEOUT_SECONDS", 90)))
+        except (GatewayResponseError, GatewayUnavailable) as exc:
+            code = exc.error_code if isinstance(exc, GatewayResponseError) else "CONNECTION_ERROR"
+            failed = {"success": False, "partial": False, "results": {},
+                      "errors": [{"command": "poll", "error_code": code, "message": str(exc)}]}
+            _record_poll(device, failed, source=source, user_id=user_id, started=started)
+            raise
         if log_operations:
             for command_id, command_result in result.get("results", {}).items():
-                _store_operation(device, user_id, command_id, "POLL", result=command_result)
+                _store_operation(device, user_id, command_id, "POLL", result=command_result, apply=False)
             for error in result.get("errors", []):
+                if error.get("command") not in COMMANDS:
+                    continue
                 gateway_error = GatewayResponseError(error.get("message", "Ошибка опроса"), 502, error.get("error_code", "PROTOCOL_ERROR"), error)
-                _store_operation(device, user_id, error.get("command", "poll"), "POLL", error=gateway_error)
-        device.last_polled_at = datetime.now(timezone.utc)
-        meter = db.session.scalar(db.select(IRZMeter).where(IRZMeter.active_filter(), IRZMeter.irz_device_id == device.id))
-        status = "PARTIAL" if result.get("partial") else ("SUCCESS" if result.get("success") else "ERROR")
-        snapshot = None
-        if meter:
-            meter.last_poll_at = device.last_polled_at
-            meter.last_poll_status = status
-            values = normalize_poll_values(result)
-            if values:
-                meter.latest_snapshot = values
-            snapshot = IRZMeterSnapshot(
-                meter_id=meter.id, captured_at=device.last_polled_at, values=values,
-                quality="PARTIAL" if result.get("partial") else ("GOOD" if result.get("success") else "INVALID"),
-                quality_flags={"errors": result.get("errors", [])} if result.get("errors") else None,
-                poll_duration_ms=int((datetime.now(timezone.utc) - started).total_seconds() * 1000),
-                source=source, status=status, extras=None, created_by=user_id, updated_by=user_id,
-            )
-            db.session.add(snapshot)
-        db.session.commit()
+                _store_operation(device, user_id, error["command"], "POLL", error=gateway_error, apply=False)
+        snapshot = _record_poll(device, result, source=source, user_id=user_id, started=started)
         if snapshot is not None:
             result["snapshot"] = serialize_snapshot(snapshot, include_delta=True)
+        result["quality"] = poll_quality(result)
         return result
     finally:
         _release_poll_lease(device)
+
+
+def _record_poll(device: IRZDevice, result: dict, *, source: str, user_id, started: datetime) -> IRZMeterSnapshot | None:
+    """One logical poll → one snapshot; failed commands keep previous values as STALE."""
+    now = datetime.now(timezone.utc)
+    results = {key: value for key, value in (result.get("results") or {}).items() if isinstance(value, dict)}
+    errors = [item for item in (result.get("errors") or []) if isinstance(item, dict)]
+    device.last_polled_at = now
+    if errors and not results and not any(item.get("command") in COMMANDS for item in errors):
+        first = errors[0]
+        errors = errors + [{"command": command.id, "error_code": first.get("error_code"), "message": first.get("message")}
+                           for command in poll_commands()]
+    meter = _apply_results(device, results, errors, now, user_id)
+    quality = poll_quality(result)
+    status = "SUCCESS" if quality == "GOOD" else ("PARTIAL" if quality == "PARTIAL" else "ERROR")
+    snapshot = None
+    if meter is not None:
+        meter.last_poll_at = now
+        meter.last_poll_status = status
+        snapshot = IRZMeterSnapshot(
+            meter_id=meter.id, captured_at=now, values=normalize_poll_values(result),
+            quality=quality,
+            quality_flags={"errors": result.get("errors", [])} if result.get("errors") else None,
+            poll_duration_ms=int((now - started).total_seconds() * 1000),
+            source=source, status=status, extras=None, created_by=user_id, updated_by=user_id,
+        )
+        db.session.add(snapshot)
+    db.session.commit()
+    return snapshot
 
 
 def operation_logs(device: IRZDevice, *, limit: int = 100, status: str | None = None) -> list[IRZOperationLog]:

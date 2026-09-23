@@ -20,9 +20,10 @@ class VerifiedSession:
         self.response = bytes.fromhex(response)
         self.sent = []
 
-    def ask_mercury(self, package: bytes, timeout: float) -> bytes:
+    def ask_mercury(self, package: bytes, timeout: float, expected_length=None, log_package=None) -> bytes:
         assert timeout == 5.0
         self.sent.append(package)
+        self.expected_length = expected_length
         assert package == self.expected_tx
         return self.response
 
@@ -39,6 +40,16 @@ def test_physically_verified_address_zero_packets_and_parsers(fixture):
     assert check_crc(bytes.fromhex(fixture["tx"]))
     assert check_crc(bytes.fromhex(fixture["rx"]))
     assert result["data"] == fixture["expected"]
+    assert session.expected_length == len(bytes.fromhex(fixture["rx"]))
+
+
+def test_ratios_frame_is_not_cut_at_a_coincidental_crc_prefix():
+    from app.modem_gateway.sniffer import match_mercury_frame
+    fixture = next(item for item in FIXTURES if item["command"] == "transformation_ratios")
+    observed, full = bytes.fromhex(fixture["rx_observed"]), bytes.fromhex(fixture["rx"])
+    assert check_crc(observed)
+    assert match_mercury_frame(observed, 0, len(full), check_crc) is None
+    assert match_mercury_frame(full, 0, len(full), check_crc) == full
 
 
 def test_broken_real_response_crc_is_rejected():

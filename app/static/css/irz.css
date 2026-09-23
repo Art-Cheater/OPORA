@@ -9,4 +9,9 @@
 .irz-detail-grid { display: grid; grid-template-columns: auto 1fr; gap: .3rem .75rem; }
 .irz-detail-grid dt { color: var(--bs-secondary-color); font-weight: 400; }
 .irz-detail-grid dd { margin: 0; overflow-wrap: anywhere; }
+.irz-phase-table tbody th { font-weight: 600; width: 3.5rem; }
+.irz-stale, .irz-metric.irz-stale strong { color: var(--bs-warning-text-emphasis); }
+td.irz-stale { background: var(--bs-warning-bg-subtle); }
+.irz-metric.irz-stale { border-color: var(--bs-warning-border-subtle); }
+.irz-events li + li { margin-top: .45rem; }
 @media (max-width: 767.98px) { .irz-device-select { min-width: 12rem; max-width: 60vw; } }

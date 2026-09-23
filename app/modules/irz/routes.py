@@ -262,6 +262,29 @@ def monitoring_poll(imei):
         return _error_response(exc)
 
 
+@irz_bp.post("/api/devices/<imei>/events")
+@login_required
+@permission_required("irz.view")
+def monitoring_events(imei):
+    try:
+        device = service.get_device_by_imei(imei)
+        return jsonify(service.execute_device_command(device, "events", user_id=current_user.id))
+    except (ValueError, LookupError, service.GatewayUnavailable, service.GatewayResponseError) as exc:
+        return _error_response(exc)
+
+
+@irz_bp.post("/api/devices/<imei>/energy-archive")
+@login_required
+@permission_required("irz.view")
+def monitoring_energy_archive(imei):
+    try:
+        device = service.get_device_by_imei(imei)
+        params = service.energy_archive_params(request.get_json(silent=True) or {})
+        return jsonify(service.execute_device_command(device, "energy_archive", user_id=current_user.id, params=params))
+    except (ValueError, LookupError, service.GatewayUnavailable, service.GatewayResponseError) as exc:
+        return _error_response(exc)
+
+
 @irz_bp.get("/api/mercury/devices/<device_id>")
 @login_required
 @permission_required("irz.view")
@@ -361,7 +384,9 @@ def mercury_command(device_id, command_id):
         if command.dangerous and payload.get("confirm") is not True:
             return jsonify({"success": False, "error_code": "CONFIRMATION_REQUIRED", "message": "Требуется подтверждение опасной команды"}), 409
         device = service.get_device(device_id)
-        result = service.execute_device_command(device, command_id, user_id=current_user.id)
+        raw_params = payload.get("params") if isinstance(payload.get("params"), dict) else {}
+        params = service.energy_archive_params(raw_params) if command.id == "energy_archive" else None
+        result = service.execute_device_command(device, command_id, user_id=current_user.id, params=params)
     except (KeyError, ValueError, LookupError, service.GatewayUnavailable, service.GatewayResponseError) as exc:
         return _error_response(exc)
     AuditService.log(user_id=current_user.id, action="update", entity_type="irz_device", entity_id=device.id, description=f"IRZ команда {command.id}: {device.name}", new_values={"command": command.id})

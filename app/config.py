@@ -165,6 +165,9 @@ class Config:
     IRZ_POLL_MS = int(os.getenv("IRZ_POLL_MS", "1000"))
     IRZ_AUTO_POLL_INTERVAL_SECONDS = int(os.getenv("IRZ_AUTO_POLL_INTERVAL_SECONDS", "600"))
     IRZ_DATA_FRESH_SECONDS = int(os.getenv("IRZ_DATA_FRESH_SECONDS", "900"))
+    IRZ_POLL_TIMEOUT_SECONDS = int(os.getenv("IRZ_POLL_TIMEOUT_SECONDS", "90"))
+    IRZ_POLL_WORKERS = int(os.getenv("IRZ_POLL_WORKERS", "8"))
+    IRZ_METER_TIMEZONE = os.getenv("IRZ_METER_TIMEZONE", "Europe/Moscow").strip() or "Europe/Moscow"
     IRZ_TELEMETRY_RETENTION_DAYS = int(os.getenv("IRZ_TELEMETRY_RETENTION_DAYS", "0"))
 
     WTF_CSRF_ENABLED = True

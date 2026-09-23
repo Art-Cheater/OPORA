@@ -60,9 +60,27 @@ def emit_exchange(callback, imei, direction, data, packet_type):
 @dataclass(slots=True)
 class PendingMercury:
     address_byte: int
+    expected_length: int | None = None
     data: bytearray = field(default_factory=bytearray)
     response: bytes | None = None
     disconnected: bool = False
+
+
+def match_mercury_frame(raw: bytes, address_byte: int, expected_length: int | None, check_crc) -> bytes | None:
+    """Return a complete CRC-valid response frame or None while more bytes may follow.
+
+    The shortest CRC-valid prefix is not a frame boundary: e.g. the 7-byte
+    ratios answer 00 00 01 00 01 B4 00 has a CRC-valid 6-byte prefix.
+    """
+    if len(raw) < 4 or raw[0] != address_byte:
+        return None
+    if expected_length and len(raw) >= expected_length and check_crc(raw[:expected_length]):
+        return raw[:expected_length]
+    if len(raw) == 4 and raw[1] & 0x0F and check_crc(raw):
+        return raw
+    if not expected_length and check_crc(raw):
+        return raw
+    return None
 
 
 class PendingResponseError(RuntimeError):
@@ -104,34 +122,41 @@ class DeviceConnection:
                 from modbus_crc import check_crc
             except ImportError:
                 return False
-            raw = bytes(self.pending.data)
-            for end in range(3, len(raw) + 1):
-                candidate = raw[:end]
-                if candidate[0] == self.pending.address_byte and check_crc(candidate):
-                    self.pending.response = candidate
-                    self.response_condition.notify_all()
-                    return True
-            return False
+            frame = match_mercury_frame(bytes(self.pending.data), self.pending.address_byte, self.pending.expected_length, check_crc)
+            if frame is None:
+                return False
+            self.pending.response = frame
+            self.response_condition.notify_all()
+            return True
 
-    def ask_mercury(self, package: bytes, timeout: float) -> bytes:
+    def ask_mercury(self, package: bytes, timeout: float, expected_length: int | None = None,
+                    log_package: bytes | None = None) -> bytes:
         """Serialize a command and wait for a classified, CRC-valid response."""
         address_byte = package[0]
+        public = log_package or package
         with self.send_lock:
             with self.response_condition:
-                self.pending = PendingMercury(address_byte)
+                self.pending = PendingMercury(address_byte, expected_length)
             try:
                 self.socket.sendall(package)
-                emit_exchange(self.log_exchange, self.imei, "TX", package, "MERCURY_REQUEST")
-                LOG.info("IRZ TX\nIMEI=%s\nLEN=%s\nHEX=%s", self.imei, len(package), package.hex(" ").upper())
+                emit_exchange(self.log_exchange, self.imei, "TX", public, "MERCURY_REQUEST")
+                LOG.info("IRZ TX\nIMEI=%s\nLEN=%s\nHEX=%s", self.imei, len(public), public.hex(" ").upper())
                 deadline = time.monotonic() + timeout
                 with self.response_condition:
                     while self.pending and self.pending.response is None:
                         remaining = deadline - time.monotonic()
                         if remaining <= 0:
                             if self.pending.data:
-                                if self.pending.data[0] != address_byte:
+                                raw = bytes(self.pending.data)
+                                if raw[0] != address_byte:
                                     raise PendingResponseError("WRONG_ADDRESS")
-                                if len(self.pending.data) < 3:
+                                try:
+                                    from modbus_crc import check_crc
+                                except ImportError:
+                                    check_crc = None
+                                if check_crc and len(raw) >= 4 and check_crc(raw):
+                                    return raw
+                                if len(raw) < 4 or (expected_length and len(raw) < expected_length):
                                     raise PendingResponseError("INCOMPLETE_RESPONSE")
                                 raise PendingResponseError("CRC_ERROR")
                             raise TimeoutError
@@ -333,11 +358,14 @@ class ControlRequestHandler(BaseHTTPRequestHandler):
     def _mercury(self, payload):
         try:
             imei, address = str(payload["imei"]), int(payload["network_address"])
+            params = payload.get("params")
+            if params is not None and not isinstance(params, dict): raise ValueError
             if self.path == "/mercury/poll": result = self.server.mercury_manager.poll(imei, address)
-            else: result = self.server.mercury_manager.execute(imei, address, payload.get("command_id") or "serial_and_manufacture")
+            else: result = self.server.mercury_manager.execute(imei, address, payload.get("command_id") or "serial_and_manufacture", params)
         except (KeyError, ValueError, TypeError): self._json(400, {"success": False, "error_code": "INVALID_PARAMETERS", "message": "Некорректный запрос"}); return
         except MercuryGatewayError as exc:
-            self._json(exc.status, {"success": False, "error_code": exc.code, "message": str(exc), "duration_ms": exc.duration_ms, "tx_raw": exc.tx_raw, "rx_raw": exc.rx_raw}); return
+            self._json(exc.status, {"success": False, "error_code": exc.code, "message": str(exc), "duration_ms": exc.duration_ms,
+                                    "tx_raw": exc.tx_raw, "rx_raw": exc.rx_raw, "exchanges": exc.exchanges}); return
         self._json(200, result)
 
 
