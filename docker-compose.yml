@@ -33,10 +33,14 @@ services:
       DB_PORT: "5432"
       FLASK_ENV: ${FLASK_ENV:-production}
       OPORA_RUN_MIGRATE: "1"
+      GEO_DATA_HOST_PATH: ${GEO_DATA_HOST_PATH:-/opt/opora/data/geo}
+      GEO_DATA_CONTAINER_PATH: /data/geo
     expose:
       - "5000"
     volumes:
       - uploads_data:/app/instance/uploads
+      # Архив ГАР и OSM PBF кладут на хост в /opt/opora/data/geo. В git их нет.
+      - ${GEO_DATA_HOST_PATH:-/opt/opora/data/geo}:/data/geo:ro
     depends_on:
       db:
         condition: service_healthy

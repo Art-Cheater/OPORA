@@ -63,6 +63,11 @@ def search_settlements(query: str, *, limit: int = 8) -> list[AddressSuggestion]
                 address_external_id=row.external_id,
                 other_settlement=fold(row.name) not in {"киров", "город киров"},
                 precision="SETTLEMENT",
+                official_address=f"{row.region_name or 'Кировская область'}, {row.kind} {row.name}",
+                fias_id=row.fias_id,
+                address_level="SETTLEMENT",
+                coordinate_quality="SETTLEMENT" if row.latitude is not None else "UNKNOWN",
+                coordinate_source="directory" if row.latitude is not None else None,
             )
         )
     return hits
@@ -134,6 +139,19 @@ def search_directory(query: str, *, limit: int = 8) -> list[AddressSuggestion]:
             normalized = f"{normalized}, {suffix}"
         lat = float(row.latitude) if row is not None and row.latitude is not None else None
         lon = float(row.longitude) if row is not None and row.longitude is not None else None
+        matched_house = row is not None and bool(house)
+        if matched_house:
+            level = "HOUSE"
+            quality = "EXACT" if lat is not None else "UNKNOWN"
+            point_source = "directory" if lat is not None else None
+            fias_id = row.fias_id
+            external_id = row.external_id
+        else:
+            level = "STREET"
+            quality = "STREET"
+            point_source = None
+            fias_id = street.fias_id
+            external_id = street.external_id
         hits.append(
             AddressSuggestion(
                 original_address=cleaned,
@@ -142,13 +160,18 @@ def search_directory(query: str, *, limit: int = 8) -> list[AddressSuggestion]:
                 district=street.district_name,
                 settlement=settlement,
                 street=label,
-                house=house or None,
+                house=row.number if matched_house else (house or None),
                 latitude=lat,
                 longitude=lon,
                 address_source="directory",
-                address_external_id=row.external_id if row is not None else street.external_id,
+                address_external_id=external_id,
                 other_settlement=fold(settlement) not in {"киров", "город киров"},
-                precision="EXACT" if lat is not None and house else "STREET",
+                precision=quality,
+                official_address=normalized,
+                fias_id=fias_id,
+                address_level=level,
+                coordinate_source=point_source,
+                coordinate_quality=quality,
             )
         )
         if len(hits) >= limit:

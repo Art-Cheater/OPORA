@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from urllib.request import urlopen
 
 from sqlalchemy import func, select
@@ -25,6 +26,18 @@ def geocoder_reachable(config) -> bool:
         return False
 
 
+def _data_files(directory: str) -> tuple[str, str]:
+    try:
+        path = Path(directory)
+        if not path.is_dir():
+            return "not found", "not found"
+        gar = any(path.glob("*.zip"))
+        pbf = any(item.is_file() and item.name.casefold().endswith(".pbf") for item in path.iterdir())
+        return ("found" if gar else "not found", "found" if pbf else "not found")
+    except OSError:
+        return "not found", "not found"
+
+
 def geo_status_lines(config, *, reachable: bool | None = None) -> list[str]:
     settlements = _count(GeoSettlement)
     streets = _count(GeoStreet)
@@ -40,6 +53,9 @@ def geo_status_lines(config, *, reachable: bool | None = None) -> list[str]:
     secret = bool(str(config.get("TURNSTILE_SECRET_KEY") or "").strip())
     captcha = bool(config.get("CAPTCHA_ENABLED"))
     style = str(config.get("MAPLIBRE_STYLE_URL") or "")
+    host_dir = str(config.get("GEO_DATA_HOST_PATH") or "/opt/opora/data/geo")
+    container_dir = str(config.get("GEO_DATA_CONTAINER_PATH") or "/data/geo")
+    gar_state, pbf_state = _data_files(container_dir)
     last_text = last_entrance.isoformat(sep=" ", timespec="minutes") if last_entrance is not None else "нет"
     return [
         "ADDRESS DIRECTORY",
@@ -67,6 +83,12 @@ def geo_status_lines(config, *, reachable: bool | None = None) -> list[str]:
         "",
         "ROUTING",
         "Disabled / not in current scope",
+        "",
+        "GEO DATA",
+        f"Host directory: {host_dir}",
+        f"Container directory: {container_dir}",
+        f"GAR archive: {gar_state}",
+        f"OSM PBF: {pbf_state}",
     ]
 
 

@@ -69,9 +69,10 @@ flask security-status
 ```
 
 `geo-status` печатает число населённых пунктов, улиц и домов, число подъездов
-и время последнего импорта, провайдер геокодера, адрес стиля карты и флаги
-проверки входа. Секрет Turnstile не печатается. Строка маршрутов всегда
-`Disabled / not in current scope`: отсутствие Valhalla — не ошибка.
+и время последнего импорта, провайдер геокодера, адрес стиля карты, каталог
+`/opt/opora/data/geo` и флаги проверки входа. Если архива ещё нет, статус
+пишет `not found` и не падает. Секрет Turnstile не печатается. Строка
+маршрутов всегда `Disabled / not in current scope`: отсутствие Valhalla — не ошибка.
 
 Проверка входа в production включается только переменными окружения, не кодом:
 
@@ -91,17 +92,31 @@ TURNSTILE_SECRET_KEY=...
 Деплой не скачивает ГАР и OSM и не импортирует адреса.
 
 ```text
+mkdir -p /opt/opora/data/geo
+# сюда кладут архив ГАР (*.zip) и OSM PBF (*.osm.pbf)
+ls -lh /opt/opora/data/geo
+
 cd /opt/opora
 sudo bash scripts/deploy.sh
+
+docker compose exec -T web ls -lh /data/geo
+docker compose exec -T web stat /data/geo/<real-filename>.zip
+docker compose exec -T web stat /data/geo/<real-filename>.osm.pbf
 docker compose exec -T web flask db current
 docker compose exec -T web flask geo-status
-docker compose exec -T web flask geo-import-gar --archive /path/to/gar.zip --region 43
-docker compose exec -T web flask geo-import-entrances --pbf /path/to/kirov.osm.pbf
+
+docker compose exec -T web flask geo-import-gar \
+  --archive /data/geo/<real-filename>.zip \
+  --region 43
+
+docker compose exec -T web flask geo-import-entrances \
+  --pbf /data/geo/<real-filename>.osm.pbf
+
 docker compose exec -T web flask geo-status
 ```
 
 `flask db current` после этой поставки должен показать ревизию
 `063_geo_gar_entrances` (она идёт следом за `062_geo_directory`).
 Дальше открыть карты заявок, дефектов, деревень, объектов, плана и IRZ.
-Координаты на картах появляются после геокодинга или ручной точки: сам архив
-ГАР их не привозит.
+Архив ГАР привозит официальный адрес. Координата дома запрашивается у
+геокодера, когда этот дом ищут, и только точное совпадение дома сохраняется.

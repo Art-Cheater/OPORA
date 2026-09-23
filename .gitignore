@@ -67,6 +67,8 @@ docker-data/
 !/data/valhalla/.gitkeep
 /data/osm/*
 !/data/osm/.gitkeep
+/data/geo/*
+!/data/geo/.gitkeep
 /data/routing/*
 !/data/routing/.gitkeep
 /data/osrm/*

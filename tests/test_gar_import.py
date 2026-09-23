@@ -161,11 +161,16 @@ def test_gar_archive_imports_region_and_repeat_is_safe(app, tmp_path):
         assert city and short and plain
         assert {item.normalized_address for item in (city[0], short[0], plain[0])} == {city[0].normalized_address}
         assert "корп. 2" in city[0].normalized_address
-        assert city[0].precision != "EXACT"
+        assert city[0].address_level == "HOUSE"
+        assert city[0].precision == "UNKNOWN"
+        assert city[0].latitude is None
+        assert city[0].fias_id == "house-10"
         village_hits = search_directory("Бахта, Центральная 1", limit=5)
         assert village_hits
         assert village_hits[0].settlement == "Бахта"
         assert "Центральная" in village_hits[0].normalized_address
+        assert village_hits[0].address_level == "HOUSE"
+        assert village_hits[0].precision == "UNKNOWN"
         places = search_settlements("Бахта", limit=5)
         assert places and places[0].precision == "SETTLEMENT"
         assert db.session.scalar(select(GeoStreet).where(GeoStreet.external_id == "old-street")) is None
@@ -231,30 +236,126 @@ def test_geo_status_hides_secrets_and_marks_routing_disabled(app):
         assert "do-not-print" not in security
 
 
-def test_gar_house_without_coordinates_is_not_sent_to_geocoder(app, tmp_path):
+def test_house_geocode_keeps_gar_address_and_uses_cache(app, tmp_path):
     archive = tmp_path / "gar.zip"
     _gar_zip(archive)
 
-    class ExplodingProvider:
+    class CountingProvider:
+        def __init__(self):
+            self.calls = 0
+
         def search(self, query, limit=8):
-            raise AssertionError(query)
+            self.calls += 1
+            from app.core.address.providers import AddressSuggestion
+
+            if "Бахта" in query:
+                return [
+                    AddressSuggestion(
+                        original_address=query,
+                        normalized_address="только улица, не дом",
+                        street="Центральная",
+                        latitude=58.2,
+                        longitude=49.2,
+                        address_source="nominatim",
+                        address_external_id="osm/street",
+                        precision="STREET",
+                    )
+                ]
+            return [
+                AddressSuggestion(
+                    original_address=query,
+                    normalized_address="чужой адрес геокодера",
+                    house="10",
+                    latitude=58.6035,
+                    longitude=49.668,
+                    address_source="nominatim",
+                    address_external_id="osm/house",
+                    precision="EXACT",
+                )
+            ]
 
         def reverse_geocode(self, latitude, longitude):
-            raise AssertionError("reverse")
+            return None
 
     with app.app_context():
         import_gar_archive(archive, region="43")
         from app.core.address.service import AddressSuggestionService
+        from app.models.geo.directory import GeoGeocodeCache
 
-        service = AddressSuggestionService(ExplodingProvider())
-        hits = service.suggest("ул Ленина д 10")
-        assert hits
-        assert hits[0].precision == "STREET"
-        assert hits[0].latitude is None
-        assert "корп. 2" in hits[0].normalized_address
+        provider = CountingProvider()
+        service = AddressSuggestionService(provider)
+        street = service.suggest("Ленина")
+        assert street and street[0].address_level == "STREET"
+        assert street[0].precision != "EXACT"
+        assert provider.calls == 0
+
+        first = service.suggest("ул Ленина д 10")
+        assert first[0].address_level == "HOUSE"
+        assert first[0].precision == "EXACT"
+        assert first[0].coordinate_quality == "EXACT"
+        assert first[0].coordinate_source == "nominatim"
+        assert first[0].latitude == 58.6035
+        assert first[0].normalized_address != "чужой адрес геокодера"
+        assert "улица Ленина" in first[0].official_address
+        assert first[0].fias_id == "house-10"
+        assert first[0].address_external_id == "house-10"
+        house = db.session.scalar(select(GeoHouse).where(GeoHouse.external_id == "house-10"))
+        assert house.number == "10"
+        assert house.building == "2"
+        assert house.fias_id == "house-10"
+        assert float(house.latitude) == 58.6035
+        assert provider.calls == 1
+        assert db.session.scalar(select(GeoGeocodeCache).where(GeoGeocodeCache.cache_key == "house-point|house-10")) is not None
+
+        house.latitude = None
+        house.longitude = None
+        db.session.commit()
+        second = service.suggest("ул Ленина д 10")
+        assert provider.calls == 1
+        assert second[0].address_level == "HOUSE"
+        assert second[0].fias_id == "house-10"
+        assert second[0].normalized_address == first[0].normalized_address
+        assert second[0].latitude == 58.6035
+
         village = service.suggest_settlement("Бахта, Центральная 1")
-        assert village and village[0].settlement == "Бахта"
-        assert village[0].precision != "EXACT"
+        assert village[0].address_level == "HOUSE"
+        assert village[0].precision == "STREET"
+        assert village[0].settlement == "Бахта"
+        assert "Центральная" in village[0].official_address
+        assert village[0].fias_id == "house-bakhta"
+        untouched = db.session.scalar(select(GeoHouse).where(GeoHouse.external_id == "house-bakhta"))
+        assert untouched.latitude is None
+        assert untouched.structure == "3"
+        again = service.suggest_settlement("Бахта, Центральная 1")
+        assert again[0].precision == "STREET"
+        assert provider.calls == 2
+
+
+def test_geo_data_directory_status_and_compose_mount(app, tmp_path):
+    filled = tmp_path / "filled"
+    filled.mkdir()
+    (filled / "gar.zip").write_bytes(b"PK")
+    (filled / "kirov.osm.pbf").write_bytes(b"pbf")
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    with app.app_context():
+        app.config["GEO_DATA_HOST_PATH"] = "/opt/opora/data/geo"
+        app.config["GEO_DATA_CONTAINER_PATH"] = str(filled)
+        text = "\n".join(geo_status_lines(app.config, reachable=False))
+        assert "Host directory: /opt/opora/data/geo" in text
+        assert f"Container directory: {filled}" in text
+        assert "GAR archive: found" in text
+        assert "OSM PBF: found" in text
+        app.config["GEO_DATA_CONTAINER_PATH"] = str(empty)
+        missing = "\n".join(geo_status_lines(app.config, reachable=False))
+        assert "GAR archive: not found" in missing
+        assert "OSM PBF: not found" in missing
+        app.config["GEO_DATA_CONTAINER_PATH"] = str(tmp_path / "absent")
+        absent = "\n".join(geo_status_lines(app.config, reachable=False))
+        assert "GAR archive: not found" in absent
+    compose = Path("docker-compose.yml").read_text(encoding="utf-8")
+    assert "${GEO_DATA_HOST_PATH:-/opt/opora/data/geo}:/data/geo:ro" in compose
+    assert "postgres_data:/var/lib/postgresql/data" in compose
 
 
 def test_many_houses_and_entrances_stay_bounded(admin_client, app, tmp_path):

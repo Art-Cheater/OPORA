@@ -35,6 +35,11 @@ class AddressSuggestion:
     address_external_id: str | None = None
     other_settlement: bool = False
     precision: str | None = None
+    official_address: str | None = None
+    fias_id: str | None = None
+    address_level: str | None = None
+    coordinate_source: str | None = None
+    coordinate_quality: str | None = None
 
     def with_query(self, query: str) -> "AddressSuggestion":
         return replace(self, original_address=query)
@@ -54,6 +59,11 @@ class AddressSuggestion:
             "address_external_id": self.address_external_id,
             "other_settlement": self.other_settlement,
             "precision": self.precision,
+            "official_address": self.official_address or self.normalized_address,
+            "fias_id": self.fias_id,
+            "address_level": self.address_level,
+            "coordinate_source": self.coordinate_source,
+            "coordinate_quality": self.coordinate_quality or self.precision,
         }
 
 

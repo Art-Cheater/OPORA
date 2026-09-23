@@ -14,14 +14,23 @@
 входов, не ради графа дорог. Команда администратора, не часть деплоя:
 
 ```text
-flask geo-import-entrances --pbf /path/to/kirov.osm.pbf
+flask geo-import-entrances --pbf /data/geo/<real-filename>.osm.pbf
 ```
 
-Тот же импорт принимает OSM XML и разовый JSON Overpass:
+На хосте файл лежит в `/opt/opora/data/geo`. Проверка перед импортом:
 
 ```text
-flask geo-import-entrances --file /path/to/entrances.osm
-flask geo-import-entrances --file /path/to/entrances.json
+ls -lh /opt/opora/data/geo
+docker compose exec -T web ls -lh /data/geo
+docker compose exec -T web stat /data/geo/<real-filename>.osm.pbf
+```
+
+Тот же импорт принимает OSM XML и разовый JSON Overpass, если файл тоже
+лежит в этом каталоге:
+
+```text
+docker compose exec -T web flask geo-import-entrances --file /data/geo/<real-filename>.osm
+docker compose exec -T web flask geo-import-entrances --file /data/geo/<real-filename>.json
 ```
 
 Публичный Overpass нельзя вызывать из веб-запроса карты. Разовый файл,

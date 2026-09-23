@@ -131,6 +131,17 @@ class AddressSuggestionService:
         worker.join(timeout)
         return found
 
+    def _with_house_coordinates(self, hits: list[AddressSuggestion]) -> list[AddressSuggestion]:
+        from app.core.address.house_geocode import geocode_missing_houses
+
+        def lookup(query: str) -> list[AddressSuggestion]:
+            try:
+                return self._search_provider(query, 3)
+            except Exception:
+                return []
+
+        return geocode_missing_houses(hits, lookup)
+
     def suggest(self, query: str, *, limit: int | None = None) -> list[AddressSuggestion]:
         from app.modules.requests.address_format import split_address_query
 
@@ -141,7 +152,7 @@ class AddressSuggestionService:
         _kind, _name, house = split_address_query(cleaned)
         directory_hits = self._directory_hits(cleaned, safe_limit)
         if directory_hits:
-            return directory_hits[:safe_limit]
+            return self._with_house_coordinates(directory_hits)[:safe_limit]
         catalog = [
             replace(item.with_query(cleaned), other_settlement=False)
             for item in self.fallback.search(cleaned, limit=safe_limit)
@@ -192,7 +203,7 @@ class AddressSuggestionService:
         safe_limit = min(max(int(limit or self.default_limit), 1), 20)
         directory_hits = self._directory_hits(cleaned, safe_limit)
         if directory_hits:
-            return directory_hits[:safe_limit]
+            return self._with_house_coordinates(directory_hits)[:safe_limit]
         folded = cleaned.casefold()
         regional_query = cleaned if "кировск" in folded else f"{cleaned}, Кировская область"
         ranked = self._rank_region(self._search_provider(regional_query, safe_limit), cleaned)

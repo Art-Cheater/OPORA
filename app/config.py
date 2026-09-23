@@ -236,6 +236,8 @@ class Config:
     PHOTON_BASE_URL = os.getenv("PHOTON_BASE_URL", "").strip()
     PHOTON_REGION_BIAS = os.getenv("PHOTON_REGION_BIAS", "Киров, Кировская область").strip()
     GEOCODER_FALLBACK_PROVIDER = os.getenv("GEOCODER_FALLBACK_PROVIDER", "").strip().lower()
+    GEO_DATA_HOST_PATH = os.getenv("GEO_DATA_HOST_PATH", "/opt/opora/data/geo").strip()
+    GEO_DATA_CONTAINER_PATH = os.getenv("GEO_DATA_CONTAINER_PATH", "/data/geo").strip()
     # MapLibre получает стиль из конфигурации: JS не должен знать адрес tiles provider.
     MAP_PROVIDER = os.getenv("MAP_PROVIDER", "maplibre").strip().lower()
     MAP_FRONTEND_PROVIDER = os.getenv("MAP_FRONTEND_PROVIDER", "maplibre").strip().lower()
