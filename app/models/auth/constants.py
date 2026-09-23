@@ -6,6 +6,7 @@ ROLE_DIRECTOR = "director"
 ROLE_DISPATCHER = "dispatcher"
 ROLE_MASTER = "master"
 ROLE_EXECUTOR = "executor"
+ROLE_IRZ_DISPLAY = "irz_display"
 
 ROLE_LABELS = {
     ROLE_ADMIN: "Администратор",
@@ -13,6 +14,7 @@ ROLE_LABELS = {
     ROLE_DISPATCHER: "Диспетчер",
     ROLE_MASTER: "Мастер",
     ROLE_EXECUTOR: "Исполнитель",
+    ROLE_IRZ_DISPLAY: "Карта IRZ (экран)",
 }
 
 ALL_ROLE_CODES = tuple(ROLE_LABELS.keys())
@@ -89,3 +91,8 @@ PERM_DEVICES_VIEW = "devices.view"
 PERM_DEVICES_MANAGE = "devices.manage"
 PERM_IRZ_VIEW = "irz.view"
 PERM_IRZ_SEND = "irz.send"
+PERM_IRZ_EDIT = "irz.edit"
+PERM_IRZ_POLL = "irz.poll"
+PERM_IRZ_CONTROL = "irz.control"
+PERM_IRZ_ADMIN = "irz.admin"
+PERM_IRZ_MAP_DISPLAY = "irz.map_display"

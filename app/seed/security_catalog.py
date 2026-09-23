@@ -27,7 +27,7 @@ SYSTEM_MODULES = [
     ("auth", "Безопасность", "shield-check", 110, "Журнал входов"),
     ("search", "Поиск", "search", 120, "Глобальный поиск"),
     ("devices", "Удалённые платы", "cpu", 125, "Контроль TCP-устройств"),
-    ("irz", "IRZ Console", "terminal", 126, "Диагностика и управление ATM21"),
+    ("irz", "IRZ · Мониторинг", "broadcast", 126, "Карта и мониторинг ATM21 и счётчиков Mercury"),
 ]
 
 # module_code -> [(field_code, field_name, sort_order)]
@@ -296,7 +296,10 @@ SPECIAL_PERMISSIONS = [
     ("wallpapers", "manage", "Управление обоями интерфейса"),
     ("devices", "view", "Просмотр удалённых плат"),
     ("devices", "manage", "Управление удалёнными платами"),
-    ("irz", "view", "Просмотр IRZ Console"),
+    ("irz", "view", "IRZ: просмотр карты, списка и показаний"),
+    ("irz", "edit", "IRZ: название, адрес и координаты"),
+    ("irz", "poll", "IRZ: ручной опрос счётчика"),
+    ("irz", "map_display", "IRZ: полноэкранная карта (экран)"),
     ("irz", "send", "Отправка команд ATM21"),
     ("irz", "control", "Управление и команды Mercury"),
     ("irz", "admin", "Настройка устройств Mercury"),

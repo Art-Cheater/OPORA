@@ -18,6 +18,11 @@ from app.models.auth.constants import (
     PERM_DEFECTS_FILE_UPLOAD,
     PERM_DEFECTS_STATUS_CHANGE,
     PERM_DEFECTS_VIEW,
+    PERM_IRZ_ADMIN,
+    PERM_IRZ_EDIT,
+    PERM_IRZ_MAP_DISPLAY,
+    PERM_IRZ_POLL,
+    PERM_IRZ_VIEW,
     PERM_MESSENGER_USE,
     PERM_DOCUMENTS_USE,
     PERM_OBJECTS_CREATE,
@@ -55,6 +60,7 @@ from app.models.auth.constants import (
     ROLE_DIRECTOR,
     ROLE_DISPATCHER,
     ROLE_EXECUTOR,
+    ROLE_IRZ_DISPLAY,
     ROLE_LABELS,
     ROLE_MASTER,
 )
@@ -132,7 +138,18 @@ class ReferenceDataService:
         (ROLE_DISPATCHER, ROLE_LABELS[ROLE_DISPATCHER], "Диспетчеризация заявок", True),
         (ROLE_MASTER, ROLE_LABELS[ROLE_MASTER], "Руководство бригадой", True),
         (ROLE_EXECUTOR, ROLE_LABELS[ROLE_EXECUTOR], "Исполнение заявок", True),
+        (ROLE_IRZ_DISPLAY, ROLE_LABELS[ROLE_IRZ_DISPLAY], "Только полноэкранная карта IRZ, без доступа к остальной системе", True),
     ]
+
+    # Права, которые при первом появлении в каталоге получают роли с уже выданным правом-предком:
+    # так новое разделение irz.* не отнимает у ролей то, что они умели раньше.
+    INHERITED_ON_CREATE = {
+        PERM_IRZ_EDIT: (PERM_IRZ_ADMIN,),
+        PERM_IRZ_POLL: (PERM_IRZ_VIEW,),
+        PERM_IRZ_MAP_DISPLAY: (PERM_IRZ_VIEW,),
+    }
+    # Роли-«экраны» не получают автоматически права общего назначения (личные документы и т.п.).
+    DISPLAY_ONLY_ROLES = frozenset({ROLE_IRZ_DISPLAY})
 
     ALL_PERMISSION_CODES = [p[0] for p in build_permission_catalog()]
 
@@ -194,6 +211,7 @@ class ReferenceDataService:
             PERM_OBJECTS_VIEW, PERM_PROJECTS_VIEW, PERM_MESSENGER_USE, PERM_DOCUMENTS_USE, PERM_SEARCH_USE,
             "inquiries.view",
         ],
+        ROLE_IRZ_DISPLAY: [PERM_IRZ_MAP_DISPLAY],
     }
 
     @classmethod
@@ -220,12 +238,51 @@ class ReferenceDataService:
     @classmethod
     def sync_security_roles(cls) -> None:
         """Добавляет недостающие модули и права. Назначения ролей не сбрасывает."""
+        known_permissions = set(
+            db.session.scalars(db.select(Permission.code).where(Permission.active_filter()))
+        )
         cls._seed_security_catalog()
+        cls._ensure_system_roles()
         cls._ensure_admin_full_access()
         cls._grant_missing_role_permissions()
+        cls._grant_inherited_permissions(known_permissions)
         cls._grant_personal_documents_to_all_roles()
         db.session.commit()
         cls._clear_permission_cache()
+
+    @classmethod
+    def _ensure_system_roles(cls) -> None:
+        """Создаёт системные роли, которых ещё нет; существующие не меняет."""
+        existing = set(db.session.scalars(db.select(Role.code).where(Role.active_filter())))
+        for code, name, desc, is_system in cls.ROLES:
+            if code not in existing:
+                db.session.add(Role(code=code, name=name, description=desc, is_system=is_system))
+        db.session.flush()
+
+    @classmethod
+    def _grant_inherited_permissions(cls, known_permissions: set[str]) -> None:
+        """Только что созданное право получают роли, у которых уже есть право-предок."""
+        created = [code for code in cls.INHERITED_ON_CREATE if code not in known_permissions]
+        if not created:
+            return
+        permissions = {
+            perm.code: perm
+            for perm in db.session.scalars(db.select(Permission).where(Permission.active_filter()))
+        }
+        have = {
+            (rp.role_id, rp.permission_id)
+            for rp in db.session.scalars(db.select(RolePermission).where(RolePermission.active_filter()))
+        }
+        for code in created:
+            perm = permissions.get(code)
+            ancestors = [permissions[item].id for item in cls.INHERITED_ON_CREATE[code] if item in permissions]
+            if perm is None or not ancestors:
+                continue
+            role_ids = {role_id for role_id, perm_id in have if perm_id in ancestors}
+            for role_id in role_ids:
+                if (role_id, perm.id) not in have:
+                    db.session.add(RolePermission(role_id=role_id, permission_id=perm.id))
+                    have.add((role_id, perm.id))
 
     @classmethod
     def ensure_security_catalog(cls) -> None:
@@ -313,7 +370,7 @@ class ReferenceDataService:
             )
         }
         for role in db.session.scalars(db.select(Role).where(Role.active_filter())):
-            if role.id in have:
+            if role.id in have or role.code in cls.DISPLAY_ONLY_ROLES:
                 continue
             db.session.add(RolePermission(role_id=role.id, permission_id=perm.id))
 
