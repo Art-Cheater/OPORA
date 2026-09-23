@@ -10,7 +10,8 @@ services:
       - ${TLS_CERTS_DIR:-./data/certbot}:/etc/letsencrypt:ro
 
   tcp-gateway:
-    build: .
+    # Runs the web image; a separate build would overwrite opora-web:latest
+    # without LibreOffice.
     image: opora-web:latest
     container_name: opora_tcp_gateway
     restart: unless-stopped
@@ -30,7 +31,8 @@ services:
       web:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-m", "app.tcp_gateway.main", "--healthcheck"]
+      # Plain socket probe: importing the Flask app on every check exceeds the 5 s timeout.
+      test: ["CMD", "python", "-c", "import os, socket; s=socket.create_connection(('127.0.0.1', int(os.getenv('DEVICE_HEALTH_PORT', '8081'))), 3); assert s.recv(8).strip() == b'ok'; s.close()"]
       interval: 30s
       timeout: 5s
       retries: 3

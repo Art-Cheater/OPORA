@@ -175,8 +175,9 @@ services:
       DB_PORT: "5432"
       FLASK_ENV: ${FLASK_ENV:-production}
       OPORA_RUN_MIGRATE: "0"
-      DB_POOL_SIZE: "2"
-      DB_MAX_OVERFLOW: "0"
+      DB_POOL_SIZE: "4"
+      DB_MAX_OVERFLOW: "4"
+      IRZ_POLL_WORKERS: "8"
     command: ["flask", "irz-poll", "--loop"]
     depends_on:
       db:
