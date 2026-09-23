@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -58,6 +59,21 @@ def test_result_normalizer_handles_protocol_types():
     from decimal import Decimal
     assert normalize_result({"number": Decimal("1.20"), "day": date(2026, 9, 22), "raw": b"\x01\xff"}) == {
         "number": "1.20", "day": "2026-09-22", "raw": "01 FF"}
+
+
+def test_command_results_are_mapped_to_monitoring_keys_without_losing_zero():
+    values = service.normalize_poll_values({"results": {
+        "voltage_phases": {"data": {"a": "231.83", "b": "239.41", "c": "234.29"}},
+        "current_phases": {"data": {"a": 0, "b": "0", "c": "1.25"}},
+        "active_power": {"data": {"total": "3.52", "a": "3.52"}},
+        "reactive_power": {"data": {"a": "6.86"}},
+        "power_factor": {"data": {"a": "0.000"}},
+        "frequency": {"data": {"value": "49.99"}},
+    }})
+    assert values["u_a"] == "231.83" and values["u_c"] == "234.29"
+    assert values["i_a"] == 0 and values["i_b"] == "0"
+    assert values["p_total"] == "3.52" and values["q_a"] == "6.86"
+    assert values["cos_phi_a"] == "0.000" and values["frequency"] == "49.99"
 
 
 def test_manager_uses_existing_session_and_exact_known_tx():
@@ -150,7 +166,9 @@ def test_poll_creates_one_logical_snapshot_for_discovered_meter(app, monkeypatch
         assert len(snapshots) == 1
         assert snapshots[0].meter_id == meter.id
         assert snapshots[0].quality == "GOOD"
-        assert snapshots[0].values == {"firmware_version": "2.3.5"}
+        assert snapshots[0].values == {
+            "commands": {"firmware_version": "2.3.5"}, "firmware_version": "2.3.5"
+        }
 
 
 def test_manual_mercury_crud_is_not_exposed(admin_client):
@@ -204,6 +222,36 @@ def test_poll_lease_rejects_overlap_and_is_released_after_timeout(app, monkeypat
 def test_six_hundred_devices_are_staggered_across_interval():
     offsets = schedule_offsets([f"{index:015d}" for index in range(600)], 600)
     assert sorted(offsets.values()) == list(range(600))
+
+
+def test_poll_snapshot_latest_and_frontend_share_monitoring_schema(app, admin_client, monkeypatch):
+    normalized = {
+        "u_a": 231.83, "u_b": 239.41, "u_c": 234.29,
+        "i_a": 0.03, "p_a": 3.52, "q_a": 6.86,
+        "cos_phi_a": 0, "i_b": "0",
+    }
+    poll_result = {"success": True, "partial": False, "results": {}, "errors": [], "normalized": normalized}
+    live = {"imei": "123456789012345", "ip": "127.0.0.1", "port": 5009}
+    with app.app_context():
+        device = IRZDevice(imei=live["imei"], name="ATM21", model="ATM21", enabled=True, network_address=0)
+        db.session.add(device); db.session.flush()
+        meter = IRZMeter(irz_device_id=device.id, serial_number="36790160")
+        db.session.add(meter); db.session.commit()
+    monkeypatch.setattr(service, "_gateway_request", lambda path, **kwargs: [live] if path == "/devices" else poll_result)
+    response = admin_client.post(f"/irz/api/devices/{live['imei']}/poll", json={})
+    assert response.status_code == 200
+    assert response.get_json()["snapshot"]["values"] == normalized
+    latest = admin_client.get(f"/irz/api/devices/{live['imei']}/latest")
+    assert latest.status_code == 200
+    assert latest.get_json()["values"] == normalized
+    with app.app_context():
+        snapshot = db.session.scalar(db.select(IRZMeterSnapshot))
+        assert snapshot.values == normalized
+        assert snapshot.status == "SUCCESS" and snapshot.source == "MANUAL"
+    script = Path("app/static/js/irz.js").read_text(encoding="utf-8")
+    for prefix in ("u", "i", "p", "q", "s", "cos_phi"):
+        assert f"['{prefix}'" in script or f",'{prefix}'" in script
+    assert "?? null" in script  # keeps numeric 0 and string "0" visible
 
 
 @pytest.mark.parametrize("result,partial", [

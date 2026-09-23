@@ -18,12 +18,12 @@
     function message(value, kind='secondary') { const node=q('[data-message]'); node.className=`alert alert-${kind} py-2`; node.textContent=value; }
     function details(values) { return `<dl class="irz-detail-grid mb-0">${values.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`; }
     function nested(obj, names) { for (const name of names) { const parts=name.split('.'); let value=obj; for (const part of parts) value=value?.[part]; if (value !== undefined && value !== null) return value; } return null; }
-    function phases(value) { if (Array.isArray(value)) return [value[0],value[1],value[2],null]; if (value && typeof value === 'object') return [value.l1 ?? value.L1 ?? value.a, value.l2 ?? value.L2 ?? value.b, value.l3 ?? value.L3 ?? value.c, value.total ?? value.sum]; return [null,null,null,value]; }
+    function phaseValues(values, prefix) { return ['a','b','c','total'].map((phase) => values?.[`${prefix}_${phase}`] ?? null); }
     function renderTelemetry() {
       const latest=selected?.latest, values=latest?.values || selected?.meter?.latest_snapshot || {};
-      const specs=[['Напряжение, В',['voltage','instantaneous.voltage']],['Ток, А',['current','instantaneous.current']],['Активная мощность, кВт',['active_power','power.active']],['Реактивная мощность, квар',['reactive_power','power.reactive']],['Полная мощность, кВА',['apparent_power','power.apparent']],['cos φ',['power_factor','cos_phi']]];
-      q('[data-phase-values]').innerHTML=specs.map(([label,paths])=>{const p=phases(nested(values,paths));return `<tr><th>${label}</th>${p.map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`;}).join('');
-      const summary=[['Частота, Гц',nested(values,['frequency'])],['Энергия',nested(values,['energy','total_energy'])],['Тарифы',nested(values,['tariffs'])],['Изменение',latest?.delta ? 'рассчитано' : null]];
+      const specs=[['Напряжение, В','u'],['Ток, А','i'],['Активная мощность, Вт','p'],['Реактивная мощность, вар','q'],['Полная мощность, ВА','s'],['cos φ','cos_phi']];
+      q('[data-phase-values]').innerHTML=specs.map(([label,prefix])=>`<tr><th>${label}</th>${phaseValues(values,prefix).map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('');
+      const summary=[['Частота, Гц',nested(values,['frequency'])],['Серийный №',nested(values,['serial_number'])],['Дата выпуска',nested(values,['manufacture_date'])],['Версия ПО',nested(values,['firmware_version'])],['Коэф. напряжения',nested(values,['transformation_voltage'])],['Коэф. тока',nested(values,['transformation_current'])]];
       q('[data-summary-values]').innerHTML=summary.map(([label,value])=>`<div class="col-6"><div class="irz-metric"><small class="text-muted">${label}</small><strong>${esc(typeof value==='object'?JSON.stringify(value):value)}</strong></div></div>`).join('');
       const state=selected?.data_state || 'NO_DATA'; const badge=q('[data-quality]'); badge.textContent=state==='STALE'?'ДАННЫЕ УСТАРЕЛИ':state; badge.className=`badge text-bg-${state==='SUCCESS'?'success':state==='PARTIAL'||state==='STALE'?'warning':'secondary'}`;
     }

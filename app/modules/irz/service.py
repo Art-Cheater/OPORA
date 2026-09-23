@@ -345,6 +345,44 @@ def _numeric_delta(current: object, previous: object) -> object:
     return None
 
 
+def normalize_poll_values(result: dict) -> dict:
+    """Build the stable monitoring schema from command-oriented gateway results."""
+    command_values = {
+        command_id: item.get("data")
+        for command_id, item in result.get("results", {}).items()
+        if isinstance(item, dict) and "data" in item
+    }
+    values: dict = dict(result.get("normalized") or {})
+    if command_values:
+        values["commands"] = command_values
+    serial = command_values.get("serial_and_manufacture")
+    if isinstance(serial, dict):
+        values["serial_number"] = serial.get("serial_number")
+        values["manufacture_date"] = serial.get("date_of_manufacture")
+    if "firmware_version" in command_values:
+        values["firmware_version"] = command_values["firmware_version"]
+    ratios = command_values.get("transformation_ratios")
+    if isinstance(ratios, dict):
+        values["transformation_voltage"] = ratios.get("voltage")
+        values["transformation_current"] = ratios.get("current")
+    mappings = {
+        "voltage_phases": "u", "current_phases": "i", "active_power": "p",
+        "reactive_power": "q", "apparent_power": "s", "power_factor": "cos_phi",
+    }
+    for command_id, prefix in mappings.items():
+        data = command_values.get(command_id)
+        if isinstance(data, dict):
+            for phase in ("a", "b", "c", "total"):
+                if phase in data:
+                    values[f"{prefix}_{phase}"] = data[phase]
+    frequency = command_values.get("frequency")
+    if isinstance(frequency, dict) and "value" in frequency:
+        values["frequency"] = frequency["value"]
+    elif frequency is not None:
+        values["frequency"] = frequency
+    return values
+
+
 def serialize_snapshot(snapshot: IRZMeterSnapshot, *, include_delta: bool = False) -> dict:
     payload = {
         "id": str(snapshot.id), "captured_at": snapshot.captured_at.isoformat(), "values": snapshot.values,
@@ -563,20 +601,24 @@ def poll_device(device: IRZDevice, *, user_id, source: str = "MANUAL", log_opera
         device.last_polled_at = datetime.now(timezone.utc)
         meter = db.session.scalar(db.select(IRZMeter).where(IRZMeter.active_filter(), IRZMeter.irz_device_id == device.id))
         status = "PARTIAL" if result.get("partial") else ("SUCCESS" if result.get("success") else "ERROR")
+        snapshot = None
         if meter:
             meter.last_poll_at = device.last_polled_at
             meter.last_poll_status = status
-            values = {key: item.get("data") for key, item in result.get("results", {}).items()}
+            values = normalize_poll_values(result)
             if values:
                 meter.latest_snapshot = values
-            db.session.add(IRZMeterSnapshot(
+            snapshot = IRZMeterSnapshot(
                 meter_id=meter.id, captured_at=device.last_polled_at, values=values,
                 quality="PARTIAL" if result.get("partial") else ("GOOD" if result.get("success") else "INVALID"),
                 quality_flags={"errors": result.get("errors", [])} if result.get("errors") else None,
                 poll_duration_ms=int((datetime.now(timezone.utc) - started).total_seconds() * 1000),
                 source=source, status=status, extras=None, created_by=user_id, updated_by=user_id,
-            ))
+            )
+            db.session.add(snapshot)
         db.session.commit()
+        if snapshot is not None:
+            result["snapshot"] = serialize_snapshot(snapshot, include_delta=True)
         return result
     finally:
         _release_poll_lease(device)
