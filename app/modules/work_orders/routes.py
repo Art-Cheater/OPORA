@@ -16,10 +16,12 @@ from app.extensions import db
 from app.models.auth.constants import (
     PERM_DEFECTS_EDIT,
     PERM_DEFECTS_STATUS_CHANGE,
+    PERM_DEFECTS_VIEW,
     PERM_MESSENGER_USE,
     PERM_REQUESTS_APPROVE,
     PERM_REQUESTS_DISPATCH,
     PERM_REQUESTS_EDIT,
+    PERM_REQUESTS_VIEW,
     PERM_WAYBILLS_EDIT,
     PERM_WAYBILLS_STATUS_CHANGE,
     PERM_WAYBILLS_VIEW,
@@ -87,6 +89,13 @@ def _can_track_plans() -> bool:
     return current_user.has_any_role(ROLE_DIRECTOR, ROLE_ADMIN)
 
 
+def _entity_scope() -> dict[str, bool]:
+    return {
+        "include_requests": current_user.has_permission(PERM_REQUESTS_VIEW),
+        "include_defects": current_user.has_permission(PERM_DEFECTS_VIEW),
+    }
+
+
 def _plural(value: int, one: str, few: str, many: str) -> str:
     tail = value % 100
     if 11 <= tail <= 14:
@@ -104,6 +113,10 @@ def _selection_related(entity_type: str, entity_id: uuid.UUID, selection) -> dic
     """Единый nearby: точный ПП либо дорожное расстояние, без broad районов."""
     geo_hits, _ = WorkOrderService.nearby_for(entity_type, entity_id, selection)
     hits = [WorkOrderService.hit_to_dict(hit) for hit in geo_hits]
+    if not current_user.has_permission(PERM_REQUESTS_VIEW):
+        hits = [row for row in hits if row.get("entity_type") != "request"]
+    if not current_user.has_permission(PERM_DEFECTS_VIEW):
+        hits = [row for row in hits if row.get("entity_type") != "defect"]
     request_count = sum(1 for row in hits if row.get("entity_type") == "request")
     defect_count = sum(1 for row in hits if row.get("entity_type") == "defect")
     parts = []
@@ -668,8 +681,9 @@ def related_json():
 @permission_required(PERM_WAYBILLS_VIEW)
 def map_json():
     plan = _current_plan()
-    points = WorkOrderService.map_points(_filters_from_request(), plan)
-    return jsonify({"points": points, "remaining": 0})
+    points = WorkOrderService.map_points(_filters_from_request(), plan, **_entity_scope())
+    from app.core.geo.payload import map_payload
+    return jsonify(map_payload(points))
 
 
 @work_orders_bp.route("/items.json")
@@ -677,7 +691,7 @@ def map_json():
 @permission_required(PERM_WAYBILLS_VIEW)
 def items_json():
     plan = _current_plan()
-    return jsonify({"items": WorkOrderService.list_items(_filters_from_request(), plan)})
+    return jsonify({"items": WorkOrderService.list_items(_filters_from_request(), plan, **_entity_scope())})
 
 
 @work_orders_bp.route("/plan.json")
@@ -731,7 +745,7 @@ def route_json():
             if lat is None or lng is None:
                 excluded.append({"entity_type": stop["entity_type"], "entity_id": stop["entity_id"], "number": stop["number"], "address": stop["address"], "reason": "missing_coordinates"})
                 continue
-            points.append({"id": stop["id"], "order": stop["order"], "address": stop["address"], "lat": lat, "lng": lng, "type": stop["entity_type"], "number": stop["number"]})
+            points.append({"id": stop["id"], "order": stop["order"], "address": stop["address"], "lat": lat, "lng": lng, "type": stop["entity_type"], "number": stop["number"], "quality": stop.get("quality") or ""})
     if len(points) < 2:
         return jsonify({"ok": False, "code": "invalid_points", "error": "not_enough_points", "message": "Для маршрута нужно минимум две точки с координатами.", "points": points, "excluded": excluded, "missing": len(excluded)}), 400
     from app.core.routing import RoutingError, RoutingService
@@ -740,7 +754,7 @@ def route_json():
         route = RoutingService.build_route([(point["lat"], point["lng"]) for point in points])
     except RoutingError as exc:
         return jsonify({"ok": False, "code": exc.code, "error": exc.code, "message": exc.message, "points": points, "excluded": excluded, "missing": len(excluded), "route": None})
-    return jsonify({"ok": True, "provider": route["provider"], "points": points, "excluded": excluded, "missing": len(excluded), "route": route, "geometry": route["geometry"], "distance_m": route["distance_m"], "duration_s": route["duration_s"]})
+    return jsonify({"ok": True, "provider": route["provider"], "points": points, "excluded": excluded, "missing": len(excluded), "route": route, "geometry": route["geometry"], "distance_m": route["distance_m"], "duration_s": route["duration_s"], "legs": route.get("legs") or []})
 
 
 @work_orders_bp.route("/nearby.json")

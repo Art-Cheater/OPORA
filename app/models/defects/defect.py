@@ -56,6 +56,7 @@ class Defect(BaseModel):
     latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     coordinates_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    geocode_quality: Mapped[str | None] = mapped_column(String(16), nullable=True)
     reported_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     reported_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     search_vector: Mapped[str | None] = deferred(

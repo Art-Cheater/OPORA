@@ -13,6 +13,13 @@
 {% endblock %}
 
 {% block content %}
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-map"></i> Карта объектов</div>
+    <div class="card-body p-0">
+        <div id="opsMap" class="opora-map-frame" data-src="{{ url_for('objects.map_json') }}" data-kind="journal"></div>
+        <div id="opsMapStatus" class="small text-muted px-3 py-2">Загрузка карты…</div>
+    </div>
+</div>
 <div class="card mb-4 list-filters" data-tour="filters">
     <div class="card-header"><i class="bi bi-search"></i>Поиск и фильтры</div>
     <div class="card-body">

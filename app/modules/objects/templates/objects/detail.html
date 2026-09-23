@@ -33,6 +33,16 @@
 
 {% block content %}
 <div class="card mb-4">
+    <div class="card-header"><i class="bi bi-map"></i> Карта</div>
+    <div class="card-body">
+        <div id="requestMap" class="opora-map-frame" style="height: 320px;"
+             data-lat="{{ obj.latitude if obj.latitude is not none else '' }}"
+             data-lng="{{ obj.longitude if obj.longitude is not none else '' }}"
+             data-address="{{ obj.display_address|e }}"></div>
+        <div id="requestMapStatus" class="small text-muted mt-2">{% if obj.latitude is none %}Координаты не заданы.{% endif %}</div>
+    </div>
+</div>
+<div class="card mb-4">
     <div class="card-header">Карточка объекта</div>
     <div class="card-body row g-3">
         <div class="col-md-8">

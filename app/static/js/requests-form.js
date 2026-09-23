@@ -169,8 +169,12 @@
     setField(form, "original_address", suggestion.original_address || input.value.trim());
     setField(form, "address_selection_token", suggestion.selection_token);
     ADDRESS_FIELDS.forEach((name) => setField(form, name, suggestion[name]));
-    // Явно выбранная на карте точка важнее новой адресной подсказки.
-    if (manualCoordinates) {
+    const precise = suggestion.precision === "EXACT" || (!suggestion.precision && suggestion.latitude != null && suggestion.house);
+    if (!manualCoordinates && !precise) {
+      setField(form, "latitude", "");
+      setField(form, "longitude", "");
+      setField(form, "coordinates_source", "");
+    } else if (manualCoordinates) {
       setField(form, "latitude", latitude);
       setField(form, "longitude", longitude);
       setField(form, "coordinates_source", "manual");
@@ -180,11 +184,14 @@
     input.setAttribute("aria-expanded", "false");
     const status = form.querySelector("[data-address-status]");
     if (status) {
-      status.textContent = suggestion.other_settlement
-        ? `Выбран другой населённый пункт: ${suggestion.settlement || "Кировская область"}`
-        : "Адрес выбран, координаты сохранятся вместе с заявкой.";
-      status.classList.toggle("text-warning", !!suggestion.other_settlement);
-      status.classList.toggle("text-success", !suggestion.other_settlement);
+      const imprecise = !precise && !manualCoordinates;
+      status.textContent = imprecise
+        ? "Адрес выбран, но точка неточная. Укажите место на карте."
+        : (suggestion.other_settlement
+          ? `Выбран другой населённый пункт: ${suggestion.settlement || "Кировская область"}`
+          : "Адрес выбран, координаты сохранятся вместе с заявкой.");
+      status.classList.toggle("text-warning", imprecise || !!suggestion.other_settlement);
+      status.classList.toggle("text-success", !imprecise && !suggestion.other_settlement);
     }
     const list = form.querySelector("[data-address-suggestions]");
     if (list) {
@@ -247,16 +254,8 @@
     const journal = form.querySelector("[name='journal_id']");
     const syncVillageMode = () => {
       const village = journal?.selectedOptions?.[0]?.textContent?.includes("деревнях");
-      if (!village) return false;
-      controller?.abort();
-      if (list) { list.replaceChildren(); list.classList.add("d-none"); }
-      input.placeholder = "Населённый пункт, улица, дом";
-      input.setAttribute("aria-expanded", "false");
-      if (status) {
-        status.classList.remove("text-success", "text-warning");
-        status.textContent = "Для деревень адрес сохраняется как введён, без автозамены.";
-      }
-      return true;
+      if (village) input.placeholder = "Населённый пункт, улица, дом";
+      return Boolean(village);
     };
     journal?.addEventListener("change", () => {
       if (!syncVillageMode()) {
@@ -283,9 +282,10 @@
         status.textContent =
           input.value.trim().length < 3
             ? "Введите не менее трёх символов."
-            : "Ищем адрес… Сохранение формы не блокируется.";
+            : (syncVillageMode()
+              ? "Ищем населённый пункт. Неточная точка не сохранится сама — её нужно указать на карте."
+              : "Ищем адрес… Сохранение формы не блокируется.");
       }
-      if (syncVillageMode()) return;
       if (input.value.trim().length < 3) return;
 
       const requestSequence = sequence;

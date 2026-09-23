@@ -31,6 +31,8 @@
 {% block content %}
 <div class="journal-page">
 {% include "requests/partials/journal_tabs.html" %}
+{% set map_src = url_for('requests.map_json', tab='defects') if tab|default('') == 'defects' else url_for('requests.map_json') %}
+{% include "requests/partials/journal_map.html" %}
 {% if tab == "defects" %}
 {% include "defects/partials/list_body.html" %}
 {% else %}

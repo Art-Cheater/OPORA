@@ -103,11 +103,13 @@ class AddressSuggestionService:
         provider: GeocodingProvider,
         *,
         fallback: GeocodingProvider | None = None,
+        secondary: GeocodingProvider | None = None,
         default_limit: int = 8,
         provider_timeout_seconds: float = 0.45,
     ) -> None:
         self.provider = provider
         self.fallback = fallback or HeuristicGeocodingProvider()
+        self.secondary = secondary
         self.default_limit = min(max(int(default_limit), 1), 20)
         self.provider_timeout_seconds = max(0.0, float(provider_timeout_seconds))
 
@@ -137,6 +139,9 @@ class AddressSuggestionService:
             return []
         safe_limit = min(max(int(limit or self.default_limit), 1), 20)
         _kind, _name, house = split_address_query(cleaned)
+        directory_hits = self._directory_hits(cleaned, safe_limit)
+        if directory_hits and (not house or any(item.latitude is not None for item in directory_hits)):
+            return directory_hits[:safe_limit]
         catalog = [
             replace(item.with_query(cleaned), other_settlement=False)
             for item in self.fallback.search(cleaned, limit=safe_limit)
@@ -173,7 +178,57 @@ class AddressSuggestionService:
         if "кировск" not in folded and "кировская область" not in folded:
             regional_query = f"{cleaned}, Кировская область"
         found = self._search_provider(regional_query, safe_limit)
-        return self._rank_region(found, cleaned)[:safe_limit]
+        ranked = self._rank_region(found, cleaned)
+        if not ranked:
+            ranked = self._secondary_hits(regional_query, cleaned, safe_limit)
+        return ranked[:safe_limit]
+
+    def suggest_settlement(self, query: str, *, limit: int | None = None) -> list[AddressSuggestion]:
+        """Населённый пункт, улица и дом без городского справочника Кирова."""
+
+        cleaned = " ".join((query or "").split())
+        if len(cleaned) < 3:
+            return []
+        safe_limit = min(max(int(limit or self.default_limit), 1), 20)
+        directory_hits = self._directory_hits(cleaned, safe_limit)
+        if directory_hits:
+            return directory_hits[:safe_limit]
+        folded = cleaned.casefold()
+        regional_query = cleaned if "кировск" in folded else f"{cleaned}, Кировская область"
+        ranked = self._rank_region(self._search_provider(regional_query, safe_limit), cleaned)
+        if not ranked:
+            ranked = self._secondary_hits(regional_query, cleaned, safe_limit)
+        return ranked[:safe_limit]
+
+    def reverse(self, latitude: float, longitude: float) -> AddressSuggestion | None:
+        try:
+            found = self.provider.reverse_geocode(latitude, longitude)
+        except GeocodingError:
+            found = None
+        if found is None and self.secondary is not None:
+            try:
+                found = self.secondary.reverse_geocode(latitude, longitude)
+            except GeocodingError:
+                found = None
+        return found
+
+    @staticmethod
+    def _directory_hits(query: str, limit: int) -> list[AddressSuggestion]:
+        try:
+            from app.core.address.directory import search_directory
+
+            return search_directory(query, limit=limit)
+        except Exception:
+            return []
+
+    def _secondary_hits(self, regional_query: str, original_query: str, limit: int) -> list[AddressSuggestion]:
+        if self.secondary is None:
+            return []
+        try:
+            found = self.secondary.search(regional_query, limit=limit)
+        except GeocodingError:
+            return []
+        return self._rank_region(found, original_query)
 
     @staticmethod
     def _nominatim_house_query(cleaned: str) -> str:
@@ -397,8 +452,18 @@ def get_address_suggestion_service() -> AddressSuggestionService:
         if factory is None:
             raise RuntimeError(f"Неизвестный GEOCODING_PROVIDER: {provider_name}")
         provider = factory(current_app.config)
+        secondary = None
+        fallback_name = str(current_app.config.get("GEOCODER_FALLBACK_PROVIDER") or "").strip().casefold()
+        if fallback_name and fallback_name != provider_name.strip().casefold():
+            fallback_factory = _PROVIDER_FACTORIES.get(fallback_name)
+            if fallback_factory is not None:
+                try:
+                    secondary = fallback_factory(current_app.config)
+                except (ValueError, RuntimeError):
+                    secondary = None
         service = AddressSuggestionService(
             provider,
+            secondary=secondary,
             default_limit=int(current_app.config.get("ADDRESS_SUGGESTION_LIMIT", 8)),
             provider_timeout_seconds=float(
                 current_app.config.get("GEOCODING_SUGGEST_TIMEOUT_SECONDS") or 2.5

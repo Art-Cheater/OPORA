@@ -156,7 +156,7 @@ class DefectRepository:
         return RequestRepository.get_masters()
 
     @classmethod
-    def map_points(cls, filters: DefectFilter | None = None, *, limit: int = 500) -> list[dict]:
+    def map_points(cls, filters: DefectFilter | None = None, *, limit: int = 500, bbox=None) -> list[dict]:
         flt = filters or DefectFilter()
         stmt = (
             db.select(Defect)
@@ -168,6 +168,14 @@ class DefectRepository:
                 Defect.longitude.isnot(None),
             )
         )
+        if bbox:
+            min_lat, max_lat, min_lon, max_lon = bbox
+            stmt = stmt.where(
+                Defect.latitude >= min_lat,
+                Defect.latitude <= max_lat,
+                Defect.longitude >= min_lon,
+                Defect.longitude <= max_lon,
+            )
         if flt.q:
             q = f"%{flt.q.strip()}%"
             stmt = stmt.where(

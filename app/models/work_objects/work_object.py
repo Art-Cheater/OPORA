@@ -28,6 +28,7 @@ class WorkObject(ActiveRecordMixin, BaseModel):
         Index("ix_work_objects_contract_number", "contract_number"),
         Index("ix_work_objects_object_kind", "object_kind"),
         Index("ix_work_objects_deleted_created", "deleted_at", "created_at"),
+        Index("ix_work_objects_lat_lng", "latitude", "longitude"),
     )
 
     # name — полное наименование из плана (тип + адрес);
@@ -42,6 +43,8 @@ class WorkObject(ActiveRecordMixin, BaseModel):
     )
     kind_comment: Mapped[str | None] = mapped_column(String(500), nullable=True)
     address: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     plan_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     work_deadline: Mapped[str | None] = mapped_column(String(500), nullable=True)
     contract_number: Mapped[str | None] = mapped_column(String(100), nullable=True)

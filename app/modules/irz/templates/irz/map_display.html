@@ -38,7 +38,6 @@
 </div>
 {% endblock %}
 {% block extra_js %}
-<meta name="opora-maplibre-style" content="{{ config.get('MAPLIBRE_STYLE_URL', '') }}">
-<script src="{{ static_url('js/ops-map.js') }}"></script>
+{% include "components/map_scripts.html" %}
 <script src="{{ static_url('js/irz-map.js') }}"></script>
 {% endblock %}

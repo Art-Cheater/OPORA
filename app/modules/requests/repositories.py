@@ -591,7 +591,7 @@ class RequestRepository:
         return db.paginate(stmt, page=page, per_page=per_page, error_out=False)
 
     @classmethod
-    def map_points(cls, filters: RequestFilter | None = None, *, journal_id: str = "", limit: int = 500) -> list[dict]:
+    def map_points(cls, filters: RequestFilter | None = None, *, journal_id: str = "", limit: int = 500, bbox=None) -> list[dict]:
         flt = filters or RequestFilter(journal_id=journal_id)
         if journal_id and not flt.journal_id:
             flt.journal_id = journal_id
@@ -604,6 +604,11 @@ class RequestRepository:
                     Request.address,
                     Request.latitude,
                     Request.longitude,
+                    Request.journal_id,
+                    Request.coordinates_source,
+                    Request.geocode_quality,
+                    Request.house,
+                    Request.status_id,
                 )
             )
             .where(
@@ -612,9 +617,33 @@ class RequestRepository:
                 Request.longitude.isnot(None),
             )
         )
+        if bbox:
+            min_lat, max_lat, min_lon, max_lon = bbox
+            stmt = stmt.where(
+                Request.latitude >= min_lat,
+                Request.latitude <= max_lat,
+                Request.longitude >= min_lon,
+                Request.longitude <= max_lon,
+            )
         stmt = cls.apply_filters(stmt, flt)
         stmt = stmt.limit(limit)
         items = list(db.session.scalars(stmt))
+        journal_codes = {}
+        status_codes = {}
+        journal_ids = {item.journal_id for item in items if item.journal_id}
+        status_ids = {item.status_id for item in items if item.status_id}
+        if journal_ids:
+            journal_codes = dict(
+                db.session.execute(
+                    db.select(RequestJournal.id, RequestJournal.code).where(RequestJournal.id.in_(journal_ids))
+                ).all()
+            )
+        if status_ids:
+            status_codes = dict(
+                db.session.execute(
+                    db.select(RequestStatus.id, RequestStatus.code).where(RequestStatus.id.in_(status_ids))
+                ).all()
+            )
         extras_by_entity: dict[str, list[WorkMapPoint]] = {}
         if items:
             extra_stmt = (
@@ -630,21 +659,28 @@ class RequestRepository:
                 extras_by_entity.setdefault(str(point.entity_id), []).append(point)
         points = []
         for item in items:
+            code = str(journal_codes.get(item.journal_id) or "")
+            kind = "village" if code.endswith("_villages") else "city"
+            quality = item.geocode_quality or ("MANUAL" if item.coordinates_source == "manual" else ("EXACT" if item.house else "UNKNOWN"))
+            status_code = status_codes.get(item.status_id) or ""
             extras = extras_by_entity.get(str(item.id), [])
             if extras:
                 for point in extras:
-                    points.append({"id": f"request:{item.id}:point:{point.sequence}", "entity_id": str(item.id), "entity_type": "request", "type": "request", "number": item.number, "address": point.address_part, "parent_address": item.address, "lat": float(point.latitude), "lng": float(point.longitude), "url": f"/requests/{item.id}", "is_multi_point": len(extras) > 1, "point_count": len(extras), "point_sequence": point.sequence, "is_primary": point.is_primary, "confidence": point.confidence})
+                    points.append({"id": f"request:{item.id}:point:{point.sequence}", "entity_id": str(item.id), "entity_type": "request", "type": "request", "kind": kind, "number": item.number, "address": point.address_part, "parent_address": item.address, "lat": float(point.latitude), "lng": float(point.longitude), "url": f"/requests/{item.id}", "is_multi_point": len(extras) > 1, "point_count": len(extras), "point_sequence": point.sequence, "is_primary": point.is_primary, "confidence": point.confidence, "quality": quality, "status_code": status_code})
                 continue
             points.append(
                 {
                     "id": str(item.id),
                     "entity_type": "request",
                     "type": "request",
+                    "kind": kind,
                     "number": item.number,
                     "address": item.address,
                     "lat": float(item.latitude),
                     "lng": float(item.longitude),
                     "url": f"/requests/{item.id}",
+                    "quality": quality,
+                    "status_code": status_code,
                 }
             )
         return points

@@ -131,22 +131,39 @@ class WorkOrderService:
         )
 
     @classmethod
-    def map_points(cls, filters: WorkOrderFilter, plan: Waybill | None) -> list[dict]:
+    def map_points(
+        cls,
+        filters: WorkOrderFilter,
+        plan: Waybill | None,
+        *,
+        include_requests: bool = True,
+        include_defects: bool = True,
+    ) -> list[dict]:
         """Карта — вход в рабочее место: только доступные открытые работы."""
         in_plan = cls._plan_keys(plan)
-        points = cls._request_points(filters, in_plan, with_coords=True, limit=500)
-        if filters.kind in {"all", "defect"}:
+        points: list[dict] = []
+        if include_requests and filters.kind in {"all", "request", "villages"}:
+            points.extend(cls._request_points(filters, in_plan, with_coords=True, limit=500))
+        if include_defects and filters.kind in {"all", "defect"}:
             points.extend(cls._defect_points(filters, in_plan, with_coords=True, limit=500))
         points.sort(key=lambda row: (row.get("number") or ""))
         return points
 
     @classmethod
-    def list_items(cls, filters: WorkOrderFilter, plan: Waybill | None, limit: int = 80) -> list[dict]:
+    def list_items(
+        cls,
+        filters: WorkOrderFilter,
+        plan: Waybill | None,
+        limit: int = 80,
+        *,
+        include_requests: bool = True,
+        include_defects: bool = True,
+    ) -> list[dict]:
         in_plan = cls._plan_keys(plan)
         items: list[dict] = []
-        if filters.kind in {"all", "request", "villages"}:
+        if include_requests and filters.kind in {"all", "request", "villages"}:
             items.extend(cls._request_points(filters, in_plan, with_coords=False, limit=limit))
-        if filters.kind in {"all", "defect"}:
+        if include_defects and filters.kind in {"all", "defect"}:
             items.extend(cls._defect_points(filters, in_plan, with_coords=False, limit=limit))
         items.sort(key=lambda row: (row.get("number") or ""))
         return items[:limit]
@@ -450,6 +467,7 @@ class WorkOrderService:
             status = defect.status.name if defect.status else ""
             journal = "Дефекты"
             url = f"/defects/{defect.id}?return_url=/work-orders/"
+        quality = getattr(entity, "geocode_quality", None) if entity is not None else None
         return {
             "id": str(stop.id),
             "order": order if order is not None else stop.sort_order,
@@ -463,6 +481,7 @@ class WorkOrderService:
             "url": url,
             "lat": float(latitude) if latitude is not None else None,
             "lng": float(longitude) if longitude is not None else None,
+            "quality": quality or "",
             "color": "blue" if entity_type == "request" else "red",
         }
 

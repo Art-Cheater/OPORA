@@ -11,6 +11,7 @@ from app.modules.documents import documents_bp
 from app.modules.eis import eis_bp
 from app.modules.employees import employees_bp
 from app.modules.field_builder import field_builder_bp
+from app.modules.geo import geo_bp
 from app.modules.inquiries import inquiries_bp
 from app.modules.irz import irz_bp
 from app.modules.main import main_bp
@@ -51,6 +52,7 @@ ALL_BLUEPRINTS = [
     positions_bp,
     roles_bp,
     field_builder_bp,
+    geo_bp,
     wallpapers_bp,
     messenger_bp,
     documents_bp,

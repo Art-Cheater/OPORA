@@ -77,6 +77,8 @@ class ObjectPayload:
     notes: str | None = None
     status: str = WorkObjectStatus.FREE.value
     create_draft_project: bool = False
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
 
 
 @dataclass
@@ -907,6 +909,17 @@ class ObjectService:
             db.session.commit()
         return removed, skipped
 
+    @staticmethod
+    def _coordinates(payload: ObjectPayload) -> tuple[Decimal | None, Decimal | None]:
+        lat, lon = payload.latitude, payload.longitude
+        if (lat is None) != (lon is None):
+            raise ValidationError("Укажите широту и долготу вместе или оставьте обе пустыми.")
+        if lat is not None and not Decimal("-90") <= lat <= Decimal("90"):
+            raise ValidationError("Широта вне диапазона −90…90.")
+        if lon is not None and not Decimal("-180") <= lon <= Decimal("180"):
+            raise ValidationError("Долгота вне диапазона −180…180.")
+        return lat, lon
+
     @classmethod
     def _compose_full_name(cls, work_type: str | None, address: str) -> str:
         """Собрать полное наименование, если его не задали вручную."""
@@ -947,6 +960,8 @@ class ObjectService:
             source_sheet=cls._normalize(payload.source_sheet),
             notes=cls._normalize(payload.notes),
             status=payload.status or WorkObjectStatus.FREE.value,
+            latitude=cls._coordinates(payload)[0],
+            longitude=cls._coordinates(payload)[1],
             created_by=user_id,
             updated_by=user_id,
         )
@@ -1003,6 +1018,7 @@ class ObjectService:
         obj.source_sheet = cls._normalize(payload.source_sheet)
         obj.notes = cls._normalize(payload.notes)
         obj.status = payload.status
+        obj.latitude, obj.longitude = cls._coordinates(payload)
         obj.updated_by = user_id
         try:
             # Обычное редактирование (сумма, адрес, комментарий) не должно

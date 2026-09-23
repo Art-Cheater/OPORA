@@ -103,6 +103,8 @@ class ObjectForm(FlaskForm):
         default=True,
     )
     address = StringField("Адрес", validators=[DataRequired(), Length(max=1000)])
+    latitude = DecimalField("Широта", validators=[Optional()], places=7)
+    longitude = DecimalField("Долгота", validators=[Optional()], places=7)
     full_name = StringField(
         "Полное наименование",
         validators=[Optional(), Length(max=1000)],

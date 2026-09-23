@@ -26,6 +26,16 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
 def _sqlite_url() -> str:
     """Файл SQLite в instance/opora.db (или DATABASE_URL=sqlite:///...)."""
     raw = os.getenv("DATABASE_URL", "").strip()
@@ -138,7 +148,7 @@ class Config:
     TURNSTILE_SITE_KEY = os.getenv("TURNSTILE_SITE_KEY", "").strip()
     TURNSTILE_SECRET_KEY = os.getenv("TURNSTILE_SECRET_KEY", "").strip()
     TURNSTILE_VERIFY_URL = os.getenv("TURNSTILE_VERIFY_URL", "https://challenges.cloudflare.com/turnstile/v0/siteverify").strip()
-    TURNSTILE_TIMEOUT_SECONDS = float(os.getenv("TURNSTILE_TIMEOUT_SECONDS", "3"))
+    TURNSTILE_TIMEOUT_SECONDS = float(os.getenv("TURNSTILE_TIMEOUT_SECONDS", "8"))
     LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("LOGIN_RATE_LIMIT_WINDOW_SECONDS", "300"))
     LOGIN_RATE_LIMIT_MAX_ATTEMPTS = int(os.getenv("LOGIN_RATE_LIMIT_MAX_ATTEMPTS", "8"))
     LOGIN_RATE_LIMIT_COOLDOWN_SECONDS = int(os.getenv("LOGIN_RATE_LIMIT_COOLDOWN_SECONDS", "300"))
@@ -225,12 +235,19 @@ class Config:
     # Photon совместим с Nominatim, но подключается только явной настройкой.
     PHOTON_BASE_URL = os.getenv("PHOTON_BASE_URL", "").strip()
     PHOTON_REGION_BIAS = os.getenv("PHOTON_REGION_BIAS", "Киров, Кировская область").strip()
+    GEOCODER_FALLBACK_PROVIDER = os.getenv("GEOCODER_FALLBACK_PROVIDER", "").strip().lower()
     # MapLibre получает стиль из конфигурации: JS не должен знать адрес tiles provider.
     MAP_PROVIDER = os.getenv("MAP_PROVIDER", "maplibre").strip().lower()
     MAP_FRONTEND_PROVIDER = os.getenv("MAP_FRONTEND_PROVIDER", "maplibre").strip().lower()
     MAPLIBRE_STYLE_URL = os.getenv(
         "MAPLIBRE_STYLE_URL", "https://tiles.openfreemap.org/styles/liberty"
     ).strip()
+    MAP_CENTER_LNG = _env_float("MAP_CENTER_LNG", 49.668)
+    MAP_CENTER_LAT = _env_float("MAP_CENTER_LAT", 58.6035)
+    MAP_ZOOM = _env_float("MAP_ZOOM", 12)
+    MAP_MIN_ZOOM = _env_float("MAP_MIN_ZOOM", 8)
+    MAP_MAX_ZOOM = _env_float("MAP_MAX_ZOOM", 20)
+    MAP_ENTRANCE_MIN_ZOOM = _env_float("MAP_ENTRANCE_MIN_ZOOM", 17)
     # Routing выключен, пока production явно не укажет provider и внутренний URL.
     ROUTING_PROVIDER = os.getenv("ROUTING_PROVIDER", "").strip().lower()
     ROUTING_BASE_URL = os.getenv("ROUTING_BASE_URL", "").strip()

@@ -304,7 +304,9 @@ def test_reports_eis_search_and_roles_still_open(admin_client):
 
     agreements = admin_client.get("/agreements/")
     html = agreements.get_data(as_text=True)
-    assert "vendor/leaflet/leaflet.js" in html
+    assert "vendor/leaflet/leaflet.js" not in html
+    assert "js/map/core.js" in html
+    assert "js/agreements-map.js" in html
     assert "unpkg.com" not in html
     assert admin_client.get("/agreements/map.json").status_code == 200
     assert admin_client.get("/static/vendor/leaflet/images/marker-icon.png").status_code == 200

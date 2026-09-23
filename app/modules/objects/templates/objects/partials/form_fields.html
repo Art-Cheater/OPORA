@@ -7,6 +7,8 @@
         {{ modal_field(form.kind_comment, col=12, module='objects', placeholder='Например: временный объект для обслуживания линии') }}
     </div>
     {{ modal_field(form.address, col=12, placeholder='ул. … / д. … / участок …', module='objects') }}
+    {{ modal_field(form.latitude, col=6, placeholder='58.6035') }}
+    {{ modal_field(form.longitude, col=6, placeholder='49.6680') }}
     {{ modal_field(form.full_name, col=12, placeholder='Как в плане: тип + адрес', module='objects', permission_field='name') }}
     {{ modal_field(form.plan_year, col=4, module='objects') }}
     {{ modal_field(form.work_deadline, col=8, module='objects') }}

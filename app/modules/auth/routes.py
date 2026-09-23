@@ -11,7 +11,7 @@ from app.modules.auth.blueprint import auth_bp
 from app.modules.auth.forms import ChangePasswordForm, LoginForm, ProfileForm
 from app.modules.auth.login_log_service import LoginLogService
 from app.modules.auth.services import AuthService
-from app.modules.auth.captcha import verify_turnstile
+from app.modules.auth.captcha import captcha_message, verify_turnstile_result
 from app.modules.auth.login_throttle import LoginThrottle
 
 
@@ -27,11 +27,12 @@ def login():
         email = form.email.data or ""
         if LoginThrottle.retry_after(client_ip, email):
             flash("Слишком много попыток входа. Подождите несколько минут и повторите.", "danger")
-            return render_template("auth/login.html", form=form)
-        if not verify_turnstile(request.form.get("cf-turnstile-response"), client_ip):
+            return _render_login(form)
+        verdict = verify_turnstile_result(request.form.get("cf-turnstile-response"), client_ip)
+        if not verdict.ok:
             LoginThrottle.record_failure(client_ip, email)
-            flash("Не удалось подтвердить проверку. Повторите попытку.", "danger")
-            return render_template("auth/login.html", form=form)
+            flash(captcha_message(verdict.code), "danger")
+            return _render_login(form)
         try:
             AuthService.authenticate(
                 email=form.email.data,
@@ -49,6 +50,10 @@ def login():
             LoginThrottle.record_failure(client_ip, email)
             flash(exc.message, "danger")
 
+    return _render_login(form)
+
+
+def _render_login(form):
     return render_template(
         "auth/login.html",
         form=form,

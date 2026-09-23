@@ -14,6 +14,7 @@ from werkzeug.datastructures import FileStorage
 
 from app.core.audit_service import AuditService
 from app.core.exceptions import NotFoundError, ValidationError
+from app.core.geo.quality import quality_for
 from app.core.upload_utils import save_upload
 from app.extensions import db
 from app.models.communication.comment import Comment
@@ -165,6 +166,10 @@ class DefectService:
             latitude=payload.latitude,
             longitude=payload.longitude,
             coordinates_source=(None if payload.coordinates_source == "cleared" else payload.coordinates_source) or ("geocoder" if payload.latitude is not None and payload.longitude is not None else None),
+            geocode_quality=quality_for(
+                (None if payload.coordinates_source == "cleared" else payload.coordinates_source) or ("geocoder" if payload.latitude is not None and payload.longitude is not None else None),
+                house=payload.house,
+            ),
             reported_date=payload.reported_date,
             reported_time=payload.reported_time,
             category_id=payload.category_id,
@@ -207,6 +212,7 @@ class DefectService:
         item.latitude = payload.latitude
         item.longitude = payload.longitude
         item.coordinates_source = (None if payload.coordinates_source == "cleared" else payload.coordinates_source) or ("geocoder" if payload.latitude is not None and payload.longitude is not None else None)
+        item.geocode_quality = quality_for(item.coordinates_source, house=payload.house)
         item.reported_date = payload.reported_date
         item.reported_time = payload.reported_time
         item.category_id = payload.category_id

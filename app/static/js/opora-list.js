@@ -225,8 +225,10 @@ window.OporaList = (() => {
     const base = mapNode.getAttribute("data-map-base") || "/requests/map.json";
     const url = `${base}?${params.toString()}`;
     mapNode.setAttribute("data-src", url);
-    if (!window.OporaOpsMap.init()) return;
-    if (typeof window.OporaOpsMap.reload === "function") window.OporaOpsMap.reload(url);
+    const started = window.OporaOpsMap.init();
+    const reload = () => window.OporaOpsMap.reload?.(url);
+    if (started && typeof started.then === "function") started.then((ok) => { if (ok !== false) reload(); });
+    else reload();
   }
 
   function ensureSortField(form, name, value) {

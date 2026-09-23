@@ -76,8 +76,15 @@ def map_summary():
     try:
         selected = directory.filter_items(items, query=request.args.get("q", ""),
                                           status=request.args.get("status", "all"), has_coordinates=True)
+        from app.core.geo.bbox import BboxError, filter_records, parse_bbox
+
+        bbox = parse_bbox(request.args)
+    except BboxError as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 400
     except ValueError as exc:
         return _error_response(exc)
+    if bbox:
+        selected = filter_records(selected, bbox)
     return jsonify({**meta, "items": selected})
 
 

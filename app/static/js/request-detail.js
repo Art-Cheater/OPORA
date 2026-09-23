@@ -39,11 +39,12 @@ window.OporaRequestDetail = (() => {
   function external(lat, lng) { const link = document.getElementById("requestMapExternal"); if (link) { link.href = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=17/${lat}/${lng}`; link.classList.remove("d-none"); } }
   async function paint(lat, lng, address) {
     const node = document.getElementById("requestMap"); if (!node) return;
-    try { await window.OporaMap.ensureAssets(); } catch { status("Карта недоступна: не удалось загрузить MapLibre.", true); return; }
-    detailMap?.remove(); node.replaceChildren();
-    const style = document.querySelector('meta[name="opora-maplibre-style"]')?.content || "https://tiles.openfreemap.org/styles/liberty";
-    detailMap = new window.maplibregl.Map({ container: node, style, center: [lng, lat], zoom: 16 });
-    detailMap.addControl(new window.maplibregl.NavigationControl(), "top-left");
+    const kit = window.OporaMapKit;
+    if (!kit?.createMap) { status("Карта недоступна: не удалось загрузить MapLibre.", true); return; }
+    kit.destroyMap(detailMap); detailMap = null; node.replaceChildren();
+    try {
+      detailMap = await kit.createMap(node, { center: [lng, lat], zoom: 16, onError: () => status("Не удалось загрузить карту.", true) });
+    } catch { status("Карта недоступна: не удалось загрузить MapLibre.", true); return; }
     new window.maplibregl.Marker({ color: "#dc3545" }).setLngLat([lng, lat]).setPopup(new window.maplibregl.Popup().setText(address || "Точка")).addTo(detailMap);
     external(lat, lng); status(address ? `Точка: ${address}` : "");
   }
@@ -53,7 +54,7 @@ window.OporaRequestDetail = (() => {
     const node = document.getElementById("requestMap"); if (!node || inflight) return;
     const current = coords(node), address = node.dataset.address || "";
     if (current) return paint(current.lat, current.lng, address);
-    if (!node.dataset.coordsUrl) return status("Координаты для этой работы не сохранены.", true);
+    if (!node.dataset.coordsUrl) return status("Координаты не заданы.", true);
     status("Определяем координаты по адресу…");
     inflight = fetch(node.dataset.coordsUrl, { headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" } })
       .then((response) => response.json().then((body) => ({ response, body })))
@@ -61,7 +62,7 @@ window.OporaRequestDetail = (() => {
       .catch((error) => status(error.message || "Не удалось показать карту по адресу.", true)).finally(() => inflight = null);
     return inflight;
   }
-  function destroy() { detailMap?.remove(); detailMap = null; inflight = null; }
+  function destroy() { window.OporaMapKit?.destroyMap?.(detailMap); detailMap = null; inflight = null; }
   document.addEventListener("DOMContentLoaded", init); window.addEventListener("opora:navigated", init); window.addEventListener("opora:before-navigate", destroy);
   return { init, destroy };
 })();

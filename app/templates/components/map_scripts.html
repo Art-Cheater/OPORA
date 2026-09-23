@@ -1,0 +1,13 @@
+<meta name="opora-maplibre-style" content="{{ config.get('MAPLIBRE_STYLE_URL', '') }}">
+<meta name="opora-map-center" content="{{ config.MAP_CENTER_LNG }},{{ config.MAP_CENTER_LAT }}">
+<meta name="opora-map-zoom" content="{{ config.MAP_ZOOM }}">
+<meta name="opora-map-min-zoom" content="{{ config.MAP_MIN_ZOOM }}">
+<meta name="opora-map-max-zoom" content="{{ config.MAP_MAX_ZOOM }}">
+<meta name="opora-entrance-zoom" content="{{ config.MAP_ENTRANCE_MIN_ZOOM }}">
+<script src="{{ static_url('js/map/config.js') }}"></script>
+<script src="{{ static_url('js/map/core.js') }}"></script>
+<script src="{{ static_url('js/map/markers.js') }}"></script>
+<script src="{{ static_url('js/map/layers.js') }}"></script>
+<script src="{{ static_url('js/map/geocoder.js') }}"></script>
+<script src="{{ static_url('js/map/routing.js') }}"></script>
+<script src="{{ static_url('js/ops-map.js') }}"></script>

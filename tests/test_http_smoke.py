@@ -373,7 +373,7 @@ def test_request_open_list_detail_and_forms(admin_client):
     assert "Поиск" in list_html
     assert "Сброс" in list_html
     assert "Сбор" not in list_html
-    assert 'id="opsMap"' not in list_html
+    assert 'id="opsMap"' in list_html
     table = admin_client.get("/requests/table")
     assert table.status_code == 200
     payload = table.get_json()

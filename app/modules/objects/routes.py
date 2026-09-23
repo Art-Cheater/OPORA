@@ -11,6 +11,7 @@ from werkzeug.utils import secure_filename
 
 from app.core.decorators import admin_required, permission_required
 from app.core.exceptions import ValidationError
+from app.extensions import db
 from app.core.field_permissions import FieldPermissionService
 from app.core.forms_utils import form_errors_message
 from app.core.http import ajax_error, ajax_ok, is_ajax
@@ -72,6 +73,8 @@ def _payload(form: ObjectForm, obj=None) -> ObjectPayload:
         notes=field("notes", form.notes.data, default=None),
         status=field("status", form.status.data or "free", default="free"),
         create_draft_project=bool(getattr(form, "create_draft_project", None) and form.create_draft_project.data),
+        latitude=form.latitude.data,
+        longitude=form.longitude.data,
     )
 
 
@@ -181,6 +184,49 @@ def index():
         status_labels=OBJECT_STATUS_LABELS,
         kind_labels=OBJECT_KIND_LABELS,
     )
+
+
+@objects_bp.route("/map.json")
+@login_required
+@permission_required(PERM_OBJECTS_VIEW)
+def map_json():
+    from sqlalchemy import select
+
+    from app.core.geo import BboxError, map_payload, parse_bbox
+    from app.models.work_objects.work_object import WorkObject
+
+    try:
+        bbox = parse_bbox(request.args)
+    except BboxError as exc:
+        return jsonify({"ok": False, "message": str(exc), "points": [], "geojson": {"type": "FeatureCollection", "features": []}}), 400
+    stmt = select(WorkObject).where(
+        WorkObject.active_filter(),
+        WorkObject.latitude.isnot(None),
+        WorkObject.longitude.isnot(None),
+    )
+    if bbox:
+        min_lat, max_lat, min_lon, max_lon = bbox
+        stmt = stmt.where(
+            WorkObject.latitude >= min_lat,
+            WorkObject.latitude <= max_lat,
+            WorkObject.longitude >= min_lon,
+            WorkObject.longitude <= max_lon,
+        )
+    points = []
+    for item in db.session.scalars(stmt.limit(500)):
+        points.append(
+            {
+                "id": str(item.id),
+                "type": "object",
+                "entity_type": "object",
+                "number": item.contract_number or "",
+                "address": item.display_address,
+                "lat": float(item.latitude),
+                "lng": float(item.longitude),
+                "url": url_for("objects.detail", object_id=item.id),
+            }
+        )
+    return jsonify(map_payload(points))
 
 
 @objects_bp.route("/table")
@@ -382,6 +428,8 @@ def edit(object_id: uuid.UUID):
         form.result_text.data = obj.result_text
         form.notes.data = obj.notes
         form.status.data = obj.status
+        form.latitude.data = obj.latitude
+        form.longitude.data = obj.longitude
     if form.validate_on_submit():
         try:
             ObjectService.update(obj, _payload(form, obj), current_user.id)

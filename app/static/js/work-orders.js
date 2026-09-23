@@ -115,6 +115,7 @@ window.OporaWorkOrders = {
 
     function renderNearby(hits, summary) {
       nearbyHits = hits || [];
+      window.OporaOpsMap?.setNearby?.(nearbyHits.map((item) => item.entity_id || item.id));
       const hasHits = nearbyHits.length > 0;
       if (nearbyToggle) nearbyToggle.hidden = !hasHits;
       if (nearbySummary) nearbySummary.textContent = summary || "";
@@ -307,6 +308,32 @@ window.OporaWorkOrders = {
         .catch(() => toast("Не удалось сохранить план.", false));
     });
 
+    function renderRoute(data) {
+      const list = document.getElementById("workRouteList");
+      if (!list) return;
+      const stops = data.points || [];
+      const legs = data.route?.legs || data.legs || [];
+      const coarse = new Set(["STREET", "SETTLEMENT", "INTERPOLATED", "UNKNOWN"]);
+      const distance = Number(data.distance_m || data.route?.distance_m || 0);
+      const duration = Number(data.duration_s || data.route?.duration_s || 0);
+      const rows = stops.map((point, index) => {
+        const leg = index > 0 ? legs[index - 1] : null;
+        let legText = index === 0 ? "Начало маршрута" : "";
+        if (leg) {
+          const meters = Number(leg.distance_m || 0);
+          const seconds = Number(leg.duration_s || 0);
+          const parts = [`${(meters / 1000).toFixed(1).replace(".", ",")} км от предыдущей`];
+          if (seconds > 0) parts.push(`${Math.ceil(seconds / 60)} мин`);
+          legText = parts.join(" · ");
+        }
+        const warning = coarse.has(String(point.quality || "")) ? "Точка неточная, проверьте её на карте." : "";
+        return `<li><strong>${index + 1}. ${escapeHtml(point.number ? `№ ${point.number}` : "Точка")}</strong><small>${escapeHtml(point.address || "Адрес не указан")}</small>${legText ? `<small>${escapeHtml(legText)}</small>` : ""}${warning ? `<small>${warning}</small>` : ""}</li>`;
+      }).join("");
+      const total = `${distance ? `${(distance / 1000).toFixed(1).replace(".", ",")} км` : ""}${duration ? `${distance ? " · " : ""}${Math.ceil(duration / 60)} мин` : ""}`;
+      list.innerHTML = `${rows}${total ? `<li><strong>Итого</strong><small>${escapeHtml(total)}</small></li>` : ""}`;
+      list.hidden = !stops.length;
+    }
+
     routeBtn?.addEventListener("click", () => {
       if (routeBtn.disabled) return;
       const initialLabel = routeBtn.textContent;
@@ -322,11 +349,14 @@ window.OporaWorkOrders = {
           const hasRoadGeometry = ["LineString", "MultiLineString"].includes(geometry?.type) && Array.isArray(geometry.coordinates) && geometry.coordinates.length > 1;
           if (!data.ok || count < 2 || !hasRoadGeometry) {
             window.OporaOpsMap?.clearRoute?.();
+            const routeList = document.getElementById("workRouteList");
+            if (routeList) { routeList.replaceChildren(); routeList.hidden = true; }
             const missingText = excluded.length ? ` Не вошли в маршрут без координат: ${excluded.map((item) => `№${item.number || "—"}`).join(", ")}.` : "";
             toast((data.message || (count < 2 ? "Для маршрута нужно минимум две точки с координатами." : "Не удалось построить дорожный маршрут.")) + missingText, false);
           } else {
             window.OporaOpsMap?.init?.();
             window.OporaOpsMap?.setRoute?.(data.points || [], geometry);
+            renderRoute(data);
             const distance = Number(data.distance_m || data.route?.distance_m || 0);
             const duration = Number(data.duration_s || data.route?.duration_s || 0);
             const meta = `${distance ? ` · ${(distance / 1000).toFixed(1).replace('.', ',')} км` : ""}${duration ? ` · ${Math.ceil(duration / 60)} мин.` : ""}`;

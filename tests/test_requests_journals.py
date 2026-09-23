@@ -26,7 +26,7 @@ def test_requests_journals_include_defects_tab(admin_client):
     assert "Заявки в деревнях Нововятского района" in html
     assert "Заявки в деревнях Ленинского района" in html
     assert "Дефекты" in html
-    assert 'id="opsMap"' not in html
+    assert 'id="opsMap"' in html
     assert "js/ops-map.js" in html
     assert "vendor/leaflet/leaflet.js" not in html
     assert "css/requests-journal.css" in html
@@ -167,7 +167,7 @@ def test_requests_defects_tab_looks_like_journal(admin_client, app):
     page = admin_client.get("/requests/?tab=defects")
     assert page.status_code == 200
     html = page.get_data(as_text=True)
-    assert 'id="opsMap"' not in html
+    assert 'id="opsMap"' in html
     assert "js/ops-map.js" in html
     assert "vendor/leaflet/leaflet.js" not in html
     assert 'id="defectFilterForm"' in html
@@ -227,7 +227,7 @@ def test_spa_nav_requests_keeps_journals_and_map(admin_client):
     assert page.status_code == 200
     html = page.get_data(as_text=True)
     assert 'id="appContent"' in html
-    assert 'id="opsMap"' not in html
+    assert 'id="opsMap"' in html
     assert "journal-tabs" in html
     assert "Дефекты" in html
     assert "js/ops-map.js" not in html
@@ -324,6 +324,7 @@ def test_spa_list_scripts_bind_navigation_without_reload():
 
     root = Path(__file__).resolve().parents[1]
     ops = (root / "app/static/js/ops-map.js").read_text(encoding="utf-8")
+    core = (root / "app/static/js/map/core.js").read_text(encoding="utf-8")
     main = (root / "app/static/js/main.js").read_text(encoding="utf-8")
     work = (root / "app/static/js/work-orders.js").read_text(encoding="utf-8")
     opora_list = (root / "app/static/js/opora-list.js").read_text(encoding="utf-8")
@@ -343,7 +344,7 @@ def test_spa_list_scripts_bind_navigation_without_reload():
     assert "OporaWorkPlanNew" in main
     assert "OporaWorkPlanDetail" in main
     assert "OporaObjectForm" in main
-    assert "ResizeObserver" in ops
+    assert "ResizeObserver" in core
     assert "destroy()" in ops
     assert "location.reload" not in ops
     assert "location.reload" not in main

@@ -20,6 +20,8 @@
 {% block content %}
 <div class="journal-page">
 {% include "requests/partials/journal_tabs.html" %}
+{% set map_src = url_for('defects.map_json') %}
+{% include "requests/partials/journal_map.html" %}
 {% include "defects/partials/list_body.html" %}
 </div>
 {% endblock %}

@@ -66,7 +66,7 @@ class RoutingService:
         geometry = raw.get("geometry") if isinstance(raw, dict) else None
         if not cls._valid_geometry(geometry):
             raise RoutingError("routing_no_route", "Не удалось построить маршрут: часть точек вне доступной карты маршрутизации.")
-        result = {"geometry": geometry, "distance_m": int(round(float(raw.get("distance") or 0))), "duration_s": int(round(float(raw.get("duration") or 0))), "provider": cls._provider(), "warnings": []}
+        result = {"geometry": geometry, "distance_m": int(round(float(raw.get("distance") or 0))), "duration_s": int(round(float(raw.get("duration") or 0))), "provider": cls._provider(), "legs": raw.get("legs") or [], "warnings": []}
         cls._put_cache(key, result)
         return result
 
@@ -145,12 +145,22 @@ class RoutingService:
                 legs = trip.get("legs") or []
                 shape = legs[0].get("shape") if legs and isinstance(legs[0], dict) else None
             geojson = shape if isinstance(shape, dict) else {"type": "LineString", "coordinates": shape} if isinstance(shape, list) else None
-            return {"distance": float((summary or {}).get("length") or 0) * 1000, "duration": float((summary or {}).get("time") or 0), "geometry": geojson if geometry else None}
+            legs = []
+            for leg in (trip.get("legs") or []) if isinstance(trip, dict) else []:
+                summary_leg = leg.get("summary") if isinstance(leg, dict) else None
+                if isinstance(summary_leg, dict):
+                    legs.append({"distance_m": int(round(float(summary_leg.get("length") or 0) * 1000)), "duration_s": int(round(float(summary_leg.get("time") or 0)))})
+            return {"distance": float((summary or {}).get("length") or 0) * 1000, "duration": float((summary or {}).get("time") or 0), "geometry": geojson if geometry else None, "legs": legs}
         coords = ";".join(f"{lng},{lat}" for lat, lng in points)
         url = f"{base}/route/v1/driving/{coords}?" + urlencode({"overview": "full" if geometry else "false", "geometries": "geojson"})
         with urlopen(Request(url, headers=headers), timeout=timeout) as response:  # nosec B310: config URL
             route = json.loads(response.read().decode("utf-8")).get("routes", [])[0]
-        return {"distance": route.get("distance"), "duration": route.get("duration"), "geometry": route.get("geometry") if geometry else None}
+        legs = [
+            {"distance_m": int(round(float(leg.get("distance") or 0))), "duration_s": int(round(float(leg.get("duration") or 0)))}
+            for leg in (route.get("legs") or [])
+            if isinstance(leg, dict)
+        ]
+        return {"distance": route.get("distance"), "duration": route.get("duration"), "geometry": route.get("geometry") if geometry else None, "legs": legs}
 
     @classmethod
     def _get_cache(cls, key: tuple) -> dict | None:

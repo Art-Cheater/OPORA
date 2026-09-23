@@ -10,7 +10,8 @@ from flask import flash, jsonify, redirect, render_template, request, send_file,
 from flask_login import current_user, login_required
 
 from app.core.address import load_address_selection_token
-from app.core.decorators import request_or_legacy_defect_permission_required
+from app.core.decorators import permission_required, request_or_legacy_defect_permission_required
+from app.core.geo import BboxError, map_payload, parse_bbox
 from app.core.exceptions import NotFoundError, ValidationError
 from app.core.navigation import back_navigation
 from app.core.field_permissions import FieldPermissionService
@@ -180,9 +181,23 @@ def table():
 
 @defects_bp.route("/map.json")
 @login_required
-@request_or_legacy_defect_permission_required(PERM_REQUESTS_VIEW, PERM_DEFECTS_VIEW)
+@permission_required(PERM_DEFECTS_VIEW)
 def map_json():
-    return jsonify({"points": DefectRepository.map_points(), "remaining": 0})
+    try:
+        bbox = parse_bbox(request.args)
+    except BboxError as exc:
+        return jsonify({"ok": False, "message": str(exc), "points": [], "geojson": {"type": "FeatureCollection", "features": []}}), 400
+    points = DefectRepository.map_points(
+        DefectFilter(
+            q=request.args.get("q", ""),
+            number=request.args.get("number", ""),
+            district=request.args.get("district", ""),
+            status_id=request.args.get("status_id", ""),
+            category_id=request.args.get("category_id", ""),
+        ),
+        bbox=bbox,
+    )
+    return jsonify(map_payload(points))
 
 
 @defects_bp.route("/new", methods=["GET", "POST"])
@@ -451,9 +466,11 @@ def ensure_coords(defect_id: uuid.UUID):
     dummy.longitude = item.longitude
     RequestService._prepare_address(dummy)
     if dummy.latitude is None or dummy.longitude is None:
-        return jsonify({"success": False, "message": "Не удалось определить координаты"})
+        return jsonify({"success": False, "message": "Координаты не заданы. Укажите точку на карте: неточный адрес не ставится автоматически."})
     if persist:
         item.latitude = dummy.latitude
         item.longitude = dummy.longitude
+        item.coordinates_source = "geocoder"
+        item.geocode_quality = "EXACT" if item.house else "STREET"
         db.session.commit()
     return jsonify({"success": True, "latitude": float(dummy.latitude), "longitude": float(dummy.longitude), "address": item.address})

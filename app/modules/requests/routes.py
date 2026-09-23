@@ -26,6 +26,7 @@ from app.core.custom_fields_integration import (
     save_custom_fields,
 )
 from app.core.decorators import any_permission_required, permission_required
+from app.core.geo import BboxError, map_payload, parse_bbox
 from app.core.exceptions import NotFoundError, ValidationError
 from app.core.field_permissions import FieldPermissionService
 from app.core.forms_utils import form_errors_message
@@ -481,6 +482,10 @@ def table():
 @login_required
 @permission_required(PERM_REQUESTS_VIEW)
 def map_json():
+    try:
+        bbox = parse_bbox(request.args)
+    except BboxError as exc:
+        return jsonify({"ok": False, "message": str(exc), "points": [], "geojson": {"type": "FeatureCollection", "features": []}}), 400
     tab = (request.args.get("tab") or "").strip().lower()
     if tab == "defects":
         if not current_user.has_permission(PERM_DEFECTS_VIEW):
@@ -494,12 +499,13 @@ def map_json():
                 district=request.args.get("district", ""),
                 status_id=request.args.get("status_id", ""),
                 category_id=request.args.get("category_id", ""),
-            )
+            ),
+            bbox=bbox,
         )
-        return jsonify({"points": points, "remaining": 0})
+        return jsonify(map_payload(points))
 
     filters = _build_filters()
-    points = RequestRepository.map_points(filters)
+    points = RequestRepository.map_points(filters, bbox=bbox)
     include_defects = (
         not filters.journal_id
         and not filters.status_id
@@ -514,15 +520,11 @@ def map_json():
                     q=filters.q,
                     number=filters.number,
                     district=filters.district,
-                )
+                ),
+                bbox=bbox,
             )
         )
-    return jsonify(
-        {
-            "points": points,
-            "remaining": 0,
-        }
-    )
+    return jsonify(map_payload(points))
 
 
 @requests_bp.route("/dispatchers", methods=["GET", "POST"])
@@ -615,19 +617,24 @@ def address_suggestions():
     )
 
     journal = RequestRepository.get_journal(request.args.get("journal_id"))
-    if journal and journal.code.endswith("_villages"):
-        return jsonify({"suggestions": [], "manual": True})
     query = (request.args.get("q") or "").strip()
     if len(query) < 3:
         return jsonify({"suggestions": []})
     limit = int(current_app.config.get("ADDRESS_SUGGESTION_LIMIT", 8))
-    suggestions = get_address_suggestion_service().suggest(query, limit=limit)
+    service = get_address_suggestion_service()
+    if journal and journal.code.endswith("_villages"):
+        suggestions = service.suggest_settlement(query, limit=limit)
+    else:
+        suggestions = service.suggest(query, limit=limit)
+    from app.core.geo.quality import precision_of
+
     payload = []
     for item in suggestions:
         data = item.as_dict()
+        data["precision"] = precision_of(item)
         data["selection_token"] = make_address_selection_token(item)
         payload.append(data)
-    return jsonify({"suggestions": payload})
+    return jsonify({"suggestions": payload, "scope": "settlement" if journal and journal.code.endswith("_villages") else "city"})
 
 
 @requests_bp.route("/api/open-by-address")
@@ -830,7 +837,7 @@ def ensure_coords(request_id: uuid.UUID):
         current_app.logger.exception("ensure_coords %s", request_id)
         filled = False
     if not filled or req.latitude is None or req.longitude is None:
-        return ajax_error("Не удалось определить координаты по адресу.", status=422)
+        return ajax_error("Координаты не заданы. Укажите точку на карте: неточный адрес не ставится автоматически.", status=422)
     return ajax_ok(
         "ok",
         latitude=float(req.latitude),

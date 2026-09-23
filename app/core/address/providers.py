@@ -34,6 +34,7 @@ class AddressSuggestion:
     address_source: str = "heuristic"
     address_external_id: str | None = None
     other_settlement: bool = False
+    precision: str | None = None
 
     def with_query(self, query: str) -> "AddressSuggestion":
         return replace(self, original_address=query)
@@ -52,6 +53,7 @@ class AddressSuggestion:
             "address_source": self.address_source,
             "address_external_id": self.address_external_id,
             "other_settlement": self.other_settlement,
+            "precision": self.precision,
         }
 
 
@@ -213,6 +215,36 @@ class NominatimGeocodingProvider(GeocodingProvider):
         self._cache.set(cache_key, results)
         return list(results)
 
+    def reverse_geocode(self, latitude: float, longitude: float) -> AddressSuggestion | None:
+        if not -90 <= float(latitude) <= 90 or not -180 <= float(longitude) <= 180:
+            return None
+        cache_key = f"reverse|{float(latitude):.5f}|{float(longitude):.5f}"
+        cached = self._cache.get(cache_key)
+        if cached is not _MISSING:
+            return cached[0] if cached else None
+        params = urlencode(
+            {
+                "lat": f"{float(latitude):.7f}",
+                "lon": f"{float(longitude):.7f}",
+                "format": "jsonv2",
+                "addressdetails": "1",
+                "accept-language": "ru",
+            }
+        )
+        req = Request(
+            f"{self.base_url}/reverse?{params}",
+            headers={"User-Agent": self.user_agent, "Accept": "application/json"},
+        )
+        self._rate_limiter.wait()
+        try:
+            with self._opener(req, timeout=self.timeout_seconds) as response:
+                payload = json.loads(response.read(1_048_576).decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError) as exc:
+            raise GeocodingError("Сервис адресов временно недоступен.") from exc
+        suggestion = self._parse_item(f"{latitude:.7f}, {longitude:.7f}", payload) if isinstance(payload, dict) else None
+        self._cache.set(cache_key, [suggestion] if suggestion else [])
+        return suggestion
+
     @staticmethod
     def _parse_item(query: str, item: dict) -> AddressSuggestion | None:
         display_name = str(item.get("display_name") or "").strip()
@@ -264,6 +296,18 @@ class NominatimGeocodingProvider(GeocodingProvider):
             district = long_district_name(str(address.get("suburb") or "").strip())
         if district is None and raw_district:
             district = raw_district
+        house = str(address.get("house_number") or "").strip() or None
+        osm_kind = str(item.get("type") or item.get("addresstype") or "")
+        if "interpolat" in osm_kind.casefold():
+            precision = "INTERPOLATED"
+        elif house:
+            precision = "EXACT"
+        elif street:
+            precision = "STREET"
+        elif settlement:
+            precision = "SETTLEMENT"
+        else:
+            precision = "UNKNOWN"
         return AddressSuggestion(
             original_address=query,
             normalized_address=display_name,
@@ -271,11 +315,12 @@ class NominatimGeocodingProvider(GeocodingProvider):
             district=district,
             settlement=settlement,
             street=street,
-            house=str(address.get("house_number") or "").strip() or None,
+            house=house,
             latitude=latitude,
             longitude=longitude,
             address_source="nominatim",
             address_external_id=external_id,
+            precision=precision,
         )
 
 
@@ -387,6 +432,7 @@ class PhotonGeocodingProvider(GeocodingProvider):
                 longitude=longitude,
                 address_source="photon",
                 address_external_id=f"{osm_type}/{osm_id}" if osm_type and osm_id else None,
+                precision="EXACT" if house else ("STREET" if street else ("SETTLEMENT" if settlement else "UNKNOWN")),
             ))
         return results
 

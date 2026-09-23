@@ -900,6 +900,8 @@ def _register_cli_commands(app: Flask) -> None:
             primary = next(iter(resolved.values()))
             item.latitude, item.longitude = primary
             item.coordinates_source = "geocoder"
+            if hasattr(item, "geocode_quality"):
+                item.geocode_quality = "EXACT" if any(char.isdigit() for char in (getattr(item, "house", None) or getattr(item, "address", "") or "")) else "STREET"
             updated += 1
             if build_points:
                 # Передаём только уже найденные координаты: sync не делает повторных
@@ -940,6 +942,18 @@ def _register_cli_commands(app: Flask) -> None:
         if not health["ok"]:
             raise click.ClickException(f"{health['code']}: {health['message']}")
         click.echo(f"OK: {health['provider']}; {health['distance_m']} м, {health['duration_s']} с.")
+
+    @app.cli.command("geo-import")
+    @click.option("--file", "path", required=True, type=click.Path(exists=True, dir_okay=False))
+    @click.option("--source", default="import")
+    def geo_import_command(path, source):
+        """Идемпотентно загрузить адресный NDJSON. Не выполняется при старте сайта."""
+        from app.core.address.directory_import import import_ndjson
+
+        stats = import_ndjson(path, source=source)
+        click.echo(
+            "created={created} updated={updated} skipped={skipped} errors={errors}".format(**stats)
+        )
 
     @app.cli.command("map-stats")
     def map_stats():

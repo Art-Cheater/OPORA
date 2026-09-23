@@ -15,6 +15,7 @@ from werkzeug.datastructures import FileStorage
 
 from app.core.audit_service import AuditService
 from app.core.exceptions import NotFoundError, ValidationError
+from app.core.geo.quality import quality_for
 from app.extensions import db
 from app.models.auth.position import Position
 from app.models.auth.user import User
@@ -274,7 +275,7 @@ class RequestService:
             payload.address_source = cls._normalize_text(payload.address_source) or "selected"
             payload.address_external_id = cls._normalize_text(payload.address_external_id)
             if not coordinate_override and (payload.latitude is None or payload.longitude is None):
-                latlng = cls._geocode_latlng(selected or submitted)
+                latlng = cls._geocode_latlng(selected or submitted, allow_coarse=False)
                 if latlng:
                     payload.latitude, payload.longitude = latlng
                     payload.coordinates_source = "geocoder"
@@ -336,14 +337,14 @@ class RequestService:
             if payload.latitude is not None and payload.longitude is not None:
                 payload.coordinates_source = "geocoder"
         if not coordinate_override and (payload.latitude is None or payload.longitude is None):
-            latlng = cls._geocode_latlng(payload.normalized_address or submitted)
+            latlng = cls._geocode_latlng(payload.normalized_address or submitted, allow_coarse=False)
             if latlng:
                 payload.latitude, payload.longitude = latlng
                 payload.coordinates_source = "geocoder"
 
     @staticmethod
     def _geocode_latlng(
-        query: str, *, timeout_seconds: float | None = None
+        query: str, *, timeout_seconds: float | None = None, allow_coarse: bool = True
     ) -> tuple[Decimal, Decimal] | None:
         """Короткий запрос к Nominatim. Без suggest() — он для домов ждёт до 2.5 с и блокирует воркер."""
         text = (query or "").strip()
@@ -373,9 +374,19 @@ class RequestService:
                 service.provider_timeout_seconds = old_timeout
         except Exception:
             return None
+        from app.modules.requests.address_format import split_address_query
+
+        _kind, _name, house = split_address_query(text)
+        wanted = (house or "").casefold().replace(" ", "")
         for hit in candidates:
             if hit.latitude is None or hit.longitude is None:
                 continue
+            if not allow_coarse:
+                got = (hit.house or "").casefold().replace(" ", "")
+                if not wanted or not got or wanted != got:
+                    continue
+                if getattr(hit, "precision", None) == "INTERPOLATED":
+                    continue
             try:
                 return Decimal(str(hit.latitude)), Decimal(str(hit.longitude))
             except Exception:
@@ -388,12 +399,13 @@ class RequestService:
         if req.latitude is not None and req.longitude is not None:
             return True
         query = (req.normalized_address or req.address or "").strip()
-        latlng = cls._geocode_latlng(query)
+        latlng = cls._geocode_latlng(query, allow_coarse=False)
         if not latlng:
             return False
         req.latitude, req.longitude = latlng
         if req.coordinates_source != "manual":
             req.coordinates_source = "geocoder"
+            req.geocode_quality = quality_for("geocoder", house=req.house)
         if persist:
             db.session.commit()
         return True
@@ -589,6 +601,10 @@ class RequestService:
             latitude=payload.latitude,
             longitude=payload.longitude,
             coordinates_source=(None if payload.coordinates_source == "cleared" else payload.coordinates_source) or ("geocoder" if payload.latitude is not None and payload.longitude is not None else None),
+            geocode_quality=quality_for(
+                (None if payload.coordinates_source == "cleared" else payload.coordinates_source) or ("geocoder" if payload.latitude is not None and payload.longitude is not None else None),
+                house=payload.house,
+            ),
             phone=cls._normalize_text(payload.phone),
             applicant_name=(payload.applicant_name or "—").strip(),
             has_barrier=bool(payload.has_barrier),
@@ -672,6 +688,7 @@ class RequestService:
         req.latitude = payload.latitude
         req.longitude = payload.longitude
         req.coordinates_source = (None if payload.coordinates_source == "cleared" else payload.coordinates_source) or ("geocoder" if payload.latitude is not None and payload.longitude is not None else None)
+        req.geocode_quality = quality_for(req.coordinates_source, house=payload.house)
         req.phone = cls._normalize_text(payload.phone)
         req.applicant_name = (payload.applicant_name or "—").strip()
         req.has_barrier = bool(payload.has_barrier)

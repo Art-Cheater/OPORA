@@ -20,14 +20,27 @@ window.OporaManualCoordinatePicker = (() => {
       return;
     }
     const modal = document.createElement("div"); modal.className = "modal fade"; modal.tabIndex = -1;
-    modal.innerHTML = `<div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Укажите точку на карте</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button></div><div class="modal-body"><div class="opora-coordinate-map" data-point-map></div><p class="small text-muted mt-2 mb-0">Нажмите на карту, чтобы поставить точку.</p></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button><button type="button" class="btn btn-primary" data-save-point disabled>Сохранить точку</button></div></div></div>`;
+    modal.innerHTML = `<div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Укажите точку на карте</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button></div><div class="modal-body"><div class="opora-coordinate-map" data-point-map></div><p class="small text-muted mt-2 mb-1" data-reverse-status>Нажмите на карту, чтобы поставить точку.</p><button type="button" class="btn btn-sm btn-outline-secondary d-none" data-use-address>Подставить найденный адрес</button></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button><button type="button" class="btn btn-primary" data-save-point disabled>Сохранить точку</button></div></div></div>`;
     document.body.append(modal); const instance = new window.bootstrap.Modal(modal); let map, marker, selected;
     modal.addEventListener("shown.bs.modal", () => {
       try {
         const lat = Number(f.lat.value), lng = Number(f.lng.value), initial = Number.isFinite(lat) && Number.isFinite(lng) ? [lng, lat] : KIROV;
         map = new window.maplibregl.Map({ container: modal.querySelector("[data-point-map]"), style: styleUrl(), center: initial, zoom: Number.isFinite(lat) ? 16 : 12 });
         map.addControl(new window.maplibregl.NavigationControl(), "top-left");
-        const place = (coords) => { selected = coords; if (marker) marker.setLngLat(coords); else marker = new window.maplibregl.Marker({ color: "#198754" }).setLngLat(coords).addTo(map); modal.querySelector("[data-save-point]").disabled = false; };
+        const place = (coords) => {
+          selected = coords;
+          if (marker) marker.setLngLat(coords); else marker = new window.maplibregl.Marker({ color: "#198754" }).setLngLat(coords).addTo(map);
+          modal.querySelector("[data-save-point]").disabled = false;
+          const note = modal.querySelector("[data-reverse-status]");
+          const useAddress = modal.querySelector("[data-use-address]");
+          if (note) note.textContent = "Ищем адрес точки…";
+          window.OporaMapKit?.geocoder?.reverse(coords[1], coords[0]).then((body) => {
+            const suggestion = body.suggestion;
+            if (!suggestion?.normalized_address) { if (note) note.textContent = "Адрес для точки не найден. Координаты всё равно можно сохранить."; return; }
+            if (note) note.textContent = `Найден адрес: ${suggestion.normalized_address}. Точка сохранится как ручная.`;
+            if (useAddress) { useAddress.classList.remove("d-none"); useAddress.onclick = () => { const address = form.querySelector("[name='address']"); if (address) address.value = suggestion.normalized_address; }; }
+          }).catch(() => { if (note) note.textContent = "Адрес по точке не найден. Координаты можно сохранить вручную."; });
+        };
         map.on("click", (event) => place([event.lngLat.lng, event.lngLat.lat])); if (Number.isFinite(lat) && Number.isFinite(lng)) place(initial);
         map.once("load", () => map?.resize());
       } catch (error) {

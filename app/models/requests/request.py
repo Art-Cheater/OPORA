@@ -68,6 +68,7 @@ class Request(BaseModel):
     latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
     coordinates_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    geocode_quality: Mapped[str | None] = mapped_column(String(16), nullable=True)
     completion_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completion_by_id: Mapped[uuid.UUID | None] = mapped_column(
         GUID(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True

@@ -52,6 +52,7 @@ from app.models.requests.request_journal_counter import RequestJournalCounter
 from app.models.requests.request_material import RequestMaterial
 from app.models.requests.request_status import RequestStatus
 from app.models.maps.work_map_point import WorkMapPoint
+from app.models.geo.directory import GeoEntrance, GeoGeocodeCache, GeoHouse, GeoSettlement, GeoStreet
 from app.models.waybills.waybill import Waybill
 from app.models.waybills.waybill_history import WaybillHistory
 from app.models.waybills.waybill_member import WaybillMember
@@ -90,6 +91,11 @@ __all__ = [
     "RequestHistory",
     "RequestMaterial",
     "WorkMapPoint",
+    "GeoSettlement",
+    "GeoStreet",
+    "GeoHouse",
+    "GeoEntrance",
+    "GeoGeocodeCache",
     "Defect",
     "DefectCategory",
     "DefectHistory",

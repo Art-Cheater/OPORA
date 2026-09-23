@@ -67,12 +67,14 @@
   function createMap(node, options) {
     let map = null, lib = null, observer = null, popup = null, popupIds = [], items = [], byId = new Map();
     let loaded = false, destroyed = false, fitted = false, selectedId = null, hoverId = null, labels = options.labels !== false;
-    const loader = window.OporaMap?.ensureAssets;
+    const loader = window.OporaMapKit?.ensureAssets || window.OporaMap?.ensureAssets;
     const ready = (loader ? loader() : Promise.reject(new Error('MapLibre loader unavailable'))).then((maplibre) => {
       if (destroyed) return null;
       lib = maplibre;
-      const style = document.querySelector('meta[name="opora-maplibre-style"]')?.content || DEFAULT_STYLE;
-      map = new lib.Map({container: node, style, center: KIROV, zoom: 11, attributionControl: true});
+      const cfg = window.OporaMapKit?.readConfig?.() || {};
+      const style = cfg.styleUrl || document.querySelector('meta[name="opora-maplibre-style"]')?.content || DEFAULT_STYLE;
+      const center = cfg.center || KIROV;
+      map = new lib.Map({container: node, style, center, zoom: options.zoom || 11, attributionControl: true, minZoom: cfg.minZoom, maxZoom: cfg.maxZoom});
       map.addControl(new lib.NavigationControl({showCompass: false}), 'top-left');
       map.on('error', (event) => { if (event?.error && !loaded) options.onError?.('Не удалось загрузить подложку карты.'); });
       if (window.ResizeObserver) { observer = new ResizeObserver(() => map?.resize()); observer.observe(node); }
