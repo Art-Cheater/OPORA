@@ -37,7 +37,7 @@ OpenFreeMap на данных OpenMapTiles. На крупном масштабе
 | Заявки | `GET /requests/map.json` | MapLibre |
 | Дефекты | `GET /defects/map.json` | MapLibre |
 | Заявки по деревням | тот же журнал, фильтр деревенского журнала | MapLibre |
-| План мастера | `GET /work-orders/map.json`, маршрут `POST /work-orders/route.json` | MapLibre |
+| План мастера | `GET /work-orders/map.json`: заявки, дефекты, деревни, работы рядом | MapLibre, только точки |
 | Объекты | `GET /objects/map.json` | MapLibre |
 | Договоры | `GET /agreements/map.json` | MapLibre |
 | IRZ | `GET /irz/map-summary`, киоск `/irz/map-display` | MapLibre, квадратные маркеры |
@@ -60,3 +60,48 @@ IRZ остаётся со своими квадратами по состоян�
 Новая сущность подключается так: хранит `latitude`/`longitude`, отдаёт GeoJSON
 через свой route с проверкой права и рисуется через `OporaMapKit`, а не
 отдельной библиотекой.
+
+## Статус
+
+```text
+flask geo-status
+flask security-status
+```
+
+`geo-status` печатает число населённых пунктов, улиц и домов, число подъездов
+и время последнего импорта, провайдер геокодера, адрес стиля карты и флаги
+проверки входа. Секрет Turnstile не печатается. Строка маршрутов всегда
+`Disabled / not in current scope`: отсутствие Valhalla — не ошибка.
+
+Проверка входа в production включается только переменными окружения, не кодом:
+
+```text
+CAPTCHA_ENABLED=1
+TURNSTILE_SITE_KEY=...
+TURNSTILE_SECRET_KEY=...
+```
+
+В Cloudflare Turnstile в список hostname добавляется домен, с которого
+открывается сайт: `opora.zheleznogame.ru`. Реальные ключи в git не кладутся.
+Если скрипт виджета не загрузился, форма входа показывает ошибку и не
+отправляется. Таймаут проверки на сервере тоже не пропускает вход.
+
+## Порядок на сервере
+
+Деплой не скачивает ГАР и OSM и не импортирует адреса.
+
+```text
+cd /opt/opora
+sudo bash scripts/deploy.sh
+docker compose exec -T web flask db current
+docker compose exec -T web flask geo-status
+docker compose exec -T web flask geo-import-gar --archive /path/to/gar.zip --region 43
+docker compose exec -T web flask geo-import-entrances --pbf /path/to/kirov.osm.pbf
+docker compose exec -T web flask geo-status
+```
+
+`flask db current` после этой поставки должен показать ревизию
+`063_geo_gar_entrances` (она идёт следом за `062_geo_directory`).
+Дальше открыть карты заявок, дефектов, деревень, объектов, плана и IRZ.
+Координаты на картах появляются после геокодинга или ручной точки: сам архив
+ГАР их не привозит.

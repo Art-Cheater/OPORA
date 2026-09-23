@@ -140,7 +140,7 @@ class AddressSuggestionService:
         safe_limit = min(max(int(limit or self.default_limit), 1), 20)
         _kind, _name, house = split_address_query(cleaned)
         directory_hits = self._directory_hits(cleaned, safe_limit)
-        if directory_hits and (not house or any(item.latitude is not None for item in directory_hits)):
+        if directory_hits:
             return directory_hits[:safe_limit]
         catalog = [
             replace(item.with_query(cleaned), other_settlement=False)
@@ -215,9 +215,12 @@ class AddressSuggestionService:
     @staticmethod
     def _directory_hits(query: str, limit: int) -> list[AddressSuggestion]:
         try:
-            from app.core.address.directory import search_directory
+            from app.core.address.directory import search_directory, search_settlements
 
-            return search_directory(query, limit=limit)
+            hits = search_directory(query, limit=limit)
+            if hits:
+                return hits
+            return search_settlements(query, limit=limit)
         except Exception:
             return []
 

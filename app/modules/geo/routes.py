@@ -195,6 +195,8 @@ def entrances():
                     "settlement": row.settlement_name or "",
                     "street": row.street_name or "",
                     "house": row.house_number or "",
+                    "address_text": row.address_text or "",
+                    "entrance_type": row.entrance_type or "",
                     "lat": float(row.latitude),
                     "lon": float(row.longitude),
                 },

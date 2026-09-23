@@ -1,8 +1,17 @@
 # Маршруты
 
-Фронтенд не знает, какой движок считает дорогу. Мастер нажимает
-«Построить маршрут», сервер вызывает `RoutingService`, карта рисует линию
-только если пришла дорожная геометрия. Прямая между точками не подставляется.
+Routing postponed. Recommended architecture researched separately.
+В текущем этапе Valhalla, OSRM, GraphHopper, VROOM и OR-Tools не
+разворачиваются. Обычный `scripts/deploy.sh` от них не зависит.
+Кнопки «Построить маршрут» в интерфейсе нет: план мастера показывает
+точки выбранных работ и работы рядом, без линии маршрута.
+`flask geo-status` пишет `Disabled / not in current scope`.
+Код `RoutingService` и `docker-compose.routing.yml` оставлены как задел
+и ничего не запускают сами.
+
+Фронтенд не знает, какой движок считает дорогу. Когда маршруты вернут
+в задачу, сервер вызывает `RoutingService`, карта рисует линию только если
+пришла дорожная геометрия. Прямая между точками не подставляется.
 
 `POST /api/routes` принимает точки `{lat, lon, id}`, режим `driving` и флаг
 `optimize`. Ответ: `geometry`, `distance_m`, `duration_s`, `ordered_stops`,
@@ -77,8 +86,8 @@ ROUTING_BASE_URL=http://valhalla:8002
 docker compose -f docker-compose.yml -f docker-compose.routing.yml up -d
 ```
 
-`scripts/deploy.sh` этот override сам не поднимает. Пока строки пустые,
-кнопка маршрута честно сообщает, что дорожный сервис не настроен.
+`scripts/deploy.sh` этот override сам не поднимает и не скачивает PBF.
+Пока маршруты отложены, эти строки не задают и контейнер не запускают.
 
 Свой Photon для геокодера области — ещё около 1–2 ГБ RAM и выгрузка OSM
 той же области. Это отдельное решение, публичный Nominatim остаётся рабочим

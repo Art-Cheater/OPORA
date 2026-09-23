@@ -90,8 +90,8 @@ def test_check_routing_prints_clear_message_when_url_is_missing(app):
         app.config.update(ROUTING_PROVIDER="valhalla", VALHALLA_BASE_URL="", ROUTING_BASE_URL="")
         result = app.test_cli_runner().invoke(args=["check-routing"])
     assert result.exit_code == 0
-    assert "Routing: disabled" in result.output
-    assert "ROUTING_PROVIDER and ROUTING_BASE_URL" in result.output
+    assert "Disabled / not in current scope" in result.output
+    assert "Traceback" not in result.output
 
 
 def test_check_routing_hides_connection_traceback(app, monkeypatch):

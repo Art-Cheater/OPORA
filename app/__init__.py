@@ -933,8 +933,8 @@ def _register_cli_commands(app: Flask) -> None:
         provider = app.config.get("ROUTING_PROVIDER") or "не выбран"
         base = RoutingService._base_url()
         if not RoutingService.is_configured():
-            click.echo("Routing: disabled")
-            click.echo("Set ROUTING_PROVIDER and ROUTING_BASE_URL. OPORA works without routing.")
+            click.echo("ROUTING")
+            click.echo("Disabled / not in current scope")
             return
         health = RoutingService.check_health()
         click.echo(f"Провайдер: {provider}")
@@ -954,6 +954,48 @@ def _register_cli_commands(app: Flask) -> None:
         click.echo(
             "created={created} updated={updated} skipped={skipped} errors={errors}".format(**stats)
         )
+
+    @app.cli.command("geo-import-gar")
+    @click.option("--archive", required=True, type=click.Path(exists=True, dir_okay=False))
+    @click.option("--region", default="43", show_default=True)
+    def geo_import_gar_command(archive, region):
+        """Загрузить один регион из официального zip ГАР/ФИАС. Не запускается при деплое."""
+        from app.core.address.gar_import import import_gar_archive
+
+        stats = import_gar_archive(archive, region=region, progress=click.echo)
+        click.echo(
+            "settlements={settlements} streets={streets} houses={houses} "
+            "created={created} updated={updated} skipped={skipped}".format(**stats)
+        )
+
+    @app.cli.command("geo-import-entrances")
+    @click.option("--pbf", "pbf_path", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--file", "file_path", type=click.Path(exists=True, dir_okay=False))
+    def geo_import_entrances_command(pbf_path, file_path):
+        """Загрузить подъезды из OSM PBF, OSM XML или Overpass JSON. Не запускается при деплое."""
+        from app.core.address.entrance_import import import_entrances
+
+        chosen = pbf_path or file_path
+        if not chosen:
+            raise click.UsageError("Укажите --pbf или --file.")
+        stats = import_entrances(chosen, progress=click.echo)
+        click.echo("created={created} updated={updated} skipped={skipped}".format(**stats))
+
+    @app.cli.command("geo-status")
+    def geo_status_command():
+        """Сводка справочника, подъездов, геокодера, карты и проверки входа."""
+        from app.core.geo.status import geo_status_lines
+
+        for line in geo_status_lines(app.config):
+            click.echo(line)
+
+    @app.cli.command("security-status")
+    def security_status_command():
+        """Показывает, включена ли проверка входа, не печатая ключи."""
+        from app.core.geo.status import security_status_lines
+
+        for line in security_status_lines(app.config):
+            click.echo(line)
 
     @app.cli.command("map-stats")
     def map_stats():

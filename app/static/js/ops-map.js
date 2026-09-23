@@ -56,11 +56,13 @@ window.OporaMap = (() => {
       if (!feature) return;
       const props = feature.properties || {};
       const esc = kit().escapeHtml;
-      const house = [props.street, props.house].filter(Boolean).join(", д. ");
+      const house = props.address_text || [props.street, props.house].filter(Boolean).join(", д. ");
       const entrance = props.ref ? esc(props.ref) : "номер не указан";
+      const kind = props.entrance_type && props.entrance_type !== "yes" ? `<div>Вход: ${esc(props.entrance_type)}</div>` : "";
+      const named = props.name ? `<div>${esc(props.name)}</div>` : "";
       new lib.Popup({ maxWidth: "260px" })
         .setLngLat(feature.geometry.coordinates)
-        .setHTML(`<div><div>Дом: ${esc(house || "—")}</div><div>Подъезд: ${entrance}</div><div>${esc(props.lat)}, ${esc(props.lon)}</div></div>`)
+        .setHTML(`<div><div>Дом: ${esc(house || "—")}</div><div>Подъезд: ${entrance}</div>${kind}${named}<div>${esc(props.lat)}, ${esc(props.lon)}</div></div>`)
         .addTo(map);
     });
     ["opora-clusters", "opora-points", "opora-entrances"].forEach((layer) => {

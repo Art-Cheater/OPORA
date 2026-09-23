@@ -123,6 +123,8 @@ def test_work_orders_access(client):
     assert 'id="opsMap"' in html
     assert "js/ops-map.js" in html
     assert "vendor/leaflet/leaflet.js" not in html
+    assert "Построить маршрут" not in html
+    assert 'id="workRouteBtn"' not in html
     assert "js/ops-map.js" in html
     assert "/work-orders/plans/new" not in html
     _login(client, "executor@test.local")
