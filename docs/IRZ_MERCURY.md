@@ -37,16 +37,17 @@ not a database boolean. Disconnect or sidecar restart makes the ATM21 offline.
 ## Heartbeat
 
 `B5 BC BD BE BF` is classified as `ATM21_HEARTBEAT` and never passed to the
-Mercury parser. The operator journal hides it by default; engineering RAW and
-the Heartbeat filter retain it. Its exact protocol meaning is unknown. Legacy
+Mercury parser, including heartbeats that arrive between fragments of one
+Mercury answer. It is hidden from the operator journal. Its exact protocol
+meaning is unknown. Legacy
 echo is configurable with `ATM21_HEARTBEAT_ACK=1` and disabled by default.
 
 ## Mercury universal address 0
 
 The installed meter physically answers read-only Mercury V2 commands at
 network address `0`. Address zero is therefore the operator default. It is not
-approved for write/control commands. Engineering mode explains that `0` is the
-universal/read address and `1..N` is a specific meter address.
+approved for write/control commands: `0` is the universal/read address and
+`1..N` is a specific meter address.
 
 ## Physically verified commands
 
@@ -63,13 +64,18 @@ date_of_manufacture = 2019-02-10
 
 ```text
 TX 00 08 02 F7 C1
-RX 00 00 01 00 01 B4
+RX 00 00 01 00 01 B4        (observed, 6 bytes)
+RX 00 00 01 00 01 B4 00     (full frame, reconstructed)
 voltage = 1
-current = 0
+current = 1 (expected)
 ```
 
-These are the unmodified `mercury-base 1.6` parser values. The suspicious
-`current=0` is deliberately not rescaled or hidden without protocol evidence.
+The request is physically verified. The observed `current=0` was an artefact:
+the old transport accepted the shortest CRC-valid prefix, and `00 00 01 00`
+happens to have CRC `01 B4`. By §4.4.4 the answer carries four binary bytes
+(Кн, Кт, most significant byte first), so the full frame is 7 bytes. The
+transport now waits for the expected length; the ratios need a fresh physical
+capture.
 
 ### Firmware
 
@@ -79,32 +85,59 @@ RX 00 02 03 05 61 17
 firmware_version = 2.3.5
 ```
 
-The additional (`08 04`) and main (`08 1D`) timeout multipliers are implemented
-by the library and included in polling, but still require physical verification
-on this meter.
+The additional (`08 04`) and main (`08 1D`) timeout multipliers are available
+as manual commands and are not part of the regular poll.
 
 ## Transport, timeout, and correlation
 
 `ATM21SessionTransport` supplies `mercury-base` with the already accepted
 ATM21 socket. A per-session lock permits one Mercury command at a time. The
-default command timeout is five seconds; a complete poll is bounded by the web
-request timeout. Timeout, disconnect, CRC failure, wrong address, and incomplete
-response clear pending state so a later command can proceed.
+default command timeout is five seconds. Timeout, disconnect, CRC failure,
+wrong address, and incomplete response clear pending state so a later command
+can proceed.
 
-Responses must have the expected address, a minimum CRC frame length, and valid
-CRC. Mercury V2 responses do not echo the request opcode, so command correlation
-is provided by the one-pending-command rule rather than a fictitious echoed
-command field.
+Every command declares its response length. A response is complete when it has
+the expected address and exactly `address + data + CRC` bytes with a valid CRC,
+or when it is a 4-byte status frame. Mercury V2 responses do not echo the
+request opcode, so command correlation is provided by the one-pending-command
+rule rather than a fictitious echoed command field.
 
-## Operator and RAW modes
+When the meter answers `05` (channel not open), the manager opens access
+level 1 (`01 01 <password>`, read-only) and repeats the command once. The
+password comes from `MERCURY_LEVEL1_PASSWORD` (factory default `111111`) and is
+masked as `2A` bytes in every TX log.
+
+## Monitoring and diagnostics
 
 The operator page shows ATM21 connectivity separately from the last successful
 Mercury response, persists the last serial/date, firmware, ratios and poll time,
 and groups TX/RX/result as one logical operation. Heartbeats and duplicate raw
 transport events are hidden by default.
 
-Engineering mode retains manual HEX, Protocol Lab, full heartbeat traffic,
-internal command IDs, CSV export, and network address diagnostics.
+The user page exposes monitoring only. Low-level RAW, manual HEX and protocol
+diagnostics remain backend-only and are not mixed into the operator workflow.
+
+## Ten-minute production poll
+
+The `irz-poller` sidecar gives every enabled IMEI a fixed offset inside the
+600-second window (600 devices means one start per second). A device is due
+once its current slot has started and it has not been polled since. Due devices
+are polled by a thread pool (`IRZ_POLL_WORKERS`); modem-sniffer still
+serializes transactions inside one ATM21. The database session is released
+while waiting for the gateway. Browsers never trigger periodic polling.
+
+Manual refresh calls the same `MercurySessionManager.poll()` path. One poll
+creates one normalized `IRZMeterSnapshot` with quality `GOOD`, `PARTIAL`,
+`STALE`, `INVALID`, `CRC_ERROR` or `UNSUPPORTED`. The meter keeps a merged
+current state: successful commands update their fields; failed commands keep
+the previous values marked `STALE` with their capture time. After two
+consecutive timeouts the remaining commands are skipped.
+
+The default poll includes identity, Кн/Кт, U/I/P/Q/S/cos phi, frequency,
+phase angles, energy A+/A-/R+/R- (total and T1–T4), meter time with drift
+against server time (`IRZ_METER_TIMEZONE`, no correction), and the status word
+with E-01…E-48 decoding. Event journals and energy archives are read only on
+request (`POST /irz/api/devices/<imei>/events`, `/energy-archive`).
 
 ## Known mercury-base 1.6 limitations
 
@@ -112,9 +145,20 @@ internal command IDs, CSV export, and network address diagnostics.
   `0x0100`, so it is disabled.
 - `get_info` sends `08 12 00`, but its parser is a TODO returning
   `model=unknown` and an empty feature list; it is disabled.
-- Voltage, current, power, frequency, cos phi, energy, tariffs, event journal,
-  and meter time are not implemented for V2 by this dependency. No speculative
-  production commands are exposed.
+- `get_transformation_ratios` parses Кн/Кт as decimal strings, which is wrong
+  for binary values; the project parser is used instead.
+- Voltage, current, power, frequency, cos phi, angles, energy, meter time,
+  status word, journals and archives are implemented in the project-local
+  `app/modem_gateway/mercury230.py`; site-packages are unchanged. Load
+  profiles are not implemented yet.
+
+## Official sources
+
+- Incotex, «Описание системы команд приборов учета Меркурий», version 06.2024,
+  pages 43-74 and appendix A:
+  https://www.incotexcom.ru/files/em/docs/merkuriy-sistema-komand-ver-1-ot-2024-08-30.pdf
+- Mercury 230 operating manual АВЛГ.411152.021 РЭ:
+  https://doc.incotexcom.ru/hardware/230/
 
 ## How to add a read command
 
