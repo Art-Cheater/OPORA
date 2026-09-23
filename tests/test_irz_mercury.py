@@ -5,7 +5,7 @@ from modbus_crc import add_crc
 
 from app.extensions import db
 from app.models.irz import IRZOperationLog
-from app.models.irz import IRZDevice, IRZMeter
+from app.models.irz import IRZDevice, IRZMeter, IRZMeterSnapshot
 from app.modem_gateway.mercury import MercuryGatewayError, MercurySessionManager
 from app.modules.irz import service
 from app.modules.irz.commands import COMMANDS, normalize_result
@@ -130,6 +130,25 @@ def test_irz_and_discovered_meter_can_be_renamed(app, admin_client):
     assert response.status_code == 200
     assert response.get_json()["display_name"] == "Главный ввод"
     assert response.get_json()["model_source"] == "MANUAL"
+
+
+def test_poll_creates_one_logical_snapshot_for_discovered_meter(app, monkeypatch):
+    with app.app_context():
+        device = IRZDevice(imei="123456789012345", name="ATM21", model="ATM21", enabled=True, network_address=0)
+        db.session.add(device); db.session.flush()
+        meter = IRZMeter(irz_device_id=device.id, serial_number="36790160")
+        db.session.add(meter); db.session.commit()
+        monkeypatch.setattr(service, "_gateway_request", lambda *args, **kwargs: {
+            "success": True, "partial": False,
+            "results": {"firmware_version": {"data": "2.3.5", "duration_ms": 10, "tx_raw": "00", "rx_raw": "00"}},
+            "errors": [],
+        })
+        service.poll_device(device, user_id=None)
+        snapshots = list(db.session.scalars(db.select(IRZMeterSnapshot)))
+        assert len(snapshots) == 1
+        assert snapshots[0].meter_id == meter.id
+        assert snapshots[0].quality == "GOOD"
+        assert snapshots[0].values == {"firmware_version": "2.3.5"}
 
 
 def test_manual_mercury_crud_is_not_exposed(admin_client):

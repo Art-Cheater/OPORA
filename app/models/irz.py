@@ -74,6 +74,22 @@ class IRZMeter(BaseModel):
     latest_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
 
 
+class IRZMeterSnapshot(BaseModel):
+    """One logical poll result; JSON avoids a row per individual measurement."""
+    __tablename__ = "irz_meter_snapshots"
+    __table_args__ = (
+        Index("ix_irz_meter_snapshots_meter_captured", "meter_id", "captured_at"),
+        Index("ix_irz_meter_snapshots_captured", "captured_at"),
+    )
+
+    meter_id: Mapped[Any] = mapped_column(GUID(), ForeignKey("irz_meters.id", ondelete="CASCADE"), nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    values: Mapped[dict[str, Any]] = mapped_column(JSONType, nullable=False)
+    quality: Mapped[str] = mapped_column(String(20), nullable=False)
+    quality_flags: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
+    poll_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
 class IRZOperationLog(BaseModel):
     __tablename__ = "irz_operation_logs"
     __table_args__ = (

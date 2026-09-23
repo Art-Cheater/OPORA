@@ -11,7 +11,7 @@ from urllib.request import Request, urlopen
 from flask import current_app
 
 from app.extensions import db
-from app.models.irz import IRZDevice, IRZExchangeLog, IRZExperiment, IRZMeter, IRZOperationLog
+from app.models.irz import IRZDevice, IRZExchangeLog, IRZExperiment, IRZMeter, IRZMeterSnapshot, IRZOperationLog
 from app.modules.irz.commands import command_list, get_command
 
 
@@ -456,6 +456,14 @@ def poll_device(device: IRZDevice, *, user_id) -> dict:
     if meter:
         meter.last_poll_at = device.last_polled_at
         meter.last_poll_status = "PARTIAL" if result.get("partial") else ("SUCCESS" if result.get("success") else "ERROR")
+        values = {key: item.get("data") for key, item in result.get("results", {}).items()}
+        db.session.add(IRZMeterSnapshot(
+            meter_id=meter.id, captured_at=device.last_polled_at, values=values,
+            quality="PARTIAL" if result.get("partial") else ("GOOD" if result.get("success") else "INVALID"),
+            quality_flags={"errors": result.get("errors", [])} if result.get("errors") else None,
+            poll_duration_ms=sum(item.get("duration_ms") or 0 for item in result.get("results", {}).values()),
+            created_by=user_id, updated_by=user_id,
+        ))
     db.session.commit()
     return result
 

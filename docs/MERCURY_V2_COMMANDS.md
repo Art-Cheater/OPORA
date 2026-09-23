@@ -21,7 +21,15 @@
 | `additional_timeout_multiplier` | `08 04` | Дополнительный timeout | parser `mercury-base 1.6` | — | supported list библиотеки | yes | no | no | mercury-base 1.6 |
 | `main_timeout_multiplier` | `08 1D` | Основной timeout | parser `mercury-base 1.6` | — | supported list библиотеки | yes | no | no | mercury-base 1.6 |
 | `passport` | `08 0100` | Паспорт | реализация библиотеки формирует недопустимый байт | — | — | no | no | no | mercury-base 1.6 limitation |
-| `device_info` | `08 12` | Вариант исполнения | parser библиотеки содержит TODO | — | 234/236 documented | no | no | no | official protocol §6 |
+| `device_info` | `08 12` | Возможности исполнения | 6/8 байт feature flags; полная маркировка не угадывается | — | Mercury family | yes | yes | no | official protocol §6.21 |
+| `voltage_phases` | `08 14 11` | U A/B/C | reordered unsigned 24-bit / 100 | V | Mercury 230 | yes | yes | no | official protocol §6.9–6.16 |
+| `current_phases` | `08 14 21` | I A/B/C | reordered unsigned 24-bit / 1000 | A | Mercury 230 | yes | yes | no | official protocol §6.9–6.16 |
+| `active_power` | `08 14 00` | P total/A/B/C | direction flag, reordered 24-bit / 100 | W | Mercury 230 | yes | yes | no | official protocol §6.11–6.14 |
+| `reactive_power` | `08 14 04` | Q total/A/B/C | direction flag, reordered 24-bit / 100 | var | Mercury 230 | yes | yes | no | official protocol §6.11–6.14 |
+| `apparent_power` | `08 14 08` | S total/A/B/C | reordered 24-bit / 100 | VA | Mercury 230 | yes | yes | no | official protocol §6.11–6.14 |
+| `power_factor` | `08 14 30` | cosφ total/A/B/C | direction flags, reordered 24-bit / 1000 | 1 | Mercury 230 | yes | yes | no | official protocol §6.17 |
+| `frequency` | `08 11 40` | Частота сети | reordered unsigned 24-bit / 100 | Hz | Mercury 230 | yes | yes | no | official protocol §6.18 |
+| `phase_angles` | `08 11 51/52/53` | Углы AB/AC/BC | reordered unsigned 24-bit / 100 | deg | Mercury 230 | yes | yes | no | official protocol §6.9–6.16 |
 
 Статусы в API command registry представлены флагами `fixture_tested` и
 `physical_verified`. Все команды whitelist имеют `safe_read_only=true`.

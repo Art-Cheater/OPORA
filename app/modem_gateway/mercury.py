@@ -85,7 +85,17 @@ class MercurySessionManager:
         meter = V2MeterAdapter(address, transport, self._module_loader())
         started = time.monotonic()
         try:
-            result = getattr(meter.driver.commands, command.mercury_command)(meter)
+            if command.mercury_command.startswith("ext:"):
+                from app.modem_gateway.mercury230 import execute
+                result = execute(meter, command.id)
+            else:
+                result = getattr(meter.driver.commands, command.mercury_command)(meter)
+        except ValueError as exc:
+            error = MercuryGatewayError("UNKNOWN_RESPONSE_FORMAT", "Ответ Mercury имеет неизвестный формат", 502)
+            error.duration_ms = round((time.monotonic() - started) * 1000)
+            error.tx_raw = transport.tx_raw.hex(" ").upper()
+            error.rx_raw = transport.rx_raw.hex(" ").upper()
+            raise error from exc
         except MercuryGatewayError as exc:
             exc.duration_ms = round((time.monotonic() - started) * 1000)
             exc.tx_raw = exc.tx_raw or transport.tx_raw.hex(" ").upper()
