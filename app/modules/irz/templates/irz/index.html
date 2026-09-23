@@ -1,30 +1,42 @@
 {% extends "layouts/app.html" %}
 {% from "macros/ui.html" import page_header %}
 {% block title %}IRZ · Мониторинг — {{ app_name }}{% endblock %}
-{% block page_header %}{{ page_header("IRZ · Мониторинг", "ATM21 и счётчики Mercury", "activity") }}{% endblock %}
+{% block page_header %}
+{% call page_header("IRZ · Мониторинг", "Карта и список ATM21 со счётчиками Mercury", "broadcast") %}
+{% if can_map_display %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('irz.map_display') }}" target="_blank" rel="noopener"><i class="bi bi-arrows-fullscreen"></i> Карта на весь экран</a>{% endif %}
+{% endcall %}
+{% endblock %}
 {% block content %}
-<div class="irz-monitor" data-irz-monitor data-list-url="{{ url_for('irz.mercury_devices') }}" data-detail-template="{{ url_for('irz.monitoring_device_detail', imei='IMEI') }}" data-poll-template="{{ url_for('irz.monitoring_poll', imei='IMEI') }}" data-history-template="{{ url_for('irz.monitoring_snapshots', imei='IMEI') }}" data-events-template="{{ url_for('irz.monitoring_events', imei='IMEI') }}" data-can-admin="{{ '1' if can_admin else '0' }}">
-  <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
-    <div class="d-flex align-items-center gap-2"><label class="small text-muted" for="irzDevice">Объект</label><select id="irzDevice" class="form-select form-select-sm irz-device-select" data-device-select></select></div>
-    <div class="d-flex align-items-center gap-2"><span class="badge text-bg-secondary" data-device-status>OFFLINE</span><span class="small text-muted" data-last-update>Нет данных</span><button class="btn btn-sm btn-primary" data-poll><i class="bi bi-arrow-repeat"></i> Обновить показания</button></div>
+<div class="irz-directory" data-irz-directory
+     data-api-url="{{ url_for('irz.directory_list') }}"
+     data-detail-template="{{ url_for('irz.device_page', device_ref='DEVICE_ID') }}"
+     data-can-edit="{{ '1' if can_edit else '0' }}">
+  <div class="irz-filters mb-2" role="group" aria-label="Фильтр устройств">
+    <button type="button" class="irz-filter active" data-filter="all">Все <b data-count="total">0</b></button>
+    <button type="button" class="irz-filter" data-filter="online"><span class="irz-square irz-square--ok"></span>Online <b data-count="online">0</b></button>
+    <button type="button" class="irz-filter" data-filter="offline"><span class="irz-square irz-square--offline"></span>Offline <b data-count="offline">0</b></button>
+    <button type="button" class="irz-filter" data-filter="problem" title="Online, но Mercury не отвечает, данные устарели или опрос частичный"><span class="irz-square irz-square--warning"></span>Проблемы <b data-count="problems">0</b></button>
+    <button type="button" class="irz-filter" data-filter="no_coordinates"><i class="bi bi-geo"></i>Без координат <b data-count="no_coordinates">0</b></button>
   </div>
-  <div class="alert alert-secondary py-2" data-message>Загрузка устройств…</div>
-  <div class="row g-3 irz-dashboard">
-    <section class="col-xl-3"><div class="card h-100"><div class="card-header fw-semibold">Местоположение</div><div class="card-body">
-      <div class="irz-map-placeholder mb-3" data-map><i class="bi bi-geo-alt"></i><span>Координаты не заданы</span></div>
-      <form data-profile-form><label class="form-label small">Название объекта</label><input class="form-control form-control-sm mb-2" data-name {% if not can_admin %}disabled{% endif %}><label class="form-label small">Адрес</label><textarea class="form-control form-control-sm mb-2" rows="2" data-address {% if not can_admin %}disabled{% endif %}></textarea><div class="row g-2"><div class="col-6"><label class="form-label small">Широта</label><input class="form-control form-control-sm" type="number" step="any" data-lat {% if not can_admin %}disabled{% endif %}></div><div class="col-6"><label class="form-label small">Долгота</label><input class="form-control form-control-sm" type="number" step="any" data-lon {% if not can_admin %}disabled{% endif %}></div></div>{% if can_admin %}<button class="btn btn-sm btn-outline-primary mt-3 w-100">Сохранить карточку</button>{% endif %}</form>
-    </div></div></section>
-    <section class="col-xl-6"><div class="card h-100"><div class="card-header d-flex justify-content-between align-items-center gap-2"><strong>Показания Mercury</strong><span class="small text-muted ms-auto" data-values-time></span><span class="badge text-bg-secondary" data-quality>НЕТ ДАННЫХ</span></div><div class="card-body">
-      <div class="table-responsive"><table class="table table-sm align-middle irz-phase-table"><thead><tr><th>Фаза</th><th>U, В</th><th>I, А</th><th>P, кВт</th><th>Q, квар</th><th>S, кВА</th><th>cos φ</th></tr></thead><tbody data-phase-values></tbody></table></div>
-      <div class="row g-2 mt-1" data-summary-values></div>
-      <div class="table-responsive mt-3"><table class="table table-sm align-middle irz-phase-table mb-0"><thead><tr><th>Энергия от сброса</th><th>A+, кВт·ч</th><th>A−, кВт·ч</th><th>R+, квар·ч</th><th>R−, квар·ч</th></tr></thead><tbody data-energy-values></tbody></table></div>
-      <div class="mt-3"><div class="small text-muted mb-1">Самодиагностика</div><div class="small" data-diagnostics>Нет данных самодиагностики</div></div>
-      <div class="small text-muted mt-3">При ошибке опроса сохраняются последние значения; устаревшие отмечены цветом, время — во всплывающей подсказке. Значения показаны без учёта Кн/Кт.</div>
-    </div></div></section>
-    <section class="col-xl-3"><div class="card mb-3"><div class="card-header fw-semibold">Счётчик</div><div class="card-body small" data-meter-details>Не обнаружен</div></div><div class="card"><div class="card-header fw-semibold">ATM21 / контроллер</div><div class="card-body small" data-atm-details>Устройство не выбрано</div></div></section>
+  <div class="irz-note" data-message hidden></div>
+  <div class="irz-directory__body">
+    <div class="irz-directory__map">
+      <div class="irz-map-canvas" data-map-canvas></div>
+      <div class="irz-map-empty" data-map-empty hidden>Нет объектов с координатами для выбранного фильтра</div>
+      <div class="irz-legend">
+        <span><span class="irz-square irz-square--ok"></span>Online</span>
+        <span><span class="irz-square irz-square--warning"></span>Проблема</span>
+        <span><span class="irz-square irz-square--offline"></span>Offline</span>
+      </div>
+    </div>
+    <aside class="irz-directory__list">
+      <input type="search" class="form-control form-control-sm" data-search autocomplete="off"
+             placeholder="Название, IMEI, № счётчика или адрес" aria-label="Поиск устройства">
+      <div class="small text-muted my-1" data-shown>Загрузка…</div>
+      <div class="irz-list" data-list role="list"></div>
+    </aside>
   </div>
-  <div class="row g-3 mt-0"><section class="col-xl-8"><div class="card"><div class="card-header fw-semibold">История опросов</div><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Время</th><th>Источник</th><th>Статус</th><th>Качество</th><th>Длительность</th></tr></thead><tbody data-history><tr><td colspan="5" class="text-center text-muted py-4">История пока пуста</td></tr></tbody></table></div></div></section><section class="col-xl-4"><div class="card"><div class="card-header d-flex justify-content-between align-items-center"><strong>События</strong><button class="btn btn-sm btn-outline-secondary" data-read-events><i class="bi bi-journal-text"></i> Прочитать журналы</button></div><div class="card-body small" data-events>Журналы читаются по запросу</div></div></section></div>
 </div>
 {% endblock %}
 {% block extra_css %}{{ super() }}<link href="{{ static_url('css/irz.css') }}" rel="stylesheet">{% endblock %}
-{% block extra_js %}{{ super() }}<script src="{{ static_url('js/irz.js') }}"></script>{% endblock %}
+{% block extra_js %}{{ super() }}<script src="{{ static_url('js/irz-map.js') }}"></script>{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+{% block title %}{{ title }} — IRZ · Мониторинг — {{ app_name }}{% endblock %}
+{% block page_header %}
+<nav aria-label="breadcrumb" class="mb-2">
+  <ol class="breadcrumb mb-0 small">
+    <li class="breadcrumb-item">IRZ</li>
+    <li class="breadcrumb-item"><a href="{{ url_for('irz.index') }}">Мониторинг</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ title }}</li>
+  </ol>
+</nav>
+{% call page_header(title, "ATM21 · IMEI " ~ device.imei, "broadcast") %}
+<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('irz.index') }}"><i class="bi bi-arrow-left"></i> Назад к карте</a>
+{% endcall %}
+{% endblock %}
+{% block content %}
+<div class="irz-monitor" data-irz-monitor data-imei="{{ device.imei }}"
+     data-detail-url="{{ url_for('irz.monitoring_device_detail', imei=device.imei) }}"
+     data-poll-url="{{ url_for('irz.monitoring_poll', imei=device.imei) }}"
+     data-history-url="{{ url_for('irz.monitoring_snapshots', imei=device.imei) }}"
+     data-events-url="{{ url_for('irz.monitoring_events', imei=device.imei) }}"
+     data-map-url="{{ url_for('irz.index', device=device.id) }}"
+     data-can-edit="{{ '1' if can_edit else '0' }}" data-can-poll="{{ '1' if can_poll else '0' }}">
+  <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+    <div class="d-flex align-items-center gap-2"><span class="badge text-bg-secondary" data-device-status>OFFLINE</span><span class="small text-muted" data-last-update>Нет данных</span></div>
+    {% if can_poll %}<button class="btn btn-sm btn-primary" data-poll><i class="bi bi-arrow-repeat"></i> Обновить показания</button>{% endif %}
+  </div>
+  <div class="irz-note" data-message>Загрузка данных устройства…</div>
+  <div class="row g-3 irz-dashboard">
+    <section class="col-xl-3"><div class="card h-100"><div class="card-header fw-semibold">Местоположение</div><div class="card-body">
+      <div class="irz-map-placeholder mb-3" data-map><i class="bi bi-geo-alt"></i><span>Координаты не заданы</span></div>
+      {% if can_edit %}
+      <form data-profile-form novalidate>
+        <label class="form-label small" for="irzName">Название объекта</label>
+        <input class="form-control form-control-sm mb-2" id="irzName" maxlength="160" placeholder="Название не задано" data-name>
+        <label class="form-label small" for="irzAddress">Адрес</label>
+        <textarea class="form-control form-control-sm mb-2" id="irzAddress" rows="2" maxlength="500" data-address></textarea>
+        <div class="row g-2">
+          <div class="col-6"><label class="form-label small" for="irzLat">Широта</label><input class="form-control form-control-sm" id="irzLat" inputmode="decimal" placeholder="−90…90" data-lat></div>
+          <div class="col-6"><label class="form-label small" for="irzLon">Долгота</label><input class="form-control form-control-sm" id="irzLon" inputmode="decimal" placeholder="−180…180" data-lon></div>
+        </div>
+        <div class="form-text">Пустые широта и долгота — объект не показывается на карте.</div>
+        <button class="btn btn-sm btn-outline-primary mt-3 w-100">Сохранить карточку</button>
+      </form>
+      {% else %}
+      <div class="small" data-profile-view></div>
+      {% endif %}
+    </div></div></section>
+    <section class="col-xl-6"><div class="card h-100"><div class="card-header d-flex justify-content-between align-items-center gap-2"><strong>Показания Mercury</strong><span class="small text-muted ms-auto" data-values-time></span><span class="badge text-bg-secondary" data-quality>НЕТ ДАННЫХ</span></div><div class="card-body">
+      <div class="table-responsive"><table class="table table-sm align-middle irz-phase-table"><thead><tr><th>Фаза</th><th>U, В</th><th>I, А</th><th>P, кВт</th><th>Q, квар</th><th>S, кВА</th><th>cos φ</th></tr></thead><tbody data-phase-values></tbody></table></div>
+      <div class="row g-2 mt-1" data-summary-values></div>
+      <div class="table-responsive mt-3"><table class="table table-sm align-middle irz-phase-table mb-0"><thead><tr><th>Энергия от сброса</th><th>A+, кВт·ч</th><th>A−, кВт·ч</th><th>R+, квар·ч</th><th>R−, квар·ч</th></tr></thead><tbody data-energy-values></tbody></table></div>
+      <div class="mt-3"><div class="small text-muted mb-1">Самодиагностика</div><div class="small" data-diagnostics>Нет данных самодиагностики</div></div>
+      <div class="small text-muted mt-3">При ошибке опроса сохраняются последние значения; устаревшие отмечены цветом, время — во всплывающей подсказке. Значения показаны без учёта Кн/Кт.</div>
+    </div></div></section>
+    <section class="col-xl-3"><div class="card mb-3"><div class="card-header fw-semibold">Счётчик</div><div class="card-body small" data-meter-details>Не определён</div></div><div class="card"><div class="card-header fw-semibold">ATM21 / контроллер</div><div class="card-body small" data-atm-details>Загрузка…</div></div></section>
+  </div>
+  <div class="row g-3 mt-0"><section class="col-xl-8"><div class="card"><div class="card-header fw-semibold">История опросов</div><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Время</th><th>Источник</th><th>Статус</th><th>Качество</th><th>Длительность</th></tr></thead><tbody data-history><tr><td colspan="5" class="text-center text-muted py-4">История пока пуста</td></tr></tbody></table></div></div></section><section class="col-xl-4"><div class="card"><div class="card-header d-flex justify-content-between align-items-center"><strong>События</strong>{% if can_poll %}<button class="btn btn-sm btn-outline-secondary" data-read-events><i class="bi bi-journal-text"></i> Прочитать журналы</button>{% endif %}</div><div class="card-body small" data-events>Журналы читаются по запросу</div></div></section></div>
+</div>
+{% endblock %}
+{% block extra_css %}{{ super() }}<link href="{{ static_url('css/irz.css') }}" rel="stylesheet">{% endblock %}
+{% block extra_js %}{{ super() }}<script src="{{ static_url('js/irz.js') }}"></script>{% endblock %}

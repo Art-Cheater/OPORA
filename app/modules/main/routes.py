@@ -1,8 +1,9 @@
 """Маршруты главного модуля."""
 
-from flask import current_app, render_template, send_from_directory
+from flask import current_app, redirect, render_template, send_from_directory, url_for
 from flask_login import current_user, login_required
 
+from app.models.auth.constants import PERM_IRZ_MAP_DISPLAY
 from app.modules.main.blueprint import main_bp
 from app.modules.main.dashboard_service import DashboardService
 from app.release import RELEASE
@@ -12,6 +13,8 @@ from app.release import RELEASE
 @login_required
 def index():
     """Главная страница — рабочий дашборд."""
+    if set(current_user.permission_codes_list) == {PERM_IRZ_MAP_DISPLAY}:
+        return redirect(url_for("irz.map_display"))
     tz_name = current_app.config.get("EIS_SYNC_TIMEZONE") or "Europe/Moscow"
     dashboard = DashboardService.build(current_user, tz_name=tz_name)
     return render_template(

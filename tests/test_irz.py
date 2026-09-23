@@ -9,7 +9,7 @@ from app.extensions import db
 from app.models.auth.associations import RolePermission
 from app.models.auth.permission import Permission
 from app.models.auth.role import Role
-from app.models.irz import IRZExchangeLog, IRZExperiment
+from app.models.irz import IRZDevice, IRZExchangeLog, IRZExperiment
 from app.modules.auth.services import AuthService
 from app.modules.irz import service
 from app.modem_gateway.sniffer import create_servers
@@ -19,23 +19,30 @@ def _login(client, email, password="pass12345"):
     return client.post("/auth/login", data={"email": email, "password": password}, follow_redirects=True)
 
 
-def test_irz_page_opens_and_appears_in_menu(admin_client):
+def test_irz_page_opens_and_appears_in_menu(app, admin_client):
     response = admin_client.get("/irz")
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "IRZ · Мониторинг" in html
     assert 'href="/irz"' in html
-    assert "Обновить показания" in html
-    assert "Местоположение" in html
-    assert "История опросов" in html
-    assert "Инженерный режим" not in html
-    assert "PROTOCOL LAB" not in html
-    assert "HEX COMMAND" not in html
-    assert "/static/js/irz.js?v=" in html
-    assert "/static/js/irz-legacy.js?v=" not in html
+    assert "data-irz-directory" in html and "data-map-canvas" in html
+    assert "Без координат" in html and "Проблемы" in html
+    assert "/static/js/irz-map.js?v=" in html
+    for forbidden in ("Инженерный режим", "PROTOCOL LAB", "HEX COMMAND", "/static/js/irz-legacy.js?v="):
+        assert forbidden not in html
     partial = admin_client.get("/irz", headers={"X-Opora-Nav": "1"})
     assert partial.status_code == 200
     assert "appShell" not in partial.get_data(as_text=True)
+
+    with app.app_context():
+        device = IRZDevice(imei="123456789012345", name="ATM21 123456789012345", model="ATM21", enabled=True)
+        db.session.add(device)
+        db.session.commit()
+        device_id = str(device.id)
+    detail = admin_client.get(f"/irz/{device_id}").get_data(as_text=True)
+    for text in ("Обновить показания", "Местоположение", "История опросов", "Назад к карте", "/static/js/irz.js?v="):
+        assert text in detail
+    assert "Инженерный режим" not in detail and "PROTOCOL LAB" not in detail
     script = Path("app/static/js/irz.js").read_text(encoding="utf-8")
     assert "DOMContentLoaded" in script
     assert "opora:navigated" in script

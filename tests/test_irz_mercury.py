@@ -435,7 +435,7 @@ def test_events_and_energy_archive_endpoints_are_read_only_and_validated(app, ad
 
 def test_frontend_contract_uses_canonical_keys_and_hides_only_missing_values():
     script = Path("app/static/js/irz.js").read_text(encoding="utf-8")
-    template = Path("app/modules/irz/templates/irz/index.html").read_text(encoding="utf-8")
+    template = Path("app/modules/irz/templates/irz/device.html").read_text(encoding="utf-8")
     values = service.normalize_poll_values(full_poll())
     for prefix in service.PHASE_PREFIXES.values():
         assert f"['{prefix}'," in script

@@ -559,30 +559,42 @@ def rename_device(device: IRZDevice, value: object, *, user_id) -> None:
     db.session.commit()
 
 
+def _coordinate(raw: object, key: str, low: float, high: float) -> float | None:
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    if isinstance(raw, bool):
+        raise ValueError(f"INVALID_{key.upper()}")
+    try:
+        value = float(str(raw).strip().replace(",", "."))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"INVALID_{key.upper()}") from exc
+    if not low <= value <= high:
+        raise ValueError(f"INVALID_{key.upper()}")
+    return value
+
+
 def update_device_profile(device: IRZDevice, payload: dict, *, user_id) -> None:
+    """Name, address and coordinates; an empty name restores the IMEI-based default."""
+    changes: dict = {}
     if "name" in payload:
-        name = str(payload.get("name") or "").strip()
-        if not 1 <= len(name) <= 160:
+        name = str(payload.get("name") or "").strip() or f"ATM21 {device.imei}"
+        if len(name) > 160:
             raise ValueError("INVALID_NAME")
-        device.name = name
+        changes["name"] = name
     for key, low, high in (("latitude", -90, 90), ("longitude", -180, 180)):
         if key in payload:
-            raw = payload.get(key)
-            if raw in (None, ""):
-                setattr(device, key, None)
-            else:
-                try:
-                    value = float(raw)
-                except (TypeError, ValueError) as exc:
-                    raise ValueError(f"INVALID_{key.upper()}") from exc
-                if not low <= value <= high:
-                    raise ValueError(f"INVALID_{key.upper()}")
-                setattr(device, key, value)
+            changes[key] = _coordinate(payload.get(key), key, low, high)
+    latitude = changes.get("latitude", device.latitude)
+    longitude = changes.get("longitude", device.longitude)
+    if (latitude is None) != (longitude is None):
+        raise ValueError("INCOMPLETE_COORDINATES")
     if "address_text" in payload:
         address = str(payload.get("address_text") or "").strip()
         if len(address) > 500:
             raise ValueError("INVALID_ADDRESS_TEXT")
-        device.address_text = address or None
+        changes["address_text"] = address or None
+    for key, value in changes.items():
+        setattr(device, key, value)
     device.updated_by = user_id
     db.session.commit()
 

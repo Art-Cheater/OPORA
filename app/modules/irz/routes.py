@@ -1,16 +1,17 @@
-"""IRZ Console page and browser-facing JSON API."""
+"""IRZ monitoring pages (map, device detail, wall display) and JSON API."""
 
 import csv
 import io
+from datetime import datetime, timezone
 
-from flask import Response, jsonify, render_template, request
+from flask import Response, abort, current_app, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.core.audit_service import AuditService
-from app.core.decorators import permission_required
+from app.core.decorators import any_permission_required, permission_required
 from app.extensions import db
 from app.models.irz import IRZMeter
-from app.modules.irz import service
+from app.modules.irz import directory, service
 from app.modules.irz.blueprint import irz_bp
 
 
@@ -20,10 +21,83 @@ from app.modules.irz.blueprint import irz_bp
 def index():
     return render_template(
         "irz/index.html",
-        can_send=current_user.has_permission("irz.send"),
-        can_control=current_user.has_permission("irz.control"),
-        can_admin=current_user.has_permission("irz.admin"),
+        can_edit=current_user.has_permission("irz.edit"),
+        can_map_display=current_user.has_permission("irz.map_display"),
     )
+
+
+@irz_bp.get("/map-display")
+@login_required
+@permission_required("irz.map_display")
+def map_display():
+    return render_template(
+        "irz/map_display.html",
+        can_open_detail=current_user.has_permission("irz.view"),
+        refresh_seconds=min(max(int(current_app.config.get("IRZ_MAP_DISPLAY_REFRESH_SECONDS", 20)), 15), 30),
+    )
+
+
+@irz_bp.get("/<device_ref>")
+@login_required
+@permission_required("irz.view")
+def device_page(device_ref):
+    try:
+        device = service.get_device_by_imei(device_ref) if device_ref.isdigit() else service.get_device(device_ref)
+    except (ValueError, LookupError):
+        abort(404)
+    if device_ref != str(device.id):
+        return redirect(url_for("irz.device_page", device_ref=str(device.id)))
+    return render_template(
+        "irz/device.html",
+        device=device,
+        title=directory.custom_name(device) or directory.default_name(device.imei),
+        can_edit=current_user.has_permission("irz.edit"),
+        can_poll=current_user.has_permission("irz.poll"),
+    )
+
+
+def _directory_payload():
+    live, gateway_ok = directory.live_sessions()
+    items = directory.build_directory(live, gateway_ok)
+    return items, {
+        "counters": directory.counters(items),
+        "gateway": "online" if gateway_ok else "unavailable",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "fresh_seconds": int(current_app.config.get("IRZ_DATA_FRESH_SECONDS", 900)),
+    }
+
+
+@irz_bp.get("/api/map")
+@login_required
+@any_permission_required("irz.view", "irz.map_display")
+def map_summary():
+    """Light marker payload for the map and the wall display; counters cover every device."""
+    items, meta = _directory_payload()
+    try:
+        selected = directory.filter_items(items, query=request.args.get("q", ""),
+                                          status=request.args.get("status", "all"), has_coordinates=True)
+    except ValueError as exc:
+        return _error_response(exc)
+    return jsonify({**meta, "items": selected})
+
+
+@irz_bp.get("/api/directory")
+@login_required
+@permission_required("irz.view")
+def directory_list():
+    items, meta = _directory_payload()
+    try:
+        selected = directory.filter_items(
+            items, query=request.args.get("q", ""), status=request.args.get("status", "all"),
+            has_coordinates=directory.parse_bool(request.args.get("has_coordinates")),
+        )
+    except ValueError as exc:
+        return _error_response(exc)
+    page_items, pagination = directory.paginate(
+        selected, request.args.get("page", 1, type=int),
+        request.args.get("per_page", directory.MAX_PER_PAGE, type=int),
+    )
+    return jsonify({**meta, "items": page_items, "pagination": pagination})
 
 
 @irz_bp.get("/api/devices")
@@ -210,7 +284,7 @@ def monitoring_device_detail(imei):
 
 @irz_bp.patch("/api/devices/<imei>")
 @login_required
-@permission_required("irz.admin")
+@permission_required("irz.edit")
 def monitoring_device_update(imei):
     try:
         device = service.get_device_by_imei(imei)
@@ -252,7 +326,7 @@ def monitoring_snapshots(imei):
 
 @irz_bp.post("/api/devices/<imei>/poll")
 @login_required
-@permission_required("irz.view")
+@permission_required("irz.poll")
 def monitoring_poll(imei):
     try:
         device = service.get_device_by_imei(imei)
@@ -264,7 +338,7 @@ def monitoring_poll(imei):
 
 @irz_bp.post("/api/devices/<imei>/events")
 @login_required
-@permission_required("irz.view")
+@permission_required("irz.poll")
 def monitoring_events(imei):
     try:
         device = service.get_device_by_imei(imei)
@@ -275,7 +349,7 @@ def monitoring_events(imei):
 
 @irz_bp.post("/api/devices/<imei>/energy-archive")
 @login_required
-@permission_required("irz.view")
+@permission_required("irz.poll")
 def monitoring_energy_archive(imei):
     try:
         device = service.get_device_by_imei(imei)
@@ -315,7 +389,7 @@ def mercury_device_update(device_id):
 
 @irz_bp.patch("/api/mercury/devices/<device_id>/identity")
 @login_required
-@permission_required("irz.admin")
+@permission_required("irz.edit")
 def mercury_device_identity(device_id):
     try:
         device = service.get_device(device_id)
@@ -350,7 +424,7 @@ def mercury_meter_identity(device_id):
 
 @irz_bp.post("/api/mercury/devices/<device_id>/test")
 @login_required
-@permission_required("irz.view")
+@permission_required("irz.poll")
 def mercury_test(device_id):
     try:
         device = service.get_device(device_id)
@@ -373,11 +447,11 @@ def mercury_commands(device_id):
 
 @irz_bp.post("/api/mercury/devices/<device_id>/commands/<command_id>")
 @login_required
-@permission_required("irz.view")
+@permission_required("irz.poll")
 def mercury_command(device_id, command_id):
     try:
         command = service.get_command(command_id)
-        required = "irz.control" if command.mode != "read" or command.dangerous else "irz.view"
+        required = "irz.control" if command.mode != "read" or command.dangerous else "irz.poll"
         if not current_user.has_permission(required):
             return jsonify({"success": False, "error_code": "PERMISSION_DENIED", "message": "Недостаточно прав"}), 403
         payload = request.get_json(silent=True) or {}
@@ -396,7 +470,7 @@ def mercury_command(device_id, command_id):
 
 @irz_bp.post("/api/mercury/devices/<device_id>/poll")
 @login_required
-@permission_required("irz.view")
+@permission_required("irz.poll")
 def mercury_poll(device_id):
     try:
         device = service.get_device(device_id)

@@ -1,0 +1,44 @@
+{% extends "layouts/base.html" %}
+{% block title %}IRZ · Состояние сети — {{ app_name }}{% endblock %}
+{% block body_class %}irz-display-body{% endblock %}
+{% block extra_css %}<link href="{{ static_url('css/irz.css') }}" rel="stylesheet">{% endblock %}
+{% block body %}
+<div class="irz-display" data-irz-display
+     data-api-url="{{ url_for('irz.map_summary') }}"
+     data-refresh-seconds="{{ refresh_seconds }}"
+     data-detail-template="{{ url_for('irz.device_page', device_ref='DEVICE_ID') if can_open_detail else '' }}">
+  <header class="irz-display__bar">
+    <h1 class="irz-display__title">IRZ · Состояние сети</h1>
+    <div class="irz-display__counts">
+      <span><span class="irz-square irz-square--ok"></span><b data-count="online">0</b> Online</span>
+      <span><span class="irz-square irz-square--offline"></span><b data-count="offline">0</b> Offline</span>
+      <span><span class="irz-square irz-square--warning"></span><b data-count="problems">0</b> проблемы</span>
+    </div>
+    <div class="irz-display__tools">
+      <label class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" data-labels-toggle> <span class="form-check-label">Подписи</span></label>
+      <form method="post" action="{{ url_for('auth.logout') }}" class="m-0">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="irz-display__logout" title="Выйти"><i class="bi bi-box-arrow-right"></i></button>
+      </form>
+    </div>
+  </header>
+  <main class="irz-display__map">
+    <div class="irz-map-canvas" data-map-canvas></div>
+    <div class="irz-display__alert" data-connection hidden></div>
+  </main>
+  <footer class="irz-display__bar irz-display__bar--footer">
+    <div class="irz-display__counts">
+      <span><span class="irz-square irz-square--ok"></span><b data-count="online">0</b> Online</span>
+      <span><span class="irz-square irz-square--offline"></span><b data-count="offline">0</b> Offline</span>
+      <span><span class="irz-square irz-square--warning"></span><b data-count="problems">0</b> проблемы</span>
+      <span class="irz-display__muted">Всего <b data-count="total">0</b> · без координат <b data-count="no_coordinates">0</b></span>
+    </div>
+    <div class="irz-display__muted">Обновлено <b data-updated>—</b></div>
+  </footer>
+</div>
+{% endblock %}
+{% block extra_js %}
+<meta name="opora-maplibre-style" content="{{ config.get('MAPLIBRE_STYLE_URL', '') }}">
+<script src="{{ static_url('js/ops-map.js') }}"></script>
+<script src="{{ static_url('js/irz-map.js') }}"></script>
+{% endblock %}
