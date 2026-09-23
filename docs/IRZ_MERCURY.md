@@ -117,6 +117,33 @@ transport events are hidden by default.
 The user page exposes monitoring only. Low-level RAW, manual HEX and protocol
 diagnostics remain backend-only and are not mixed into the operator workflow.
 
+## User pages and permissions
+
+- `/irz` — «IRZ · Мониторинг»: MapLibre map with square status markers and a
+  searchable device list (name, IMEI, meter serial, address). Devices without
+  coordinates stay in the list only.
+- `/irz/<uuid>` — device detail (IMEI URLs redirect to the UUID URL):
+  readings, poll history, location card.
+- `/irz/map-display` — read-only fullscreen map, see
+  [`IRZ_MAP_DISPLAY.md`](IRZ_MAP_DISPLAY.md).
+
+Marker colours: green — ATM21 online and the last poll is fresh and complete;
+yellow — online, but Mercury timed out, data is partial, stale or missing;
+red — ATM21 offline; grey — only when the gateway sidecar is unreachable.
+
+| Permission | Grants |
+|---|---|
+| `irz.view` | list, map, detail page, `GET /irz/api/map`, `GET /irz/api/directory` |
+| `irz.edit` | name, address and coordinates (`PATCH /irz/api/devices/<imei>`) |
+| `irz.poll` | manual poll, event journals, energy archive |
+| `irz.map_display` | fullscreen map and `GET /irz/api/map` only |
+| `irz.admin` | manual meter model (`PATCH /irz/api/mercury/devices/<id>/meter`) |
+| `irz.send`, `irz.control` | legacy engineering endpoints; write commands stay disabled |
+
+Newly introduced permissions are granted once on creation to roles that already
+had the matching older one (`irz.edit` ← `irz.admin`, `irz.poll` and
+`irz.map_display` ← `irz.view`); later changes in the roles UI are kept.
+
 ## Ten-minute production poll
 
 The `irz-poller` sidecar gives every enabled IMEI a fixed offset inside the
