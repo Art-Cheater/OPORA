@@ -19,6 +19,13 @@ git fetch origin
 git checkout main
 git reset --hard origin/main
 
+# reset replaced this file on disk, but bash keeps reading the old copy.
+# Restart once so the rest of the deploy runs the version just checked out.
+if [[ "${OPORA_DEPLOY_REEXEC:-0}" != "1" ]]; then
+  export OPORA_DEPLOY_REEXEC=1
+  exec bash "$ROOT/scripts/deploy.sh" "$@"
+fi
+
 if [[ ! -f "$ROOT/.env" ]]; then
   echo "Нет файла .env. Скопируйте .env.example и заполните секреты."
   exit 1

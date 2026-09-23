@@ -203,7 +203,9 @@ def _run_deploy(tmp_path, **env):
     fakebin = tmp_path / "fakebin"
     fakebin.mkdir()
     stubs = {"docker": FAKE_DOCKER, "sleep": "#!/usr/bin/env bash\nexit 0\n",
-             "git": '#!/usr/bin/env bash\necho "git $*" >> "$PWD/calls.log"\n[[ "$1" == rev-parse ]] && echo abc123\nexit 0\n',
+             "git": '#!/usr/bin/env bash\necho "git $*" >> "$PWD/calls.log"\n[[ "$1" == rev-parse ]] && echo abc123\n'
+                    '[[ "$1" == reset && -n "${FAKE_NEW_DEPLOY:-}" && ! -f "$PWD/.replaced" ]] && '
+                    '{ cp "$FAKE_NEW_DEPLOY" scripts/deploy.new; mv scripts/deploy.new scripts/deploy.sh; touch "$PWD/.replaced"; }\nexit 0\n',
              "python3": '#!/usr/bin/env bash\necho "python3 $*" >> "$PWD/calls.log"\nexit 0\n'}
     for name, content in stubs.items():
         path = fakebin / name
@@ -237,6 +239,18 @@ def test_deploy_builds_once_and_recreates_every_service_without_build(tmp_path):
     assert "COMMIT: abc123" in output
     assert "MIGRATION HEAD: 061_irz_monitoring_dashboard" in output
     assert "tcp-gateway row" in output and "modem-sniffer row" in output
+    assert sum(1 for line in calls if line == "git reset --hard origin/main") == 2
+
+
+def test_deploy_restarts_with_the_script_version_checked_out_by_git(tmp_path):
+    script = (ROOT / "scripts" / "deploy.sh").read_bytes().replace(b"\r\n", b"\n")
+    marker = 'echo "==> OPORA deploy: $ROOT"'.encode()
+    assert marker in script
+    (tmp_path / "new_deploy.sh").write_bytes(script.replace(marker, b'echo "==> NEW deploy version"'))
+    code, output, calls = _run_deploy(tmp_path, FAKE_NEW_DEPLOY="new_deploy.sh")
+    assert code == 0, output
+    assert "==> NEW deploy version" in output
+    assert len([line for line in calls if line.startswith("docker compose") and " build " in line]) == 1
 
 
 def test_deploy_stops_when_migrations_are_not_at_head(tmp_path):
