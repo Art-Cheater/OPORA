@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import BaseModel
@@ -50,6 +50,10 @@ class IRZDevice(BaseModel):
     last_firmware_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
     last_transformation_ratios: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
     last_mercury_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    address_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    poll_lock_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
 
 class IRZMeter(BaseModel):
@@ -88,6 +92,9 @@ class IRZMeterSnapshot(BaseModel):
     quality: Mapped[str] = mapped_column(String(20), nullable=False)
     quality_flags: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
     poll_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="MANUAL")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="SUCCESS")
+    extras: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
 
 
 class IRZOperationLog(BaseModel):

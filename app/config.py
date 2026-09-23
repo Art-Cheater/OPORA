@@ -163,6 +163,9 @@ class Config:
     IRZ_GATEWAY_URL = os.getenv("IRZ_GATEWAY_URL", "http://modem-sniffer:5010").strip()
     IRZ_GATEWAY_TIMEOUT_SECONDS = float(os.getenv("IRZ_GATEWAY_TIMEOUT_SECONDS", "2"))
     IRZ_POLL_MS = int(os.getenv("IRZ_POLL_MS", "1000"))
+    IRZ_AUTO_POLL_INTERVAL_SECONDS = int(os.getenv("IRZ_AUTO_POLL_INTERVAL_SECONDS", "600"))
+    IRZ_DATA_FRESH_SECONDS = int(os.getenv("IRZ_DATA_FRESH_SECONDS", "900"))
+    IRZ_TELEMETRY_RETENTION_DAYS = int(os.getenv("IRZ_TELEMETRY_RETENTION_DAYS", "0"))
 
     WTF_CSRF_ENABLED = True
     WTF_CSRF_TIME_LIMIT = 3600

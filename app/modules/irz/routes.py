@@ -9,6 +9,7 @@ from flask_login import current_user, login_required
 from app.core.audit_service import AuditService
 from app.core.decorators import permission_required
 from app.extensions import db
+from app.models.irz import IRZMeter
 from app.modules.irz import service
 from app.modules.irz.blueprint import irz_bp
 
@@ -185,6 +186,80 @@ def mercury_devices():
     except (service.GatewayUnavailable, service.GatewayResponseError) as exc:
         return _error_response(exc)
     return jsonify([service.serialize_device(item, online=item.imei in online, runtime=runtime.get(item.imei, {})) for item in items])
+
+
+def _monitoring_device(imei):
+    device = service.get_device_by_imei(imei)
+    try:
+        live = {item["imei"]: item for item in service.get_devices() if item.get("imei")}
+    except (service.GatewayUnavailable, service.GatewayResponseError):
+        live = {}
+    return device, live
+
+
+@irz_bp.get("/api/devices/<imei>")
+@login_required
+@permission_required("irz.view")
+def monitoring_device_detail(imei):
+    try:
+        device, live = _monitoring_device(imei)
+        return jsonify(service.serialize_device(device, online=imei in live, runtime=live.get(imei, {})))
+    except (ValueError, LookupError) as exc:
+        return _error_response(exc)
+
+
+@irz_bp.patch("/api/devices/<imei>")
+@login_required
+@permission_required("irz.admin")
+def monitoring_device_update(imei):
+    try:
+        device = service.get_device_by_imei(imei)
+        payload = request.get_json(silent=True) or {}
+        service.update_device_profile(device, payload, user_id=current_user.id)
+    except (ValueError, LookupError) as exc:
+        return _error_response(exc)
+    AuditService.log(user_id=current_user.id, action="update", entity_type="irz_device", entity_id=device.id,
+                     description=f"Обновлена карточка IRZ {imei}", new_values={key: payload.get(key) for key in ("name", "latitude", "longitude", "address_text") if key in payload})
+    db.session.commit()
+    return jsonify(service.serialize_device(device))
+
+
+@irz_bp.get("/api/devices/<imei>/latest")
+@login_required
+@permission_required("irz.view")
+def monitoring_latest(imei):
+    try:
+        device = service.get_device_by_imei(imei)
+        meter = db.session.scalar(db.select(IRZMeter).where(IRZMeter.active_filter(), IRZMeter.irz_device_id == device.id))
+        snapshot = service.latest_meter_snapshot(meter) if meter else None
+        return jsonify(service.serialize_snapshot(snapshot, include_delta=True) if snapshot else None)
+    except (ValueError, LookupError) as exc:
+        return _error_response(exc)
+
+
+@irz_bp.get("/api/devices/<imei>/snapshots")
+@login_required
+@permission_required("irz.view")
+def monitoring_snapshots(imei):
+    try:
+        device = service.get_device_by_imei(imei)
+        meter = db.session.scalar(db.select(IRZMeter).where(IRZMeter.active_filter(), IRZMeter.irz_device_id == device.id))
+        limit = request.args.get("limit", 30, type=int)
+        return jsonify([service.serialize_snapshot(item) for item in service.meter_snapshots(meter, limit=limit)] if meter else [])
+    except (ValueError, LookupError) as exc:
+        return _error_response(exc)
+
+
+@irz_bp.post("/api/devices/<imei>/poll")
+@login_required
+@permission_required("irz.view")
+def monitoring_poll(imei):
+    try:
+        device = service.get_device_by_imei(imei)
+        result = service.poll_device(device, user_id=current_user.id, source="MANUAL")
+        return jsonify(result)
+    except (ValueError, LookupError, service.GatewayUnavailable, service.GatewayResponseError) as exc:
+        return _error_response(exc)
 
 
 @irz_bp.get("/api/mercury/devices/<device_id>")

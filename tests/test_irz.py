@@ -23,23 +23,16 @@ def test_irz_page_opens_and_appears_in_menu(admin_client):
     response = admin_client.get("/irz")
     assert response.status_code == 200
     html = response.get_data(as_text=True)
-    assert "IRZ · Управление приборами" in html
+    assert "IRZ · Мониторинг" in html
     assert 'href="/irz"' in html
-    assert 'id="irzOperatorShell"' in html
-    assert "Операторская панель" in html
-    assert "Опросить счётчик" in html
-    assert "Инженерный режим" in html
-    assert "Нет подключённых IRZ" in html
-    assert "Добавить устройство" not in html
-    assert "Mercury network address" in html  # engineering tab only
-    assert "0 — universal/read address" in html
-    assert "Опросить счётчик" in html
-    assert '<option value="">Команды</option>' in html
-    assert '<option value="HEARTBEAT">Heartbeat</option>' in html
-    assert 'class="tab-pane fade show active" id="irzOperatorPane"' in html
-    assert 'class="tab-pane fade" id="irzLegacyPane"' in html
+    assert "Обновить показания" in html
+    assert "Местоположение" in html
+    assert "История опросов" in html
+    assert "Инженерный режим" not in html
+    assert "PROTOCOL LAB" not in html
+    assert "HEX COMMAND" not in html
     assert "/static/js/irz.js?v=" in html
-    assert "/static/js/irz-legacy.js?v=" in html
+    assert "/static/js/irz-legacy.js?v=" not in html
     partial = admin_client.get("/irz", headers={"X-Opora-Nav": "1"})
     assert partial.status_code == 200
     assert "appShell" not in partial.get_data(as_text=True)
@@ -47,18 +40,16 @@ def test_irz_page_opens_and_appears_in_menu(admin_client):
     assert "DOMContentLoaded" in script
     assert "opora:navigated" in script
     assert "opora:before-navigate" in script
-    assert "operationBusy" in script
-    assert "ATM21_HEARTBEAT" in script
+    assert "data-irz-monitor" in script
+    assert "latest" in script
 
 
-def test_irz_has_one_real_entrypoint_and_operator_assets(app):
+def test_irz_has_one_real_entrypoint_and_monitoring_assets(app):
     rules = [rule for rule in app.url_map.iter_rules() if rule.rule == "/irz"]
     assert [(rule.endpoint, sorted(rule.methods - {"HEAD", "OPTIONS"})) for rule in rules] == [("irz.index", ["GET"])]
     operator = Path("app/static/js/irz.js").read_text(encoding="utf-8")
-    legacy = Path("app/static/js/irz-legacy.js").read_text(encoding="utf-8")
-    assert "data-irz-operator-root" in operator
+    assert "data-irz-monitor" in operator
     assert "data-irz-legacy-root" not in operator
-    assert "data-irz-legacy-root" in legacy
 
 
 def test_irz_permissions_separate_view_and_send(app, client, monkeypatch):

@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -8,6 +9,7 @@ from app.models.irz import IRZOperationLog
 from app.models.irz import IRZDevice, IRZMeter, IRZMeterSnapshot
 from app.modem_gateway.mercury import MercuryGatewayError, MercurySessionManager
 from app.modules.irz import service
+from app.modules.irz.scheduler import schedule_offsets
 from app.modules.irz.commands import COMMANDS, normalize_result
 
 
@@ -153,6 +155,55 @@ def test_poll_creates_one_logical_snapshot_for_discovered_meter(app, monkeypatch
 
 def test_manual_mercury_crud_is_not_exposed(admin_client):
     assert admin_client.post("/irz/api/mercury/devices", json={}).status_code == 405
+
+
+def test_monitoring_profile_latest_history_stale_and_delta(app, admin_client):
+    with app.app_context():
+        device = IRZDevice(imei="123456789012345", name="ТП-1", model="ATM21", enabled=True)
+        db.session.add(device); db.session.flush()
+        meter = IRZMeter(irz_device_id=device.id, serial_number="36790160")
+        db.session.add(meter); db.session.flush()
+        old = datetime.now(timezone.utc) - timedelta(minutes=20)
+        db.session.add_all([
+            IRZMeterSnapshot(meter_id=meter.id, captured_at=old - timedelta(minutes=10), values={"energy": 100}, quality="GOOD", source="AUTO", status="SUCCESS"),
+            IRZMeterSnapshot(meter_id=meter.id, captured_at=old, values={"energy": 112.5}, quality="GOOD", source="MANUAL", status="SUCCESS"),
+        ])
+        db.session.commit()
+    response = admin_client.patch("/irz/api/devices/123456789012345", json={
+        "name": "Котельная", "latitude": 55.75, "longitude": 37.61, "address_text": "ул. Тестовая, 1"
+    })
+    assert response.status_code == 200
+    payload = admin_client.get("/irz/api/devices/123456789012345").get_json()
+    assert payload["name"] == "Котельная" and payload["location"]["latitude"] == 55.75
+    assert payload["stale"] is True and payload["latest"]["delta"]["energy"] == 12.5
+    history = admin_client.get("/irz/api/devices/123456789012345/snapshots?limit=20").get_json()
+    assert [item["source"] for item in history] == ["MANUAL", "AUTO"]
+
+
+def test_monitoring_rejects_invalid_coordinates(app, admin_client):
+    with app.app_context():
+        db.session.add(IRZDevice(imei="123456789012345", name="ATM21", model="ATM21", enabled=True)); db.session.commit()
+    assert admin_client.patch("/irz/api/devices/123456789012345", json={"latitude": 91}).status_code == 400
+
+
+def test_poll_lease_rejects_overlap_and_is_released_after_timeout(app, monkeypatch):
+    with app.app_context():
+        device = IRZDevice(imei="123456789012345", name="ATM21", model="ATM21", enabled=True,
+                           poll_lock_until=datetime.now(timezone.utc) + timedelta(seconds=30))
+        db.session.add(device); db.session.commit()
+        with pytest.raises(ValueError, match="POLL_IN_PROGRESS"):
+            service.poll_device(device, user_id=None)
+        device.poll_lock_until = None; db.session.commit()
+        monkeypatch.setattr(service, "_gateway_request", lambda *a, **k: (_ for _ in ()).throw(service.GatewayUnavailable("timeout")))
+        with pytest.raises(service.GatewayUnavailable):
+            service.poll_device(device, user_id=None)
+        db.session.refresh(device)
+        assert device.poll_lock_until is None
+
+
+def test_six_hundred_devices_are_staggered_across_interval():
+    offsets = schedule_offsets([f"{index:015d}" for index in range(600)], 600)
+    assert sorted(offsets.values()) == list(range(600))
 
 
 @pytest.mark.parametrize("result,partial", [

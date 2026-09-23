@@ -1,28 +1,12 @@
-.irz-console .card { border-color: var(--bs-border-color); }
-.irz-workspace > .nav-tabs .nav-link { font-weight: 600; }
-.irz-panel-sticky { position: sticky; top: 1rem; max-height: 48vh; overflow: auto; }
-.irz-empty-state { padding: 2.5rem 1.25rem; }
-.irz-empty-icon { display: block; font-size: 2.5rem; color: var(--bs-secondary-color); }
-.irz-device { cursor: pointer; border-left: 4px solid transparent; }
-.irz-device.active { border-left-color: var(--bs-primary); background: var(--bs-primary-bg-subtle); color: inherit; }
-.irz-status-dot { display: inline-block; width: .75rem; height: .75rem; border-radius: 50%; background: var(--bs-secondary); }
-[data-connection-details] { white-space: pre-line; }
-.irz-result { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .82rem; max-height: 12rem; overflow: auto; }
-.irz-result-value { font-size: .92rem; font-weight: 600; overflow-wrap: anywhere; }
-[data-command-list] .btn { padding: .55rem .7rem; min-height: 3.5rem; }
-[data-command-list] .btn small { font-size: .72rem; }
-.irz-operation-log { max-height: 30rem; overflow: auto; border-top: 1px solid var(--bs-border-color); }
-.irz-operation { padding: .75rem 1rem; border-bottom: 1px solid var(--bs-border-color); }
-.irz-operation pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .78rem; }
-.irz-operation-success { border-left: 4px solid var(--bs-success); }
-.irz-operation-error, .irz-operation-timeout { border-left: 4px solid var(--bs-danger); }
-.irz-device-dialog { width: min(760px, calc(100vw - 2rem)); padding: 0; border: 0; border-radius: .5rem; box-shadow: 0 1rem 3rem rgba(0,0,0,.35); }
-.irz-device-dialog::backdrop { background: rgba(0,0,0,.45); }
-.irz-devices-card, .irz-log-card { min-height: 30rem; }
-.irz-log-scroll { height: 27rem; overflow: auto; background: #111820; }
-.irz-log-table { --bs-table-bg: #111820; --bs-table-color: #d8e0e8; font-size: .78rem; white-space: nowrap; }
-.irz-log-table thead { position: sticky; top: 0; z-index: 1; }
-.irz-log-table td:nth-child(4) { white-space: normal; min-width: 18rem; overflow-wrap: anywhere; }
-.irz-dir-rx { color: #62d98b !important; font-weight: 700; }
-.irz-dir-tx { color: #70b7ff !important; font-weight: 700; }
-@media (max-width: 1199.98px) { .irz-panel-sticky { position: static; max-height: none; } }
+.irz-device-select { min-width: 18rem; }
+.irz-dashboard .card { border-color: var(--bs-border-color); }
+.irz-map-placeholder { min-height: 12rem; border: 1px dashed var(--bs-border-color); border-radius: .5rem; background: var(--bs-tertiary-bg); display: grid; place-content: center; text-align: center; color: var(--bs-secondary-color); }
+.irz-map-placeholder i { font-size: 2rem; }
+.irz-map-placeholder span { display: block; }
+.irz-phase-table th:not(:first-child), .irz-phase-table td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.irz-metric { border: 1px solid var(--bs-border-color); border-radius: .4rem; padding: .55rem .7rem; }
+.irz-metric strong { display: block; font-variant-numeric: tabular-nums; }
+.irz-detail-grid { display: grid; grid-template-columns: auto 1fr; gap: .3rem .75rem; }
+.irz-detail-grid dt { color: var(--bs-secondary-color); font-weight: 400; }
+.irz-detail-grid dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 767.98px) { .irz-device-select { min-width: 12rem; max-width: 60vw; } }

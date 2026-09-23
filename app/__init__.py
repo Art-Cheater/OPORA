@@ -643,6 +643,17 @@ def _register_cli_commands(app: Flask) -> None:
             f"Напоминания: месяц={result.get('month', 0)}, две недели={result.get('two_weeks', 0)}"
         )
 
+    @app.cli.command("irz-poll")
+    @click.option("--loop", "as_loop", is_flag=True, help="Опрос IRZ по расписанию")
+    def irz_poll(as_loop: bool):
+        """Staggered read-only polling of live ATM21/Mercury devices."""
+        from app.modules.irz.scheduler import run_loop, run_once
+
+        if as_loop:
+            run_loop()
+            return
+        click.echo(run_once())
+
     @app.cli.command("repair-request-districts")
     @click.option("--dry-run", is_flag=True, help="Только показать, без записи в БД")
     @click.option("--limit", default=0, show_default=True, help="Максимум заявок (0 = все)")

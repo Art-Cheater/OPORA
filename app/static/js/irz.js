@@ -1,212 +1,55 @@
 (function () {
-    function boot() {
-        const root = document.querySelector('[data-irz-operator-root]');
-        if (!root || root.dataset.bound === '1') return;
-        root.dataset.bound = '1';
-        const q = (selector) => root.querySelector(selector);
-        const devicesNode = q('[data-mercury-devices]');
-        const message = q('[data-operation-message]');
-        const metrics = q('[data-metrics]');
-        const commandsNode = q('[data-command-list]');
-        const logNode = q('[data-operation-log]');
-        const pollButton = q('[data-device-poll]');
-        const renameButton = q('[data-device-rename]');
-        const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
-        let devices = [], selected = null, commands = [], rawMode = false, stopped = false, timer = null, viewCleared = false, operationBusy = false;
-
-        const endpoint = (suffix = '') => root.dataset.deviceUrlTemplate.replace('DEVICE_ID', selected?.id || '') + suffix;
-        const stateClass = (state) => ({ ONLINE: 'success', BUSY: 'warning', ERROR: 'danger' }[state] || 'secondary');
-        const text = (value) => value === null || value === undefined || value === '' ? '—' : String(value);
-        const fmtTime = (value) => value ? new Date(value).toLocaleString('ru-RU') : '—';
-        const commandTitle = (id) => commands.find((item) => item.id === id)?.title || ({
-            serial_and_manufacture: 'Серийный номер и дата выпуска', transformation_ratios: 'Коэффициенты трансформации',
-            firmware_version: 'Версия ПО', additional_timeout_multiplier: 'Дополнительный множитель тайм-аута',
-            main_timeout_multiplier: 'Основной множитель тайм-аута',
-            CONNECT: 'Подключение ATM21', DISCONNECT: 'Отключение ATM21', ATM21_IDENTIFICATION: 'Идентификация ATM21',
-            ATM21_HEARTBEAT: 'Heartbeat ATM21', MERCURY_REQUEST: 'Запрос Mercury', MERCURY_RESPONSE: 'Ответ Mercury', UNKNOWN_RAW: 'Неизвестные данные'
-        }[id] || id);
-
-        async function api(url, options = {}) {
-            const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-CSRFToken': csrf, ...(options.headers || {}) }, ...options });
-            const payload = response.status === 204 ? null : await response.json();
-            if (!response.ok) throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
-            return payload;
-        }
-
-        function setMessage(value, kind = 'secondary') {
-            message.className = `alert alert-${kind} py-2`;
-            message.textContent = value;
-        }
-
-        function renderDevices() {
-            devicesNode.replaceChildren();
-            const emptyState = q('[data-device-empty]');
-            emptyState.hidden = devices.length > 0;
-            devicesNode.hidden = devices.length === 0;
-            if (!devices.length) {
-                return;
-            }
-            devices.forEach((device) => {
-                const button = document.createElement('button'); button.type = 'button';
-                button.className = `list-group-item list-group-item-action irz-device ${selected?.id === device.id ? 'active' : ''}`;
-                const title = document.createElement('div'); title.className = 'd-flex justify-content-between gap-2';
-                const name = document.createElement('strong'); name.textContent = device.name;
-                const badge = document.createElement('span'); badge.className = `badge text-bg-${stateClass(device.connection_state)}`; badge.textContent = device.connection_state;
-                title.append(name, badge);
-                const detail = document.createElement('div'); detail.className = 'small text-muted mt-1'; detail.textContent = `IMEI ${device.imei}`;
-                const polled = document.createElement('div'); polled.className = 'small text-muted'; polled.textContent = `${device.ip || 'IP неизвестен'} · CSQ ${text(device.csq)}`;
-                button.append(title, detail, polled); button.addEventListener('click', () => selectDevice(device.id)); devicesNode.append(button);
-            });
-        }
-
-        function renderSelected() {
-            const panel = q('[data-connection-panel]'); panel.hidden = !selected;
-            q('[data-device-title]').textContent = selected?.name || 'Выберите прибор';
-            const state = selected?.connection_state || 'OFFLINE';
-            const badge = q('[data-device-state]'); badge.textContent = state; badge.className = `badge text-bg-${stateClass(state)}`;
-            q('[data-status-dot]').className = `irz-status-dot bg-${stateClass(state)}`;
-            q('[data-device-summary]').textContent = selected ? `IMEI ${selected.imei} · ${selected.device_type || 'ATM21'} · ${selected.ip || 'IP неизвестен'} · CSQ ${text(selected.csq)}` : '—';
-            if (renameButton) renameButton.disabled = !selected;
-            const meterBox = q('[data-meter-identity]');
-            if (meterBox) {
-                meterBox.hidden = !selected?.meter;
-                q('[data-meter-title]').textContent = selected?.meter?.display_name || '';
-                q('[data-meter-summary]').textContent = selected?.meter ? `${selected.meter.model || 'Модель не определена'} · № ${selected.meter.serial_number}` : '';
-            }
-            if (selected) q('[data-connection-details]').textContent = `IP ${selected.ip || '—'}:${selected.port || '—'}\nПодключён: ${fmtTime(selected.connected_at)}\nПоследний пакет: ${fmtTime(selected.last_seen_at)}\nINT: ${text(selected.interfaces)}\nVER/REV/BLD: ${text(selected.firmware_version)}/${text(selected.firmware_revision)}/${text(selected.firmware_build)}`;
-            const atmOnline = Boolean(selected?.online);
-            q('[data-atm-status]').textContent = atmOnline ? 'ONLINE' : 'OFFLINE';
-            q('[data-atm-status-dot]').className = `irz-status-dot bg-${atmOnline ? 'success' : 'secondary'}`;
-            const mercuryOnline = Boolean(selected?.mercury_responding);
-            q('[data-mercury-status]').textContent = mercuryOnline ? 'отвечает' : 'нет ответа';
-            q('[data-mercury-status-dot]').className = `irz-status-dot bg-${mercuryOnline ? 'success' : 'danger'}`;
-            q('[data-mercury-last]').textContent = fmtTime(selected?.last_mercury_seen_at);
-            const busy = state === 'BUSY' || operationBusy; pollButton.disabled = !selected || busy || !selected.enabled;
-            pollButton.disabled = !selected || busy || !selected.online;
-            if (selected) renderPersistedMetrics();
-        }
-
-        async function selectDevice(id) {
-            selected = devices.find((item) => item.id === id) || null; viewCleared = false; renderDevices(); renderSelected();
-            if (!selected) return;
-            try {
-                [commands] = await Promise.all([api(endpoint('/commands')), refreshLog()]);
-                renderCommands();
-            } catch (error) { setMessage(error.message, 'danger'); }
-        }
-
-        function renderCommands() {
-            commandsNode.replaceChildren();
-            commands.forEach((command) => {
-                const col = document.createElement('div'); col.className = 'col-md-6 col-xxl-4';
-                const button = document.createElement('button'); button.type = 'button'; button.className = `btn w-100 text-start ${command.available ? 'btn-outline-primary' : 'btn-outline-secondary'}`; button.disabled = !command.available || !selected?.online || operationBusy || selected?.connection_state === 'BUSY';
-                const title = document.createElement('strong'); title.textContent = command.title;
-                const detail = document.createElement('small'); detail.className = 'd-block text-muted mt-1'; detail.textContent = command.available ? command.description : command.limitation;
-                button.append(title, detail); if (command.available) button.addEventListener('click', () => executeCommand(command)); col.append(button); commandsNode.append(col);
-            });
-        }
-
-        function renderMetrics(results) {
-            metrics.replaceChildren();
-            Object.entries(results || {}).forEach(([id, item]) => {
-                const spec = commands.find((value) => value.id === id);
-                const col = document.createElement('div'); col.className = 'col-md-6 col-xxl-4';
-                const card = document.createElement('div'); card.className = 'border rounded p-3 h-100';
-                const label = document.createElement('div'); label.className = 'small text-muted'; label.textContent = spec?.title || commandTitle(id);
-                const value = document.createElement('div'); value.className = 'irz-result-value mt-1'; value.textContent = formatResult(id, item.data);
-                card.append(label, value); col.append(card); metrics.append(col);
-            });
-            if (!metrics.children.length) metrics.textContent = 'Данные не получены.';
-        }
-
-        function formatResult(id, value) {
-            if (id === 'serial_and_manufacture' && value) return `Серийный № ${text(value.serial_number)} · дата выпуска ${value.date_of_manufacture ? new Date(`${value.date_of_manufacture}T00:00:00`).toLocaleDateString('ru-RU') : '—'}`;
-            if (id === 'transformation_ratios' && value) return `Напряжение: ${text(value.voltage)} · ток: ${text(value.current)}`;
-            return typeof value === 'object' ? JSON.stringify(value) : text(value);
-        }
-
-        function renderPersistedMetrics() {
-            const values = selected?.last_values || {};
-            const saved = {};
-            if (values.serial_number || values.date_of_manufacture) saved.serial_and_manufacture = { data: values };
-            if (values.firmware_version) saved.firmware_version = { data: values.firmware_version };
-            if (values.transformation_ratios) saved.transformation_ratios = { data: values.transformation_ratios };
-            renderMetrics(saved);
-        }
-
-        async function executeCommand(command) {
-            if (command.dangerous && !window.confirm(`Опасная команда: ${command.title}\nУстройство: ${selected.name}\nПродолжить?`)) return;
-            setBusy(true, `Выполняется: ${command.title}…`);
-            try {
-                const url = root.dataset.commandUrlTemplate.replace('DEVICE_ID', selected.id).replace('COMMAND_ID', command.id);
-                const result = await api(url, { method: 'POST', body: JSON.stringify({ confirm: command.dangerous === true }) });
-                renderMetrics({ [command.id]: result }); setMessage(`${command.title}: выполнено за ${result.duration_ms} мс`, 'success');
-            } catch (error) { setMessage(error.message, 'danger'); } finally { setBusy(false); await reload(); }
-        }
-
-        function setBusy(busy, label) {
-            operationBusy = busy;
-            if (selected && busy) selected.connection_state = 'BUSY';
-            pollButton.disabled = busy || !selected; if (label) setMessage(label, 'info'); renderSelected(); renderCommands();
-        }
-
-        async function refreshLog() {
-            if (!selected || viewCleared) { logNode.innerHTML = '<div class="p-4 text-muted text-center">Журнал пуст</div>'; return; }
-            const url = new URL(endpoint('/exchange-log'), window.location.origin); url.searchParams.set('limit', '100'); const filter = q('[data-log-filter]').value;
-            let entries = await api(url);
-            if (!filter) entries = entries.filter((entry) => !['RX', 'TX'].includes(entry.operation));
-            if (filter === 'ATM21') entries = entries.filter((entry) => /ATM21|CONNECT|DISCONNECT/.test(entry.command_id) && entry.command_id !== 'ATM21_HEARTBEAT');
-            if (filter === 'HEARTBEAT') entries = entries.filter((entry) => entry.command_id === 'ATM21_HEARTBEAT');
-            if (filter === 'ERROR') entries = entries.filter((entry) => entry.status === 'ERROR' || entry.status === 'TIMEOUT');
-            if (filter === 'RAW') rawMode = true;
-            logNode.replaceChildren();
-            entries.forEach((entry) => {
-                const row = document.createElement('div'); row.className = `irz-operation irz-operation-${entry.status.toLowerCase()}`;
-                const head = document.createElement('div'); head.className = 'd-flex justify-content-between gap-2';
-                const summary = document.createElement('strong'); summary.textContent = `${fmtTime(entry.created_at)} ${entry.status === 'SUCCESS' ? '✓' : '✕'} ${commandTitle(entry.command_id)}`;
-                const duration = document.createElement('span'); duration.className = 'text-muted'; duration.textContent = entry.duration_ms === null ? '' : `${entry.duration_ms} мс`; head.append(summary, duration);
-                const body = document.createElement('pre'); body.className = 'mb-0 mt-1';
-                const crc = entry.crc_ok === true ? 'OK' : (entry.crc_ok === false ? 'ERROR' : '—');
-                const rawText = `TX: ${text(entry.tx_raw)}\nRX: ${text(entry.rx_raw)}\nCRC: ${crc}\nDuration: ${entry.duration_ms === null ? '—' : `${entry.duration_ms} ms`}`;
-                body.textContent = rawMode || filter === 'RAW' ? rawText : (entry.error_message || formatResult(entry.command_id, entry.result));
-                row.append(head, body);
-                if (rawMode || filter === 'RAW') { const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'btn btn-sm btn-link px-0'; copy.textContent = 'Копировать RAW'; copy.addEventListener('click', () => navigator.clipboard?.writeText(rawText)); row.append(copy); }
-                logNode.append(row);
-            });
-            if (!entries.length) logNode.innerHTML = '<div class="p-4 text-muted text-center">Журнал пуст</div>';
-        }
-
-        async function reload() {
-            devices = await api(root.dataset.mercuryDevicesUrl); if (selected) selected = devices.find((item) => item.id === selected.id) || null;
-            renderDevices(); renderSelected(); if (selected) await refreshLog();
-        }
-
-        pollButton.addEventListener('click', async () => {
-            setBusy(true, 'Выполняется комплексный опрос…');
-            try { const result = await api(endpoint('/poll'), { method: 'POST', body: '{}' }); renderMetrics(result.results); setMessage(result.partial ? `Опрос завершён частично: ошибок ${result.errors.length}` : 'Опрос успешно завершён.', result.partial ? 'warning' : 'success'); }
-            catch (error) { setMessage(error.message, 'danger'); } finally { setBusy(false); await reload(); }
-        });
-        renameButton?.addEventListener('click', async () => {
-            const value = window.prompt('Название IRZ', selected?.name || '');
-            if (value === null) return;
-            try { await api(endpoint('/identity'), { method: 'PATCH', body: JSON.stringify({ name: value }) }); await reload(); }
-            catch (error) { setMessage(error.message, 'danger'); }
-        });
-        q('[data-meter-rename]')?.addEventListener('click', async () => {
-            if (!selected?.meter) return;
-            const customName = window.prompt('Название счётчика', selected.meter.custom_name || '');
-            if (customName === null) return;
-            const model = window.prompt('Точная модель Mercury (пусто, если неизвестна)', selected.meter.model || '');
-            if (model === null) return;
-            try { await api(endpoint('/meter'), { method: 'PATCH', body: JSON.stringify({ custom_name: customName, model }) }); await reload(); }
-            catch (error) { setMessage(error.message, 'danger'); }
-        });
-        q('[data-log-filter]').addEventListener('change', () => { viewCleared = false; refreshLog(); });
-        root.querySelectorAll('[data-log-mode]').forEach((button) => button.addEventListener('click', () => { rawMode = button.dataset.logMode === 'raw'; root.querySelectorAll('[data-log-mode]').forEach((item) => item.classList.toggle('active', item === button)); refreshLog(); }));
-        q('[data-clear-view]').addEventListener('click', () => { viewCleared = true; refreshLog(); });
-
-        async function tick() { try { await reload(); } catch (error) { devices = []; selected = null; renderDevices(); renderSelected(); setMessage(`Не удалось загрузить устройства: ${error.message}`, 'danger'); } finally { if (!stopped) timer = window.setTimeout(tick, Math.max(1000, Number(root.dataset.pollMs) || 1000)); } }
-        window.addEventListener('opora:before-navigate', () => { stopped = true; if (timer) window.clearTimeout(timer); }, { once: true }); tick();
+  function boot() {
+    const root = document.querySelector('[data-irz-monitor]');
+    if (!root || root.dataset.bound === '1') return;
+    root.dataset.bound = '1';
+    const q = (s) => root.querySelector(s), csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    let devices = [], selected = null, stopped = false, busy = false, timer;
+    const url = (template) => template.replace('IMEI', encodeURIComponent(selected?.imei || ''));
+    const fmt = (v) => v === null || v === undefined || v === '' ? '—' : String(v);
+    const time = (v) => v ? new Date(v).toLocaleString('ru-RU') : '—';
+    const esc = (v) => fmt(v).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    async function api(path, options = {}) {
+      const response = await fetch(path, {credentials:'same-origin', cache:'no-store', headers:{Accept:'application/json','Content-Type':'application/json','X-CSRFToken':csrf}, ...options});
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
+      return payload;
     }
-    document.addEventListener('DOMContentLoaded', boot); window.addEventListener('opora:navigated', boot); window.OporaIRZOperator = { init: boot };
+    function message(value, kind='secondary') { const node=q('[data-message]'); node.className=`alert alert-${kind} py-2`; node.textContent=value; }
+    function details(values) { return `<dl class="irz-detail-grid mb-0">${values.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`; }
+    function nested(obj, names) { for (const name of names) { const parts=name.split('.'); let value=obj; for (const part of parts) value=value?.[part]; if (value !== undefined && value !== null) return value; } return null; }
+    function phases(value) { if (Array.isArray(value)) return [value[0],value[1],value[2],null]; if (value && typeof value === 'object') return [value.l1 ?? value.L1 ?? value.a, value.l2 ?? value.L2 ?? value.b, value.l3 ?? value.L3 ?? value.c, value.total ?? value.sum]; return [null,null,null,value]; }
+    function renderTelemetry() {
+      const latest=selected?.latest, values=latest?.values || selected?.meter?.latest_snapshot || {};
+      const specs=[['Напряжение, В',['voltage','instantaneous.voltage']],['Ток, А',['current','instantaneous.current']],['Активная мощность, кВт',['active_power','power.active']],['Реактивная мощность, квар',['reactive_power','power.reactive']],['Полная мощность, кВА',['apparent_power','power.apparent']],['cos φ',['power_factor','cos_phi']]];
+      q('[data-phase-values]').innerHTML=specs.map(([label,paths])=>{const p=phases(nested(values,paths));return `<tr><th>${label}</th>${p.map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`;}).join('');
+      const summary=[['Частота, Гц',nested(values,['frequency'])],['Энергия',nested(values,['energy','total_energy'])],['Тарифы',nested(values,['tariffs'])],['Изменение',latest?.delta ? 'рассчитано' : null]];
+      q('[data-summary-values]').innerHTML=summary.map(([label,value])=>`<div class="col-6"><div class="irz-metric"><small class="text-muted">${label}</small><strong>${esc(typeof value==='object'?JSON.stringify(value):value)}</strong></div></div>`).join('');
+      const state=selected?.data_state || 'NO_DATA'; const badge=q('[data-quality]'); badge.textContent=state==='STALE'?'ДАННЫЕ УСТАРЕЛИ':state; badge.className=`badge text-bg-${state==='SUCCESS'?'success':state==='PARTIAL'||state==='STALE'?'warning':'secondary'}`;
+    }
+    function render() {
+      if (!selected) return;
+      const status=q('[data-device-status]'); status.textContent=selected.online?'ONLINE':'OFFLINE'; status.className=`badge text-bg-${selected.online?'success':'secondary'}`;
+      q('[data-last-update]').textContent=`Последний опрос: ${time(selected.latest?.captured_at || selected.last_polled_at)}`;
+      q('[data-poll]').disabled=busy || !selected.online;
+      q('[data-name]').value=selected.name || ''; q('[data-address]').value=selected.location?.address_text || ''; q('[data-lat]').value=selected.location?.latitude ?? ''; q('[data-lon]').value=selected.location?.longitude ?? '';
+      q('[data-map]').innerHTML=selected.location?.latitude!=null&&selected.location?.longitude!=null?`<i class="bi bi-geo-alt-fill"></i><span>${esc(selected.location.latitude)}, ${esc(selected.location.longitude)}</span>`:'<i class="bi bi-geo-alt"></i><span>Координаты не заданы</span>';
+      const meter=selected.meter; q('[data-meter-details]').innerHTML=meter?details([['Название',meter.display_name],['Модель',meter.model],['Серийный №',meter.serial_number],['Дата выпуска',meter.manufacture_date],['Версия ПО',meter.firmware_version],['Последний ответ',selected.last_mercury_seen_at]]):'Счётчик ещё не обнаружен';
+      q('[data-atm-details]').innerHTML=details([['IMEI',selected.imei],['IP / порт',`${fmt(selected.ip)}:${fmt(selected.port)}`],['CSQ',selected.csq],['Интерфейсы',selected.interfaces],['Версия',`${fmt(selected.firmware_version)} / ${fmt(selected.firmware_revision)} / ${fmt(selected.firmware_build)}`],['Последний пакет',selected.last_seen_at]]);
+      renderTelemetry();
+    }
+    async function history() { const rows=await api(url(root.dataset.historyTemplate)+'?limit=30'); q('[data-history]').innerHTML=rows.length?rows.map(x=>`<tr><td>${esc(time(x.captured_at))}</td><td>${esc(x.source)}</td><td>${esc(x.status)}</td><td>${esc(x.quality)}</td><td>${esc(x.poll_duration_ms==null?null:`${x.poll_duration_ms} мс`)}</td></tr>`).join(''):'<tr><td colspan="5" class="text-center text-muted py-4">История пока пуста</td></tr>'; }
+    async function select(imei) { selected=devices.find(x=>x.imei===imei)||null; if(!selected)return; render(); await history(); }
+    async function reload() {
+      const previous=selected?.imei; devices=await api(root.dataset.listUrl); devices.sort((a,b)=>(Number(b.online)-Number(a.online))||(Number(a.stale)-Number(b.stale))||a.name.localeCompare(b.name,'ru'));
+      const selector=q('[data-device-select]'); selector.innerHTML=devices.length?devices.map(x=>`<option value="${esc(x.imei)}">${x.online?'●':'○'} ${esc(x.name)} · ${esc(x.imei)}</option>`).join(''):'<option>Устройств нет</option>';
+      const imei=devices.some(x=>x.imei===previous)?previous:devices[0]?.imei; if(imei){selector.value=imei; await select(imei); message(selected.online?'Устройство подключено.':'ATM21 не подключён; показаны последние сохранённые данные.',selected.online?'success':'warning');} else message('Устройства ATM21 пока не обнаружены.','secondary');
+    }
+    q('[data-device-select]').addEventListener('change',(e)=>select(e.target.value).catch(err=>message(err.message,'danger')));
+    q('[data-poll]').addEventListener('click',async()=>{busy=true;render();message('Выполняется опрос…','info');try{await api(url(root.dataset.pollTemplate),{method:'POST',body:'{}'});await reload();message('Показания обновлены.','success');}catch(err){message(`Опрос не выполнен: ${err.message}. Последние данные сохранены.`,'danger');}finally{busy=false;render();}});
+    q('[data-profile-form]').addEventListener('submit',async(e)=>{e.preventDefault();if(root.dataset.canAdmin!=='1')return;try{await api(url(root.dataset.detailTemplate),{method:'PATCH',body:JSON.stringify({name:q('[data-name]').value,address_text:q('[data-address]').value,latitude:q('[data-lat]').value,longitude:q('[data-lon]').value})});await reload();message('Карточка объекта сохранена.','success');}catch(err){message(err.message,'danger');}});
+    async function tick(){try{await reload();}catch(err){message(`Мониторинг недоступен: ${err.message}`,'danger');}finally{if(!stopped)timer=setTimeout(tick,10000);}}
+    window.addEventListener('opora:before-navigate',()=>{stopped=true;clearTimeout(timer);},{once:true}); tick();
+  }
+  document.addEventListener('DOMContentLoaded',boot); window.addEventListener('opora:navigated',boot);
 })();

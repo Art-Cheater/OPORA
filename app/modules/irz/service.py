@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -199,6 +199,16 @@ def get_device(value: object) -> IRZDevice:
     return device
 
 
+def get_device_by_imei(imei: object) -> IRZDevice:
+    value = str(imei or "").strip()
+    if len(value) != 15 or not value.isdigit():
+        raise ValueError("invalid IMEI")
+    device = db.session.scalar(db.select(IRZDevice).where(IRZDevice.active_filter(), IRZDevice.imei == value))
+    if device is None:
+        raise LookupError("device not found")
+    return device
+
+
 def upsert_atm21(metadata: dict) -> IRZDevice:
     """Persist identification metadata; the live socket remains in the gateway."""
     imei = str(metadata.get("imei") or "")
@@ -251,6 +261,9 @@ def serialize_device(device: IRZDevice, *, online: bool = False, runtime: dict |
         db.select(IRZMeter).where(IRZMeter.active_filter(), IRZMeter.irz_device_id == device.id)
         .order_by(IRZMeter.last_seen_at.desc())
     )
+    latest = latest_meter_snapshot(meter) if meter else None
+    stale_seconds = int(current_app.config.get("IRZ_DATA_FRESH_SECONDS", 900))
+    is_stale = not latest or (datetime.now(timezone.utc) - _aware(latest.captured_at)).total_seconds() > stale_seconds
     return {
         "id": str(device.id),
         "name": device.name,
@@ -286,6 +299,10 @@ def serialize_device(device: IRZDevice, *, online: bool = False, runtime: dict |
             "firmware_version": device.last_firmware_version,
             "transformation_ratios": device.last_transformation_ratios,
         },
+        "location": {"latitude": device.latitude, "longitude": device.longitude, "address_text": device.address_text},
+        "data_state": "NO_DATA" if latest is None else ("STALE" if is_stale else latest.status),
+        "stale": is_stale,
+        "latest": serialize_snapshot(latest, include_delta=True) if latest else None,
         "meter": serialize_meter(meter) if meter else None,
     }
 
@@ -303,11 +320,80 @@ def serialize_meter(meter: IRZMeter) -> dict:
     }
 
 
+def _aware(value: datetime) -> datetime:
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+
+def latest_meter_snapshot(meter: IRZMeter) -> IRZMeterSnapshot | None:
+    return db.session.scalar(db.select(IRZMeterSnapshot).where(
+        IRZMeterSnapshot.active_filter(), IRZMeterSnapshot.meter_id == meter.id
+    ).order_by(IRZMeterSnapshot.captured_at.desc()).limit(1))
+
+
+def meter_snapshots(meter: IRZMeter, *, limit: int = 30) -> list[IRZMeterSnapshot]:
+    return list(db.session.scalars(db.select(IRZMeterSnapshot).where(
+        IRZMeterSnapshot.active_filter(), IRZMeterSnapshot.meter_id == meter.id
+    ).order_by(IRZMeterSnapshot.captured_at.desc()).limit(min(max(limit, 1), 50))))
+
+
+def _numeric_delta(current: object, previous: object) -> object:
+    if isinstance(current, dict):
+        return {key: _numeric_delta(value, previous.get(key) if isinstance(previous, dict) else None)
+                for key, value in current.items()}
+    if isinstance(current, (int, float)) and not isinstance(current, bool) and isinstance(previous, (int, float)):
+        return round(current - previous, 6)
+    return None
+
+
+def serialize_snapshot(snapshot: IRZMeterSnapshot, *, include_delta: bool = False) -> dict:
+    payload = {
+        "id": str(snapshot.id), "captured_at": snapshot.captured_at.isoformat(), "values": snapshot.values,
+        "quality": snapshot.quality, "quality_flags": snapshot.quality_flags or {},
+        "poll_duration_ms": snapshot.poll_duration_ms, "source": snapshot.source, "status": snapshot.status,
+        "extras": snapshot.extras or {},
+    }
+    if include_delta:
+        previous = db.session.scalar(db.select(IRZMeterSnapshot).where(
+            IRZMeterSnapshot.active_filter(), IRZMeterSnapshot.meter_id == snapshot.meter_id,
+            IRZMeterSnapshot.captured_at < snapshot.captured_at,
+        ).order_by(IRZMeterSnapshot.captured_at.desc()).limit(1))
+        payload["delta"] = _numeric_delta(snapshot.values, previous.values if previous else {})
+    return payload
+
+
 def rename_device(device: IRZDevice, value: object, *, user_id) -> None:
     name = str(value or "").strip()
     if not 1 <= len(name) <= 160:
         raise ValueError("INVALID_NAME")
     device.name = name
+    device.updated_by = user_id
+    db.session.commit()
+
+
+def update_device_profile(device: IRZDevice, payload: dict, *, user_id) -> None:
+    if "name" in payload:
+        name = str(payload.get("name") or "").strip()
+        if not 1 <= len(name) <= 160:
+            raise ValueError("INVALID_NAME")
+        device.name = name
+    for key, low, high in (("latitude", -90, 90), ("longitude", -180, 180)):
+        if key in payload:
+            raw = payload.get(key)
+            if raw in (None, ""):
+                setattr(device, key, None)
+            else:
+                try:
+                    value = float(raw)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"INVALID_{key.upper()}") from exc
+                if not low <= value <= high:
+                    raise ValueError(f"INVALID_{key.upper()}")
+                setattr(device, key, value)
+    if "address_text" in payload:
+        address = str(payload.get("address_text") or "").strip()
+        if len(address) > 500:
+            raise ValueError("INVALID_ADDRESS_TEXT")
+        device.address_text = address or None
     device.updated_by = user_id
     db.session.commit()
 
@@ -441,31 +527,59 @@ def execute_device_command(device: IRZDevice, command_id: str, *, user_id, opera
     return result
 
 
-def poll_device(device: IRZDevice, *, user_id) -> dict:
+def _acquire_poll_lease(device: IRZDevice) -> bool:
+    now = datetime.now(timezone.utc)
+    result = db.session.execute(db.update(IRZDevice).where(
+        IRZDevice.id == device.id,
+        db.or_(IRZDevice.poll_lock_until.is_(None), IRZDevice.poll_lock_until < now),
+    ).values(poll_lock_until=now + timedelta(seconds=45)).execution_options(synchronize_session=False))
+    db.session.commit()
+    return result.rowcount == 1
+
+
+def _release_poll_lease(device: IRZDevice) -> None:
+    db.session.execute(db.update(IRZDevice).where(IRZDevice.id == device.id).values(poll_lock_until=None).execution_options(synchronize_session=False))
+    db.session.commit()
+
+
+def poll_device(device: IRZDevice, *, user_id, source: str = "MANUAL", log_operations: bool = True) -> dict:
     if not device.enabled:
         raise ValueError("DEVICE_DISABLED")
+    source = str(source).upper()
+    if source not in {"MANUAL", "AUTO"}:
+        raise ValueError("INVALID_POLL_SOURCE")
+    if not _acquire_poll_lease(device):
+        raise ValueError("POLL_IN_PROGRESS")
     address = device.network_address if device.network_address is not None else 0
-    result = _gateway_request("/mercury/poll", payload={"imei": device.imei, "network_address": address}, timeout=35)
-    for command_id, command_result in result.get("results", {}).items():
-        _store_operation(device, user_id, command_id, "POLL", result=command_result)
-    for error in result.get("errors", []):
-        gateway_error = GatewayResponseError(error.get("message", "Ошибка опроса"), 502, error.get("error_code", "PROTOCOL_ERROR"), error)
-        _store_operation(device, user_id, error.get("command", "poll"), "POLL", error=gateway_error)
-    device.last_polled_at = datetime.now(timezone.utc)
-    meter = db.session.scalar(db.select(IRZMeter).where(IRZMeter.active_filter(), IRZMeter.irz_device_id == device.id))
-    if meter:
-        meter.last_poll_at = device.last_polled_at
-        meter.last_poll_status = "PARTIAL" if result.get("partial") else ("SUCCESS" if result.get("success") else "ERROR")
-        values = {key: item.get("data") for key, item in result.get("results", {}).items()}
-        db.session.add(IRZMeterSnapshot(
-            meter_id=meter.id, captured_at=device.last_polled_at, values=values,
-            quality="PARTIAL" if result.get("partial") else ("GOOD" if result.get("success") else "INVALID"),
-            quality_flags={"errors": result.get("errors", [])} if result.get("errors") else None,
-            poll_duration_ms=sum(item.get("duration_ms") or 0 for item in result.get("results", {}).values()),
-            created_by=user_id, updated_by=user_id,
-        ))
-    db.session.commit()
-    return result
+    started = datetime.now(timezone.utc)
+    try:
+        result = _gateway_request("/mercury/poll", payload={"imei": device.imei, "network_address": address}, timeout=35)
+        if log_operations:
+            for command_id, command_result in result.get("results", {}).items():
+                _store_operation(device, user_id, command_id, "POLL", result=command_result)
+            for error in result.get("errors", []):
+                gateway_error = GatewayResponseError(error.get("message", "Ошибка опроса"), 502, error.get("error_code", "PROTOCOL_ERROR"), error)
+                _store_operation(device, user_id, error.get("command", "poll"), "POLL", error=gateway_error)
+        device.last_polled_at = datetime.now(timezone.utc)
+        meter = db.session.scalar(db.select(IRZMeter).where(IRZMeter.active_filter(), IRZMeter.irz_device_id == device.id))
+        status = "PARTIAL" if result.get("partial") else ("SUCCESS" if result.get("success") else "ERROR")
+        if meter:
+            meter.last_poll_at = device.last_polled_at
+            meter.last_poll_status = status
+            values = {key: item.get("data") for key, item in result.get("results", {}).items()}
+            if values:
+                meter.latest_snapshot = values
+            db.session.add(IRZMeterSnapshot(
+                meter_id=meter.id, captured_at=device.last_polled_at, values=values,
+                quality="PARTIAL" if result.get("partial") else ("GOOD" if result.get("success") else "INVALID"),
+                quality_flags={"errors": result.get("errors", [])} if result.get("errors") else None,
+                poll_duration_ms=int((datetime.now(timezone.utc) - started).total_seconds() * 1000),
+                source=source, status=status, extras=None, created_by=user_id, updated_by=user_id,
+            ))
+        db.session.commit()
+        return result
+    finally:
+        _release_poll_lease(device)
 
 
 def operation_logs(device: IRZDevice, *, limit: int = 100, status: str | None = None) -> list[IRZOperationLog]:
