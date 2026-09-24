@@ -13,6 +13,8 @@ import json
 import secrets
 from typing import Any
 
+from app.models.devices.state import CONNECTOR_MASKS, connector_pins, phase_summary_from_connectors
+
 
 def new_nonce() -> str:
     return secrets.token_urlsafe(32)
@@ -78,6 +80,14 @@ def _parse_hex_byte(value: str) -> tuple[int, str]:
         raise ValueError("invalid hex byte") from exc
 
 
+def _parse_phase_mask(value: str) -> tuple[int, str]:
+    """Accept a 6-bit connector mask: exactly two hex digits, 0x00..0x3F."""
+    mask, encoded = _parse_hex_byte(value)
+    if mask > 0x3F:
+        raise ValueError("invalid phase mask")
+    return mask, encoded
+
+
 def parse_v2_state(args: list[str]) -> tuple[dict[str, Any], dict[str, Any]]:
     """Parse extensible ``STATE KEY=VALUE`` into OPORA-owned state semantics."""
     values: dict[str, str] = {}
@@ -112,7 +122,19 @@ def parse_v2_state(args: list[str]) -> tuple[dict[str, Any], dict[str, Any]]:
         mapping = {7: "REF", 0: "AUX0", 1: "G1", 2: "G2", 3: "G3", 4: "G4", 5: "G5", 6: "AUX6"}
         inputs.update({name: (mask >> bit) & 1 for bit, name in mapping.items()})
 
+    connectors: dict[str, Any] = {}
+    for key, name in CONNECTOR_MASKS:
+        if key not in values:
+            continue
+        mask, encoded = _parse_phase_mask(values.pop(key))
+        raw[key] = encoded
+        connectors[name] = connector_pins(mask)
+
     telemetry: dict[str, Any] = {}
     for key, value in values.items():
         telemetry[key.lower()] = int(value) if value.isdigit() else value
-    return {"outputs": outputs, "inputs": inputs, "raw": raw}, telemetry
+    actual: dict[str, Any] = {"outputs": outputs, "inputs": inputs, "raw": raw}
+    if connectors:
+        actual["connectors"] = connectors
+        actual["phase_summary"] = phase_summary_from_connectors(connectors)
+    return actual, telemetry

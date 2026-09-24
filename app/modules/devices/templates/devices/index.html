@@ -66,6 +66,42 @@
                 </div>
             </div>
 
+            <div class="mt-3" data-phase-root>
+                <h6>Фазы / входы</h6>
+                {% set connectors = actual.get('connectors') if actual else none %}
+                {% if status.state_stale or not connectors %}
+                <span class="text-muted">Нет данных</span>
+                {% else %}
+                {% set summary = actual.get('phase_summary') or {} %}
+                <div class="phase-summary mb-2" data-phase-summary>
+                    {% for phase in ['A', 'B', 'C'] %}
+                    {% set item = summary.get(phase) or {} %}
+                    <span class="phase-summary__item"><span class="phase-summary__name">{{ phase }}</span> <strong>{{ item.get('active', 0) }}/{{ item.get('total', 0) }}</strong></span>
+                    {% endfor %}
+                </div>
+                {% for name in ['CON9', 'CON10', 'CON11'] %}
+                {% set pins = connectors.get(name) %}
+                {% if pins %}
+                <div class="phase-compact mb-2" data-phase-compact="{{ name }}">
+                    <div class="phase-compact__name">{{ name }}</div>
+                    <div class="phase-compact__phases">A B C A B C</div>
+                    <div class="phase-compact__bits">{% for n in ['1','2','3','4','5','6'] %}{{ pins[n].value if pins.get(n) else '—' }}{% if not loop.last %} {% endif %}{% endfor %}</div>
+                </div>
+                <table class="table table-sm mb-2"><tbody>
+                    {% for n in ['1','2','3','4','5','6'] %}
+                    {% set pin = pins.get(n) %}
+                    <tr data-phase-pin="{{ name }}.{{ n }}" data-phase-value="{{ pin.value if pin else '' }}">
+                        <td>Pin {{ n }}</td>
+                        <td>{{ pin.phase if pin else '—' }}</td>
+                        <td>{% if pin %}<span class="phase-mark {{ 'is-active' if pin.value else '' }}">{{ '●' if pin.value else '○' }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody></table>
+                {% endif %}
+                {% endfor %}
+                {% endif %}
+            </div>
+
             <div class="alert {{ 'alert-warning' if status.active_command else 'alert-light' }} py-2 mt-3 mb-3" data-command-status aria-live="polite">
                 {% if status.active_command %}<span class="spinner-border spinner-border-sm me-2"></span>Выполняется команда…
                 {% elif status.latest_command and status.latest_command.confirmation == 'mismatch' %}Команда подтверждена, но state не соответствует требуемому состоянию.

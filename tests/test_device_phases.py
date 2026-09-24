@@ -1,0 +1,114 @@
+"""CON9/CON10/CON11 phase masks on protocol v2 and the boards page."""
+
+from pathlib import Path
+
+import pytest
+
+from app.extensions import db
+from app.models.base import utcnow
+from app.models.devices import Device
+from app.models.devices.state import connector_pins, phase_summary_from_connectors
+from app.tcp_gateway.protocol import parse_v2_state
+from tests.test_devices_ui import _device
+
+
+def test_v2_state_parses_connector_masks_and_keeps_outputs():
+    actual, telemetry = parse_v2_state("STATE O=5 C9=2D C10=3F C11=00 CSQ=20".split()[1:])
+    assert actual["outputs"] == {"C6": 1, "C7": 0, "C8": 1}
+    assert actual["raw"]["C9"] == "2D"
+    assert actual["raw"]["C10"] == "3F"
+    assert actual["raw"]["C11"] == "00"
+    assert actual["connectors"]["CON9"]["1"] == {"phase": "A", "value": 1}
+    assert actual["connectors"]["CON9"]["2"] == {"phase": "B", "value": 0}
+    assert actual["connectors"]["CON10"]["6"] == {"phase": "C", "value": 1}
+    assert actual["connectors"]["CON11"]["1"] == {"phase": "A", "value": 0}
+    assert telemetry == {"csq": 20}
+    assert "c9" not in telemetry
+
+
+def test_c9_bits_map_pin_and_phase():
+    pins = connector_pins(0x2D)
+    assert pins == {
+        "1": {"phase": "A", "value": 1},
+        "2": {"phase": "B", "value": 0},
+        "3": {"phase": "C", "value": 1},
+        "4": {"phase": "A", "value": 1},
+        "5": {"phase": "B", "value": 0},
+        "6": {"phase": "C", "value": 1},
+    }
+
+
+def test_phase_mask_above_six_bits_is_rejected():
+    with pytest.raises(ValueError):
+        parse_v2_state(["C9=40"])
+    with pytest.raises(ValueError):
+        parse_v2_state(["C10=FF"])
+
+
+def test_state_without_connector_masks_stays_compatible():
+    actual, telemetry = parse_v2_state("O=5 U2=EF U3=A6 CSQ=20 CREG=1 CGATT=1".split())
+    assert "connectors" not in actual
+    assert "phase_summary" not in actual
+    assert actual["outputs"] == {"C6": 1, "C7": 0, "C8": 1}
+    assert actual["raw"] == {"U2": "EF", "U3": "A6"}
+    assert telemetry == {"csq": 20, "creg": 1, "cgatt": 1}
+
+
+def test_phase_summary_counts_active_pins():
+    actual, _telemetry = parse_v2_state(["C9=2D", "C10=3F", "C11=00"])
+    assert actual["phase_summary"] == phase_summary_from_connectors(actual["connectors"])
+    assert actual["phase_summary"] == {
+        "A": {"active": 4, "total": 6},
+        "B": {"active": 2, "total": 6},
+        "C": {"active": 4, "total": 6},
+    }
+
+
+def test_status_api_returns_connectors_and_page_renders_pins(app, admin_client):
+    device_id = _device(app)
+    with app.app_context():
+        device = db.session.get(Device, device_id)
+        device.connection_state = "online"
+        device.last_state_at = utcnow()
+        actual, _telemetry = parse_v2_state(["O=5", "C9=2D", "C10=3F", "C11=00"])
+        device.actual_state = actual
+        db.session.commit()
+
+    payload = admin_client.get("/devices/status").get_json()["devices"][0]
+    assert payload["actual_state"]["raw"]["C9"] == "2D"
+    assert payload["actual_state"]["connectors"]["CON9"]["1"]["phase"] == "A"
+    assert payload["actual_state"]["phase_summary"]["A"] == {"active": 4, "total": 6}
+
+    page = admin_client.get("/devices/").get_data(as_text=True)
+    assert "Фазы / входы" in page
+    for name in ("CON9", "CON10", "CON11"):
+        assert name in page
+    assert 'data-phase-pin="CON9.1"' in page
+    assert "Pin 1" in page and "4/6" in page
+    assert "Включить" in page
+
+
+def test_missing_connector_data_does_not_break_the_boards_page(app, admin_client):
+    device_id = _device(app)
+    with app.app_context():
+        device = db.session.get(Device, device_id)
+        device.connection_state = "online"
+        device.last_state_at = utcnow()
+        device.actual_state = {"outputs": {"C6": 1, "C7": 0, "C8": 1}, "inputs": {"SW2": 0}, "raw": {"U2": "01"}}
+        db.session.commit()
+    page = admin_client.get("/devices/").get_data(as_text=True)
+    assert "Фазы / входы" in page
+    assert "Нет данных" in page
+    assert "C6" in page and "C7" in page and "C8" in page
+    payload = admin_client.get("/devices/status").get_json()["devices"][0]
+    assert "connectors" not in payload["actual_state"]
+
+
+def test_phase_ui_updates_from_the_existing_status_poll():
+    script = Path("app/static/js/devices.js").read_text(encoding="utf-8")
+    assert "function renderPhases(" in script
+    assert "renderPhases(card, device);" in script
+    assert "root.dataset.statusUrl" in script
+    assert "dataset.phasePin" in script
+    assert "is-changed" in script
+    assert "location.reload" not in script

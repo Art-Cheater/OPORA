@@ -1,0 +1,86 @@
+IPP / OPORA DEVICE PROTOCOL V2
+================================
+
+TRANSPORT
+---------
+Persistent TCP:
+tcp.zheleznogame.ru:5000
+
+AUTH HANDSHAKE
+--------------
+Gateway -> device:
+{"type":"challenge","version":"1","nonce":"..."}
+
+Device -> gateway:
+{"type":"auth","version":"1","device_id":"ipp-001","hmac":"..."}
+
+HMAC:
+HMAC-SHA256(secret, device_id + ":" + nonce)
+
+Gateway -> device:
+{"type":"authenticated","version":"1"}
+
+AFTER AUTHENTICATION: ASCII ONLY
+--------------------------------
+Gateway commands, LF terminated:
+
+PING
+GET
+SET 6 0
+SET 6 1
+SET 7 0
+SET 7 1
+SET 8 0
+SET 8 1
+SETALL 0
+SETALL 1
+
+Device responses:
+
+PONG
+OK 6 0
+OK 6 1
+OK 7 0
+OK 7 1
+OK 8 0
+OK 8 1
+OK ALL 0
+OK ALL 1
+ERR CMD
+
+STATE
+-----
+STATE O=5 U2=FF U3=A6 CSQ=20 CREG=1 CGATT=1
+STATE O=5 U2=FF U3=A6 C9=2D C10=3F C11=15 CSQ=20 CREG=1 CGATT=1
+
+O is a 3-bit logical output mask:
+bit2 = C6
+bit1 = C7
+bit0 = C8
+
+Example:
+O=5 -> 101 -> C6=1 C7=0 C8=1
+
+U2/U3 are raw 8-bit input masks in hex.
+Firmware DOES NOT assign phase A/B/C.
+
+C9/C10/C11 are optional 6-bit hex masks (00..3F) for CON9/CON10/CON11.
+bit0 = pin1, bit1 = pin2, bit2 = pin3, bit3 = pin4, bit4 = pin5, bit5 = pin6.
+They are omitted while CON9_1..CON11_6 in main.c do not prove every pin of that connector.
+OPORA names the pins A B C A B C. The AVR does not.
+
+STATE is sent:
+- immediately after authenticated
+- immediately after SET/SETALL
+- immediately after confirmed U2/U3 change
+- every 2 seconds as a heartbeat snapshot
+
+COMMAND EXECUTION ORDER
+-----------------------
+SET / SETALL received
+-> update logical relay state
+-> apply_relays() physically
+-> send OK
+-> send STATE
+
+The AVR has no desired-state or business logic.

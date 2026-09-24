@@ -436,6 +436,15 @@ body.is-opora-busy { cursor: wait; }
     font-weight: 700;
 }
 .badge-neutral { background: var(--opora-surface-hover); color: var(--opora-text-muted); }
+.phase-summary { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; }
+.phase-summary__name { color: var(--opora-text-muted); font-weight: 600; }
+.phase-compact { display: grid; grid-template-columns: 4.5rem 1fr; column-gap: 0.75rem; font-variant-numeric: tabular-nums; }
+.phase-compact__name { grid-row: span 2; font-weight: 600; }
+.phase-compact__phases, .phase-compact__bits { letter-spacing: 0.35em; }
+.phase-compact__phases { color: var(--opora-text-muted); }
+.phase-mark { color: var(--opora-text-faint); font-size: 1.15rem; line-height: 1; }
+.phase-mark.is-active { color: var(--status-done); }
+tr[data-phase-pin].is-changed { background: var(--status-in-progress-bg); box-shadow: inset 3px 0 0 var(--status-in-progress); }
 .badge-role { background: rgba(245,124,0,0.1); color: var(--opora-primary); font-size: 0.75rem; padding: 0.3em 0.65em; border-radius: 6px; }
 
 .table-row-new { background: rgba(220, 53, 69, 0.12) !important; box-shadow: inset 4px 0 0 #DC3545; }

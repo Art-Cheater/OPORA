@@ -1,0 +1,70 @@
+HARDWARE MAPPING — CONFIRMED
+============================
+
+MCU:
+ATmega8515 @ 6 MHz
+UART 9600 8N1
+
+OUTPUTS:
+PC2 -> CON6
+PC1 -> CON7
+PC0 -> CON8
+active LOW
+
+Cold boot:
+C6/C7/C8 OFF
+
+Reconnect:
+relay state preserved
+
+PD3..PD7:
+HIGH from startup
+
+RAW INPUT BUS:
+U2 /OE = PC4
+U3 /OE = PC5
+shared Port A bus
+
+Known logical labels from previous diagnostics:
+
+U2:
+bit0 -> SW2
+bit1 -> SW3
+bit2 -> SW4
+bit3 -> SW5
+
+U3:
+bit7 -> REF
+bit0 -> AUX0
+bit1 -> G1
+bit2 -> G2
+bit3 -> G3
+bit4 -> G4
+bit5 -> G5
+bit6 -> AUX6
+
+IMPORTANT:
+Firmware transmits raw U2/U3 bytes.
+It does NOT assume which bits are phases A/B/C.
+That mapping must be discovered on real hardware and configured in OPORA.
+
+CON9 / CON10 / CON11
+====================
+Each connector pin order requested by OPORA is A B C A B C.
+Firmware must report each physical pin separately via C9/C10/C11 bit0=pin1 .. bit5=pin6.
+
+Traced hardware in this folder:
+  physical input -> U2 or U3 -> PINA bit -> raw U2/U3 byte
+  CON6/CON7/CON8 are relay OUTPUTS (PC2/PC1/PC0), not phase inputs.
+
+No Board file names CON9, CON10 or CON11, and none ties those pins to a
+U2/U3 bit or an MCU pin. U2+U3 are 16 bits; the three connectors are 18 pins.
+All 18 connector pins are therefore unproven:
+
+  CON9.1  CON9.2  CON9.3  CON9.4  CON9.5  CON9.6
+  CON10.1 CON10.2 CON10.3 CON10.4 CON10.5 CON10.6
+  CON11.1 CON11.2 CON11.3 CON11.4 CON11.5 CON11.6
+
+The only mapping table is the CON9_1..CON11_6 macros in main.c.
+0xFF means "not proven". A connector mask is compiled into STATE only
+when all six of its pins are filled in. Do not guess the missing bits.

@@ -302,7 +302,7 @@ SETALL 0
 либо extensible state line:
 
 ```text
-STATE O=5 U2=EF U3=A6 CSQ=20 CREG=1 CGATT=1
+STATE O=5 U2=EF U3=A6 C9=2D C10=3F C11=15 CSQ=20 CREG=1 CGATT=1
 ```
 
 `O` — десятичная маска `0..7`: bit2 `C6`, bit1 `C7`, bit0 `C8`. `U2` и `U3`
@@ -310,7 +310,22 @@ STATE O=5 U2=EF U3=A6 CSQ=20 CREG=1 CGATT=1
 `SW2`, `SW3`, `SW4`, `SW5`; `U3`: bit7 `REF`, bit0 `AUX0`, bit1–5 `G1`–`G5`,
 bit6 `AUX6`. Назначать эти линии фазами A/B/C запрещено без отдельного
 подтверждения. `U2`/`U3` сохраняются в `actual.raw`, расшифрованные значения —
-в `actual.inputs`; остальные `KEY=VALUE` переходят в extensible `telemetry`.
+в `actual.inputs`; остальные неизвестные `KEY=VALUE` переходят в extensible `telemetry`.
+
+`C9`, `C10`, `C11` — необязательные 6-битные HEX-маски разъёмов `CON9`,
+`CON10`, `CON11`. Допустимый диапазон `00..3F`; значение больше `0x3F`
+отклоняется. Бит 0 — pin 1, бит 1 — pin 2, …, бит 5 — pin 6. На каждом
+разъёме фазы идут `A B C A B C` (pin 1 = A, pin 2 = B, pin 3 = C, pin 4 = A,
+pin 5 = B, pin 6 = C). Сервер раскладывает маску в `actual.connectors`
+(`connector` / `pin` / `phase` / `value`) и считает диагностический
+`actual.phase_summary` (`active` / `total` по фазам A/B/C). Сырые маски
+остаются в `actual.raw`. Старая прошивка без `C9`/`C10`/`C11` остаётся
+валидной: connectors не создаются, UI показывает «Нет данных».
+
+Физическое соответствие pin разъёма биту U2/U3 в файлах `Board/` не доказано.
+Прошивка держит его в макросах `CON9_1`…`CON11_6` в `Board/main.c` и не
+передаёт маску, пока все шесть пинов разъёма не сопоставлены. Фазовые имена
+задаёт OPORA, не AVR.
 
 Для v2 `OK` завершает единственную активную команду сразу (`completed`), а
 следующий `STATE` независимо обновляет только `actual_state`. Для v1 сохраняется

@@ -73,6 +73,102 @@
         });
     }
 
+    const previousPins = new Map();
+    const changedUntil = new Map();
+    const PHASE_ORDER = ['A', 'B', 'C', 'A', 'B', 'C'];
+    const CONNECTORS = ['CON9', 'CON10', 'CON11'];
+
+    function phaseMark(value) {
+        const mark = document.createElement('span');
+        mark.className = `phase-mark${Number(value) === 1 ? ' is-active' : ''}`;
+        mark.textContent = Number(value) === 1 ? '●' : '○';
+        return mark;
+    }
+
+    function renderPhases(card, device) {
+        const root = card.querySelector('[data-phase-root]');
+        if (!root) return;
+        const deviceKey = card.dataset.deviceId;
+        const connectors = device.actual_state?.connectors;
+        const known = previousPins.has(deviceKey);
+        const previous = previousPins.get(deviceKey) || {};
+        const next = {};
+        root.replaceChildren();
+        const title = document.createElement('h6');
+        title.textContent = 'Фазы / входы';
+        root.append(title);
+        if (device.state_stale || !connectors || !Object.keys(connectors).length) {
+            const empty = document.createElement('span');
+            empty.className = 'text-muted';
+            empty.textContent = 'Нет данных';
+            root.append(empty);
+            if (!device.state_stale) previousPins.set(deviceKey, next);
+            return;
+        }
+        const summary = device.actual_state?.phase_summary || {};
+        const summaryRow = document.createElement('div');
+        summaryRow.className = 'phase-summary mb-2';
+        summaryRow.dataset.phaseSummary = '';
+        ['A', 'B', 'C'].forEach((phase) => {
+            const item = summary[phase] || {};
+            const cell = document.createElement('span');
+            cell.className = 'phase-summary__item';
+            const name = document.createElement('span');
+            name.className = 'phase-summary__name';
+            name.textContent = phase;
+            const value = document.createElement('strong');
+            value.textContent = ` ${item.active ?? 0}/${item.total ?? 0}`;
+            cell.append(name, value);
+            summaryRow.append(cell);
+        });
+        root.append(summaryRow);
+        CONNECTORS.forEach((name) => {
+            const pins = connectors[name];
+            if (!pins) return;
+            const compact = document.createElement('div');
+            compact.className = 'phase-compact mb-2';
+            compact.dataset.phaseCompact = name;
+            const label = document.createElement('div');
+            label.className = 'phase-compact__name';
+            label.textContent = name;
+            const phases = document.createElement('div');
+            phases.className = 'phase-compact__phases';
+            phases.textContent = 'A B C A B C';
+            const bits = document.createElement('div');
+            bits.className = 'phase-compact__bits';
+            bits.textContent = ['1', '2', '3', '4', '5', '6'].map((pin) => pins[pin]?.value ?? '—').join(' ');
+            compact.append(label, phases, bits);
+            const table = document.createElement('table');
+            table.className = 'table table-sm mb-2';
+            const body = document.createElement('tbody');
+            ['1', '2', '3', '4', '5', '6'].forEach((pin, index) => {
+                const info = pins[pin] || {};
+                const row = document.createElement('tr');
+                const key = `${name}.${pin}`;
+                const value = Number(info.value) === 1 ? 1 : 0;
+                next[key] = value;
+                row.dataset.phasePin = key;
+                row.dataset.phaseValue = String(value);
+                const highlightKey = `${deviceKey}:${key}`;
+                if (known && previous[key] !== undefined && previous[key] !== value) {
+                    changedUntil.set(highlightKey, Date.now() + 2500);
+                }
+                if ((changedUntil.get(highlightKey) || 0) > Date.now()) row.classList.add('is-changed');
+                const pinCell = document.createElement('td');
+                pinCell.textContent = `Pin ${pin}`;
+                const phaseCell = document.createElement('td');
+                phaseCell.textContent = info.phase || PHASE_ORDER[index];
+                const markCell = document.createElement('td');
+                markCell.append(phaseMark(value));
+                row.append(pinCell, phaseCell, markCell);
+                body.append(row);
+            });
+            table.append(body);
+            root.append(compact, table);
+        });
+        previousPins.set(deviceKey, next);
+    }
+
     function renderCard(card, device, commandsEnabled, canManage) {
         const stale = Boolean(device.state_stale);
         const outputs = device.actual_state?.outputs || {};
@@ -89,6 +185,7 @@
         });
         renderTelemetry(card.querySelector('[data-telemetry]'), device.telemetry);
         renderValues(card.querySelector('[data-raw-inputs-list]'), device.actual_state);
+        renderPhases(card, device);
 
         const status = card.querySelector('[data-command-status]');
         status.innerHTML = commandMessage(device.active_command, device.latest_command);
@@ -164,6 +261,7 @@
         const destroy = () => {
             stopped = true;
             if (timer) window.clearTimeout(timer);
+            changedUntil.clear();
         };
         window.addEventListener('opora:before-navigate', destroy, { once: true });
         refresh();
