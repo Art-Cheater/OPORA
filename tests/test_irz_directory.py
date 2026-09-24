@@ -21,6 +21,7 @@ IMEI_NO_METER = "861000000000002"
 IMEI_STALE = "861000000000003"
 IMEI_PARTIAL = "861000000000004"
 IMEI_OFFLINE = "861000000000005"
+IMEI_DARK = "861000000000006"
 
 
 def _login(client, email, password="pass12345"):
@@ -41,9 +42,13 @@ def _user_with(app, email, codes):
 
 
 def _state(values, updated_at):
-    return {"values": values, "commands": {"voltage_phases": {"captured_at": updated_at.isoformat(), "quality": "GOOD",
-                                                               "fields": sorted(values)}},
-            "updated_at": updated_at.isoformat()}
+    """Merged meter state: U values from voltage_phases, I values from current_phases."""
+    commands = {}
+    for command, prefix in (("voltage_phases", "u_"), ("current_phases", "i_")):
+        fields = sorted(key for key in values if key.startswith(prefix))
+        if fields:
+            commands[command] = {"captured_at": updated_at.isoformat(), "quality": "GOOD", "fields": fields}
+    return {"values": values, "commands": commands, "updated_at": updated_at.isoformat()}
 
 
 def _seed(app):
@@ -56,15 +61,19 @@ def _seed(app):
         partial = IRZDevice(imei=IMEI_PARTIAL, name="КТП Южная", model="ATM21", enabled=True, latitude=58.62, longitude=49.68)
         offline = IRZDevice(imei=IMEI_OFFLINE, name=f"ATM21 {IMEI_OFFLINE}", model="ATM21", enabled=True,
                             latitude=58.63, longitude=49.69)
-        db.session.add_all([ok, no_meter, stale, partial, offline])
+        dark = IRZDevice(imei=IMEI_DARK, name="ИП Луговая 3", model="ATM21", enabled=True, latitude=58.64, longitude=49.7)
+        db.session.add_all([ok, no_meter, stale, partial, offline, dark])
         db.session.flush()
         db.session.add_all([
             IRZMeter(irz_device_id=ok.id, serial_number="45211093", last_poll_status="SUCCESS", last_poll_at=now,
-                     latest_snapshot=_state({"u_a": 231.8, "u_b": 229.1, "u_c": 230.4}, now)),
+                     latest_snapshot=_state({"u_a": 231.8, "u_b": 229.1, "u_c": 230.4,
+                                             "i_a": 2.5, "i_b": 2.4, "i_c": 2.6}, now)),
             IRZMeter(irz_device_id=stale.id, serial_number="45211094", last_poll_status="SUCCESS",
-                     latest_snapshot=_state({"u_a": 220.0}, now - timedelta(hours=2))),
+                     latest_snapshot=_state({"u_a": 220.0, "i_a": 5.0, "i_b": 5.0, "i_c": 5.0}, now - timedelta(hours=2))),
             IRZMeter(irz_device_id=partial.id, serial_number="45211095", last_poll_status="PARTIAL",
-                     latest_snapshot=_state({"u_a": 225.0}, now)),
+                     latest_snapshot=_state({"u_a": 225.0, "i_a": 0.2}, now)),
+            IRZMeter(irz_device_id=dark.id, serial_number="45211096", last_poll_status="SUCCESS",
+                     latest_snapshot=_state({"i_a": 0, "i_b": 0.4, "i_c": 1.0}, now)),
         ])
         db.session.commit()
 
@@ -72,7 +81,7 @@ def _seed(app):
 @pytest.fixture()
 def live(monkeypatch):
     sessions = [{"imei": imei, "ip": "10.0.0.1", "port": 5009, "last_seen_at": datetime.now(timezone.utc).isoformat()}
-                for imei in (IMEI_OK, IMEI_NO_METER, IMEI_STALE, IMEI_PARTIAL)]
+                for imei in (IMEI_OK, IMEI_NO_METER, IMEI_STALE, IMEI_PARTIAL, IMEI_DARK)]
     monkeypatch.setattr(service, "get_devices", lambda: list(sessions))
     return sessions
 
@@ -81,18 +90,27 @@ def test_directory_statuses_names_meter_and_counters(app, admin_client, live):
     _seed(app)
     payload = admin_client.get("/irz/api/directory").get_json()
     by_imei = {item["imei"]: item for item in payload["items"]}
-    assert by_imei[IMEI_OK]["status"] == "OK"
-    assert by_imei[IMEI_OK]["meter"] == {"serial": "45211093", "model": "Mercury 230"}
-    assert by_imei[IMEI_OK]["summary"] == {"u_a": 231.8, "u_b": 229.1, "u_c": 230.4}
-    assert by_imei[IMEI_OK]["title"] == "ПП Чехова 8" and by_imei[IMEI_OK]["name"] == "ПП Чехова 8"
-    assert by_imei[IMEI_NO_METER]["status"] == "WARNING" and by_imei[IMEI_NO_METER]["meter"] is None
-    assert by_imei[IMEI_NO_METER]["name"] is None and by_imei[IMEI_NO_METER]["title"] == f"ATM21 {IMEI_NO_METER}"
-    assert by_imei[IMEI_NO_METER]["has_coordinates"] is False and by_imei[IMEI_NO_METER]["latitude"] is None
-    assert (by_imei[IMEI_STALE]["status"], by_imei[IMEI_STALE]["data_state"]) == ("WARNING", "STALE")
-    assert (by_imei[IMEI_PARTIAL]["status"], by_imei[IMEI_PARTIAL]["data_state"]) == ("WARNING", "PARTIAL")
-    assert by_imei[IMEI_OFFLINE]["status"] == "OFFLINE" and by_imei[IMEI_OFFLINE]["online"] is False
-    assert payload["counters"] == {"total": 5, "online": 4, "offline": 1, "problems": 3, "unknown": 0, "no_coordinates": 1}
-    assert [item["status"] for item in payload["items"]] == ["WARNING", "WARNING", "WARNING", "OK", "OFFLINE"]
+    ok = by_imei[IMEI_OK]
+    assert (ok["operational_status"], ok["operational_label"], ok["cabinet_type"], ok["online"]) == ("ON", "Горит", "PP", True)
+    assert ok["problem"] is None and ok["no_data_seconds"] is None and ok["last_successful_meter_response"]
+    assert ok["meter"] == {"serial": "45211093", "model": "Mercury 230"}
+    assert ok["summary"] == {"u_a": 231.8, "u_b": 229.1, "u_c": 230.4, "i_a": 2.5, "i_b": 2.4, "i_c": 2.6}
+    assert ok["title"] == "ПП Чехова 8" and ok["name"] == "ПП Чехова 8"
+    assert (by_imei[IMEI_DARK]["operational_status"], by_imei[IMEI_DARK]["cabinet_type"]) == ("OFF", "IP")
+    no_meter = by_imei[IMEI_NO_METER]
+    assert no_meter["operational_status"] == "PROBLEM" and no_meter["meter"] is None
+    assert no_meter["problem"] == "Mercury ещё не передал показания" and no_meter["last_successful_meter_response"] is None
+    assert no_meter["name"] is None and no_meter["title"] == f"ATM21 {IMEI_NO_METER}" and no_meter["cabinet_type"] == "OTHER"
+    assert no_meter["has_coordinates"] is False and no_meter["latitude"] is None
+    stale = by_imei[IMEI_STALE]
+    assert (stale["operational_status"], stale["data_state"], stale["cabinet_type"]) == ("CRITICAL", "STALE", "OTHER")
+    assert 7100 <= stale["no_data_seconds"] <= 7300
+    assert (by_imei[IMEI_PARTIAL]["operational_status"], by_imei[IMEI_PARTIAL]["data_state"]) == ("PROBLEM", "PARTIAL")
+    offline = by_imei[IMEI_OFFLINE]
+    assert (offline["operational_status"], offline["online"], offline["problem"]) == ("PROBLEM", False, "ATM21 не на связи")
+    assert payload["counters"] == {"total": 6, "on": 1, "off": 1, "problem": 3, "critical": 1,
+                                   "online": 5, "offline": 1, "no_coordinates": 1}
+    assert [item["operational_status"] for item in payload["items"]] == ["CRITICAL", "PROBLEM", "PROBLEM", "PROBLEM", "OFF", "ON"]
     assert payload["gateway"] == "online"
 
 
@@ -100,25 +118,31 @@ def test_map_api_returns_only_located_devices_but_counts_all(app, admin_client, 
     _seed(app)
     payload = admin_client.get("/irz/api/map").get_json()
     assert IMEI_NO_METER not in {item["imei"] for item in payload["items"]}
-    assert len(payload["items"]) == 4 and payload["counters"]["total"] == 5
+    assert len(payload["items"]) == 5 and payload["counters"]["total"] == 6
     assert payload["counters"]["no_coordinates"] == 1
-    assert {"id", "imei", "title", "meter", "latitude", "longitude", "status", "last_seen_at", "last_poll_at", "summary"} <= set(payload["items"][0])
+    item = payload["items"][0]
+    assert set(item) == {"id", "imei", "name", "title", "meter", "latitude", "longitude", "has_coordinates", "cabinet_type",
+                         "online", "operational_status", "problem", "last_successful_meter_response", "no_data_seconds",
+                         "last_seen_at", "summary"}
+    assert set(item["summary"]) <= {"u_a", "u_b", "u_c"}
 
 
-def test_gateway_outage_marks_devices_unknown_instead_of_offline(app, admin_client, monkeypatch):
+def test_gateway_outage_never_keeps_old_on_status(app, admin_client, monkeypatch):
     _seed(app)
     monkeypatch.setattr(service, "get_devices", lambda: (_ for _ in ()).throw(service.GatewayUnavailable("down")))
     payload = admin_client.get("/irz/api/directory").get_json()
+    by_imei = {item["imei"]: item for item in payload["items"]}
     assert payload["gateway"] == "unavailable"
-    assert {item["status"] for item in payload["items"]} == {"UNKNOWN"}
-    assert payload["counters"]["offline"] == 0 and payload["counters"]["unknown"] == 5
+    assert by_imei[IMEI_OK]["operational_status"] == "PROBLEM" and by_imei[IMEI_OK]["problem"] == "Шлюз связи недоступен"
+    assert by_imei[IMEI_STALE]["operational_status"] == "CRITICAL"
+    assert payload["counters"]["on"] == 0 and payload["counters"]["online"] == 0 and payload["counters"]["offline"] == 6
 
 
 def test_new_live_atm21_appears_automatically(app, admin_client, monkeypatch):
     monkeypatch.setattr(service, "get_devices", lambda: [{"imei": "861000000000099", "ip": "10.0.0.9"}])
     payload = admin_client.get("/irz/api/directory").get_json()
     assert [item["title"] for item in payload["items"]] == ["ATM21 861000000000099"]
-    assert payload["items"][0]["status"] == "WARNING" and payload["items"][0]["has_coordinates"] is False
+    assert payload["items"][0]["operational_status"] == "PROBLEM" and payload["items"][0]["has_coordinates"] is False
 
 
 @pytest.mark.parametrize("query,expected", [
@@ -133,19 +157,23 @@ def test_search_by_name_imei_meter_serial_and_address(app, admin_client, live, q
     _seed(app)
     payload = admin_client.get("/irz/api/directory", query_string={"q": query}).get_json()
     assert {item["imei"] for item in payload["items"]} == expected
-    assert payload["counters"]["total"] == 5
+    assert payload["counters"]["total"] == 6
 
 
 def test_status_coordinates_filters_and_pagination(app, admin_client, live):
     _seed(app)
     get = lambda **params: admin_client.get("/irz/api/directory", query_string=params).get_json()
-    assert {item["imei"] for item in get(status="offline")["items"]} == {IMEI_OFFLINE}
-    assert len(get(status="online")["items"]) == 4
-    assert len(get(status="problem")["items"]) == 3
-    assert {item["imei"] for item in get(status="no_coordinates")["items"]} == {IMEI_NO_METER}
-    assert len(get(has_coordinates="1")["items"]) == 4
+    imeis = lambda **params: {item["imei"] for item in get(**params)["items"]}
+    assert imeis(status="on") == {IMEI_OK}
+    assert imeis(status="off") == {IMEI_DARK}
+    assert imeis(status="problem") == {IMEI_NO_METER, IMEI_PARTIAL, IMEI_OFFLINE}
+    assert imeis(status="critical") == {IMEI_STALE}
+    assert imeis(status="offline") == {IMEI_OFFLINE}
+    assert len(get(status="online")["items"]) == 5
+    assert imeis(status="no_coordinates") == {IMEI_NO_METER}
+    assert len(get(has_coordinates="1")["items"]) == 5
     page = get(per_page=2, page=2)
-    assert len(page["items"]) == 2 and page["pagination"] == {"page": 2, "per_page": 2, "pages": 3, "total": 5}
+    assert len(page["items"]) == 2 and page["pagination"] == {"page": 2, "per_page": 2, "pages": 3, "total": 6}
     assert admin_client.get("/irz/api/directory?status=bogus").status_code == 400
 
 
@@ -160,8 +188,13 @@ def test_device_page_resolves_id_and_imei_and_works_offline(app, admin_client, l
     assert f'data-imei="{IMEI_OFFLINE}"' in html
     redirect = admin_client.get(f"/irz/{IMEI_OFFLINE}")
     assert redirect.status_code == 302 and redirect.headers["Location"].endswith(f"/irz/{device_id}")
+    assert "Статус освещения" in html and "Последний успешный ответ Mercury" in html
     detail = admin_client.get(f"/irz/api/devices/{IMEI_OFFLINE}").get_json()
     assert detail["online"] is False and detail["imei"] == IMEI_OFFLINE
+    assert detail["operational"]["code"] == "PROBLEM" and detail["operational"]["reason"] == "ATM21 не на связи"
+    lit = admin_client.get(f"/irz/api/devices/{IMEI_OK}").get_json()
+    assert (lit["operational"]["code"], lit["operational"]["label"], lit["cabinet_type"]) == ("ON", "Горит", "PP")
+    assert lit["operational"]["last_success_at"]
     assert admin_client.get("/irz/00000000-0000-0000-0000-000000000000").status_code == 404
     assert admin_client.get("/irz/not-a-device").status_code == 404
 
@@ -315,7 +348,8 @@ def _bulk_devices(count, *, start=0):
     db.session.flush()
     for device in devices:
         meters.append(IRZMeter(irz_device_id=device.id, serial_number=f"9{device.imei[-8:]}", last_poll_status="SUCCESS",
-                               last_seen_at=now, latest_snapshot=_state({"u_a": 230.0, "u_b": 231.0, "u_c": 229.0}, now)))
+                               last_seen_at=now, latest_snapshot=_state({"u_a": 230.0, "u_b": 231.0, "u_c": 229.0,
+                                                                         "i_a": 3.0, "i_b": 3.1, "i_c": 2.9}, now)))
     db.session.add_all(meters)
     db.session.commit()
 
@@ -352,7 +386,7 @@ def test_directory_for_600_devices_uses_constant_queries(app, admin_client, monk
     elapsed = time.perf_counter() - started
     payload = response.get_json()
     assert large == small
-    assert payload["counters"] == {"total": 600, "online": 300, "offline": 300, "problems": 0, "unknown": 0,
-                                   "no_coordinates": 60}
+    assert payload["counters"] == {"total": 600, "on": 300, "off": 0, "problem": 300, "critical": 0,
+                                   "online": 300, "offline": 300, "no_coordinates": 60}
     assert len(payload["items"]) == 540
     assert elapsed < 5

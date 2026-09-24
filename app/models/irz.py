@@ -98,6 +98,18 @@ class MeterCabinetDirectory(BaseModel):
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
+class LightPole(BaseModel):
+    """Street-lighting pole imported from Excel; one row per pole, `quantity` counts its luminaires."""
+    __tablename__ = "light_poles"
+    __table_args__ = (Index("ix_light_poles_lat_lon", "latitude", "longitude"),)
+
+    pole_number: Mapped[str] = mapped_column(String(40), nullable=False, unique=True, index=True)
+    luminaire_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
 class IRZMeterSnapshot(BaseModel):
     """One logical poll result; JSON avoids a row per individual measurement."""
     __tablename__ = "irz_meter_snapshots"

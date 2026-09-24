@@ -2,6 +2,7 @@
 
 The whole directory is built with two SQL queries (devices, meters) and one
 gateway call for live sessions, so it stays cheap for hundreds of devices.
+`operational_status` is the lighting state; `online` is only the ATM21 transport.
 """
 
 from __future__ import annotations
@@ -13,14 +14,11 @@ from flask import current_app
 
 from app.extensions import db
 from app.models.irz import IRZDevice, IRZMeter
-from app.modules.irz import service
+from app.modules.irz import service, status as operational
 
-STATUS_OK = "OK"
-STATUS_WARNING = "WARNING"
-STATUS_OFFLINE = "OFFLINE"
-STATUS_UNKNOWN = "UNKNOWN"
-STATUS_ORDER = {STATUS_WARNING: 0, STATUS_OK: 1, STATUS_OFFLINE: 2, STATUS_UNKNOWN: 3}
-FILTERS = ("all", "online", "offline", "problem", "no_coordinates")
+FILTERS = ("all", "on", "off", "problem", "critical", "online", "offline", "no_coordinates")
+STATUS_FILTERS = {"on": operational.ON, "off": operational.OFF, "problem": operational.PROBLEM,
+                  "critical": operational.CRITICAL}
 SUMMARY_KEYS = ("u_a", "u_b", "u_c", "i_a", "i_b", "i_c", "p_total", "frequency")
 DEFAULT_METER_MODEL = "Mercury 230"
 MAX_PER_PAGE = 1000
@@ -70,20 +68,6 @@ def _data_state(meter: IRZMeter | None, updated_at: datetime | None, now: dateti
     return {"SUCCESS": "GOOD", "PARTIAL": "PARTIAL"}.get(meter.last_poll_status or "", "STALE")
 
 
-def _status(online: bool, gateway_ok: bool, data_state: str) -> tuple[str, str | None]:
-    if not gateway_ok:
-        return STATUS_UNKNOWN, "Шлюз связи недоступен"
-    if not online:
-        return STATUS_OFFLINE, None
-    if data_state == "GOOD":
-        return STATUS_OK, None
-    return STATUS_WARNING, {
-        "NO_DATA": "Нет данных Mercury",
-        "STALE": "Mercury не отвечает или данные устарели",
-        "PARTIAL": "Счётчик ответил частично",
-    }.get(data_state, "Нет данных Mercury")
-
-
 def _summary(values: dict) -> dict:
     result = {}
     for key in SUMMARY_KEYS:
@@ -114,7 +98,10 @@ def build_directory(live: dict[str, dict], gateway_ok: bool, *, now: datetime | 
         updated_at = service._parse_time(state.get("updated_at"))
         online = device.imei in live
         data_state = _data_state(meter, updated_at, now, fresh_seconds)
-        status, problem = _status(online, gateway_ok, data_state)
+        lighting = operational.get_irz_operational_status(device, meter, online=online, now=now)
+        problem = lighting["reason"]
+        if problem and not gateway_ok:
+            problem = "Шлюз связи недоступен"
         name = custom_name(device)
         has_coordinates = device.latitude is not None and device.longitude is not None
         runtime = live.get(device.imei, {})
@@ -130,18 +117,34 @@ def build_directory(live: dict[str, dict], gateway_ok: bool, *, now: datetime | 
             "longitude": device.longitude if has_coordinates else None,
             "has_coordinates": has_coordinates,
             "address": device.address_text,
+            "cabinet_type": operational.cabinet_type(name),
             "online": online,
-            "status": status,
+            "operational_status": lighting["code"],
+            "operational_label": lighting["label"],
             "problem": problem,
+            "last_successful_meter_response": lighting["last_success_at"],
+            "no_data_seconds": lighting["no_data_seconds"],
             "data_state": data_state,
             "last_seen_at": runtime.get("last_seen_at") or _iso(device.last_seen_at),
             "last_poll_at": _iso(meter.last_poll_at) if meter else _iso(device.last_polled_at),
             "updated_at": updated_at.isoformat() if updated_at else None,
             "summary": _summary(state.get("values") or {}),
         })
-    items.sort(key=lambda item: (STATUS_ORDER[item["status"]], item["name"] is None,
+    items.sort(key=lambda item: (operational.ORDER[item["operational_status"]], item["name"] is None,
                                  _natural(item["title"]), item["imei"]))
     return items
+
+
+MAP_KEYS = ("id", "imei", "name", "title", "meter", "latitude", "longitude", "has_coordinates", "cabinet_type",
+            "online", "operational_status", "problem", "last_successful_meter_response", "no_data_seconds", "last_seen_at")
+MAP_SUMMARY_KEYS = ("u_a", "u_b", "u_c")
+
+
+def map_item(item: dict) -> dict:
+    """Marker and short popup fields only: no address, poll bookkeeping or full measurement summary."""
+    result = {key: item[key] for key in MAP_KEYS}
+    result["summary"] = {key: value for key, value in item["summary"].items() if key in MAP_SUMMARY_KEYS}
+    return result
 
 
 def _natural(value: str) -> list:
@@ -150,15 +153,14 @@ def _natural(value: str) -> list:
 
 
 def counters(items: list[dict]) -> dict:
-    """Online includes problem devices; offline and online never overlap."""
-    return {
-        "total": len(items),
-        "online": sum(1 for item in items if item["online"]),
-        "offline": sum(1 for item in items if item["status"] == STATUS_OFFLINE),
-        "problems": sum(1 for item in items if item["status"] == STATUS_WARNING),
-        "unknown": sum(1 for item in items if item["status"] == STATUS_UNKNOWN),
-        "no_coordinates": sum(1 for item in items if not item["has_coordinates"]),
-    }
+    """Lighting states partition the total; online/offline is a separate ATM21 transport split."""
+    result = {"total": len(items)}
+    for key, code in STATUS_FILTERS.items():
+        result[key] = sum(1 for item in items if item["operational_status"] == code)
+    result["online"] = sum(1 for item in items if item["online"])
+    result["offline"] = len(items) - result["online"]
+    result["no_coordinates"] = sum(1 for item in items if not item["has_coordinates"])
+    return result
 
 
 def _normalize(value: object) -> str:
@@ -181,11 +183,11 @@ def filter_items(items: list[dict], *, query: str = "", status: str = "all",
         raise ValueError("INVALID_STATUS_FILTER")
     selected = []
     for item in items:
+        if status in STATUS_FILTERS and item["operational_status"] != STATUS_FILTERS[status]:
+            continue
         if status == "online" and not item["online"]:
             continue
-        if status == "offline" and item["status"] != STATUS_OFFLINE:
-            continue
-        if status == "problem" and item["status"] != STATUS_WARNING:
+        if status == "offline" and item["online"]:
             continue
         if status == "no_coordinates" and item["has_coordinates"]:
             continue

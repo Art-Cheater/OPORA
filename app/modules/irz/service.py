@@ -272,6 +272,8 @@ def list_mercury_devices() -> tuple[list[IRZDevice], set[str], dict[str, dict]]:
 
 
 def serialize_device(device: IRZDevice, *, online: bool = False, runtime: dict | None = None) -> dict:
+    from app.modules.irz import status
+
     runtime = runtime or {}
     meter = db.session.scalar(
         db.select(IRZMeter).where(IRZMeter.active_filter(), IRZMeter.irz_device_id == device.id)
@@ -331,6 +333,8 @@ def serialize_device(device: IRZDevice, *, online: bool = False, runtime: dict |
         "current": current,
         "meter": serialize_meter(meter) if meter else None,
         "directory": cabinets.directory_state(device, meter),
+        "operational": status.get_irz_operational_status(device, meter, online=online),
+        "cabinet_type": status.cabinet_type(device.name),
     }
 
 

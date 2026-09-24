@@ -73,6 +73,7 @@ from app.models.irz import (
     IRZMeter,
     IRZMeterSnapshot,
     IRZOperationLog,
+    LightPole,
     MeterCabinetDirectory,
 )
 from app.models.work_objects.work_object import WorkObject
@@ -158,5 +159,6 @@ __all__ = [
     "IRZMeter",
     "IRZMeterSnapshot",
     "IRZOperationLog",
+    "LightPole",
     "MeterCabinetDirectory",
 ]

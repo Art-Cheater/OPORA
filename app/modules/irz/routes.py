@@ -11,7 +11,7 @@ from app.core.audit_service import AuditService
 from app.core.decorators import any_permission_required, permission_required
 from app.extensions import db
 from app.models.irz import IRZMeter
-from app.modules.irz import cabinets, directory, service
+from app.modules.irz import cabinets, directory, poles, service
 from app.modules.irz.blueprint import irz_bp
 
 
@@ -35,6 +35,40 @@ def map_display():
         can_open_detail=current_user.has_permission("irz.view"),
         refresh_seconds=min(max(int(current_app.config.get("IRZ_MAP_DISPLAY_REFRESH_SECONDS", 20)), 15), 30),
     )
+
+
+@irz_bp.get("/poles")
+@login_required
+@permission_required("irz.view")
+def poles_page():
+    query = (request.args.get("q") or "").strip()
+    items, pagination = poles.search_poles(query, page=request.args.get("page", 1, type=int))
+    return render_template("irz/poles.html", items=items, pagination=pagination, query=query)
+
+
+@irz_bp.get("/poles/<uuid:pole_id>")
+@login_required
+@permission_required("irz.view")
+def pole_page(pole_id):
+    pole = poles.get_pole(pole_id)
+    if pole is None:
+        abort(404)
+    return render_template("irz/pole.html", pole=pole)
+
+
+@irz_bp.get("/poles/map.json")
+@login_required
+@any_permission_required("irz.view", "irz.map_display")
+def poles_map():
+    """Poles inside the visible map area only; the client refetches on moveend."""
+    from app.core.geo.bbox import BboxError
+
+    try:
+        bbox = poles.parse_map_bbox(request.args)
+    except BboxError as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 400
+    limit = min(max(request.args.get("limit", poles.MAP_LIMIT, type=int), 1), poles.MAP_LIMIT)
+    return jsonify(poles.poles_geojson(bbox, limit=limit))
 
 
 @irz_bp.get("/<device_ref>")
@@ -85,7 +119,7 @@ def map_summary():
         return _error_response(exc)
     if bbox:
         selected = filter_records(selected, bbox)
-    return jsonify({**meta, "items": selected})
+    return jsonify({**meta, "items": [directory.map_item(item) for item in selected]})
 
 
 @irz_bp.get("/api/directory")

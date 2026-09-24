@@ -113,8 +113,30 @@
       const button = q('[data-directory-reapply]');
       if (button) button.disabled = busy || !state.current_serial;
     }
+    const pad = (value) => String(value).padStart(2, '0');
+    function stamp(value) {
+      if (!value) return '—';
+      const d = new Date(value);
+      return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+    function silence(seconds) {
+      const minutes = Math.floor(seconds / 60), hours = Math.floor(minutes / 60);
+      if (minutes < 1) return 'меньше минуты';
+      return hours ? `${hours} ч ${minutes % 60} мин` : `${minutes} мин`;
+    }
+    function renderLight() {
+      const light = selected.operational || {}, code = light.code || 'PROBLEM';
+      q('[data-light-dot]').className = `irz-lamp irz-lamp--${code}`;
+      q('[data-light]').className = `irz-light irz-light--${code} mb-3`;
+      q('[data-light-label]').textContent = light.label || '—';
+      q('[data-light-last]').textContent = stamp(light.last_success_at);
+      const gap = q('[data-light-gap]'), hasGap = light.no_data_seconds !== null && light.no_data_seconds !== undefined;
+      gap.hidden = !hasGap;
+      gap.textContent = hasGap ? `Нет данных ${silence(light.no_data_seconds)}${light.reason ? ` · ${light.reason}` : ''}` : '';
+    }
     function render() {
       if (!selected) return;
+      renderLight();
       const status=q('[data-device-status]'); status.textContent=selected.online?'ONLINE':'OFFLINE'; status.className=`badge text-bg-${selected.online?'success':'danger'}`;
       q('[data-last-update]').textContent=`Последний опрос: ${time(selected.latest?.captured_at || selected.last_polled_at)}`;
       if (q('[data-poll]')) q('[data-poll]').disabled=busy || !selected.online;

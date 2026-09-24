@@ -5,28 +5,44 @@
 {% call page_header("IRZ · Мониторинг", "Карта и список ATM21 со счётчиками Mercury", "broadcast") %}
 {% if can_map_display %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('irz.map_display') }}" target="_blank" rel="noopener"><i class="bi bi-arrows-fullscreen"></i> Карта на весь экран</a>{% endif %}
 {% endcall %}
+{% include "irz/_tabs.html" %}
 {% endblock %}
 {% block content %}
 <div class="irz-directory" data-irz-directory
      data-api-url="{{ url_for('irz.directory_list') }}"
      data-detail-template="{{ url_for('irz.device_page', device_ref='DEVICE_ID') }}"
+     data-poles-url="{{ url_for('irz.poles_map') }}"
+     data-pole-template="{{ url_for('irz.pole_page', pole_id='POLE_ID') }}"
      data-can-edit="{{ '1' if can_edit else '0' }}">
   <div class="irz-filters mb-2" role="group" aria-label="Фильтр устройств">
     <button type="button" class="irz-filter active" data-filter="all">Все <b data-count="total">0</b></button>
-    <button type="button" class="irz-filter" data-filter="online"><span class="irz-square irz-square--ok"></span>Online <b data-count="online">0</b></button>
-    <button type="button" class="irz-filter" data-filter="offline"><span class="irz-square irz-square--offline"></span>Offline <b data-count="offline">0</b></button>
-    <button type="button" class="irz-filter" data-filter="problem" title="Online, но Mercury не отвечает, данные устарели или опрос частичный"><span class="irz-square irz-square--warning"></span>Проблемы <b data-count="problems">0</b></button>
+    <button type="button" class="irz-filter" data-filter="on"><span class="irz-lamp irz-lamp--ON"></span>Горит <b data-count="on">0</b></button>
+    <button type="button" class="irz-filter" data-filter="off"><span class="irz-lamp irz-lamp--OFF"></span>Не горит <b data-count="off">0</b></button>
+    <button type="button" class="irz-filter" data-filter="problem" title="Нет актуальных данных Mercury меньше часа"><span class="irz-lamp irz-lamp--PROBLEM"></span>Проблема <b data-count="problem">0</b></button>
+    <button type="button" class="irz-filter" data-filter="critical" title="Нет успешного ответа Mercury час и больше"><span class="irz-lamp irz-lamp--CRITICAL"></span>Критическая проблема <b data-count="critical">0</b></button>
     <button type="button" class="irz-filter" data-filter="no_coordinates"><i class="bi bi-geo"></i>Без координат <b data-count="no_coordinates">0</b></button>
+    <span class="irz-filters__sep" aria-hidden="true"></span>
+    <button type="button" class="irz-filter" data-filter="online" title="Транспортная связь ATM21 с сервером, не состояние освещения">ATM21 online <b data-count="online">0</b></button>
+    <button type="button" class="irz-filter" data-filter="offline" title="Транспортная связь ATM21 с сервером, не состояние освещения">ATM21 offline <b data-count="offline">0</b></button>
   </div>
   <div class="irz-note" data-message hidden></div>
   <div class="irz-directory__body">
     <div class="irz-directory__map">
       <div class="irz-map-canvas" data-map-canvas></div>
       <div class="irz-map-empty" data-map-empty hidden>Нет объектов с координатами для выбранного фильтра</div>
+      <div class="irz-layers" role="group" aria-label="Слои карты">
+        <label class="form-check m-0"><input class="form-check-input" type="checkbox" data-layer-devices> <span class="form-check-label">IRZ</span></label>
+        <label class="form-check m-0" title="Опоры видны при приближении"><input class="form-check-input" type="checkbox" data-layer-poles> <span class="form-check-label">Опоры</span></label>
+      </div>
       <div class="irz-legend">
-        <span><span class="irz-square irz-square--ok"></span>Online</span>
-        <span><span class="irz-square irz-square--warning"></span>Проблема</span>
-        <span><span class="irz-square irz-square--offline"></span>Offline</span>
+        <span><span class="irz-lamp irz-lamp--ON"></span>Горит</span>
+        <span><span class="irz-lamp irz-lamp--OFF"></span>Не горит</span>
+        <span><span class="irz-lamp irz-lamp--PROBLEM"></span>Проблема</span>
+        <span><span class="irz-lamp irz-lamp--CRITICAL"></span>Критическая</span>
+        <span><span class="irz-type irz-type--IP"></span>ИП</span>
+        <span><span class="irz-type irz-type--PP"></span>ПП</span>
+        <span><span class="irz-type irz-type--OTHER"></span>Прочие</span>
+        <span><span class="irz-pole-mark"></span>Опора</span>
       </div>
     </div>
     <aside class="irz-directory__list">

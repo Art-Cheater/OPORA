@@ -730,6 +730,42 @@ def _register_cli_commands(app: Flask) -> None:
         linked = db.session.scalar(db.select(IRZDevice).where(IRZDevice.active_filter(), IRZDevice.directory_entry_id == entry.id))
         click.echo(f"IRZ: {f'{linked.name} (IMEI {linked.imei})' if linked else 'не сопоставлен'}")
 
+    @app.cli.command("irz-import-poles")
+    @click.option("--file", "path", default="", help="Путь к опоры.xlsx; «-» — читать из stdin")
+    @click.option("--dry-run", is_flag=True, help="Разобрать файл без записи в БД")
+    @click.option("--show-warnings", is_flag=True, help="Вывести все предупреждения по строкам")
+    def irz_import_poles(path: str, dry_run: bool, show_warnings: bool):
+        """Импорт опор освещения (номер, светильник, координаты, количество) для слоя карты IRZ."""
+        import sys
+
+        from app.modules.irz import poles
+
+        if path == "-":
+            source = sys.stdin.buffer
+        else:
+            source = Path(path) if path else poles.default_poles_path(Path(app.root_path).parent)
+            if not source.is_file():
+                raise click.ClickException(f"Файл не найден: {source}")
+        try:
+            report = poles.import_poles(source, dry_run=dry_run)
+        except ValueError as exc:
+            raise click.ClickException(str(exc)) from exc
+        click.echo(f"Всего строк: {report['total']}")
+        click.echo(f"Опор (уникальных номеров): {report['poles']}")
+        click.echo(f"  строк объединено (несколько светильников на опоре): {report['merged']}")
+        click.echo(f"Добавлено: {report['inserted']}")
+        click.echo(f"Обновлено: {report['updated']}")
+        click.echo(f"Без изменений: {report['unchanged']}")
+        click.echo(f"Пропущено: {report['skipped']}")
+        for reason, count in report["skip_reasons"].items():
+            click.echo(f"  {reason}: {count}")
+        click.echo(f"Ошибок: {report['errors']}")
+        click.echo(f"Предупреждений: {len(report['warnings'])}")
+        for warning in report["warnings"] if show_warnings else report["warnings"][:10]:
+            click.echo(f"  {warning}")
+        if dry_run:
+            click.echo("Пробный запуск: изменения не сохранены")
+
     @app.cli.command("repair-request-districts")
     @click.option("--dry-run", is_flag=True, help="Только показать, без записи в БД")
     @click.option("--limit", default=0, show_default=True, help="Максимум заявок (0 = все)")

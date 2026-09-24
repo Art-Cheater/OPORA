@@ -24,8 +24,16 @@
      data-directory-apply-url="{{ url_for('irz.monitoring_device_directory_apply', imei=device.imei) }}"
      data-can-edit="{{ '1' if can_edit else '0' }}" data-can-poll="{{ '1' if can_poll else '0' }}">
   <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
-    <div class="d-flex align-items-center gap-2"><span class="badge text-bg-secondary" data-device-status>OFFLINE</span><span class="small text-muted" data-last-update>Нет данных</span></div>
+    <div class="d-flex align-items-center gap-2"><span class="small text-muted">Связь ATM21</span><span class="badge text-bg-secondary" data-device-status>OFFLINE</span><span class="small text-muted" data-last-update>Нет данных</span></div>
     {% if can_poll %}<button class="btn btn-sm btn-primary" data-poll><i class="bi bi-arrow-repeat"></i> Обновить показания</button>{% endif %}
+  </div>
+  <div class="irz-light mb-3" data-light>
+    <span class="irz-lamp irz-lamp--PROBLEM" data-light-dot></span>
+    <div>
+      <div class="irz-light__title">Статус освещения: <span data-light-label>—</span></div>
+      <div class="small text-muted">Последний успешный ответ Mercury: <span data-light-last>—</span></div>
+      <div class="small irz-light__gap" data-light-gap hidden></div>
+    </div>
   </div>
   <div class="irz-note" data-message>Загрузка данных устройства…</div>
   <div class="row g-3 irz-dashboard">

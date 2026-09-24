@@ -26,7 +26,7 @@ def test_irz_page_opens_and_appears_in_menu(app, admin_client):
     assert "IRZ · Мониторинг" in html
     assert 'href="/irz"' in html
     assert "data-irz-directory" in html and "data-map-canvas" in html
-    assert "Без координат" in html and "Проблемы" in html
+    assert "Без координат" in html and "Критическая проблема" in html and "Не горит" in html
     assert "/static/js/irz-map.js?v=" in html
     for forbidden in ("Инженерный режим", "PROTOCOL LAB", "HEX COMMAND", "/static/js/irz-legacy.js?v="):
         assert forbidden not in html

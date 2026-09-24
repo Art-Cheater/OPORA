@@ -24,32 +24,52 @@ td.irz-stale { background: var(--bs-warning-bg-subtle); }
 .irz-note--danger { background: var(--bs-danger-bg-subtle); color: var(--bs-danger-text-emphasis); border-color: var(--bs-danger-border-subtle); }
 .irz-directory-preview { border: 1px solid var(--bs-border-color); border-radius: .4rem; padding: .6rem .75rem; background: var(--bs-tertiary-bg); }
 
-/* Квадратный индикатор статуса — тот же, что маркер на карте. */
-.irz-square { display: inline-block; flex: none; width: .7rem; height: .7rem; border: 1px solid rgba(17, 24, 39, .85); vertical-align: middle; margin-right: .35rem; }
-.irz-square--ok { background: #16a34a; }
-.irz-square--warning { background: #eab308; }
-.irz-square--offline { background: #dc2626; }
-.irz-square--unknown { background: #9ca3af; }
+/* Лампа статуса освещения, плашка типа ШУНО и опора — те же цвета, что на карте (irz-map.js). */
+.irz-lamp { display: inline-block; flex: none; width: .72rem; height: .72rem; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(17, 24, 39, .35); vertical-align: middle; margin-right: .35rem; background: #facc15; }
+.irz-lamp--ON { background: #22c55e; }
+.irz-lamp--OFF { background: #9ca3af; }
+.irz-lamp--PROBLEM { background: #facc15; }
+.irz-lamp--CRITICAL { background: #dc2626; }
+.irz-type { display: inline-block; flex: none; width: .9rem; height: .6rem; border-radius: .2rem; border: 1px solid; vertical-align: middle; margin-right: .3rem; }
+.irz-type--IP { background: #fbcfe8; border-color: #db2777; }
+.irz-type--PP { background: #f8fafc; border-color: #64748b; }
+.irz-type--OTHER { background: #bbf7d0; border-color: #16a34a; }
+.irz-pole-mark { display: inline-block; width: 0; height: 0; border-left: .36rem solid transparent; border-right: .36rem solid transparent; border-bottom: .62rem solid #475569; vertical-align: middle; margin-right: .3rem; }
+.irz-light { display: flex; align-items: center; gap: .75rem; border: 1px solid var(--bs-border-color); border-left-width: 4px; border-radius: .4rem; padding: .55rem .85rem; background: var(--bs-body-bg); }
+.irz-light .irz-lamp { width: 1.25rem; height: 1.25rem; margin: 0; }
+.irz-light__title { font-weight: 600; font-size: 1.05rem; }
+.irz-light--ON { border-left-color: #22c55e; }
+.irz-light--OFF { border-left-color: #9ca3af; }
+.irz-light--PROBLEM { border-left-color: #facc15; }
+.irz-light--CRITICAL { border-left-color: #dc2626; }
+.irz-light--PROBLEM .irz-light__gap { color: var(--bs-warning-text-emphasis); }
+.irz-light--CRITICAL .irz-light__gap { color: var(--bs-danger-text-emphasis); font-weight: 600; }
 
 .irz-filters { display: flex; flex-wrap: wrap; gap: .35rem; }
 .irz-filter { display: inline-flex; align-items: center; gap: .15rem; border: 1px solid var(--bs-border-color); border-radius: .4rem; background: var(--bs-body-bg); color: var(--bs-body-color); padding: .25rem .6rem; font-size: .85rem; }
 .irz-filter b { margin-left: .3rem; font-variant-numeric: tabular-nums; }
 .irz-filter .bi { margin-right: .3rem; }
 .irz-filter.active { border-color: var(--bs-primary); background: rgba(37, 99, 235, .16); }
+.irz-filters__sep { width: 1px; align-self: stretch; background: var(--bs-border-color); margin: 0 .2rem; }
+.irz-layers { position: absolute; left: 3.1rem; top: .5rem; z-index: 2; display: flex; gap: .75rem; background: rgba(255, 255, 255, .94); color: #111827; border-radius: .35rem; padding: .2rem .55rem; font-size: .8rem; box-shadow: 0 1px 3px rgba(0, 0, 0, .15); }
+.irz-tabs .bi { margin-right: .25rem; }
+.irz-poles__search { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.irz-poles__search .form-control { max-width: 24rem; }
+.irz-pole-map { position: relative; height: 26rem; }
 
 .irz-directory__body { display: grid; grid-template-columns: minmax(0, 1fr) 24rem; gap: .75rem; height: calc(100vh - 15rem); min-height: 28rem; }
 .irz-directory__map { position: relative; border: 1px solid var(--bs-border-color); border-radius: .5rem; overflow: hidden; background: var(--bs-tertiary-bg); }
 /* Специфичнее .maplibregl-map { position: relative }, иначе контейнер схлопывается до нулевой высоты. */
 .irz-directory__map > .irz-map-canvas, .irz-display__map > .irz-map-canvas { position: absolute; inset: 0; }
 .irz-map-empty { position: absolute; left: 50%; top: 1rem; transform: translateX(-50%); z-index: 2; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: .4rem; padding: .35rem .75rem; font-size: .85rem; }
-.irz-legend { position: absolute; right: .5rem; top: .5rem; z-index: 2; display: flex; gap: .6rem; background: rgba(255, 255, 255, .92); color: #111827; border-radius: .35rem; padding: .2rem .5rem; font-size: .75rem; }
+.irz-legend { position: absolute; right: .5rem; top: .5rem; z-index: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; max-width: calc(100% - 14rem); gap: .2rem .6rem; background: rgba(255, 255, 255, .92); color: #111827; border-radius: .35rem; padding: .2rem .5rem; font-size: .75rem; }
 .irz-directory__list { display: flex; flex-direction: column; min-height: 0; }
 .irz-list { flex: 1; overflow-y: auto; border: 1px solid var(--bs-border-color); border-radius: .5rem; }
 .irz-list__empty { padding: 2rem 1rem; text-align: center; color: var(--bs-secondary-color); }
 .irz-row { display: flex; align-items: flex-start; gap: .45rem; padding: .4rem .6rem; border-bottom: 1px solid var(--bs-border-color-translucent); cursor: pointer; }
 .irz-row:hover, .irz-row:focus-within { background: var(--bs-tertiary-bg); }
 .irz-row.is-selected { background: rgba(37, 99, 235, .16); box-shadow: inset 3px 0 0 var(--bs-primary); }
-.irz-row .irz-square { margin-top: .3rem; }
+.irz-row > .irz-lamp { margin-top: .3rem; }
 .irz-row__main { flex: 1; min-width: 0; color: inherit; text-decoration: none; display: flex; flex-direction: column; line-height: 1.25; }
 .irz-row__title { font-weight: 600; font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .irz-row__sub { font-size: .75rem; color: var(--bs-secondary-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -59,10 +79,15 @@ td.irz-stale { background: var(--bs-warning-bg-subtle); }
 .irz-row__time { color: var(--bs-secondary-color); }
 .irz-row__locate { font-size: .72rem; }
 .irz-status { font-weight: 600; }
-.irz-status--ok { color: #15803d; }
-.irz-status--warning { color: var(--bs-warning-text-emphasis); }
-.irz-status--offline { color: #b91c1c; }
-.irz-status--unknown { color: var(--bs-secondary-color); }
+.irz-status--ON { color: #15803d; }
+.irz-status--OFF { color: var(--bs-secondary-color); }
+.irz-status--PROBLEM { color: var(--bs-warning-text-emphasis); }
+.irz-status--CRITICAL { color: #b91c1c; }
+html[data-theme="dark"] .irz-status--ON { color: #4ade80; }
+html[data-theme="dark"] .irz-status--PROBLEM,
+html[data-theme="dark"] .irz-light--PROBLEM .irz-light__gap { color: #fde047; }
+html[data-theme="dark"] .irz-status--CRITICAL,
+html[data-theme="dark"] .irz-light--CRITICAL .irz-light__gap { color: #f87171; }
 
 .irz-popup .maplibregl-popup-content { padding: .6rem .75rem; color: #111827; font-size: .82rem; }
 .irz-popup__title { font-weight: 600; font-size: .92rem; padding-right: 1rem; }
@@ -84,7 +109,9 @@ td.irz-stale { background: var(--bs-warning-bg-subtle); }
 .irz-display__title { font-size: 1.6rem; font-weight: 700; margin: 0; }
 .irz-display__counts { display: flex; gap: 1.5rem; font-size: 1.35rem; align-items: center; flex-wrap: wrap; }
 .irz-display__counts b { font-variant-numeric: tabular-nums; }
-.irz-display__counts .irz-square { width: 1.05rem; height: 1.05rem; border-color: #f8fafc; }
+.irz-display__counts .irz-lamp { width: 1.1rem; height: 1.1rem; box-shadow: none; }
+.irz-display__counts .irz-type { width: 1.4rem; height: .9rem; }
+.irz-legend-box { font-size: 1rem; color: #cbd5e1; }
 .irz-display__bar--footer .irz-display__counts { font-size: 1.1rem; }
 .irz-display__muted { color: #cbd5e1; font-size: 1.1rem; }
 .irz-display__tools { display: flex; align-items: center; gap: 1rem; font-size: 1.05rem; }

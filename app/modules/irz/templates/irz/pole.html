@@ -1,0 +1,38 @@
+{% extends "layouts/app.html" %}
+{% from "macros/ui.html" import page_header %}
+{% block title %}Опора № {{ pole.pole_number }} — IRZ · Опоры — {{ app_name }}{% endblock %}
+{% block page_header %}
+<nav aria-label="breadcrumb" class="mb-2">
+  <ol class="breadcrumb mb-0 small">
+    <li class="breadcrumb-item">IRZ</li>
+    <li class="breadcrumb-item"><a href="{{ url_for('irz.poles_page') }}">Опоры</a></li>
+    <li class="breadcrumb-item active" aria-current="page">№ {{ pole.pole_number }}</li>
+  </ol>
+</nav>
+{% call page_header("Опора № " ~ pole.pole_number, pole.luminaire_name or "Светильник не указан", "triangle") %}
+<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('irz.poles_page') }}"><i class="bi bi-arrow-left"></i> К списку опор</a>
+{% endcall %}
+{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <section class="col-lg-4"><div class="card h-100"><div class="card-header fw-semibold">Опора</div><div class="card-body small">
+    <dl class="irz-detail-grid mb-0">
+      <dt>Номер опоры</dt><dd>{{ pole.pole_number }}</dd>
+      <dt>Светильник</dt><dd>{{ pole.luminaire_name or '—' }}</dd>
+      <dt>Количество</dt><dd>{{ pole.quantity if pole.quantity is not none else '—' }}</dd>
+      <dt>Широта</dt><dd>{{ '%.8f'|format(pole.latitude) if pole.latitude is not none else '—' }}</dd>
+      <dt>Долгота</dt><dd>{{ '%.8f'|format(pole.longitude) if pole.longitude is not none else '—' }}</dd>
+    </dl>
+  </div></div></section>
+  <section class="col-lg-8"><div class="card h-100"><div class="card-header fw-semibold">На карте</div><div class="card-body p-0">
+    {% if pole.latitude is not none and pole.longitude is not none %}
+    <div class="irz-pole-map" data-irz-pole-map data-lat="{{ pole.latitude }}" data-lon="{{ pole.longitude }}"
+         data-poles-url="{{ url_for('irz.poles_map') }}" data-pole-template="{{ url_for('irz.pole_page', pole_id='POLE_ID') }}"></div>
+    {% else %}
+    <div class="irz-map-placeholder m-3"><i class="bi bi-geo-alt"></i><span>Координаты не заданы — опора не показывается на карте</span></div>
+    {% endif %}
+  </div></div></section>
+</div>
+{% endblock %}
+{% block extra_css %}{{ super() }}<link href="{{ static_url('css/irz.css') }}" rel="stylesheet">{% endblock %}
+{% block extra_js %}{{ super() }}<script src="{{ static_url('js/irz-map.js') }}"></script>{% endblock %}

@@ -139,7 +139,8 @@ def test_new_irz_is_named_and_placed_from_directory_after_serial_is_read(app, ad
     monkeypatch.setattr(service, "get_devices", lambda: [{"imei": IMEI_A, "ip": "10.0.0.1",
                                                           "last_seen_at": datetime.now(timezone.utc).isoformat()}])
     item = admin_client.get("/irz/api/map").get_json()["items"][0]
-    assert item["title"] == "ИП-6" and item["has_coordinates"] and item["status"] == "OK"
+    assert item["title"] == "ИП-6" and item["has_coordinates"] and item["online"] and item["operational_status"] == "PROBLEM"
+    assert item["cabinet_type"] == "IP"
     assert item["meter"]["model"] == "Меркурий 230 ART-03 PQRSIDN"
     detail = admin_client.get(f"/irz/api/devices/{IMEI_A}").get_json()
     assert detail["directory"]["entry"]["cabinet_external_id"] == "221"
@@ -159,7 +160,7 @@ def test_unknown_serial_marks_not_found_and_changes_nothing(app, admin_client, t
     detail = admin_client.get(f"/irz/api/devices/{IMEI_A}").get_json()
     assert detail["directory"]["status"] == "NOT_FOUND" and detail["directory"]["entry"] is None
     listed = admin_client.get("/irz/api/directory").get_json()["items"][0]
-    assert listed["status"] == "OK" and listed["online"] is True
+    assert listed["data_state"] == "GOOD" and listed["online"] is True
 
 
 def test_directory_imported_later_matches_on_next_poll(app, tmp_path, monkeypatch):
