@@ -675,6 +675,61 @@ def _register_cli_commands(app: Flask) -> None:
                 json_module.dump(verify.fixture(address, report), handle, ensure_ascii=False, indent=2, default=str)
             click.echo(f"Fixture сохранён: {save_path}")
 
+    @app.cli.command("irz-import-meter-directory")
+    @click.option("--file", "path", default="", help="Путь к meters_with_cabinets.xlsx; «-» — читать из stdin")
+    @click.option("--dry-run", is_flag=True, help="Разобрать файл без записи в БД")
+    @click.option("--show-warnings", is_flag=True, help="Вывести все предупреждения по строкам")
+    def irz_import_meter_directory(path: str, dry_run: bool, show_warnings: bool):
+        """Импорт справочника «серийный № Mercury → ШУНО» (лист «Счётчики»)."""
+        import sys
+
+        from app.modules.irz import cabinets
+
+        if path == "-":
+            source = sys.stdin.buffer
+        else:
+            source = Path(path) if path else cabinets.default_directory_path(Path(app.root_path).parent)
+            if not source.is_file():
+                raise click.ClickException(f"Файл не найден: {source}")
+        try:
+            report = cabinets.import_meter_directory(source, dry_run=dry_run)
+        except ValueError as exc:
+            raise click.ClickException(str(exc)) from exc
+        click.echo(f"Всего строк: {report['total']}")
+        click.echo(f"Добавлено: {report['inserted']}")
+        click.echo(f"Обновлено: {report['updated']}")
+        click.echo(f"Без изменений: {report['unchanged']}")
+        click.echo(f"Пропущено: {report['skipped']}")
+        for reason, count in report["skip_reasons"].items():
+            click.echo(f"  {reason}: {count}")
+        click.echo(f"Ошибок: {report['errors']}")
+        click.echo(f"Предупреждений: {len(report['warnings'])}")
+        for warning in report["warnings"] if show_warnings else report["warnings"][:10]:
+            click.echo(f"  {warning}")
+        if dry_run:
+            click.echo("Пробный запуск: изменения не сохранены")
+
+    @app.cli.command("irz-meter-directory-find")
+    @click.argument("serial")
+    def irz_meter_directory_find(serial: str):
+        """Показать запись справочника ШУНО по серийному номеру Mercury."""
+        from app.models.irz import IRZDevice
+        from app.modules.irz import cabinets
+
+        entry = cabinets.find_entry(serial)
+        if entry is None:
+            raise click.ClickException(f"Серийный № {cabinets.normalize_serial(serial) or serial} не найден в справочнике")
+        click.echo(f"Serial: {entry.meter_serial}")
+        click.echo(f"ШУНО: {entry.cabinet_name or '—'}")
+        click.echo(f"ID ШУНО: {entry.cabinet_external_id or '—'}")
+        click.echo(f"Model: {entry.meter_model or '—'}")
+        click.echo(f"Installed: {entry.installed_raw or '—'}")
+        click.echo(f"КТТ: {entry.ktt if entry.ktt is not None else '—'}")
+        click.echo(f"Latitude: {entry.latitude if entry.latitude is not None else '—'}")
+        click.echo(f"Longitude: {entry.longitude if entry.longitude is not None else '—'}")
+        linked = db.session.scalar(db.select(IRZDevice).where(IRZDevice.active_filter(), IRZDevice.directory_entry_id == entry.id))
+        click.echo(f"IRZ: {f'{linked.name} (IMEI {linked.imei})' if linked else 'не сопоставлен'}")
+
     @app.cli.command("repair-request-districts")
     @click.option("--dry-run", is_flag=True, help="Только показать, без записи в БД")
     @click.option("--limit", default=0, show_default=True, help="Максимум заявок (0 = все)")

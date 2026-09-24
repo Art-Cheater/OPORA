@@ -14,6 +14,7 @@ from flask import current_app
 
 from app.extensions import db
 from app.models.irz import IRZDevice, IRZExchangeLog, IRZExperiment, IRZMeter, IRZMeterSnapshot, IRZOperationLog
+from app.modules.irz import cabinets
 from app.modules.irz.commands import COMMANDS, command_list, get_command, poll_commands
 
 PHASE_PREFIXES = {
@@ -329,6 +330,7 @@ def serialize_device(device: IRZDevice, *, online: bool = False, runtime: dict |
         "latest": serialize_snapshot(latest, include_delta=True) if latest else None,
         "current": current,
         "meter": serialize_meter(meter) if meter else None,
+        "directory": cabinets.directory_state(device, meter),
     }
 
 
@@ -336,7 +338,7 @@ def serialize_meter(meter: IRZMeter) -> dict:
     return {
         "id": str(meter.id), "serial_number": meter.serial_number, "custom_name": meter.custom_name,
         "display_name": meter.custom_name or f"Mercury {meter.serial_number}", "model": meter.model,
-        "model_source": meter.model_source,
+        "model_source": meter.model_source, "catalog_model": meter.catalog_model,
         "manufacture_date": meter.manufacture_date.isoformat() if meter.manufacture_date else None,
         "firmware_version": meter.firmware_version,
         "last_seen_at": meter.last_seen_at.isoformat() if meter.last_seen_at else None,
@@ -666,7 +668,9 @@ def _apply_results(device: IRZDevice, results: dict, errors: list, now: datetime
             if raw_date:
                 try: device.last_manufacture_date = datetime.fromisoformat(str(raw_date)).date()
                 except ValueError: pass
-            _upsert_meter(device, data, now, user_id)
+            meter = _upsert_meter(device, data, now, user_id)
+            if meter is not None:
+                cabinets.match_irz_from_meter_serial(device, meter.serial_number, meter=meter)
         elif command_id == "firmware_version" and data is not None:
             device.last_firmware_version = str(data)
         elif command_id == "transformation_ratios" and isinstance(data, dict):

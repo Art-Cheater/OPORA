@@ -54,6 +54,10 @@ class IRZDevice(BaseModel):
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     address_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
     poll_lock_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    directory_entry_id: Mapped[Any | None] = mapped_column(GUID(), nullable=True, index=True)
+    directory_match_status: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    directory_match_serial: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    directory_matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class IRZMeter(BaseModel):
@@ -70,12 +74,28 @@ class IRZMeter(BaseModel):
     custom_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     model: Mapped[str | None] = mapped_column(String(80), nullable=True)
     model_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    catalog_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
     manufacture_date: Mapped[Any | None] = mapped_column(Date, nullable=True)
     firmware_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_poll_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_poll_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     latest_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
+
+
+class MeterCabinetDirectory(BaseModel):
+    """Mercury serial -> ШУНО reference imported from Excel; linked to IRZ by id only, without FK."""
+    __tablename__ = "meter_cabinet_directory"
+
+    meter_serial: Mapped[str] = mapped_column(String(40), nullable=False, unique=True, index=True)
+    cabinet_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    cabinet_external_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    meter_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    installed_at: Mapped[Any | None] = mapped_column(Date, nullable=True)
+    installed_raw: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    ktt: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class IRZMeterSnapshot(BaseModel):

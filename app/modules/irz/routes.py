@@ -11,7 +11,7 @@ from app.core.audit_service import AuditService
 from app.core.decorators import any_permission_required, permission_required
 from app.extensions import db
 from app.models.irz import IRZMeter
-from app.modules.irz import directory, service
+from app.modules.irz import cabinets, directory, service
 from app.modules.irz.blueprint import irz_bp
 
 
@@ -301,6 +301,45 @@ def monitoring_device_update(imei):
         return _error_response(exc)
     AuditService.log(user_id=current_user.id, action="update", entity_type="irz_device", entity_id=device.id,
                      description=f"Обновлена карточка IRZ {imei}", new_values={key: payload.get(key) for key in ("name", "latitude", "longitude", "address_text") if key in payload})
+    db.session.commit()
+    return jsonify(service.serialize_device(device))
+
+
+DIRECTORY_ERRORS = {"METER_SERIAL_UNKNOWN", "DIRECTORY_ENTRY_NOT_FOUND"}
+
+
+def _directory_error(exc):
+    if isinstance(exc, LookupError) and str(exc) in DIRECTORY_ERRORS:
+        return jsonify({"success": False, "error_code": str(exc), "message": str(exc)}), 404
+    return _error_response(exc)
+
+
+@irz_bp.get("/api/devices/<imei>/directory")
+@login_required
+@permission_required("irz.edit")
+def monitoring_device_directory_preview(imei):
+    try:
+        device = service.get_device_by_imei(imei)
+        return jsonify(cabinets.reapply_preview(device, service._device_meter(device)))
+    except (ValueError, LookupError) as exc:
+        return _directory_error(exc)
+
+
+@irz_bp.post("/api/devices/<imei>/directory/apply")
+@login_required
+@permission_required("irz.edit")
+def monitoring_device_directory_apply(imei):
+    try:
+        device = service.get_device_by_imei(imei)
+        payload = request.get_json(silent=True) or {}
+        result = cabinets.reapply_directory(device, service._device_meter(device),
+                                            entry_id=payload.get("entry_id"), user_id=current_user.id)
+    except (ValueError, LookupError) as exc:
+        return _directory_error(exc)
+    AuditService.log(user_id=current_user.id, action="update", entity_type="irz_device", entity_id=device.id,
+                     description=f"IRZ {imei}: применены данные справочника ШУНО по № {result['serial']}",
+                     old_values={item["field"]: item["current"] for item in result["changes"]},
+                     new_values={item["field"]: item["new"] for item in result["changes"]})
     db.session.commit()
     return jsonify(service.serialize_device(device))
 

@@ -66,7 +66,15 @@ from app.models.tenders.tender_project import TenderProject
 from app.models.ui.wallpaper import Wallpaper
 from app.models.devices.device import Device
 from app.models.devices.device_command import DeviceCommand
-from app.models.irz import IRZDevice, IRZExchangeLog, IRZExperiment, IRZMeter, IRZMeterSnapshot, IRZOperationLog
+from app.models.irz import (
+    IRZDevice,
+    IRZExchangeLog,
+    IRZExperiment,
+    IRZMeter,
+    IRZMeterSnapshot,
+    IRZOperationLog,
+    MeterCabinetDirectory,
+)
 from app.models.work_objects.work_object import WorkObject
 
 __all__ = [
@@ -150,4 +158,5 @@ __all__ = [
     "IRZMeter",
     "IRZMeterSnapshot",
     "IRZOperationLog",
+    "MeterCabinetDirectory",
 ]
