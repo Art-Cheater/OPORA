@@ -119,24 +119,48 @@ diagnostics remain backend-only and are not mixed into the operator workflow.
 
 ## User pages and permissions
 
-- `/irz` — «IRZ · Мониторинг»: MapLibre map with square status markers and a
-  searchable device list (name, IMEI, meter serial, address). Devices without
-  coordinates stay in the list only.
+- `/irz` — «IRZ · Мониторинг»: MapLibre map and a searchable device list
+  (name, IMEI, meter serial, address). Devices without coordinates stay in the
+  list only.
 - `/irz/<uuid>` — device detail (IMEI URLs redirect to the UUID URL):
-  readings, poll history, location card.
+  lighting status, readings, poll history, location card.
 - `/irz/map-display` — read-only fullscreen map, see
   [`IRZ_MAP_DISPLAY.md`](IRZ_MAP_DISPLAY.md).
+- `/irz/poles`, `/irz/poles/<id>` — street-lighting poles, see below.
 
-Marker colours: green — ATM21 online and the last poll is fresh and complete;
-yellow — online, but Mercury timed out, data is partial, stale or missing;
-red — ATM21 offline; grey — only when the gateway sidecar is unreachable.
+### Статус освещения
+
+Эксплуатационный статус вычисляется только в `app/modules/irz/status.py`
+(`get_irz_operational_status`) и не зависит от транспортного online ATM21,
+который показывается отдельно.
+
+| Статус | Условие |
+|---|---|
+| `ON` «Горит» | ATM21 на связи, есть актуальные I/P/Q/S, хотя бы одно значение любой фазы по модулю > `IRZ_LIGHT_ON_THRESHOLD` (1.0) |
+| `OFF` «Не горит» | актуальные данные есть, хотя бы одна из величин I/P/Q/S пришла по всем трём фазам, ничего не превышает порог |
+| `PROBLEM` «Проблема» | актуальных данных нет или их недостаточно для решения, прошло меньше часа |
+| `CRITICAL` «Критическая проблема» | то же, но с последнего успешного ответа прошло ≥ `IRZ_CRITICAL_AFTER_SECONDS` (3600) |
+
+Актуальны только команды I/P/Q/S, которые в последнем опросе вернулись
+успешно и не старше `IRZ_DATA_FRESH_SECONDS` (900 с). Если команда упала,
+её прошлые значения остаются в карточке с пометкой STALE, но решение по ним
+не принимается. `null`, `NaN`, строки и `bool` не считаются нулём. «Последний
+успешный ответ Mercury» — самое позднее `captured_at` из успешно считанных I/P/Q/S
+(`irz_meters.latest_snapshot.commands`), а не heartbeat ATM21. Если ответов
+не было ни разу, время отсчитывается от первого обнаружения ATM21 (`created_at`).
+
+Тип шкафа по названию (trim, верхний регистр): начинается с «ИП» — `IP`,
+розовая плашка; «ПП» — `PP`, серо-белая; иначе `OTHER`, светло-зелёная.
+Маркер строится только из слоёв MapLibre над одним GeoJSON source: symbol-слой
+с плашкой (`icon-text-fit`) и названием, над ним circle-слой лампы статуса.
+DOM-маркеров нет.
 
 | Permission | Grants |
 |---|---|
-| `irz.view` | list, map, detail page, `GET /irz/api/map`, `GET /irz/api/directory` |
+| `irz.view` | list, map, detail page, poles list/detail, `GET /irz/api/map`, `GET /irz/api/directory`, `GET /irz/poles/map.json` |
 | `irz.edit` | name, address and coordinates (`PATCH /irz/api/devices/<imei>`) |
 | `irz.poll` | manual poll, event journals, energy archive |
-| `irz.map_display` | fullscreen map and `GET /irz/api/map` only |
+| `irz.map_display` | fullscreen map, `GET /irz/api/map` and `GET /irz/poles/map.json` only |
 | `irz.admin` | manual meter model (`PATCH /irz/api/mercury/devices/<id>/meter`) |
 | `irz.send`, `irz.control` | legacy engineering endpoints; write commands stay disabled |
 
@@ -198,6 +222,59 @@ docker compose exec -T web flask irz-meter-directory-find 40191143
 
 Локально без `--file` используется `meters_with_cabinets.xlsx` в корне
 проекта. `--show-warnings` выводит все предупреждения по строкам.
+
+## Опоры освещения
+
+Таблица `light_poles` (миграция `067_irz_light_poles`): `pole_number`
+(строка, уникален), `luminaire_name`, `latitude`, `longitude`, `quantity`.
+Источник — `опоры.xlsx`, первый лист, столбцы «Номер опоры», «Название
+светильника», «Широта», «Долгота», «Кол-во, шт».
+
+В файле одна строка — один светильник. Опора с несколькими светильниками
+повторяет номер с теми же координатами, поэтому такие строки объединяются:
+`quantity` — сумма строк, `luminaire_name` — «MAG41-200 … × 2; MAG31-130 …».
+Реальный файл: 4701 строка → 4068 опор, 633 строки объединены, пропусков и
+ошибок нет.
+
+- Пустой номер — строка пропускается.
+- Невалидные или неполные координаты — опора сохраняется без координат с
+  предупреждением: она находится поиском, но не показывается на карте.
+  Строку не выбрасываем, чтобы не потерять опору из справочника.
+- Нецелое количество — ошибка строки и предупреждение, количество не учитывается.
+- Повторный импорт — upsert по номеру: «Добавлено / Обновлено / Без изменений».
+  Опоры, которых нет в новом файле, не удаляются.
+
+Страницы: `/irz/poles` (поиск по номеру и светильнику, 50 на страницу),
+`/irz/poles/<id>` (карточка с небольшой картой). На `/irz` и
+`/irz/map-display` опоры — отдельный слой треугольников. Он появляется с zoom 14
+на `/irz` и с zoom 15 на большом экране, загружается через `GET /irz/poles/map.json?bbox=minLon,minLat,maxLon,maxLat`
+после остановки карты (debounce 300 мс). Отдаётся не больше 2500 опор;
+при обрезке в ответе `truncated: true`. Переключатели слоёв «IRZ» и «Опоры»
+запоминаются в `localStorage` браузера. На экране IRZ показываются всегда,
+опоры включаются отдельно.
+
+### Runbook
+
+Excel читается только CLI-командой, запросы страниц работают с БД. Файл не
+входит в Docker-образ (`*.xlsx` в `.dockerignore`) и не хранится в git.
+На сервере его кладут в уже смонтированный каталог импортных данных:
+хост `/opt/opora/data/geo` → контейнер `/data/geo` (read-only). Латинское имя
+файла избавляет от проблем с кодировкой в shell:
+
+```bash
+cp опоры.xlsx /opt/opora/data/geo/irz_poles.xlsx
+docker compose exec -T web flask irz-import-poles --file /data/geo/irz_poles.xlsx --dry-run
+docker compose exec -T web flask irz-import-poles --file /data/geo/irz_poles.xlsx
+```
+
+Без копирования на сервер файл можно передать через stdin:
+
+```bash
+docker compose exec -T web flask irz-import-poles --file - < опоры.xlsx
+```
+
+Локально без `--file` используется `опоры.xlsx` в корне проекта.
+`--show-warnings` выводит все предупреждения по строкам.
 
 ## Ten-minute production poll
 
