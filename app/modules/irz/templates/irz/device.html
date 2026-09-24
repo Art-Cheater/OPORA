@@ -20,6 +20,8 @@
      data-history-url="{{ url_for('irz.monitoring_snapshots', imei=device.imei) }}"
      data-events-url="{{ url_for('irz.monitoring_events', imei=device.imei) }}"
      data-map-url="{{ url_for('irz.index', device=device.id) }}"
+     data-directory-url="{{ url_for('irz.monitoring_device_directory_preview', imei=device.imei) }}"
+     data-directory-apply-url="{{ url_for('irz.monitoring_device_directory_apply', imei=device.imei) }}"
      data-can-edit="{{ '1' if can_edit else '0' }}" data-can-poll="{{ '1' if can_poll else '0' }}">
   <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
     <div class="d-flex align-items-center gap-2"><span class="badge text-bg-secondary" data-device-status>OFFLINE</span><span class="small text-muted" data-last-update>Нет данных</span></div>
@@ -29,6 +31,7 @@
   <div class="row g-3 irz-dashboard">
     <section class="col-xl-3"><div class="card h-100"><div class="card-header fw-semibold">Местоположение</div><div class="card-body">
       <div class="irz-map-placeholder mb-3" data-map><i class="bi bi-geo-alt"></i><span>Координаты не заданы</span></div>
+      <div class="small mb-3" data-directory hidden></div>
       {% if can_edit %}
       <form data-profile-form novalidate>
         <label class="form-label small" for="irzName">Название объекта</label>
@@ -42,6 +45,8 @@
         <div class="form-text">Пустые широта и долгота — объект не показывается на карте.</div>
         <button class="btn btn-sm btn-outline-primary mt-3 w-100">Сохранить карточку</button>
       </form>
+      <button type="button" class="btn btn-sm btn-outline-secondary mt-2 w-100" data-directory-reapply disabled><i class="bi bi-journal-arrow-down"></i> Повторно применить данные справочника</button>
+      <div class="irz-directory-preview small mt-2" data-directory-preview hidden></div>
       {% else %}
       <div class="small" data-profile-view></div>
       {% endif %}

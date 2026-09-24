@@ -97,15 +97,31 @@
           ['Координаты', hasPoint ? `${location.latitude}, ${location.longitude}` : 'Не заданы']]);
       }
     }
+    function renderDirectory() {
+      const state = selected.directory || {}, entry = state.entry, node = q('[data-directory]');
+      let html = '';
+      if (entry) {
+        html = details([['ШУНО', entry.cabinet_name || 'не указано в справочнике'], ['ID ШУНО', entry.cabinet_external_id], ['Модель по справочнику', entry.meter_model]])
+          + `<div class="text-muted mt-1">Сопоставлено по серийному № ${esc(entry.meter_serial)}</div>`;
+        if (state.serial_changed) html += `<div class="irz-note irz-note--warning mt-2 mb-0">Сейчас прочитан другой серийный № ${esc(state.current_serial)}. Карточка не менялась автоматически${canEdit ? ' — при необходимости примените справочник повторно' : ''}.</div>`;
+      } else if (state.status === 'NOT_FOUND') {
+        html = `<div class="irz-note irz-note--warning mb-0">Серийный номер ${esc(state.matched_serial)} не найден в справочнике ШУНО</div>`;
+      } else if (state.status === 'METER_SERIAL_CONFLICT') {
+        html = `<div class="irz-note irz-note--danger mb-0">Серийный № ${esc(state.matched_serial)} уже сопоставлен с другим IRZ, автоматическая привязка не выполнена${canEdit ? '. Проверьте и примените справочник вручную' : ''}.</div>`;
+      }
+      node.innerHTML = html; node.hidden = !html;
+      const button = q('[data-directory-reapply]');
+      if (button) button.disabled = busy || !state.current_serial;
+    }
     function render() {
       if (!selected) return;
       const status=q('[data-device-status]'); status.textContent=selected.online?'ONLINE':'OFFLINE'; status.className=`badge text-bg-${selected.online?'success':'danger'}`;
       q('[data-last-update]').textContent=`Последний опрос: ${time(selected.latest?.captured_at || selected.last_polled_at)}`;
       if (q('[data-poll]')) q('[data-poll]').disabled=busy || !selected.online;
       if (q('[data-read-events]')) q('[data-read-events]').disabled=busy || !selected.online;
-      renderProfile();
+      renderProfile(); renderDirectory();
       const meter=selected.meter, values=current().values;
-      q('[data-meter-details]').innerHTML=meter?details([['Название',meter.display_name],['Модель',meter.model || 'Mercury 230'],['Серийный №',meter.serial_number],['Дата выпуска',meter.manufacture_date],['Версия ПО',meter.firmware_version],['Кн / Кт',`${fmt(values?.transformation_voltage ?? null)} / ${fmt(values?.transformation_current ?? null)}`],['Последний ответ',time(selected.last_mercury_seen_at)]]):'Счётчик: не определён';
+      q('[data-meter-details]').innerHTML=meter?details([['Название',meter.display_name],['Модель',meter.catalog_model || meter.model || 'Mercury 230'],['Серийный №',meter.serial_number],['Дата выпуска',meter.manufacture_date],['Версия ПО',meter.firmware_version],['Кн / Кт',`${fmt(values?.transformation_voltage ?? null)} / ${fmt(values?.transformation_current ?? null)}`],['Последний ответ',time(selected.last_mercury_seen_at)]]):'Счётчик: не определён';
       q('[data-atm-details]').innerHTML=details([['IMEI',selected.imei],['IP / порт',`${fmt(selected.ip)}:${fmt(selected.port)}`],['CSQ',selected.csq],['Интерфейсы',selected.interfaces],['Версия',`${fmt(selected.firmware_version)} / ${fmt(selected.firmware_revision)} / ${fmt(selected.firmware_build)}`],['Последний пакет',time(selected.last_seen_at)]]);
       renderTelemetry(); renderEvents();
     }
@@ -143,6 +159,32 @@
         await api(root.dataset.detailUrl,{method:'PATCH',body:JSON.stringify({name:q('[data-name]').value,address_text:q('[data-address]').value,latitude:q('[data-lat]').value,longitude:q('[data-lon]').value})});
         formDirty = false; await reload(); notice('Карточка объекта сохранена.','success');
       } catch(err) { notice(PROFILE_ERRORS[err.message] || err.message,'danger'); }
+    });
+    const DIRECTORY_ERRORS = {METER_SERIAL_UNKNOWN: 'Серийный номер счётчика ещё не прочитан.',
+      DIRECTORY_ENTRY_NOT_FOUND: 'Серийного номера счётчика нет в справочнике ШУНО.',
+      DIRECTORY_PREVIEW_OUTDATED: 'Справочник изменился, откройте предпросмотр заново.'};
+    const preview = q('[data-directory-preview]');
+    const closePreview = () => { preview.hidden = true; preview.innerHTML = ''; };
+    q('[data-directory-reapply]')?.addEventListener('click', async () => {
+      try {
+        const plan = await api(root.dataset.directoryUrl), entry = plan.entry;
+        const changes = plan.changes.length
+          ? `<ul class="mb-2 ps-3">${plan.changes.map((item) => `<li><strong>${esc(item.label)}:</strong> ${esc(item.current)} → ${esc(item.new)}</li>`).join('')}</ul>`
+          : '<div class="mb-2">Карточка уже совпадает со справочником.</div>';
+        const conflict = plan.conflict ? `<div class="irz-note irz-note--danger mb-2">Запись сейчас сопоставлена с IRZ «${esc(plan.conflict.name)}» (IMEI ${esc(plan.conflict.imei)}). После применения связь перейдёт на это устройство.</div>` : '';
+        preview.innerHTML = `<div class="mb-1">По серийному № ${esc(plan.serial)} · ШУНО ${esc(entry.cabinet_name)}</div>${conflict}${changes}`
+          + '<div class="d-flex gap-2"><button type="button" class="btn btn-sm btn-primary" data-directory-confirm>Применить</button><button type="button" class="btn btn-sm btn-outline-secondary" data-directory-cancel>Отмена</button></div>';
+        preview.hidden = false;
+        preview.querySelector('[data-directory-cancel]').addEventListener('click', closePreview);
+        const confirm = preview.querySelector('[data-directory-confirm]');
+        confirm.addEventListener('click', async () => {
+          confirm.disabled = true;
+          try {
+            await api(root.dataset.directoryApplyUrl, {method: 'POST', body: JSON.stringify({entry_id: entry.id})});
+            closePreview(); formDirty = false; await reload(); notice('Данные справочника применены.', 'success');
+          } catch (err) { confirm.disabled = false; notice(DIRECTORY_ERRORS[err.message] || err.message, 'danger'); }
+        });
+      } catch (err) { notice(DIRECTORY_ERRORS[err.message] || err.message, 'danger'); }
     });
     async function tick(){try{if(!busy)await reload();}catch(err){message(`Мониторинг недоступен: ${err.message}`,'danger');}finally{if(!stopped)timer=setTimeout(tick,10000);}}
     window.addEventListener('opora:before-navigate',()=>{stopped=true;clearTimeout(timer);},{once:true}); tick();

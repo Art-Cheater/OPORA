@@ -22,6 +22,7 @@ td.irz-stale { background: var(--bs-warning-bg-subtle); }
 .irz-note--info { background: var(--bs-info-bg-subtle); color: var(--bs-info-text-emphasis); border-color: var(--bs-info-border-subtle); }
 .irz-note--warning { background: var(--bs-warning-bg-subtle); color: var(--bs-warning-text-emphasis); border-color: var(--bs-warning-border-subtle); }
 .irz-note--danger { background: var(--bs-danger-bg-subtle); color: var(--bs-danger-text-emphasis); border-color: var(--bs-danger-border-subtle); }
+.irz-directory-preview { border: 1px solid var(--bs-border-color); border-radius: .4rem; padding: .6rem .75rem; background: var(--bs-tertiary-bg); }
 
 /* Квадратный индикатор статуса — тот же, что маркер на карте. */
 .irz-square { display: inline-block; flex: none; width: .7rem; height: .7rem; border: 1px solid rgba(17, 24, 39, .85); vertical-align: middle; margin-right: .35rem; }
