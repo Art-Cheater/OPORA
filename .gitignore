@@ -83,6 +83,17 @@ docker-data/
 /data/valhalla/*.sqlite
 /data/valhalla/*.bin
 
+# Import sources are copied to the server data directory, not committed
+/опоры.xlsx
+/meters_with_cabinets.xlsx
+~$*
+
+# Board firmware build output
+/Board/firmware.elf
+/Board/firmware.hex
+/Board/firmware.map
+/Board/symbols_by_size.txt
+
 # Testing
 .pytest_cache/
 .coverage
