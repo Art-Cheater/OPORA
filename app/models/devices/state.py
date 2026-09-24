@@ -99,8 +99,11 @@ def _hex_byte(value: Any) -> str | None:
     return f"{number:02X}"
 
 
+STABLE_SAMPLES = 3
+
+
 def start_input_test(raw: dict[str, Any] | None, connector: str, pin: str, started_at: str) -> dict[str, Any]:
-    """Snapshot U2/U3. Earlier bit history is not copied into the session."""
+    """Open a short measurement. Baseline starts only with STATE frames after this call."""
     if connector not in CONNECTORS or pin not in {"1", "2", "3", "4", "5", "6"}:
         raise ValueError("invalid test target")
     source = raw if isinstance(raw, dict) else {}
@@ -109,32 +112,139 @@ def start_input_test(raw: dict[str, Any] | None, connector: str, pin: str, start
         "connector": connector,
         "pin": pin,
         "started_at": started_at,
-        "start_u2": u2,
-        "start_u3": u3,
+        "phase": "baseline",
+        "baseline_samples": [],
+        "after_samples": [],
+        "baseline_u2": None,
+        "baseline_u3": None,
         "last_u2": u2,
         "last_u3": u3,
         "transitions": [],
+        "result": None,
     }
 
 
-def apply_input_test_sample(session: dict[str, Any] | None, raw: dict[str, Any] | None, changed_at: str) -> dict[str, Any] | None:
-    """Append transitions that happen after the snapshot. Pre-start changes stay out."""
-    if not isinstance(session, dict):
-        return None
-    updated = dict(session)
-    updated["transitions"] = list(session.get("transitions") or [])
+def _sample_pair(raw: dict[str, Any] | None) -> tuple[str, str] | None:
     source = raw if isinstance(raw, dict) else {}
-    for bank, key in (("U2", "last_u2"), ("U3", "last_u3")):
-        incoming = _hex_byte(source.get(bank))
-        if incoming is None:
+    u2, u3 = _hex_byte(source.get("U2")), _hex_byte(source.get("U3"))
+    if u2 is None or u3 is None:
+        return None
+    return u2, u3
+
+
+def _same_pair(samples: list[dict[str, Any]]) -> bool:
+    if len(samples) < STABLE_SAMPLES:
+        return False
+    first = samples[-STABLE_SAMPLES]
+    return all(item["U2"] == first["U2"] and item["U3"] == first["U3"] for item in samples[-STABLE_SAMPLES:])
+
+
+def _unanimous_bit(samples: list[dict[str, Any]], bank: str, bit: int) -> int | None:
+    if len(samples) < STABLE_SAMPLES:
+        return None
+    values = []
+    for sample in samples[:STABLE_SAMPLES]:
+        decoded = decode_raw_bank(sample.get(bank))
+        if not decoded:
+            return None
+        values.append(int(decoded[str(bit)]))
+    return values[0] if len(set(values)) == 1 else None
+
+
+def stable_diff(baseline_samples: list[dict[str, Any]], after_samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Bits stable before and after, and different between those two stable values."""
+    changed = []
+    for bank in RAW_BANKS:
+        for bit in range(8):
+            before = _unanimous_bit(baseline_samples, bank, bit)
+            after = _unanimous_bit(after_samples, bank, bit)
+            if before is None or after is None or before == after:
+                continue
+            changed.append({"label": f"{bank}.bit{bit}", "source": bank, "bit": bit, "from": before, "to": after})
+    return changed
+
+
+def _measurement_result(session: dict[str, Any]) -> dict[str, Any]:
+    changed = stable_diff(list(session.get("baseline_samples") or []), list(session.get("after_samples") or []))
+    candidate = None
+    if len(changed) == 1:
+        item = changed[0]
+        verdict = "RESULT"
+        candidate = {
+            "connector": session.get("connector"),
+            "pin": session.get("pin"),
+            "source": item["source"],
+            "bit": item["bit"],
+            "active_level": item["to"],
+        }
+    elif changed:
+        verdict = "AMBIGUOUS"
+    else:
+        verdict = "NO CHANGE"
+    after = list(session.get("after_samples") or [])
+    return {
+        "verdict": verdict,
+        "changed": changed,
+        "candidate": candidate,
+        "before_u2": session.get("baseline_u2"),
+        "before_u3": session.get("baseline_u3"),
+        "after_u2": after[-1]["U2"] if after else None,
+        "after_u3": after[-1]["U3"] if after else None,
+    }
+
+
+def mark_input_switch(session: dict[str, Any] | None) -> dict[str, Any]:
+    """Begin the three STATE samples that follow the physical pin change."""
+    if not isinstance(session, dict) or session.get("phase") != "armed":
+        raise ValueError("baseline is not stable")
+    updated = dict(session)
+    updated["phase"] = "after"
+    updated["after_samples"] = []
+    updated["result"] = None
+    return updated
+
+
+def apply_input_test_sample(session: dict[str, Any] | None, raw: dict[str, Any] | None, changed_at: str) -> dict[str, Any] | None:
+    """Collect a short baseline, then three samples after the operator marks the switch."""
+    if not isinstance(session, dict) or session.get("phase") == "done":
+        return session
+    updated = dict(session)
+    updated["transitions"] = list(session.get("transitions") or [])[-40:]
+    pair = _sample_pair(raw)
+    if pair is None:
+        return updated
+    u2, u3 = pair
+    previous = decode_raw_bank(updated.get("last_u2") if isinstance(updated.get("last_u2"), str) else None)
+    current = decode_raw_bank(u2)
+    previous_u3 = decode_raw_bank(updated.get("last_u3") if isinstance(updated.get("last_u3"), str) else None)
+    current_u3 = decode_raw_bank(u3)
+    for bank, old_bits, new_bits in (("U2", previous, current), ("U3", previous_u3, current_u3)):
+        if not old_bits or not new_bits:
             continue
-        previous = decode_raw_bank(updated.get(key) if isinstance(updated.get(key), str) else None)
-        current = decode_raw_bank(incoming)
-        if previous and current:
-            for bit, value in current.items():
-                if int(previous[bit]) != int(value):
-                    updated["transitions"].append({"at": changed_at, "source": bank, "bit": int(bit), "from": int(previous[bit]), "to": int(value)})
-        updated[key] = incoming
+        for bit, value in new_bits.items():
+            if int(old_bits[bit]) != int(value):
+                updated["transitions"].append({"at": changed_at, "source": bank, "bit": int(bit), "from": int(old_bits[bit]), "to": int(value)})
+    updated["last_u2"], updated["last_u3"] = u2, u3
+    sample = {"U2": u2, "U3": u3, "at": changed_at}
+    phase = updated.get("phase")
+    if phase == "baseline":
+        samples = list(updated.get("baseline_samples") or [])
+        samples.append(sample)
+        samples = samples[-STABLE_SAMPLES:]
+        updated["baseline_samples"] = samples
+        if _same_pair(samples):
+            updated["phase"] = "armed"
+            updated["baseline_u2"] = samples[-1]["U2"]
+            updated["baseline_u3"] = samples[-1]["U3"]
+            updated["baseline_samples"] = samples[-STABLE_SAMPLES:]
+    elif phase == "after":
+        samples = list(updated.get("after_samples") or [])
+        if len(samples) < STABLE_SAMPLES:
+            samples.append(sample)
+        updated["after_samples"] = samples
+        if len(samples) >= STABLE_SAMPLES:
+            updated["phase"] = "done"
+            updated["result"] = _measurement_result(updated)
     return updated
 
 
@@ -154,28 +264,50 @@ def raw_bank_diff(start: str | None, current: str | None) -> list[str]:
     return [f"bit{bit}" for bit, value in after.items() if int(before[bit]) != int(value)]
 
 
+def describe_input_test(session: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Live view. Mapping uses only the stable result, never the debug transition list."""
+    if not isinstance(session, dict):
+        return None
+    result = session.get("result") if isinstance(session.get("result"), dict) else None
+    return {
+        "phase": session.get("phase"),
+        "connector": session.get("connector"),
+        "pin": session.get("pin"),
+        "baseline_ready": session.get("phase") in {"armed", "after", "done"},
+        "baseline_u2": session.get("baseline_u2"),
+        "baseline_u3": session.get("baseline_u3"),
+        "before_u2": (result or {}).get("before_u2") or session.get("baseline_u2"),
+        "before_u3": (result or {}).get("before_u3") or session.get("baseline_u3"),
+        "after_u2": (result or {}).get("after_u2"),
+        "after_u3": (result or {}).get("after_u3"),
+        "verdict": (result or {}).get("verdict"),
+        "stable": (result or {}).get("changed") or [],
+        "candidate": (result or {}).get("candidate"),
+        "lines": [
+            {"at": item.get("at"), "label": f"{item['source']}.bit{item['bit']}", "from": item.get("from"), "to": item.get("to")}
+            for item in session.get("transitions") or []
+        ],
+    }
+
+
 def finish_input_test(session: dict[str, Any], ended_at: str) -> dict[str, Any]:
-    """Summarise the session. This does not write a connector mapping."""
+    """Journal summary. Stable bits only; debug transitions are not a mapping."""
+    result = session.get("result") if isinstance(session.get("result"), dict) else {}
+    changed = [item["label"] for item in result.get("changed") or []]
     chains = _transition_chains(list(session.get("transitions") or []))
-    changed = list(chains)
-    candidate = None
-    if len(changed) == 1:
-        label = changed[0]
-        source, bit_text = label.split(".bit")
-        candidate = {"connector": session.get("connector"), "pin": session.get("pin"), "source": source, "bit": int(bit_text)}
     return {
         "connector": session.get("connector"),
         "pin": session.get("pin"),
         "started_at": session.get("started_at"),
         "ended_at": ended_at,
-        "start_u2": session.get("start_u2"),
-        "start_u3": session.get("start_u3"),
-        "end_u2": session.get("last_u2"),
-        "end_u3": session.get("last_u3"),
+        "start_u2": session.get("baseline_u2"),
+        "start_u3": session.get("baseline_u3"),
+        "end_u2": (result or {}).get("after_u2"),
+        "end_u3": (result or {}).get("after_u3"),
         "changed_bits": changed,
         "transitions": {label: " -> ".join(str(value) for value in chain) for label, chain in chains.items()},
-        "diff": {"U2": raw_bank_diff(session.get("start_u2"), session.get("last_u2")), "U3": raw_bank_diff(session.get("start_u3"), session.get("last_u3"))},
-        "candidate": candidate,
+        "verdict": result.get("verdict"),
+        "candidate": result.get("candidate"),
         "duration_seconds": _duration_seconds(session.get("started_at"), ended_at),
     }
 

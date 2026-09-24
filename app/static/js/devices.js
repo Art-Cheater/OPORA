@@ -121,31 +121,44 @@
 
     function renderInputTest(card, device) {
         const live = card.querySelector('[data-input-test-live]');
-        const endForm = card.querySelector('[data-input-test-end]');
+        const captureForm = card.querySelector('[data-input-test-capture]');
+        const resetForm = card.querySelector('[data-input-test-reset]');
         const confirmForm = card.querySelector('[data-input-test-confirm]');
         if (!live) return;
         const active = device.input_test?.active;
         const latest = device.input_test?.latest;
         const session = active || null;
-        if (endForm) endForm.hidden = !session;
+        if (captureForm) captureForm.hidden = !session || session.phase !== 'armed';
+        if (resetForm) resetForm.hidden = !session;
         const candidate = session?.candidate || (!session && latest?.candidate) || null;
         if (confirmForm) {
             confirmForm.hidden = !candidate;
             const label = confirmForm.querySelector('[data-input-test-candidate]');
+            const level = confirmForm.querySelector('[name="active_level"]');
             if (label && candidate) label.textContent = `${candidate.connector}.${candidate.pin} -> ${candidate.source}.bit${candidate.bit}`;
+            if (level && candidate && candidate.active_level !== null && candidate.active_level !== undefined) level.value = String(candidate.active_level);
         }
         if (session) {
-            const u2diff = (session.diff?.U2 || []).join(', ') || 'none';
-            const u3diff = (session.diff?.U3 || []).join(', ') || 'none';
+            const stable = (session.stable || []).map((item) => `${item.label}: ${item.from} -> ${item.to}`).join('\n') || '—';
             const lines = (session.lines || []).map((item) => `${formatDate(item.at)} ${item.label} ${item.from} -> ${item.to}`).join('\n');
+            const verdict = session.verdict === 'AMBIGUOUS'
+                ? `RESULT:\nAMBIGUOUS\n${(session.stable || []).map((item) => item.label).join('\n')}`
+                : session.verdict === 'NO CHANGE'
+                    ? 'RESULT:\nNO CHANGE'
+                    : session.verdict === 'RESULT' && candidate
+                        ? `RESULT:\n${candidate.connector}.${candidate.pin} -> ${candidate.source}.bit${candidate.bit}\nactive_level candidate = ${candidate.active_level}`
+                        : session.phase === 'after'
+                            ? 'Ждём 3 STATE после переключения'
+                            : session.baseline_ready
+                                ? ''
+                                : 'Ждём стабильный baseline';
             live.textContent = [
-                'ИЗМЕНЕНИЯ ТЕКУЩЕГО ТЕСТА',
+                session.baseline_ready ? `BASELINE\nU2=${session.baseline_u2}\nU3=${session.baseline_u3}` : 'BASELINE\nждём 3 одинаковых STATE',
+                session.phase === 'done' ? `BEFORE:\nU2=${session.before_u2}\nU3=${session.before_u3}\nAFTER:\nU2=${session.after_u2}\nU3=${session.after_u3}\nSTABLE DIFF:\n${stable}` : '',
+                verdict,
+                'Отладочный журнал',
                 lines || '—',
-                `START: U2 = ${session.start_u2 || '—'} U3 = ${session.start_u3 || '—'}`,
-                `CURRENT: U2 = ${session.end_u2 || '—'} U3 = ${session.end_u3 || '—'}`,
-                `DIFF: U2 changed bits: ${u2diff}`,
-                `U3 changed bits: ${u3diff}`,
-            ].join('\n');
+            ].filter((part) => part !== undefined).join('\n');
             return;
         }
         if (!latest) {
@@ -240,9 +253,13 @@
                 event.preventDefault();
                 await postTest(block.dataset.startUrl, new FormData(event.currentTarget));
             });
-            block.querySelector('[data-input-test-end]')?.addEventListener('submit', async (event) => {
+            block.querySelector('[data-input-test-capture]')?.addEventListener('submit', async (event) => {
                 event.preventDefault();
-                await postTest(block.dataset.endUrl, new FormData(event.currentTarget));
+                await postTest(block.dataset.captureUrl, new FormData(event.currentTarget));
+            });
+            block.querySelector('[data-input-test-reset]')?.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                await postTest(block.dataset.resetUrl, new FormData(event.currentTarget));
             });
             block.querySelector('[data-input-test-confirm]')?.addEventListener('submit', async (event) => {
                 event.preventDefault();

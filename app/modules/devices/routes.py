@@ -19,7 +19,8 @@ from app.models.devices import Device, DeviceCommand, DeviceDiagnosticEvent, Dev
 from app.models.devices.state import (
     OUTPUT_RELAYS,
     _duration_seconds,
-    finish_input_test,
+    describe_input_test,
+    mark_input_switch,
     normalize_actual_state,
     normalize_phase_input_map,
     payload_matches_actual,
@@ -141,14 +142,7 @@ def _serialize_device(device: Device, active_command: DeviceCommand | None, late
 
 def _input_test_payload(device: Device) -> dict:
     session = device.input_test_session if isinstance(device.input_test_session, dict) else None
-    active = None
-    if session:
-        active = finish_input_test(session, "")
-        active["ended_at"] = None
-        active["lines"] = [
-            {"at": item.get("at"), "label": f"{item['source']}.bit{item['bit']}", "from": item.get("from"), "to": item.get("to")}
-            for item in session.get("transitions") or []
-        ]
+    active = describe_input_test(session)
     log = db.session.scalar(
         db.select(DeviceInputTestLog).where(DeviceInputTestLog.device_id == device.id, DeviceInputTestLog.active_filter()).order_by(DeviceInputTestLog.created_at.desc())
     )
@@ -158,7 +152,7 @@ def _input_test_payload(device: Device) -> dict:
         candidate = None
         if len(bits) == 1 and ".bit" in bits[0]:
             source, bit_text = bits[0].split(".bit")
-            candidate = {"connector": log.connector, "pin": log.pin, "source": source, "bit": int(bit_text)}
+            candidate = {"connector": log.connector, "pin": log.pin, "source": source, "bit": int(bit_text), "active_level": None}
         latest = {
             "connector": log.connector,
             "pin": log.pin,
@@ -178,11 +172,9 @@ def _input_test_payload(device: Device) -> dict:
 
 def _candidate_from_active_or_log(device: Device) -> dict | None:
     payload = _input_test_payload(device)
-    active = payload["active"] or {}
-    if active.get("candidate"):
-        return active["candidate"]
-    latest = payload["latest"] or {}
-    return latest.get("candidate")
+    if payload["active"]:
+        return (payload["active"] or {}).get("candidate")
+    return (payload["latest"] or {}).get("candidate")
 
 
 def _switch_payload_from_form() -> dict[str, int]:
@@ -392,33 +384,27 @@ def start_input_test_route(device_id):
     return jsonify({"input_test": _input_test_payload(device)})
 
 
-@devices_bp.route("/<uuid:device_id>/input-test/end", methods=["POST"])
+@devices_bp.route("/<uuid:device_id>/input-test/capture", methods=["POST"])
 @login_required
 @permission_required("devices.manage")
-def end_input_test_route(device_id):
+def capture_input_test_route(device_id):
     device = _device_or_404(device_id)
-    session = device.input_test_session if isinstance(device.input_test_session, dict) else None
-    if session is None:
-        abort(409, description="Тест не запущен.")
-    ended = utcnow().isoformat()
-    result = finish_input_test(session, ended)
-    db.session.add(DeviceInputTestLog(
-        device_id=device.id,
-        connector=str(result["connector"]),
-        pin=str(result["pin"]),
-        started_at=str(result["started_at"]),
-        ended_at=ended,
-        start_u2=result["start_u2"],
-        start_u3=result["start_u3"],
-        end_u2=result["end_u2"],
-        end_u3=result["end_u3"],
-        changed_bits=result["changed_bits"],
-        transitions=result["transitions"],
-        created_by=current_user.id,
-    ))
+    try:
+        device.input_test_session = mark_input_switch(device.input_test_session)
+    except ValueError:
+        abort(409, description="Сначала дождитесь стабильного baseline.")
+    db.session.commit()
+    return jsonify({"input_test": _input_test_payload(device)})
+
+
+@devices_bp.route("/<uuid:device_id>/input-test/reset", methods=["POST"])
+@login_required
+@permission_required("devices.manage")
+def reset_input_test_route(device_id):
+    device = _device_or_404(device_id)
     device.input_test_session = None
     db.session.commit()
-    return jsonify({"input_test": _input_test_payload(device), "result": result})
+    return jsonify({"input_test": _input_test_payload(device)})
 
 
 @devices_bp.route("/<uuid:device_id>/input-test/confirm", methods=["POST"])

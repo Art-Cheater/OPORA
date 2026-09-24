@@ -14,8 +14,8 @@ from flask import Flask
 from app import create_app
 from app.extensions import db
 from app.models.base import as_utc_aware, utcnow
-from app.models.devices import Device, DeviceCommand, DeviceDiagnosticSample
-from app.models.devices.state import apply_input_test_sample, normalize_actual_state, observe_raw_bits, payload_matches_actual
+from app.models.devices import Device, DeviceCommand, DeviceDiagnosticSample, DeviceInputTestLog
+from app.models.devices.state import apply_input_test_sample, finish_input_test, normalize_actual_state, observe_raw_bits, payload_matches_actual
 from app.modules.devices.command_service import expire_state_confirmation_timeouts
 from app.tcp_gateway.protocol import decode_frame, decode_v2_frame, encode_frame, encode_v2_frame, hmac_matches, new_nonce, parse_v2_state
 from app.tcp_gateway.secrets import decrypt_device_secret
@@ -61,7 +61,14 @@ class Gateway:
                 if actual is not None:
                     actual = observe_raw_bits(device.actual_state, actual, now.isoformat())
                     if device.input_test_session:
-                        device.input_test_session = apply_input_test_sample(device.input_test_session, actual.get("raw"), now.isoformat())
+                        was_saved = bool(device.input_test_session.get("saved"))
+                        session = apply_input_test_sample(device.input_test_session, actual.get("raw"), now.isoformat())
+                        if session and session.get("phase") == "done" and not was_saved:
+                            result = finish_input_test(session, now.isoformat())
+                            db.session.add(DeviceInputTestLog(device_id=device.id, connector=str(result["connector"]), pin=str(result["pin"]), started_at=str(result["started_at"]), ended_at=now.isoformat(), start_u2=result["start_u2"], start_u3=result["start_u3"], end_u2=result["end_u2"], end_u3=result["end_u3"], changed_bits=result["changed_bits"], transitions=result["transitions"]))
+                            session = dict(session)
+                            session["saved"] = True
+                        device.input_test_session = session
                     device.actual_state = normalize_actual_state(actual)
                     awaiting_confirmation = db.session.scalars(
                         db.select(DeviceCommand).where(

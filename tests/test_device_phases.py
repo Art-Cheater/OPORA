@@ -7,12 +7,12 @@ import pytest
 from app.extensions import db
 from app.models.base import utcnow
 from app.models.devices import Device
-from app.models.devices import DeviceInputTestLog
 from app.models.devices.state import (
     apply_input_test_sample,
     connector_pins,
     decode_raw_bank,
-    finish_input_test,
+    describe_input_test,
+    mark_input_switch,
     normalize_phase_input_map,
     observe_raw_bits,
     phase_summary_from_connectors,
@@ -188,53 +188,65 @@ def test_saved_phase_map_drives_the_boards_page(app, admin_client):
     assert 'data-phase-pin="CON9.1"' in page and "Не настроено" in page
 
 
-def test_input_test_keeps_transitions_only_after_start_and_does_not_map():
-    history = observe_raw_bits(None, {"raw": {"U2": "EF", "U3": "FF"}}, "t0")
-    history = observe_raw_bits(history, {"raw": {"U2": "EF", "U3": "FE"}}, "t1")
-    session = start_input_test(history["raw"], "CON10", "4", "t2")
-    assert session["start_u2"] == "EF" and session["start_u3"] == "FE"
-    assert session["transitions"] == []
-    unchanged = apply_input_test_sample(session, {"U2": "EF", "U3": "FE"}, "t3")
-    assert unchanged["transitions"] == []
-    flipped = apply_input_test_sample(unchanged, {"U2": "EF", "U3": "7C"}, "t4")
-    flipped = apply_input_test_sample(flipped, {"U2": "EF", "U3": "7E"}, "t5")
-    result = finish_input_test(flipped, "t6")
-    assert result["changed_bits"] == ["U3.bit1", "U3.bit7"]
-    assert result["transitions"]["U3.bit1"] == "1 -> 0 -> 1"
-    assert result["transitions"]["U3.bit7"] == "1 -> 0"
-    assert result["diff"]["U2"] == []
-    assert result["candidate"] is None
+def _feed(session, u2, u3, count, stamp):
+    for index in range(count):
+        session = apply_input_test_sample(session, {"U2": u2, "U3": u3}, f"{stamp}{index}")
+    return session
 
 
-def test_single_bit_session_can_be_confirmed_manually(app, admin_client):
+def test_stable_baseline_needs_three_identical_states():
+    session = start_input_test({"U2": "00", "U3": "00"}, "CON10", "4", "t0")
+    assert describe_input_test(session)["baseline_ready"] is False
+    session = _feed(session, "EF", "FF", 2, "b")
+    assert session["phase"] == "baseline"
+    session = _feed(session, "EF", "FF", 1, "c")
+    view = describe_input_test(session)
+    assert view["baseline_ready"] is True
+    assert view["baseline_u2"] == "EF" and view["baseline_u3"] == "FF"
+
+
+def test_single_stable_transition_offers_mapping_without_saving_it(app, admin_client):
     device_id = _device(app)
     with app.app_context():
         device = db.session.get(Device, device_id)
+        device.actual_state = {"raw": {"U2": "EF", "U3": "FF"}}
         device.connection_state = "online"
         device.last_state_at = utcnow()
-        device.actual_state = {"raw": {"U2": "00", "U3": "FF"}}
         db.session.commit()
-    started = admin_client.post(f"/devices/{device_id}/input-test/start", data={"connector": "CON10", "pin": "4"})
-    assert started.status_code == 200
-    assert started.get_json()["input_test"]["active"]["start_u3"] == "FF"
-    assert started.get_json()["input_test"]["active"]["lines"] == []
+    assert admin_client.post(f"/devices/{device_id}/input-test/start", data={"connector": "CON10", "pin": "4"}).status_code == 200
     with app.app_context():
         device = db.session.get(Device, device_id)
-        device.actual_state = {"raw": {"U2": "00", "U3": "FD"}}
-        device.input_test_session = apply_input_test_sample(device.input_test_session, {"U2": "00", "U3": "FD"}, "t4")
+        session = _feed(device.input_test_session, "EF", "FF", 3, "b")
+        assert session["phase"] == "armed"
+        device.input_test_session = session
         db.session.commit()
-        assert device.phase_input_map is None
-    ended = admin_client.post(f"/devices/{device_id}/input-test/end")
-    body = ended.get_json()
-    assert body["result"]["changed_bits"] == ["U3.bit1"]
-    assert body["result"]["candidate"]["source"] == "U3"
+    assert admin_client.post(f"/devices/{device_id}/input-test/capture").status_code == 200
     with app.app_context():
         device = db.session.get(Device, device_id)
+        device.actual_state = {"raw": {"U2": "EF", "U3": "FB"}}
+        device.input_test_session = _feed(device.input_test_session, "EF", "FB", 3, "a")
+        db.session.commit()
         assert device.phase_input_map is None
-        assert device.input_test_session is None
-        assert db.session.scalar(db.select(DeviceInputTestLog)).changed_bits == ["U3.bit1"]
+    view = admin_client.get("/devices/status").get_json()["devices"][0]["input_test"]["active"]
+    assert view["verdict"] == "RESULT"
+    assert view["stable"] == [{"label": "U3.bit2", "source": "U3", "bit": 2, "from": 1, "to": 0}]
+    assert view["candidate"]["active_level"] == 0
     confirmed = admin_client.post(f"/devices/{device_id}/input-test/confirm", data={"active_level": "0"})
-    assert confirmed.status_code == 200
     assert confirmed.get_json()["phase_input_map"]["CON10"]["4"]["confirmed"] is True
-    assert confirmed.get_json()["phase_input_map"]["CON10"]["4"]["bit"] == 1
-    assert confirmed.get_json()["phase_view"]["CON10"]["4"]["active"] is True
+    assert confirmed.get_json()["phase_input_map"]["CON10"]["4"]["bit"] == 2
+
+
+def test_flicker_is_not_a_stable_change_and_several_bits_are_ambiguous():
+    session = _feed(start_input_test({"U2": "EF", "U3": "FF"}, "CON10", "4", "t0"), "EF", "FF", 3, "b")
+    session = mark_input_switch(session)
+    session = apply_input_test_sample(session, {"U2": "EF", "U3": "FE"}, "n0")
+    session = apply_input_test_sample(session, {"U2": "EF", "U3": "FF"}, "n1")
+    session = apply_input_test_sample(session, {"U2": "EF", "U3": "FE"}, "n2")
+    assert describe_input_test(session)["verdict"] == "NO CHANGE"
+    assert describe_input_test(session)["lines"]
+    noisy = _feed(start_input_test({"U2": "EF", "U3": "FF"}, "CON9", "1", "t0"), "EF", "FF", 3, "b")
+    noisy = _feed(mark_input_switch(noisy), "EF", "F9", 3, "a")
+    view = describe_input_test(noisy)
+    assert view["verdict"] == "AMBIGUOUS"
+    assert view["candidate"] is None
+    assert {item["label"] for item in view["stable"]} == {"U3.bit1", "U3.bit2"}

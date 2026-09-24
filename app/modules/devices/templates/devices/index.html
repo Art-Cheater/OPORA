@@ -66,7 +66,7 @@
                 </div>
             </div>
 
-            <div class="mt-3" data-input-test data-start-url="{{ url_for('devices.start_input_test_route', device_id=device.id) }}" data-end-url="{{ url_for('devices.end_input_test_route', device_id=device.id) }}" data-confirm-url="{{ url_for('devices.confirm_input_test_route', device_id=device.id) }}">
+            <div class="mt-3" data-input-test data-start-url="{{ url_for('devices.start_input_test_route', device_id=device.id) }}" data-capture-url="{{ url_for('devices.capture_input_test_route', device_id=device.id) }}" data-reset-url="{{ url_for('devices.reset_input_test_route', device_id=device.id) }}" data-confirm-url="{{ url_for('devices.confirm_input_test_route', device_id=device.id) }}">
                 <h6>TEST SESSION</h6>
                 {% if current_user.has_permission('devices.manage') %}
                 <form class="d-flex flex-wrap align-items-center gap-2 mb-2" data-input-test-start>
@@ -79,15 +79,19 @@
                     </label>
                     <button class="btn btn-sm btn-outline-primary" type="submit">НАЧАТЬ ТЕСТ</button>
                 </form>
-                <form class="d-inline" data-input-test-end hidden>
+                <form class="d-inline" data-input-test-capture hidden>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-sm btn-outline-secondary" type="submit">ЗАВЕРШИТЬ ТЕСТ</button>
+                    <button class="btn btn-sm btn-outline-primary" type="submit">ЗАФИКСИРОВАТЬ ПЕРЕКЛЮЧЕНИЕ</button>
+                </form>
+                <form class="d-inline" data-input-test-reset hidden>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm btn-outline-secondary" type="submit">СБРОСИТЬ ТЕСТ</button>
                 </form>
                 <form class="d-flex flex-wrap align-items-center gap-2 mt-2" data-input-test-confirm hidden>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <span class="small" data-input-test-candidate></span>
                     <select class="form-select form-select-sm w-auto" name="active_level"><option value="1">active_level 1</option><option value="0">active_level 0</option></select>
-                    <button class="btn btn-sm btn-outline-success" type="submit">Использовать как mapping</button>
+                    <button class="btn btn-sm btn-outline-success" type="submit">ИСПОЛЬЗОВАТЬ КАК MAPPING</button>
                 </form>
                 {% endif %}
                 <div class="small mt-2" data-input-test-live></div>
