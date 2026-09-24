@@ -7,7 +7,14 @@ import pytest
 from app.extensions import db
 from app.models.base import utcnow
 from app.models.devices import Device
-from app.models.devices.state import connector_pins, phase_summary_from_connectors
+from app.models.devices.state import (
+    connector_pins,
+    decode_raw_bank,
+    normalize_phase_input_map,
+    observe_raw_bits,
+    phase_summary_from_connectors,
+    phase_view_from_map,
+)
 from app.tcp_gateway.protocol import parse_v2_state
 from tests.test_devices_ui import _device
 
@@ -84,7 +91,8 @@ def test_status_api_returns_connectors_and_page_renders_pins(app, admin_client):
     for name in ("CON9", "CON10", "CON11"):
         assert name in page
     assert 'data-phase-pin="CON9.1"' in page
-    assert "Pin 1" in page and "4/6" in page
+    assert "Pin 1" in page and "Не настроено" in page
+    assert "RAW INPUT MAP" in page
     assert "Включить" in page
 
 
@@ -98,7 +106,7 @@ def test_missing_connector_data_does_not_break_the_boards_page(app, admin_client
         db.session.commit()
     page = admin_client.get("/devices/").get_data(as_text=True)
     assert "Фазы / входы" in page
-    assert "Нет данных" in page
+    assert "Не настроено" in page
     assert "C6" in page and "C7" in page and "C8" in page
     payload = admin_client.get("/devices/status").get_json()["devices"][0]
     assert "connectors" not in payload["actual_state"]
@@ -106,9 +114,71 @@ def test_missing_connector_data_does_not_break_the_boards_page(app, admin_client
 
 def test_phase_ui_updates_from_the_existing_status_poll():
     script = Path("app/static/js/devices.js").read_text(encoding="utf-8")
-    assert "function renderPhases(" in script
-    assert "renderPhases(card, device);" in script
+    assert "function renderDiagnostics(" in script
+    assert "renderDiagnostics(card, device);" in script
     assert "root.dataset.statusUrl" in script
     assert "dataset.phasePin" in script
     assert "is-changed" in script
     assert "location.reload" not in script
+
+
+def test_u2_hex_decodes_to_bits():
+    assert decode_raw_bank("EF") == {"0": 1, "1": 1, "2": 1, "3": 1, "4": 0, "5": 1, "6": 1, "7": 1}
+    assert decode_raw_bank("00")["7"] == 0
+
+
+def test_connector_map_can_share_one_raw_bit_and_honours_active_level():
+    mapping = normalize_phase_input_map({
+        "CON9": {"1": {"source": "U2", "bit": 3, "active_level": 0, "confirmed": True}},
+        "CON10": {"4": {"source": "U2", "bit": 3, "active_level": 1, "confirmed": True}},
+        "CON11": {"2": {"source": "U3", "bit": 1, "active_level": 1, "confirmed": False}},
+    })
+    assert mapping["CON9"]["1"]["bit"] == mapping["CON10"]["4"]["bit"] == 3
+    assert mapping["CON9"]["1"]["phase"] == "A"
+    assert mapping["CON10"]["4"]["phase"] == "A"
+    assert mapping["CON11"]["2"]["confirmed"] is False
+    view = phase_view_from_map({"raw": {"U2": "00", "U3": "FF"}}, mapping)
+    assert view["CON9"]["1"]["active"] is True
+    assert view["CON10"]["4"]["active"] is False
+    assert view["CON11"]["2"]["configured"] is False
+    assert view["CON9"]["2"]["configured"] is False
+
+
+def test_unconfirmed_mapping_is_not_a_phase_display():
+    mapping = normalize_phase_input_map({"CON9": {"1": {"source": "U2", "bit": 0, "active_level": 1, "confirmed": False}}})
+    view = phase_view_from_map({"raw": {"U2": "01"}}, mapping)
+    assert view["CON9"]["1"]["configured"] is False
+    assert "active" not in view["CON9"]["1"]
+
+
+def test_raw_bit_change_is_recorded_without_changing_state_words():
+    first = observe_raw_bits(None, {"raw": {"U2": "01", "U3": "00"}, "outputs": {"C6": 1}}, "t1")
+    second = observe_raw_bits(first, {"raw": {"U2": "00", "U3": "00"}, "outputs": {"C6": 1}}, "t2")
+    assert second["raw_bits"]["U2"]["0"] == 0
+    assert second["raw_bit_changes"]["U2"]["0"] == {"from": 1, "to": 0, "at": "t2"}
+    assert second["outputs"] == {"C6": 1}
+
+
+def test_saved_phase_map_drives_the_boards_page(app, admin_client):
+    device_id = _device(app)
+    with app.app_context():
+        device = db.session.get(Device, device_id)
+        device.connection_state = "online"
+        device.last_state_at = utcnow()
+        device.actual_state = {"outputs": {"C6": 0, "C7": 0, "C8": 0}, "raw": {"U2": "08", "U3": "00"}, "raw_bits": {"U2": decode_raw_bank("08")}}
+        db.session.commit()
+    saved = admin_client.post(
+        f"/devices/{device_id}/phase-map",
+        data={"CON9.1.source": "U2", "CON9.1.bit": "3", "CON9.1.active_level": "1", "CON9.1.confirmed": "1", "CON9.4.source": "U2", "CON9.4.bit": "3", "CON9.4.active_level": "1", "CON9.4.confirmed": "1"},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert saved.status_code == 200
+    body = saved.get_json()
+    assert body["phase_view"]["CON9"]["1"]["active"] is True
+    assert body["phase_view"]["CON9"]["4"]["active"] is True
+    assert body["phase_view"]["CON9"]["2"]["configured"] is False
+    status = admin_client.get("/devices/status").get_json()["devices"][0]
+    assert status["phase_view"]["CON9"]["1"]["active"] is True
+    assert status["phase_view"]["CON9"]["4"]["source"] == "U2"
+    page = admin_client.get("/devices/").get_data(as_text=True)
+    assert 'data-phase-pin="CON9.1"' in page and "Не настроено" in page

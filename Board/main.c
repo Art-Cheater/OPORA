@@ -197,6 +197,12 @@ static void lline_P(uint8_t row,PGM_P p){
     while(i++<16)ld(' ');
 }
 static void screen_P(PGM_P a,PGM_P b){ lc(1); lline_P(0,a); lline_P(1,b); }
+static void screen_e6(uint8_t n){
+    uint8_t i;
+    lc(1); lline_P(0,PSTR("E06 TCP")); lc(0xC0);
+    ld('E'); ld('6'); ld((uint8_t)('0'+n));
+    for(i=3;i<16;i++)ld(' ');
+}
 
 /* ---------------- Confirmed shared-bus RAW inputs ---------------- */
 static void buffers_disable(void){ PORTC|=(1<<U2_OE)|(1<<U3_OE); }
@@ -469,7 +475,45 @@ static uint8_t send_auth(void){
  * Otherwise bit7 selects U3 (1) or U2 (0), bits 2..0 are the buffer bit.
  * A mask is compiled in only when all six pins of that connector are filled.
  */
-#define CON_PIN_UNMAPPED 0xFF
+#define UNMAPPED 0xFF
+#define CON_PIN_UNMAPPED UNMAPPED
+/* SRC is U2 or U3, BIT is 0..7. Both stay UNMAPPED until a measured net exists. */
+#define CON9_1_SRC UNMAPPED
+#define CON9_1_BIT UNMAPPED
+#define CON9_2_SRC UNMAPPED
+#define CON9_2_BIT UNMAPPED
+#define CON9_3_SRC UNMAPPED
+#define CON9_3_BIT UNMAPPED
+#define CON9_4_SRC UNMAPPED
+#define CON9_4_BIT UNMAPPED
+#define CON9_5_SRC UNMAPPED
+#define CON9_5_BIT UNMAPPED
+#define CON9_6_SRC UNMAPPED
+#define CON9_6_BIT UNMAPPED
+#define CON10_1_SRC UNMAPPED
+#define CON10_1_BIT UNMAPPED
+#define CON10_2_SRC UNMAPPED
+#define CON10_2_BIT UNMAPPED
+#define CON10_3_SRC UNMAPPED
+#define CON10_3_BIT UNMAPPED
+#define CON10_4_SRC UNMAPPED
+#define CON10_4_BIT UNMAPPED
+#define CON10_5_SRC UNMAPPED
+#define CON10_5_BIT UNMAPPED
+#define CON10_6_SRC UNMAPPED
+#define CON10_6_BIT UNMAPPED
+#define CON11_1_SRC UNMAPPED
+#define CON11_1_BIT UNMAPPED
+#define CON11_2_SRC UNMAPPED
+#define CON11_2_BIT UNMAPPED
+#define CON11_3_SRC UNMAPPED
+#define CON11_3_BIT UNMAPPED
+#define CON11_4_SRC UNMAPPED
+#define CON11_4_BIT UNMAPPED
+#define CON11_5_SRC UNMAPPED
+#define CON11_5_BIT UNMAPPED
+#define CON11_6_SRC UNMAPPED
+#define CON11_6_BIT UNMAPPED
 #define CON9_1 CON_PIN_UNMAPPED
 #define CON9_2 CON_PIN_UNMAPPED
 #define CON9_3 CON_PIN_UNMAPPED
@@ -767,20 +811,20 @@ static uint8_t socket_open(void){
     cmd_P(PSTR("AT^SISC=0"),600);
 
     cmd_P(PSTR("AT^SISS=0,srvType,Socket"),1200);
-    if(!contains_P(atbuf,PSTR("OK")))return 0;
+    if(!contains_P(atbuf,PSTR("OK")))return 1;
 
     cmd_P(PSTR("AT^SISS=0,conId,0"),1200);
-    if(!contains_P(atbuf,PSTR("OK")))return 0;
+    if(!contains_P(atbuf,PSTR("OK")))return 2;
 
     flush_rx();
     uart_puts_P(PSTR("AT^SISS=0,address,\"socktcp://"));
     uart_puts_P(tcp_host);
     uart_puts_P(PSTR(":" TCP_PORT_LITERAL "\"\r"));
     capture(1500);
-    if(!contains_P(atbuf,PSTR("OK")))return 0;
+    if(!contains_P(atbuf,PSTR("OK")))return 3;
 
     cmd_P(PSTR("AT^SISO=0"),2500);
-    if(!contains_P(atbuf,PSTR("OK")))return 0;
+    if(!contains_P(atbuf,PSTR("OK")))return 4;
 
     /*
      * BGS2T polling mode:
@@ -793,19 +837,19 @@ static uint8_t socket_open(void){
 
         if(contains_P(atbuf,PSTR("^SISI: 0,4,")) ||
            contains_P(atbuf,PSTR("^SISI:0,4,"))){
-            return 1;
+            return 0;
         }
 
         /* state 6 = Down / failed */
         if(contains_P(atbuf,PSTR("^SISI: 0,6,")) ||
            contains_P(atbuf,PSTR("^SISI:0,6,"))){
-            return 0;
+            return 5;
         }
 
         dms(250);
     }
 
-    return 0;
+    return 6;
 }
 static void socket_close(void){cmd_P(PSTR("AT^SISC=0"),700);}
 static uint8_t socket_read_once(void){
@@ -975,7 +1019,7 @@ int main(void){
     DDRD|=(1<<PD3)|(1<<PD4)|(1<<PD5)|(1<<PD6)|(1<<PD7);
     DDRD&=~(1<<PD2);PORTD&=~(1<<PD2);
 
-    linit();screen_P(PSTR("V2.2.7"),PSTR("PHASE IN"));dms(800);
+    linit();screen_P(PSTR("V2.2.8"),PSTR("E06 CODE"));dms(800);
     last_u2=read_u2();last_u3=read_u3();
 
     for(;;){
@@ -990,8 +1034,10 @@ int main(void){
 
         for(;;){
             screen_P(PSTR("TCP"),PSTR("OPENING"));
-            if(!socket_open()){
-                screen_P(PSTR("E06 TCP"),PSTR("OPEN"));
+            {
+                uint8_t open_err=socket_open();
+                if(!open_err)goto tcp_opened;
+                screen_e6(open_err);
                 socket_close();
                 socket_failures++;
                 dms(2000);
@@ -1004,6 +1050,7 @@ int main(void){
                 if(socket_failures>=3U)break;
                 continue;
             }
+tcp_opened:
 
             socket_failures=0;
             screen_P(PSTR("TCP UP"),PSTR("WAIT AUTH"));

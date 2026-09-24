@@ -16,7 +16,13 @@ from app.core.decorators import permission_required
 from app.extensions import db
 from app.models.base import as_utc_aware, utcnow
 from app.models.devices import Device, DeviceCommand, DeviceDiagnosticEvent, DeviceDiagnosticSample
-from app.models.devices.state import OUTPUT_RELAYS, normalize_actual_state, payload_matches_actual
+from app.models.devices.state import (
+    OUTPUT_RELAYS,
+    normalize_actual_state,
+    normalize_phase_input_map,
+    payload_matches_actual,
+    phase_view_from_map,
+)
 from app.modules.devices.blueprint import devices_bp
 from app.modules.devices.command_service import active_command_query, expire_state_confirmation_timeouts
 from app.modules.devices.forms import DeviceForm
@@ -117,6 +123,8 @@ def _serialize_device(device: Device, active_command: DeviceCommand | None, late
         "last_state_at": _serialize_datetime(device.last_state_at),
         "last_ip": device.last_ip,
         "actual_state": actual,
+        "phase_input_map": normalize_phase_input_map(device.phase_input_map),
+        "phase_view": phase_view_from_map(actual, device.phase_input_map),
         "desired_state": normalize_actual_state(device.desired_state),
         "telemetry": device.telemetry or {},
         "state_stale": state_stale,
@@ -316,6 +324,40 @@ def delete(device_id):
     AuditService.log(user_id=current_user.id, action="soft_delete", entity_type="device", entity_id=device.id, description=f"Удалена плата {device.device_id}")
     db.session.commit()
     flash("Плата деактивирована и удалена из списка.", "success")
+    return redirect(url_for("devices.index"))
+
+
+@devices_bp.route("/<uuid:device_id>/phase-map", methods=["POST"])
+@login_required
+@permission_required("devices.manage")
+def save_phase_map(device_id):
+    device = _device_or_404(device_id)
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        payload = request.form.to_dict(flat=False)
+        nested: dict = {}
+        for key, values in payload.items():
+            parts = key.split(".")
+            if len(parts) != 3:
+                continue
+            connector, pin, field = parts
+            nested.setdefault(connector, {}).setdefault(pin, {})[field] = values[-1] if values else None
+        for connector, pins in nested.items():
+            for pin, item in pins.items():
+                item["confirmed"] = str(item.get("confirmed") or "") in {"1", "true", "on", "y"}
+        payload = nested
+    device.phase_input_map = normalize_phase_input_map(payload)
+    AuditService.log(
+        user_id=current_user.id,
+        action="update",
+        entity_type="device",
+        entity_id=device.id,
+        description=f"Обновлено сопоставление входов {device.device_id}",
+    )
+    db.session.commit()
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.is_json:
+        return jsonify({"phase_input_map": device.phase_input_map, "phase_view": phase_view_from_map(device.actual_state, device.phase_input_map)})
+    flash("Сопоставление входов сохранено.", "success")
     return redirect(url_for("devices.index"))
 
 

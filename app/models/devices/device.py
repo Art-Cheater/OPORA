@@ -29,5 +29,6 @@ class Device(BaseModel):
     actual_state: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
     desired_state: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
     telemetry: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
+    phase_input_map: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
     last_state_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)

@@ -65,6 +65,12 @@ All 18 connector pins are therefore unproven:
   CON10.1 CON10.2 CON10.3 CON10.4 CON10.5 CON10.6
   CON11.1 CON11.2 CON11.3 CON11.4 CON11.5 CON11.6
 
-The only mapping table is the CON9_1..CON11_6 macros in main.c.
-0xFF means "not proven". A connector mask is compiled into STATE only
-when all six of its pins are filled in. Do not guess the missing bits.
+The only firmware mapping table is CON9_1_SRC/CON9_1_BIT .. CON11_6 in main.c.
+Every entry is UNMAPPED. STATE does not contain C9/C10/C11.
+
+Optocoupler note, not a pin map:
+Q4..Q8 are marked 817C. A bench observation says phase arrives at pin 1,
+pin 3 goes to a lamp, and pin 4 goes toward U2/U3 input logic.
+One observed net is opto pin 4 to U2 pin 10, with a similar net toward U3 pin 10.
+Board sources do not name which Qx, which CON pin, or which PINA bit that is.
+U2/U3 package pin 10 is not a firmware bit number. Do not fill the table from this.

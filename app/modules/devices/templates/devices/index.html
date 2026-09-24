@@ -66,41 +66,71 @@
                 </div>
             </div>
 
-            <div class="mt-3" data-phase-root>
-                <h6>Фазы / входы</h6>
-                {% set connectors = actual.get('connectors') if actual else none %}
-                {% if status.state_stale or not connectors %}
-                <span class="text-muted">Нет данных</span>
-                {% else %}
-                {% set summary = actual.get('phase_summary') or {} %}
-                <div class="phase-summary mb-2" data-phase-summary>
-                    {% for phase in ['A', 'B', 'C'] %}
-                    {% set item = summary.get(phase) or {} %}
-                    <span class="phase-summary__item"><span class="phase-summary__name">{{ phase }}</span> <strong>{{ item.get('active', 0) }}/{{ item.get('total', 0) }}</strong></span>
-                    {% endfor %}
-                </div>
-                {% for name in ['CON9', 'CON10', 'CON11'] %}
-                {% set pins = connectors.get(name) %}
-                {% if pins %}
-                <div class="phase-compact mb-2" data-phase-compact="{{ name }}">
-                    <div class="phase-compact__name">{{ name }}</div>
-                    <div class="phase-compact__phases">A B C A B C</div>
-                    <div class="phase-compact__bits">{% for n in ['1','2','3','4','5','6'] %}{{ pins[n].value if pins.get(n) else '—' }}{% if not loop.last %} {% endif %}{% endfor %}</div>
-                </div>
+            <div class="mt-3" data-raw-map>
+                <h6>RAW INPUT MAP</h6>
+                {% for bank in ['U2', 'U3'] %}
+                <div class="fw-semibold mt-2">{{ bank }}</div>
                 <table class="table table-sm mb-2"><tbody>
-                    {% for n in ['1','2','3','4','5','6'] %}
-                    {% set pin = pins.get(n) %}
-                    <tr data-phase-pin="{{ name }}.{{ n }}" data-phase-value="{{ pin.value if pin else '' }}">
-                        <td>Pin {{ n }}</td>
-                        <td>{{ pin.phase if pin else '—' }}</td>
-                        <td>{% if pin %}<span class="phase-mark {{ 'is-active' if pin.value else '' }}">{{ '●' if pin.value else '○' }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                    {% for bit in range(8) %}
+                    {% set bits = (actual.get('raw_bits') or {}).get(bank) or {} %}
+                    {% set change = ((actual.get('raw_bit_changes') or {}).get(bank) or {}).get(bit | string) %}
+                    <tr data-raw-bit="{{ bank }}.{{ bit }}">
+                        <td>bit{{ bit }}</td>
+                        <td data-raw-value>{{ '—' if status.state_stale else bits.get(bit | string, '—') }}</td>
+                        <td data-raw-change class="text-muted">{% if change and not status.state_stale %}{{ change['from'] }}→{{ change['to'] }}{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody></table>
-                {% endif %}
                 {% endfor %}
-                {% endif %}
             </div>
+            <div class="mt-3" data-phase-root>
+                <h6>Фазы / входы</h6>
+                {% for name in ['CON9', 'CON10', 'CON11'] %}
+                <div class="fw-semibold">{{ name }}</div>
+                <table class="table table-sm mb-2"><tbody>
+                    {% for n in ['1','2','3','4','5','6'] %}
+                    {% set pin = (status.phase_view or {}).get(name, {}).get(n, {}) %}
+                    <tr data-phase-pin="{{ name }}.{{ n }}">
+                        <td>Pin {{ n }}</td>
+                        <td>{{ pin.get('phase', 'ABCABC'[loop.index0]) }}</td>
+                        <td data-phase-state>{% if not pin.get('configured') %}Не настроено{% elif pin.get('active') is none or status.state_stale %}Нет данных{% elif pin.get('active') %}active{% else %}inactive{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody></table>
+                {% endfor %}
+            </div>
+            {% if current_user.has_permission('devices.manage') %}
+            <form class="mt-2" method="post" action="{{ url_for('devices.save_phase_map', device_id=device.id) }}" data-phase-map-form>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <h6>Сопоставление CON → U2/U3</h6>
+                {% set saved = status.phase_input_map or {} %}
+                {% for name in ['CON9', 'CON10', 'CON11'] %}
+                <div class="small fw-semibold mt-2">{{ name }}</div>
+                {% for n in ['1','2','3','4','5','6'] %}
+                {% set item = saved.get(name, {}).get(n, {}) %}
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                    <span class="small">Pin {{ n }} {{ item.get('phase', 'ABCABC'[loop.index0]) }}</span>
+                    <select class="form-select form-select-sm w-auto" name="{{ name }}.{{ n }}.source">
+                        <option value="">—</option>
+                        <option value="U2" {% if item.get('source') == 'U2' %}selected{% endif %}>U2</option>
+                        <option value="U3" {% if item.get('source') == 'U3' %}selected{% endif %}>U3</option>
+                    </select>
+                    <select class="form-select form-select-sm w-auto" name="{{ name }}.{{ n }}.bit">
+                        <option value="">bit</option>
+                        {% for bit in range(8) %}<option value="{{ bit }}" {% if item.get('bit') == bit %}selected{% endif %}>{{ bit }}</option>{% endfor %}
+                    </select>
+                    <select class="form-select form-select-sm w-auto" name="{{ name }}.{{ n }}.active_level" title="raw-уровень, при котором фаза присутствует">
+                        <option value="">active_level</option>
+                        <option value="0" {% if item.get('active_level') == 0 %}selected{% endif %}>0</option>
+                        <option value="1" {% if item.get('active_level') == 1 %}selected{% endif %}>1</option>
+                    </select>
+                    <label class="small mb-0"><input type="checkbox" name="{{ name }}.{{ n }}.confirmed" value="1" {% if item.get('confirmed') %}checked{% endif %}> confirmed</label>
+                </div>
+                {% endfor %}
+                {% endfor %}
+                <button class="btn btn-sm btn-outline-primary mt-2" type="submit">Сохранить сопоставление</button>
+            </form>
+            {% endif %}
 
             <div class="alert {{ 'alert-warning' if status.active_command else 'alert-light' }} py-2 mt-3 mb-3" data-command-status aria-live="polite">
                 {% if status.active_command %}<span class="spinner-border spinner-border-sm me-2"></span>Выполняется команда…
