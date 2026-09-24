@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 
@@ -84,6 +85,110 @@ def observe_raw_bits(previous: dict[str, Any] | None, actual: dict[str, Any], ch
     if any(changes.values()):
         updated["raw_bit_changes"] = changes
     return updated
+
+
+def _hex_byte(value: Any) -> str | None:
+    if not isinstance(value, str) or len(value) != 2:
+        return None
+    try:
+        number = int(value, 16)
+    except ValueError:
+        return None
+    if not 0 <= number <= 0xFF:
+        return None
+    return f"{number:02X}"
+
+
+def start_input_test(raw: dict[str, Any] | None, connector: str, pin: str, started_at: str) -> dict[str, Any]:
+    """Snapshot U2/U3. Earlier bit history is not copied into the session."""
+    if connector not in CONNECTORS or pin not in {"1", "2", "3", "4", "5", "6"}:
+        raise ValueError("invalid test target")
+    source = raw if isinstance(raw, dict) else {}
+    u2, u3 = _hex_byte(source.get("U2")), _hex_byte(source.get("U3"))
+    return {
+        "connector": connector,
+        "pin": pin,
+        "started_at": started_at,
+        "start_u2": u2,
+        "start_u3": u3,
+        "last_u2": u2,
+        "last_u3": u3,
+        "transitions": [],
+    }
+
+
+def apply_input_test_sample(session: dict[str, Any] | None, raw: dict[str, Any] | None, changed_at: str) -> dict[str, Any] | None:
+    """Append transitions that happen after the snapshot. Pre-start changes stay out."""
+    if not isinstance(session, dict):
+        return None
+    updated = dict(session)
+    updated["transitions"] = list(session.get("transitions") or [])
+    source = raw if isinstance(raw, dict) else {}
+    for bank, key in (("U2", "last_u2"), ("U3", "last_u3")):
+        incoming = _hex_byte(source.get(bank))
+        if incoming is None:
+            continue
+        previous = decode_raw_bank(updated.get(key) if isinstance(updated.get(key), str) else None)
+        current = decode_raw_bank(incoming)
+        if previous and current:
+            for bit, value in current.items():
+                if int(previous[bit]) != int(value):
+                    updated["transitions"].append({"at": changed_at, "source": bank, "bit": int(bit), "from": int(previous[bit]), "to": int(value)})
+        updated[key] = incoming
+    return updated
+
+
+def _transition_chains(transitions: list[dict[str, Any]]) -> dict[str, list[int]]:
+    chains: dict[str, list[int]] = {}
+    for item in transitions:
+        label = f"{item['source']}.bit{item['bit']}"
+        chain = chains.setdefault(label, [int(item["from"])])
+        chain.append(int(item["to"]))
+    return chains
+
+
+def raw_bank_diff(start: str | None, current: str | None) -> list[str]:
+    before, after = decode_raw_bank(start), decode_raw_bank(current)
+    if not before or not after:
+        return []
+    return [f"bit{bit}" for bit, value in after.items() if int(before[bit]) != int(value)]
+
+
+def finish_input_test(session: dict[str, Any], ended_at: str) -> dict[str, Any]:
+    """Summarise the session. This does not write a connector mapping."""
+    chains = _transition_chains(list(session.get("transitions") or []))
+    changed = list(chains)
+    candidate = None
+    if len(changed) == 1:
+        label = changed[0]
+        source, bit_text = label.split(".bit")
+        candidate = {"connector": session.get("connector"), "pin": session.get("pin"), "source": source, "bit": int(bit_text)}
+    return {
+        "connector": session.get("connector"),
+        "pin": session.get("pin"),
+        "started_at": session.get("started_at"),
+        "ended_at": ended_at,
+        "start_u2": session.get("start_u2"),
+        "start_u3": session.get("start_u3"),
+        "end_u2": session.get("last_u2"),
+        "end_u3": session.get("last_u3"),
+        "changed_bits": changed,
+        "transitions": {label: " -> ".join(str(value) for value in chain) for label, chain in chains.items()},
+        "diff": {"U2": raw_bank_diff(session.get("start_u2"), session.get("last_u2")), "U3": raw_bank_diff(session.get("start_u3"), session.get("last_u3"))},
+        "candidate": candidate,
+        "duration_seconds": _duration_seconds(session.get("started_at"), ended_at),
+    }
+
+
+def _duration_seconds(started_at: Any, ended_at: Any) -> int | None:
+    if not isinstance(started_at, str) or not isinstance(ended_at, str) or not ended_at:
+        return None
+    try:
+        started = datetime.fromisoformat(started_at)
+        ended = datetime.fromisoformat(ended_at)
+    except ValueError:
+        return None
+    return max(0, int((ended - started).total_seconds()))
 
 
 def blank_phase_input_map() -> dict[str, dict[str, dict[str, Any]]]:

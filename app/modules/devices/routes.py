@@ -15,13 +15,16 @@ from app.core.audit_service import AuditService
 from app.core.decorators import permission_required
 from app.extensions import db
 from app.models.base import as_utc_aware, utcnow
-from app.models.devices import Device, DeviceCommand, DeviceDiagnosticEvent, DeviceDiagnosticSample
+from app.models.devices import Device, DeviceCommand, DeviceDiagnosticEvent, DeviceDiagnosticSample, DeviceInputTestLog
 from app.models.devices.state import (
     OUTPUT_RELAYS,
+    _duration_seconds,
+    finish_input_test,
     normalize_actual_state,
     normalize_phase_input_map,
     payload_matches_actual,
     phase_view_from_map,
+    start_input_test,
 )
 from app.modules.devices.blueprint import devices_bp
 from app.modules.devices.command_service import active_command_query, expire_state_confirmation_timeouts
@@ -125,6 +128,7 @@ def _serialize_device(device: Device, active_command: DeviceCommand | None, late
         "actual_state": actual,
         "phase_input_map": normalize_phase_input_map(device.phase_input_map),
         "phase_view": phase_view_from_map(actual, device.phase_input_map),
+        "input_test": _input_test_payload(device),
         "desired_state": normalize_actual_state(device.desired_state),
         "telemetry": device.telemetry or {},
         "state_stale": state_stale,
@@ -133,6 +137,52 @@ def _serialize_device(device: Device, active_command: DeviceCommand | None, late
         "can_send_command": block_reason is None,
         "command_block_reason": block_reason,
     }
+
+
+def _input_test_payload(device: Device) -> dict:
+    session = device.input_test_session if isinstance(device.input_test_session, dict) else None
+    active = None
+    if session:
+        active = finish_input_test(session, "")
+        active["ended_at"] = None
+        active["lines"] = [
+            {"at": item.get("at"), "label": f"{item['source']}.bit{item['bit']}", "from": item.get("from"), "to": item.get("to")}
+            for item in session.get("transitions") or []
+        ]
+    log = db.session.scalar(
+        db.select(DeviceInputTestLog).where(DeviceInputTestLog.device_id == device.id, DeviceInputTestLog.active_filter()).order_by(DeviceInputTestLog.created_at.desc())
+    )
+    latest = None
+    if log is not None:
+        bits = list(log.changed_bits or [])
+        candidate = None
+        if len(bits) == 1 and ".bit" in bits[0]:
+            source, bit_text = bits[0].split(".bit")
+            candidate = {"connector": log.connector, "pin": log.pin, "source": source, "bit": int(bit_text)}
+        latest = {
+            "connector": log.connector,
+            "pin": log.pin,
+            "started_at": log.started_at,
+            "ended_at": log.ended_at,
+            "start_u2": log.start_u2,
+            "start_u3": log.start_u3,
+            "end_u2": log.end_u2,
+            "end_u3": log.end_u3,
+            "changed_bits": bits,
+            "transitions": log.transitions or {},
+            "candidate": candidate,
+            "duration_seconds": _duration_seconds(log.started_at, log.ended_at),
+        }
+    return {"active": active, "latest": latest}
+
+
+def _candidate_from_active_or_log(device: Device) -> dict | None:
+    payload = _input_test_payload(device)
+    active = payload["active"] or {}
+    if active.get("candidate"):
+        return active["candidate"]
+    latest = payload["latest"] or {}
+    return latest.get("candidate")
 
 
 def _switch_payload_from_form() -> dict[str, int]:
@@ -325,6 +375,75 @@ def delete(device_id):
     db.session.commit()
     flash("Плата деактивирована и удалена из списка.", "success")
     return redirect(url_for("devices.index"))
+
+
+@devices_bp.route("/<uuid:device_id>/input-test/start", methods=["POST"])
+@login_required
+@permission_required("devices.manage")
+def start_input_test_route(device_id):
+    device = _device_or_404(device_id)
+    connector = (request.form.get("connector") or "").upper()
+    pin = (request.form.get("pin") or "").strip()
+    try:
+        device.input_test_session = start_input_test((device.actual_state or {}).get("raw"), connector, pin, utcnow().isoformat())
+    except ValueError:
+        abort(400, description="Укажите CON9, CON10 или CON11 и pin 1..6.")
+    db.session.commit()
+    return jsonify({"input_test": _input_test_payload(device)})
+
+
+@devices_bp.route("/<uuid:device_id>/input-test/end", methods=["POST"])
+@login_required
+@permission_required("devices.manage")
+def end_input_test_route(device_id):
+    device = _device_or_404(device_id)
+    session = device.input_test_session if isinstance(device.input_test_session, dict) else None
+    if session is None:
+        abort(409, description="Тест не запущен.")
+    ended = utcnow().isoformat()
+    result = finish_input_test(session, ended)
+    db.session.add(DeviceInputTestLog(
+        device_id=device.id,
+        connector=str(result["connector"]),
+        pin=str(result["pin"]),
+        started_at=str(result["started_at"]),
+        ended_at=ended,
+        start_u2=result["start_u2"],
+        start_u3=result["start_u3"],
+        end_u2=result["end_u2"],
+        end_u3=result["end_u3"],
+        changed_bits=result["changed_bits"],
+        transitions=result["transitions"],
+        created_by=current_user.id,
+    ))
+    device.input_test_session = None
+    db.session.commit()
+    return jsonify({"input_test": _input_test_payload(device), "result": result})
+
+
+@devices_bp.route("/<uuid:device_id>/input-test/confirm", methods=["POST"])
+@login_required
+@permission_required("devices.manage")
+def confirm_input_test_route(device_id):
+    device = _device_or_404(device_id)
+    candidate = _candidate_from_active_or_log(device)
+    if not candidate:
+        abort(409, description="Для подтверждения нужен ровно один изменившийся бит.")
+    try:
+        level = int(request.form.get("active_level"))
+    except (TypeError, ValueError):
+        abort(400, description="Выберите active_level 0 или 1.")
+    if level not in (0, 1):
+        abort(400, description="Выберите active_level 0 или 1.")
+    mapping = normalize_phase_input_map(device.phase_input_map)
+    pin = mapping[candidate["connector"]][str(candidate["pin"])]
+    pin["source"] = candidate["source"]
+    pin["bit"] = candidate["bit"]
+    pin["active_level"] = level
+    pin["confirmed"] = True
+    device.phase_input_map = mapping
+    db.session.commit()
+    return jsonify({"phase_input_map": device.phase_input_map, "phase_view": phase_view_from_map(device.actual_state, device.phase_input_map)})
 
 
 @devices_bp.route("/<uuid:device_id>/phase-map", methods=["POST"])

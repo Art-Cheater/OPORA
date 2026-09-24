@@ -66,6 +66,32 @@
                 </div>
             </div>
 
+            <div class="mt-3" data-input-test data-start-url="{{ url_for('devices.start_input_test_route', device_id=device.id) }}" data-end-url="{{ url_for('devices.end_input_test_route', device_id=device.id) }}" data-confirm-url="{{ url_for('devices.confirm_input_test_route', device_id=device.id) }}">
+                <h6>TEST SESSION</h6>
+                {% if current_user.has_permission('devices.manage') %}
+                <form class="d-flex flex-wrap align-items-center gap-2 mb-2" data-input-test-start>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label class="small mb-0">Connector
+                        <select class="form-select form-select-sm" name="connector"><option>CON9</option><option>CON10</option><option>CON11</option></select>
+                    </label>
+                    <label class="small mb-0">Pin
+                        <select class="form-select form-select-sm" name="pin">{% for n in ['1','2','3','4','5','6'] %}<option>{{ n }}</option>{% endfor %}</select>
+                    </label>
+                    <button class="btn btn-sm btn-outline-primary" type="submit">НАЧАТЬ ТЕСТ</button>
+                </form>
+                <form class="d-inline" data-input-test-end hidden>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm btn-outline-secondary" type="submit">ЗАВЕРШИТЬ ТЕСТ</button>
+                </form>
+                <form class="d-flex flex-wrap align-items-center gap-2 mt-2" data-input-test-confirm hidden>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <span class="small" data-input-test-candidate></span>
+                    <select class="form-select form-select-sm w-auto" name="active_level"><option value="1">active_level 1</option><option value="0">active_level 0</option></select>
+                    <button class="btn btn-sm btn-outline-success" type="submit">Использовать как mapping</button>
+                </form>
+                {% endif %}
+                <div class="small mt-2" data-input-test-live></div>
+            </div>
             <div class="mt-3" data-raw-map>
                 <h6>RAW INPUT MAP</h6>
                 {% for bank in ['U2', 'U3'] %}
@@ -77,7 +103,7 @@
                     <tr data-raw-bit="{{ bank }}.{{ bit }}">
                         <td>bit{{ bit }}</td>
                         <td data-raw-value>{{ '—' if status.state_stale else bits.get(bit | string, '—') }}</td>
-                        <td data-raw-change class="text-muted">{% if change and not status.state_stale %}{{ change['from'] }}→{{ change['to'] }}{% endif %}</td>
+                        <td data-raw-change class="raw-bit-history">{% if change and not status.state_stale %}{{ change['from'] }}→{{ change['to'] }}{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody></table>

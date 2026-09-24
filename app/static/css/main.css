@@ -442,6 +442,7 @@ body.is-opora-busy { cursor: wait; }
 .phase-compact__name { grid-row: span 2; font-weight: 600; }
 .phase-compact__phases, .phase-compact__bits { letter-spacing: 0.35em; }
 .phase-compact__phases { color: var(--opora-text-muted); }
+.raw-bit-history { color: var(--opora-text-faint); font-size: 0.75rem; }
 .phase-mark { color: var(--opora-text-faint); font-size: 1.15rem; line-height: 1; }
 .phase-mark.is-active { color: var(--status-done); }
 tr[data-phase-pin].is-changed { background: var(--status-in-progress-bg); box-shadow: inset 3px 0 0 var(--status-in-progress); }

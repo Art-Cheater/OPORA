@@ -15,7 +15,7 @@ from app import create_app
 from app.extensions import db
 from app.models.base import as_utc_aware, utcnow
 from app.models.devices import Device, DeviceCommand, DeviceDiagnosticSample
-from app.models.devices.state import normalize_actual_state, observe_raw_bits, payload_matches_actual
+from app.models.devices.state import apply_input_test_sample, normalize_actual_state, observe_raw_bits, payload_matches_actual
 from app.modules.devices.command_service import expire_state_confirmation_timeouts
 from app.tcp_gateway.protocol import decode_frame, decode_v2_frame, encode_frame, encode_v2_frame, hmac_matches, new_nonce, parse_v2_state
 from app.tcp_gateway.secrets import decrypt_device_secret
@@ -60,6 +60,8 @@ class Gateway:
                     device.last_ip = peer
                 if actual is not None:
                     actual = observe_raw_bits(device.actual_state, actual, now.isoformat())
+                    if device.input_test_session:
+                        device.input_test_session = apply_input_test_sample(device.input_test_session, actual.get("raw"), now.isoformat())
                     device.actual_state = normalize_actual_state(actual)
                     awaiting_confirmation = db.session.scalars(
                         db.select(DeviceCommand).where(

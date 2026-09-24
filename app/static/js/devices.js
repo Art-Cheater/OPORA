@@ -119,6 +119,50 @@
         });
     }
 
+    function renderInputTest(card, device) {
+        const live = card.querySelector('[data-input-test-live]');
+        const endForm = card.querySelector('[data-input-test-end]');
+        const confirmForm = card.querySelector('[data-input-test-confirm]');
+        if (!live) return;
+        const active = device.input_test?.active;
+        const latest = device.input_test?.latest;
+        const session = active || null;
+        if (endForm) endForm.hidden = !session;
+        const candidate = session?.candidate || (!session && latest?.candidate) || null;
+        if (confirmForm) {
+            confirmForm.hidden = !candidate;
+            const label = confirmForm.querySelector('[data-input-test-candidate]');
+            if (label && candidate) label.textContent = `${candidate.connector}.${candidate.pin} -> ${candidate.source}.bit${candidate.bit}`;
+        }
+        if (session) {
+            const u2diff = (session.diff?.U2 || []).join(', ') || 'none';
+            const u3diff = (session.diff?.U3 || []).join(', ') || 'none';
+            const lines = (session.lines || []).map((item) => `${formatDate(item.at)} ${item.label} ${item.from} -> ${item.to}`).join('\n');
+            live.textContent = [
+                'ИЗМЕНЕНИЯ ТЕКУЩЕГО ТЕСТА',
+                lines || '—',
+                `START: U2 = ${session.start_u2 || '—'} U3 = ${session.start_u3 || '—'}`,
+                `CURRENT: U2 = ${session.end_u2 || '—'} U3 = ${session.end_u3 || '—'}`,
+                `DIFF: U2 changed bits: ${u2diff}`,
+                `U3 changed bits: ${u3diff}`,
+            ].join('\n');
+            return;
+        }
+        if (!latest) {
+            live.textContent = '';
+            return;
+        }
+        const transitions = Object.entries(latest.transitions || {}).map(([label, chain]) => `${label}: ${chain}`).join('\n');
+        live.textContent = [
+            'TEST RESULT',
+            `Changed bits: ${(latest.changed_bits || []).join(', ') || 'none'}`,
+            'Transitions:',
+            transitions || '—',
+            `${latest.connector} pin ${latest.pin}`,
+            latest.duration_seconds != null ? `Duration: ${latest.duration_seconds}s` : '',
+        ].filter(Boolean).join('\n');
+    }
+
     function renderCard(card, device, commandsEnabled, canManage) {
         const stale = Boolean(device.state_stale);
         const outputs = device.actual_state?.outputs || {};
@@ -136,6 +180,7 @@
         renderTelemetry(card.querySelector('[data-telemetry]'), device.telemetry);
         renderValues(card.querySelector('[data-raw-inputs-list]'), device.actual_state);
         renderDiagnostics(card, device);
+        renderInputTest(card, device);
 
         const status = card.querySelector('[data-command-status]');
         status.innerHTML = commandMessage(device.active_command, device.latest_command);
@@ -179,6 +224,31 @@
                 if (!stopped) timer = window.setTimeout(refresh, pollMs);
             }
         }
+
+        async function postTest(url, body) {
+            const response = await fetch(url, {
+                method: 'POST',
+                body,
+                headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
+            });
+            if (!response.ok) throw new Error('Не удалось выполнить тест входов.');
+            await refresh();
+        }
+
+        root.querySelectorAll('[data-input-test]').forEach((block) => {
+            block.querySelector('[data-input-test-start]')?.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                await postTest(block.dataset.startUrl, new FormData(event.currentTarget));
+            });
+            block.querySelector('[data-input-test-end]')?.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                await postTest(block.dataset.endUrl, new FormData(event.currentTarget));
+            });
+            block.querySelector('[data-input-test-confirm]')?.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                await postTest(block.dataset.confirmUrl, new FormData(event.currentTarget));
+            });
+        });
 
         root.querySelectorAll('[data-phase-map-form]').forEach((form) => {
             form.addEventListener('submit', async (event) => {

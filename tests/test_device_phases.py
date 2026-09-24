@@ -7,13 +7,17 @@ import pytest
 from app.extensions import db
 from app.models.base import utcnow
 from app.models.devices import Device
+from app.models.devices import DeviceInputTestLog
 from app.models.devices.state import (
+    apply_input_test_sample,
     connector_pins,
     decode_raw_bank,
+    finish_input_test,
     normalize_phase_input_map,
     observe_raw_bits,
     phase_summary_from_connectors,
     phase_view_from_map,
+    start_input_test,
 )
 from app.tcp_gateway.protocol import parse_v2_state
 from tests.test_devices_ui import _device
@@ -182,3 +186,55 @@ def test_saved_phase_map_drives_the_boards_page(app, admin_client):
     assert status["phase_view"]["CON9"]["4"]["source"] == "U2"
     page = admin_client.get("/devices/").get_data(as_text=True)
     assert 'data-phase-pin="CON9.1"' in page and "Не настроено" in page
+
+
+def test_input_test_keeps_transitions_only_after_start_and_does_not_map():
+    history = observe_raw_bits(None, {"raw": {"U2": "EF", "U3": "FF"}}, "t0")
+    history = observe_raw_bits(history, {"raw": {"U2": "EF", "U3": "FE"}}, "t1")
+    session = start_input_test(history["raw"], "CON10", "4", "t2")
+    assert session["start_u2"] == "EF" and session["start_u3"] == "FE"
+    assert session["transitions"] == []
+    unchanged = apply_input_test_sample(session, {"U2": "EF", "U3": "FE"}, "t3")
+    assert unchanged["transitions"] == []
+    flipped = apply_input_test_sample(unchanged, {"U2": "EF", "U3": "7C"}, "t4")
+    flipped = apply_input_test_sample(flipped, {"U2": "EF", "U3": "7E"}, "t5")
+    result = finish_input_test(flipped, "t6")
+    assert result["changed_bits"] == ["U3.bit1", "U3.bit7"]
+    assert result["transitions"]["U3.bit1"] == "1 -> 0 -> 1"
+    assert result["transitions"]["U3.bit7"] == "1 -> 0"
+    assert result["diff"]["U2"] == []
+    assert result["candidate"] is None
+
+
+def test_single_bit_session_can_be_confirmed_manually(app, admin_client):
+    device_id = _device(app)
+    with app.app_context():
+        device = db.session.get(Device, device_id)
+        device.connection_state = "online"
+        device.last_state_at = utcnow()
+        device.actual_state = {"raw": {"U2": "00", "U3": "FF"}}
+        db.session.commit()
+    started = admin_client.post(f"/devices/{device_id}/input-test/start", data={"connector": "CON10", "pin": "4"})
+    assert started.status_code == 200
+    assert started.get_json()["input_test"]["active"]["start_u3"] == "FF"
+    assert started.get_json()["input_test"]["active"]["lines"] == []
+    with app.app_context():
+        device = db.session.get(Device, device_id)
+        device.actual_state = {"raw": {"U2": "00", "U3": "FD"}}
+        device.input_test_session = apply_input_test_sample(device.input_test_session, {"U2": "00", "U3": "FD"}, "t4")
+        db.session.commit()
+        assert device.phase_input_map is None
+    ended = admin_client.post(f"/devices/{device_id}/input-test/end")
+    body = ended.get_json()
+    assert body["result"]["changed_bits"] == ["U3.bit1"]
+    assert body["result"]["candidate"]["source"] == "U3"
+    with app.app_context():
+        device = db.session.get(Device, device_id)
+        assert device.phase_input_map is None
+        assert device.input_test_session is None
+        assert db.session.scalar(db.select(DeviceInputTestLog)).changed_bits == ["U3.bit1"]
+    confirmed = admin_client.post(f"/devices/{device_id}/input-test/confirm", data={"active_level": "0"})
+    assert confirmed.status_code == 200
+    assert confirmed.get_json()["phase_input_map"]["CON10"]["4"]["confirmed"] is True
+    assert confirmed.get_json()["phase_input_map"]["CON10"]["4"]["bit"] == 1
+    assert confirmed.get_json()["phase_view"]["CON10"]["4"]["active"] is True
