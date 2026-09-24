@@ -113,9 +113,9 @@
             const [name, pin] = row.dataset.phasePin.split('.');
             const item = device.phase_view?.[name]?.[pin] || {};
             const cell = row.querySelector('[data-phase-state]');
-            if (!item.configured) cell.textContent = 'Не настроено';
+            if (!item.configured) cell.textContent = 'Не откалибровано';
             else if (stale || item.active === null || item.active === undefined) cell.textContent = 'Нет данных';
-            else cell.textContent = item.active ? 'active' : 'inactive';
+            else cell.textContent = item.active ? 'Есть' : 'Нет';
         });
     }
 

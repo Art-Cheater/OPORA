@@ -123,7 +123,7 @@
                     <tr data-phase-pin="{{ name }}.{{ n }}">
                         <td>Pin {{ n }}</td>
                         <td>{{ pin.get('phase', 'ABCABC'[loop.index0]) }}</td>
-                        <td data-phase-state>{% if not pin.get('configured') %}Не настроено{% elif pin.get('active') is none or status.state_stale %}Нет данных{% elif pin.get('active') %}active{% else %}inactive{% endif %}</td>
+                        <td data-phase-state>{% if not pin.get('configured') %}Не откалибровано{% elif pin.get('active') is none or status.state_stale %}Нет данных{% elif pin.get('active') %}Есть{% else %}Нет{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody></table>

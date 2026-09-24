@@ -32,7 +32,13 @@
  * 500 ms flooded BGS2T with SISW traffic and could delay control commands.
  */
 #define STATE_PERIOD_MS        2000U
-#define INPUT_DEBOUNCE_MS      5U
+/*
+ * 50 Hz optocoupler pulses are not a DC level. A 5 ms second snapshot
+ * confirms whichever half-cycle the first read happened to catch.
+ * main.c integrates each bank for INPUT_WINDOW_MS instead.
+ * 48 ms covers two periods even at 49 Hz (20.4 ms), from any start phase.
+ */
+#define INPUT_WINDOW_MS        48U
 
 #define AUTH_DIAG_TIMEOUT_MS   30000U
 #define READ_POLL_MS           20U

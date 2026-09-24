@@ -334,6 +334,24 @@ def blank_phase_input_map() -> dict[str, dict[str, dict[str, Any]]]:
     }
 
 
+PILOT_DEVICE_ID = "ipp-001"
+
+
+def apply_pilot_phase_map(device_external_id: str, source: dict[str, Any] | None) -> dict[str, dict[str, dict[str, Any]]]:
+    """Bench-proven pins for the pilot board only. Other devices stay uncalibrated."""
+    mapping = normalize_phase_input_map(source)
+    if device_external_id != PILOT_DEVICE_ID:
+        return mapping
+    pin = mapping["CON10"]["4"]
+    if pin["confirmed"]:
+        return mapping
+    pin["source"] = "U3"
+    pin["bit"] = 3
+    pin["active_level"] = 0
+    pin["confirmed"] = True
+    return mapping
+
+
 def normalize_phase_input_map(source: dict[str, Any] | None) -> dict[str, dict[str, dict[str, Any]]]:
     """Keep only valid U2/U3 references. Several pins may share one bit."""
     incoming = source if isinstance(source, dict) else {}

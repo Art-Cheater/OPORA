@@ -13,6 +13,7 @@ from app.models.devices.state import (
     decode_raw_bank,
     describe_input_test,
     mark_input_switch,
+    apply_pilot_phase_map,
     normalize_phase_input_map,
     observe_raw_bits,
     phase_summary_from_connectors,
@@ -95,7 +96,7 @@ def test_status_api_returns_connectors_and_page_renders_pins(app, admin_client):
     for name in ("CON9", "CON10", "CON11"):
         assert name in page
     assert 'data-phase-pin="CON9.1"' in page
-    assert "Pin 1" in page and "Не настроено" in page
+    assert "Pin 1" in page and "Не откалибровано" in page
     assert "RAW INPUT MAP" in page
     assert "Включить" in page
 
@@ -110,7 +111,7 @@ def test_missing_connector_data_does_not_break_the_boards_page(app, admin_client
         db.session.commit()
     page = admin_client.get("/devices/").get_data(as_text=True)
     assert "Фазы / входы" in page
-    assert "Не настроено" in page
+    assert "Не откалибровано" in page
     assert "C6" in page and "C7" in page and "C8" in page
     payload = admin_client.get("/devices/status").get_json()["devices"][0]
     assert "connectors" not in payload["actual_state"]
@@ -185,7 +186,7 @@ def test_saved_phase_map_drives_the_boards_page(app, admin_client):
     assert status["phase_view"]["CON9"]["1"]["active"] is True
     assert status["phase_view"]["CON9"]["4"]["source"] == "U2"
     page = admin_client.get("/devices/").get_data(as_text=True)
-    assert 'data-phase-pin="CON9.1"' in page and "Не настроено" in page
+    assert 'data-phase-pin="CON9.1"' in page and "Не откалибровано" in page
 
 
 def _feed(session, u2, u3, count, stamp):
@@ -250,3 +251,16 @@ def test_flicker_is_not_a_stable_change_and_several_bits_are_ambiguous():
     assert view["verdict"] == "AMBIGUOUS"
     assert view["candidate"] is None
     assert {item["label"] for item in view["stable"]} == {"U3.bit1", "U3.bit2"}
+
+
+def test_pilot_board_keeps_only_the_measured_con10_pin():
+    mapping = apply_pilot_phase_map("ipp-001", None)
+    assert mapping["CON10"]["4"] == {"source": "U3", "bit": 3, "phase": "A", "active_level": 0, "confirmed": True}
+    assert mapping["CON10"]["5"]["confirmed"] is False
+    assert mapping["CON10"]["6"]["confirmed"] is False
+    assert apply_pilot_phase_map("ipp-002", None)["CON10"]["4"]["confirmed"] is False
+    view = phase_view_from_map({"raw": {"U2": "EF", "U3": "75"}}, mapping)
+    assert view["CON10"]["4"]["active"] is True
+    assert view["CON10"]["5"]["configured"] is False
+    lost = phase_view_from_map({"raw": {"U2": "EF", "U3": "7D"}}, mapping)
+    assert lost["CON10"]["4"]["active"] is False

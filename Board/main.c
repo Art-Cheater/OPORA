@@ -82,6 +82,10 @@ static union {
 static uint8_t r6=0,r7=0,r8=0;
 static uint8_t csq=0,net_creg=0,net_cgatt=0;
 static uint8_t last_u2=0xFF,last_u3=0xFF;
+/* Published levels. 0xFF until two windows agree — not a single PINA sample. */
+static uint8_t stable_u2=0xFF,stable_u3=0xFF;
+static uint8_t hist0_u2=0xFF,hist1_u2=0xFF,hist0_u3=0xFF,hist1_u3=0xFF;
+static uint8_t input_windows=0;
 static uint8_t authenticated=0;
 
 static char rx_line[RX_LINE_N];
@@ -204,35 +208,61 @@ static void screen_e6(uint8_t n){
     for(i=3;i<16;i++)ld(' ');
 }
 
-/* ---------------- Confirmed shared-bus RAW inputs ---------------- */
+/* ---------------- Confirmed shared-bus RAW inputs ----------------
+ * Port A is also the LCD bus, and there is no timer ISR.
+ * One cooperative window per TCP loop replaces the old blind 20 ms poll.
+ * A waiting UART byte aborts the window and is left in UDR.
+ * Measurement must not consume an AT reply.
+ * Both /OE stay high except for the bank being read. Settle stays 5 us:
+ * the previous board timing; HC buffer enable is far below that.
+ *
+ * A bit is "seen" only after LOW on two different samples of this window.
+ * One spike does not set the window. Constant 0 sets it; constant 1 does not.
+ * Published raw keeps active-low hardware meaning (0 = repeated LOW).
+ * Present updates after 2 agreeing windows, absent after 3, so a single
+ * noisy window cannot toggle STATE.
+ */
 static void buffers_disable(void){ PORTC|=(1<<U2_OE)|(1<<U3_OE); }
-static void shared_bus_input(void){ DDRA=0x00; PORTA=0x00; }
 static void restore_lcd_bus(void){ buffers_disable(); lcd_bus_out(); }
-static uint8_t read_u2(void){
+static uint8_t read_oe(uint8_t oe){
     uint8_t v;
-    buffers_disable(); shared_bus_input();
-    PORTC&=(uint8_t)~(1<<U2_OE); _delay_us(5); v=PINA; PORTC|=(1<<U2_OE);
-    restore_lcd_bus(); return v;
+    buffers_disable();
+    DDRA=0x00; PORTA=0x00;
+    PORTC&=(uint8_t)~(1<<oe);
+    _delay_us(5);
+    v=PINA;
+    PORTC|=(1<<oe);
+    return v;
 }
-static uint8_t read_u3(void){
-    uint8_t v;
-    buffers_disable(); shared_bus_input();
-    PORTC&=(uint8_t)~(1<<U3_OE); _delay_us(5); v=PINA; PORTC|=(1<<U3_OE);
-    restore_lcd_bus(); return v;
+static uint8_t apply_hyst(uint8_t w,uint8_t *h0,uint8_t *h1,uint8_t st){
+    uint8_t present=(uint8_t)((~w)&(~*h0));
+    uint8_t absent=(uint8_t)(w&*h0&*h1);
+    uint8_t change=(uint8_t)(present|absent);
+    *h1=*h0;
+    *h0=w;
+    return (uint8_t)((st&~change)|(w&change));
 }
-static uint8_t raw_inputs_changed(void){
-    uint8_t u2=read_u2(),u3=read_u3();
-    if(u2==last_u2 && u3==last_u3)return 0;
-#if INPUT_DEBOUNCE_MS > 0
-    dms(INPUT_DEBOUNCE_MS);
-    {
-        uint8_t u2b=read_u2(),u3b=read_u3();
-        if(u2b!=u2 || u3b!=u3)return 0;
-        u2=u2b; u3=u3b;
+static void input_measure(void){
+    uint8_t i,once2=0,twice2=0,once3=0,twice3=0,low;
+    for(i=0;i<INPUT_WINDOW_MS;i++){
+        /* Do not pull UDR. One unread byte ends the window; the parser keeps it. */
+        if(rx_ready()){
+            restore_lcd_bus();
+            return;
+        }
+        low=(uint8_t)~read_oe(U2_OE);
+        twice2|=(uint8_t)(once2&low);
+        once2|=low;
+        low=(uint8_t)~read_oe(U3_OE);
+        twice3|=(uint8_t)(once3&low);
+        once3|=low;
+        _delay_ms(1);
+        tick_ms();
     }
-#endif
-    last_u2=u2; last_u3=u3;
-    return 1;
+    restore_lcd_bus();
+    stable_u2=apply_hyst((uint8_t)~twice2,&hist0_u2,&hist1_u2,stable_u2);
+    stable_u3=apply_hyst((uint8_t)~twice3,&hist0_u3,&hist1_u3,stable_u3);
+    if(input_windows<3)input_windows++;
 }
 
 /* ---------------- Relays ---------------- */
@@ -543,7 +573,7 @@ static uint8_t send_state(void){
     PGM_P e=PSTR(" CREG=");
     PGM_P f=PSTR(" CGATT=");
     uint8_t o=(uint8_t)((r6<<2)|(r7<<1)|r8);
-    uint8_t u2=read_u2(),u3=read_u3();
+    uint8_t u2=stable_u2,u3=stable_u3;
     uint8_t n1=(uint8_t)(pgm_len(a)+1+pgm_len(b)+2+pgm_len(c)+2);
     uint8_t n2=(uint8_t)(pgm_len(d)+dec_len_u8(csq)+pgm_len(e)+
                          dec_len_u8(net_creg)+pgm_len(f)+2);
@@ -716,8 +746,6 @@ static uint8_t auth_feed(char c){
         screen_P(PSTR("ONLINE"),PSTR("AUTH"));
         rx_len=0;
         rx_overflow=0;
-        last_u2=read_u2();
-        last_u3=read_u3();
         return 1;
     }
 
@@ -1019,8 +1047,7 @@ int main(void){
     DDRD|=(1<<PD3)|(1<<PD4)|(1<<PD5)|(1<<PD6)|(1<<PD7);
     DDRD&=~(1<<PD2);PORTD&=~(1<<PD2);
 
-    linit();screen_P(PSTR("V2.2.8"),PSTR("E06 CODE"));dms(800);
-    last_u2=read_u2();last_u3=read_u3();
+    linit();screen_P(PSTR("V2.3.0"),PSTR("E06 CODE"));dms(800);
 
     for(;;){
         uint8_t socket_failures=0;
@@ -1086,7 +1113,7 @@ tcp_opened:
                     screen_P(PSTR("AUTH"),PSTR("SENT"));
                 }
 
-                if(pending_initial_state){
+                if(pending_initial_state && input_windows>=2){
                     pending_initial_state=0;
                     if(!send_state()){
                         screen_P(PSTR("E12 TX"),PSTR("STATE"));
@@ -1118,8 +1145,8 @@ tcp_opened:
                     break;
                 }
 
-                if(authenticated){
-                    if(raw_inputs_changed()){
+                if(authenticated && input_windows>=2){
+                    if(stable_u2!=last_u2 || stable_u3!=last_u3){
                         if(!send_state()){
                             screen_P(PSTR("E12 TX"),PSTR("STATE"));
                             dms(2000);
@@ -1137,8 +1164,10 @@ tcp_opened:
                 /*
                  * No AT^SISO? watchdog here.
                  * Socket loss is detected by SISR/SISW failure instead.
+                 * 48 ms input window paces the next AT^SISR.
+                 * It returns early, unread, if the modem speaks.
                  */
-                dms(READ_POLL_MS);
+                input_measure();
             }
 
             authenticated=0;
