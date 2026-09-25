@@ -46,18 +46,29 @@ def test_all_zero_is_off():
 
 
 def test_all_values_at_or_below_threshold_is_off():
-    assert _status(_meter({**_phases("i", 1.0, 0.5, 0.99), **_phases("p", 1, 0, -1)}))["code"] == "OFF"
+    assert _status(_meter({**_phases("i", 1.0, 0.5, 0.99), **_phases("p", 1000, 0, -1000)}))["code"] == "OFF"
 
 
-@pytest.mark.parametrize("prefix", ["i", "p", "q", "s"])
-def test_any_value_above_threshold_on_any_phase_is_on(prefix):
-    values = {**_phases("i", 0, 0, 0), **_phases(prefix, 0, 1.01, 0)}
+def test_small_load_below_one_kilo_unit_is_off():
+    """I 0.5 / 0.8 / 0 A gives ~115-185 VA per phase: P, Q, S stay below 1 kW / kvar / kVA."""
+    values = {**_phases("i", 0.5, 0.8, 0), **_phases("p", 110.0, 175.0, 0), **_phases("q", -30.0, 40.0, 0),
+              **_phases("s", 115.0, 184.0, 0)}
+    assert _status(_meter(values))["code"] == "OFF"
+
+
+@pytest.mark.parametrize("prefix,value", [("i", 1.01), ("p", 1010.0), ("q", 1010.0), ("s", 1010.0)])
+def test_any_value_above_threshold_on_any_phase_is_on(prefix, value):
+    values = {**_phases("i", 0, 0, 0), **_phases(prefix, 0, value, 0)}
     result = _status(_meter(values))
     assert (result["code"], result["label"]) == ("ON", "Горит")
 
 
+def test_power_threshold_is_in_kilo_units():
+    assert _status(_meter({**_phases("i", 0, 0, 0), **_phases("p", 999.0, 1000.0, 42.0)}))["code"] == "OFF"
+
+
 def test_negative_reactive_power_counts_by_magnitude():
-    assert _status(_meter({**_phases("i", 0, 0, 0), **_phases("q", -250.0, 0, 0)}))["code"] == "ON"
+    assert _status(_meter({**_phases("i", 0, 0, 0), **_phases("q", -2500.0, 0, 0)}))["code"] == "ON"
 
 
 @pytest.mark.parametrize("minutes", [10, 59])
@@ -91,7 +102,7 @@ def test_link_lost_never_keeps_old_on_status():
 
 
 def test_partial_snapshot_with_one_value_above_threshold_is_on():
-    assert _status(_meter({"i_a": 0.0, "i_b": None, "p_c": 42.0}))["code"] == "ON"
+    assert _status(_meter({"i_a": 0.0, "i_b": None, "p_c": 4200.0}))["code"] == "ON"
 
 
 def test_partial_snapshot_with_insufficient_data_is_problem():

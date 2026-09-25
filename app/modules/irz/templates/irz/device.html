@@ -12,6 +12,7 @@
 {% call page_header(title, "ATM21 · IMEI " ~ device.imei, "broadcast") %}
 <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('irz.index') }}"><i class="bi bi-arrow-left"></i> Назад к карте</a>
 {% endcall %}
+{% include "irz/_tabs.html" %}
 {% endblock %}
 {% block content %}
 <div class="irz-monitor" data-irz-monitor data-imei="{{ device.imei }}"

@@ -23,6 +23,8 @@ ORDER = {CRITICAL: 0, PROBLEM: 1, OFF: 2, ON: 3}
 # Mercury command -> measurement prefix in the merged meter state (I, P, Q, S per phase).
 LIGHT_COMMANDS = {"current_phases": "i", "active_power": "p", "reactive_power": "q", "apparent_power": "s"}
 PHASES = ("a", "b", "c")
+# The threshold applies in the units of the IRZ card: A, kW, kvar, kVA. The state stores W, var, VA.
+LIGHT_UNIT_DIVISORS = {"i": 1, "p": 1000, "q": 1000, "s": 1000}
 
 IP = "IP"
 PP = "PP"
@@ -55,7 +57,7 @@ def last_successful_response(state: dict) -> datetime | None:
 
 
 def _current_measurements(state: dict, now: datetime, fresh_seconds: int) -> dict[str, list[float]]:
-    """Valid phase values of commands that succeeded in the latest poll and are still fresh."""
+    """Valid phase values (A, kW, kvar, kVA) of commands that succeeded in the latest poll and are still fresh."""
     commands, values = state.get("commands") or {}, state.get("values") or {}
     current: dict[str, list[float]] = {}
     for command, prefix in LIGHT_COMMANDS.items():
@@ -63,7 +65,7 @@ def _current_measurements(state: dict, now: datetime, fresh_seconds: int) -> dic
         captured = service._parse_time(meta.get("captured_at"))
         if meta.get("quality") != "GOOD" or captured is None or (now - captured).total_seconds() > fresh_seconds:
             continue
-        current[prefix] = [number for phase in PHASES
+        current[prefix] = [number / LIGHT_UNIT_DIVISORS[prefix] for phase in PHASES
                            if (number := _measurement(values.get(f"{prefix}_{phase}"))) is not None]
     return current
 
@@ -79,7 +81,7 @@ def _settings() -> tuple[int, int]:
 
 def get_irz_operational_status(device: IRZDevice, meter: IRZMeter | None, *, online: bool,
                                now: datetime | None = None) -> dict:
-    """ON: fresh data and any I/P/Q/S phase value above the threshold.
+    """ON: fresh data and any I (A) / P (kW) / Q (kvar) / S (kVA) phase value above the threshold.
     OFF: fresh data, at least one of I/P/Q/S complete for all phases, nothing above the threshold.
     Otherwise PROBLEM, or CRITICAL once the last valid telemetry (or first detection) is an hour old.
     """
