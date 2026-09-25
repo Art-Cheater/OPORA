@@ -109,13 +109,20 @@
             }
         });
         if (!stale) previousPins.set(deviceKey, next);
+        ['U2', 'U3'].forEach((bank) => {
+            const live = card.querySelector(`[data-live-bank="${bank}"]`);
+            if (!live) return;
+            const hex = device.actual_state?.raw?.[bank];
+            live.textContent = stale || !hex ? '—' : String(hex);
+        });
         card.querySelectorAll('[data-phase-pin]').forEach((row) => {
             const [name, pin] = row.dataset.phasePin.split('.');
             const item = device.phase_view?.[name]?.[pin] || {};
             const cell = row.querySelector('[data-phase-state]');
-            if (!item.configured) cell.textContent = 'Не откалибровано';
-            else if (stale || item.active === null || item.active === undefined) cell.textContent = 'Нет данных';
-            else cell.textContent = item.active ? 'Есть' : 'Нет';
+            if (!item.configured) cell.innerHTML = '<span class="badge text-bg-light">Не откалибровано</span>';
+            else if (stale || item.active === null || item.active === undefined) cell.innerHTML = '<span class="text-muted">Нет данных</span>';
+            else if (item.active) cell.innerHTML = '<span class="badge text-bg-success">Есть</span>';
+            else cell.innerHTML = '<span class="badge text-bg-danger">Нет</span>';
         });
     }
 

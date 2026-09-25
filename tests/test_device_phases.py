@@ -253,6 +253,24 @@ def test_flicker_is_not_a_stable_change_and_several_bits_are_ambiguous():
     assert {item["label"] for item in view["stable"]} == {"U3.bit1", "U3.bit2"}
 
 
+def test_pilot_board_status_shows_con10_phase_a(app, admin_client):
+    device_id = _device(app)
+    with app.app_context():
+        device = db.session.get(Device, device_id)
+        device.connection_state = "online"
+        device.last_state_at = utcnow()
+        device.actual_state = {"raw": {"U2": "EF", "U3": "75"}, "outputs": {"C6": 0, "C7": 0, "C8": 0}}
+        db.session.commit()
+    body = admin_client.get("/devices/status").get_json()["devices"][0]
+    assert body["phase_view"]["CON10"]["4"]["active"] is True
+    assert body["phase_view"]["CON10"]["4"]["source"] == "U3"
+    assert body["phase_view"]["CON10"]["5"]["configured"] is False
+    page = admin_client.get("/devices/").get_data(as_text=True)
+    assert "Включить" in page and "Выключить" in page
+    assert "Есть" in page
+    assert "Не откалибровано" in page
+
+
 def test_pilot_board_keeps_only_the_measured_con10_pin():
     mapping = apply_pilot_phase_map("ipp-001", None)
     assert mapping["CON10"]["4"] == {"source": "U3", "bit": 3, "phase": "A", "active_level": 0, "confirmed": True}
