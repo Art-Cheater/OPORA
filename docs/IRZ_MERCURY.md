@@ -210,24 +210,32 @@ Excel читается только CLI-командой, а не при опр�
 
 ### Runbook
 
-Миграция применяется при старте контейнера. Импорт выполняется один раз после
-деплоя и повторно при обновлении Excel. Файл не входит в Docker-образ
-(`*.xlsx` в `.dockerignore`), поэтому передаётся через stdin:
+На сервере достаточно:
 
 ```bash
-docker compose exec -T web flask irz-import-meter-directory --file - --dry-run < meters_with_cabinets.xlsx
-docker compose exec -T web flask irz-import-meter-directory --file - < meters_with_cabinets.xlsx
-docker compose exec -T web flask irz-meter-directory-find 40191143
-docker compose exec -T web flask irz-meter-directory-debug 40191143
-docker compose exec -T web flask irz-match-existing-meter-directory --dry-run
-docker compose exec -T web flask irz-match-existing-meter-directory
+cd /opt/opora && sudo bash scripts/deploy.sh
 ```
 
-`NOT_FOUND` не блокирует повторный lookup: после импорта Excel карточка
-и CLI `irz-match-existing-meter-directory` снова ищут серийный номер.
+Скрипт после `git reset --hard origin/main` копирует `meters_with_cabinets.xlsx`
+и `опоры.xlsx` из корня репозитория в `data/imports/` (в контейнере
+`/data/imports/`, volume, не Docker image). Затем, уже после Alembic head,
+в том же контейнере `web` и той же PostgreSQL:
 
-Локально без `--file` используется `meters_with_cabinets.xlsx` в корне
-проекта. `--show-warnings` выводит все предупреждения по строкам.
+1. `flask irz-import-meter-directory --file /data/imports/meters_with_cabinets.xlsx`
+2. `flask irz-import-poles --file /data/imports/опоры.xlsx`
+3. `flask irz-meter-directory-find 40191143`
+4. `flask irz-match-existing-meter-directory`
+5. `flask irz-poles-find 2880041`
+6. `flask irz-deploy-check`
+
+Повторный импорт — upsert: новые строки добавляются, изменённые обновляются,
+отсутствующие в Excel записи из БД не удаляются. Сопоставление IRZ не
+перезаписывает уже связанные карточки и не разрешает конфликты серийников.
+
+`NOT_FOUND` не блокирует повторный lookup после обновления справочника.
+
+Локально без `--file` используются xlsx в корне проекта. `--show-warnings`
+выводит все предупреждения по строкам.
 
 ## Опоры освещения
 
@@ -261,26 +269,13 @@ docker compose exec -T web flask irz-match-existing-meter-directory
 
 ### Runbook
 
-Excel читается только CLI-командой, запросы страниц работают с БД. Файл не
-входит в Docker-образ (`*.xlsx` в `.dockerignore`) и не хранится в git.
-На сервере его кладут в уже смонтированный каталог импортных данных:
-хост `/opt/opora/data/geo` → контейнер `/data/geo` (read-only). Латинское имя
-файла избавляет от проблем с кодировкой в shell:
-
-```bash
-cp опоры.xlsx /opt/opora/data/geo/irz_poles.xlsx
-docker compose exec -T web flask irz-import-poles --file /data/geo/irz_poles.xlsx --dry-run
-docker compose exec -T web flask irz-import-poles --file /data/geo/irz_poles.xlsx
-```
-
-Без копирования на сервер файл можно передать через stdin:
-
-```bash
-docker compose exec -T web flask irz-import-poles --file - < опоры.xlsx
-```
+`опоры.xlsx` хранится в корне репозитория. `deploy.sh` копирует его в
+`data/imports/опоры.xlsx` (`/data/imports/опоры.xlsx` в контейнере) и
+импортирует после миграций. Отдельный `cp` / `flask irz-import-poles` на
+сервере не нужен. Файл не кладётся в Docker-образ (`*.xlsx` в
+`.dockerignore`).
 
 Локально без `--file` используется `опоры.xlsx` в корне проекта.
-`--show-warnings` выводит все предупреждения по строкам.
 
 ## Ten-minute production poll
 

@@ -207,6 +207,10 @@ def test_repeated_poll_keeps_manual_name_and_coordinates(app, admin_client, tmp_
         db.session.refresh(device)
         assert (device.name, device.latitude, device.longitude) == ("ИП-6 (ул. Ленина)", 58.7, 49.7)
         assert device.directory_matched_at == matched_at
+        rows = cabinets.match_existing_devices(dry_run=False)
+        assert any(row["result"] == "ALREADY_MATCHED" and row["serial"] == "40191143" for row in rows)
+        db.session.refresh(device)
+        assert (device.name, device.latitude, device.longitude) == ("ИП-6 (ул. Ленина)", 58.7, 49.7)
 
 
 def test_first_match_fills_only_empty_fields_of_existing_irz(app, tmp_path, monkeypatch):

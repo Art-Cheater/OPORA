@@ -339,36 +339,54 @@ def refresh_directory_match(device: IRZDevice, meter: IRZMeter | None = None) ->
 
 
 def match_existing_devices(*, dry_run: bool = False) -> list[dict]:
-    """Re-check every IRZ that already has a Mercury serial, including former NOT_FOUND."""
+    """Link unmatched / NOT_FOUND IRZ. Already matched cards and conflicts are left alone."""
     rows = []
     for device in db.session.scalars(db.select(IRZDevice).where(IRZDevice.active_filter())).all():
-        meter = _device_meter(device)
-        serial = current_serial(device, meter)
-        if serial is None:
-            rows.append({"imei": device.imei, "serial": None, "cabinet": None, "result": "NO_SERIAL"})
-            continue
-        entry = find_entry(serial)
-        if entry is None:
-            if not dry_run:
-                device.directory_match_serial = serial
-                device.directory_match_status = NOT_FOUND
-            rows.append({"imei": device.imei, "serial": serial, "cabinet": None, "result": "NOT_FOUND"})
-            continue
-        owner = _entry_owner(entry, device)
-        if device.directory_entry_id == entry.id:
-            result = "MATCH"
-        elif owner is not None:
-            result = "CONFLICT"
-        else:
-            result = "MATCH"
-            if not dry_run:
-                match_irz_from_meter_serial(device, serial, meter=meter)
-                result = "MATCH" if device.directory_match_status == MATCHED else (device.directory_match_status or "MATCH")
-        rows.append({"imei": device.imei, "serial": serial, "cabinet": entry.cabinet_name,
-                     "cabinet_external_id": entry.cabinet_external_id, "result": result})
+        try:
+            rows.append(_match_existing_one(device, dry_run=dry_run))
+        except Exception as exc:
+            logger.exception("IRZ %s: directory rematch failed", device.imei)
+            rows.append({"imei": device.imei, "serial": current_serial(device, _device_meter(device)),
+                         "cabinet": None, "result": "ERROR", "error": str(exc)})
     if not dry_run:
         db.session.commit()
     return rows
+
+
+def _match_existing_one(device: IRZDevice, *, dry_run: bool) -> dict:
+    meter = _device_meter(device)
+    serial = current_serial(device, meter)
+    if device.directory_entry_id is not None:
+        entry = db.session.get(MeterCabinetDirectory, device.directory_entry_id)
+        return {"imei": device.imei, "serial": serial or device.directory_match_serial,
+                "cabinet": entry.cabinet_name if entry else None,
+                "cabinet_external_id": entry.cabinet_external_id if entry else None,
+                "result": "ALREADY_MATCHED"}
+    if serial is None:
+        return {"imei": device.imei, "serial": None, "cabinet": None, "result": "NO_SERIAL"}
+    if device.directory_match_status == CONFLICT:
+        entry = find_entry(serial)
+        return {"imei": device.imei, "serial": serial,
+                "cabinet": entry.cabinet_name if entry else None,
+                "cabinet_external_id": entry.cabinet_external_id if entry else None,
+                "result": "CONFLICT"}
+    entry = find_entry(serial)
+    if entry is None:
+        if not dry_run:
+            device.directory_match_serial = serial
+            device.directory_match_status = NOT_FOUND
+        return {"imei": device.imei, "serial": serial, "cabinet": None, "result": "NOT_FOUND"}
+    owner = _entry_owner(entry, device)
+    if owner is not None:
+        if not dry_run:
+            device.directory_match_serial = serial
+            device.directory_match_status = CONFLICT
+        return {"imei": device.imei, "serial": serial, "cabinet": entry.cabinet_name,
+                "cabinet_external_id": entry.cabinet_external_id, "result": "CONFLICT"}
+    if not dry_run:
+        match_irz_from_meter_serial(device, serial, meter=meter)
+    return {"imei": device.imei, "serial": serial, "cabinet": entry.cabinet_name,
+            "cabinet_external_id": entry.cabinet_external_id, "result": "MATCH"}
 
 
 def serialize_entry(entry: MeterCabinetDirectory) -> dict:

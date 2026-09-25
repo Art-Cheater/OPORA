@@ -129,6 +129,9 @@ def test_real_file_imports_every_pole_once(app):
         assert db.session.scalar(db.select(db.func.count()).select_from(LightPole).where(LightPole.latitude.is_(None))) == 0
         again = poles.import_poles(REAL_FILE)
         assert (again["inserted"], again["updated"], again["unchanged"]) == (0, 0, 4068)
+        found = poles.find_pole("2880041")
+        assert found is not None and found.pole_number == "2880041"
+        assert found.latitude is not None and found.longitude is not None
 
 
 def _seed_poles(app, tmp_path):
@@ -214,3 +217,23 @@ def test_kiosk_role_reads_pole_layer_but_not_pole_pages(app, client, tmp_path):
     assert 'data-pole-template=""' in html
     assert client.get("/irz/poles").status_code == 403
     assert client.get(f"/irz/poles/{merged_id}").status_code == 403
+
+
+def test_cli_poles_find_and_deploy_check(app, tmp_path):
+    from app.modules.irz import cabinets
+    from tests.test_irz_cabinets import _import
+
+    _seed_poles(app, tmp_path)
+    found = app.test_cli_runner().invoke(args=["irz-poles-find", "1000001"])
+    assert found.exit_code == 0, found.output
+    assert "Pole: 1000001" in found.output
+    assert app.test_cli_runner().invoke(args=["irz-poles-find", "0"]).exit_code != 0
+    with app.app_context():
+        _import(tmp_path)
+        poles.import_poles(_xlsx(tmp_path / "control.xlsx", [
+            (2880041, "MAG31-130 7-01-130-01-1-12-02-206-7-40-66 (130 Вт)", 58.60199936, 49.67259864, 1),
+        ]))
+    check = app.test_cli_runner().invoke(args=["irz-deploy-check"])
+    assert check.exit_code == 0, check.output
+    assert "IRZ deploy check: OK" in check.output
+    assert "40191143" in check.output and "ИП-6" in check.output and "2880041" in check.output

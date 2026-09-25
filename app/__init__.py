@@ -817,6 +817,63 @@ def _register_cli_commands(app: Flask) -> None:
         if dry_run:
             click.echo("Пробный запуск: изменения не сохранены")
 
+    @app.cli.command("irz-poles-find")
+    @click.argument("pole_number")
+    def irz_poles_find(pole_number: str):
+        """Показать опору по номеру из production-таблицы light_poles."""
+        from app.modules.irz import poles
+
+        pole = poles.find_pole(pole_number)
+        if pole is None:
+            raise click.ClickException(f"Опора № {pole_number} не найдена")
+        click.echo(f"Pole: {pole.pole_number}")
+        click.echo(f"Luminaire: {pole.luminaire_name or '—'}")
+        click.echo(f"Quantity: {pole.quantity if pole.quantity is not None else '—'}")
+        click.echo(f"Latitude: {pole.latitude if pole.latitude is not None else '—'}")
+        click.echo(f"Longitude: {pole.longitude if pole.longitude is not None else '—'}")
+
+    @app.cli.command("irz-deploy-check")
+    def irz_deploy_check():
+        """Контроль справочников ШУНО/опор и маршрутов IRZ после деплоя. Mercury не опрашивает."""
+        from flask import current_app
+
+        from app.models.irz import LightPole, MeterCabinetDirectory
+        from app.modules.irz import cabinets, poles, status
+
+        entry = cabinets.find_entry("40191143")
+        if entry is None:
+            raise click.ClickException("Серийный № 40191143 не найден в справочнике ШУНО")
+        if (entry.cabinet_name, entry.cabinet_external_id, entry.meter_model) != (
+            "ИП-6", "221", "Меркурий 230 ART-03 PQRSIDN"):
+            raise click.ClickException(
+                f"40191143: ожидались ИП-6 / 221 / Меркурий 230, получено "
+                f"{entry.cabinet_name} / {entry.cabinet_external_id} / {entry.meter_model}")
+        if abs((entry.latitude or 0) - 58.60934796) > 1e-8 or abs((entry.longitude or 0) - 49.68161881) > 1e-8:
+            raise click.ClickException(f"40191143: неверные координаты {entry.latitude}, {entry.longitude}")
+        pole = poles.find_pole("2880041")
+        if pole is None:
+            raise click.ClickException("Опора № 2880041 не найдена")
+        if pole.latitude is None or pole.longitude is None:
+            raise click.ClickException("Опора № 2880041 без координат")
+        missing = [name for name in ("irz.index", "irz.map_display", "irz.poles_page", "irz.poles_map")
+                   if name not in current_app.view_functions]
+        if missing:
+            raise click.ClickException("Нет маршрутов IRZ: " + ", ".join(missing))
+        for code in (status.ON, status.OFF, status.PROBLEM, status.CRITICAL):
+            if code not in status.LABELS:
+                raise click.ClickException(f"Нет подписи эксплуатационного статуса {code}")
+        cabinets_count = db.session.scalar(db.select(db.func.count(MeterCabinetDirectory.id)).where(
+            MeterCabinetDirectory.active_filter())) or 0
+        poles_count = db.session.scalar(db.select(db.func.count(LightPole.id)).where(LightPole.active_filter())) or 0
+        click.echo(f"ШУНО: {entry.meter_serial} {entry.cabinet_name} {entry.cabinet_external_id}")
+        click.echo(f"Model: {entry.meter_model}")
+        click.echo(f"Latitude: {entry.latitude}")
+        click.echo(f"Longitude: {entry.longitude}")
+        click.echo(f"Pole: {pole.pole_number} {pole.luminaire_name}")
+        click.echo(f"Directory rows: {cabinets_count}")
+        click.echo(f"Poles: {poles_count}")
+        click.echo("IRZ deploy check: OK")
+
     @app.cli.command("repair-request-districts")
     @click.option("--dry-run", is_flag=True, help="Только показать, без записи в БД")
     @click.option("--limit", default=0, show_default=True, help="Максимум заявок (0 = все)")

@@ -105,6 +105,14 @@ def test_deploy_checks_env_before_docker_build_and_reports_unhealthy_web():
     for service in ("web", "nginx", "inquiry-sync", "eis-sync", "documents-notify", "tcp-gateway", "modem-sniffer", "irz-poller"):
         assert service in deploy
     assert "flask db" in deploy and "current" in deploy and "heads" in deploy
+    assert deploy.index("flask db") < deploy.index("irz-import-meter-directory")
+    assert deploy.index("irz-import-meter-directory") < deploy.index("irz-import-poles")
+    assert deploy.index("irz-import-poles") < deploy.index("irz-match-existing-meter-directory")
+    assert "irz-meter-directory-find 40191143" in deploy
+    assert "irz-poles-find 2880041" in deploy
+    assert "irz-deploy-check" in deploy
+    assert "DEPLOY SUCCESS" in deploy
+    assert deploy.index("irz-deploy-check") < deploy.index("DEPLOY SUCCESS")
     assert "opora_tcp_gateway 5000/tcp" in deploy
     assert "opora_modem_sniffer 5009/tcp" in deploy
 
@@ -154,7 +162,17 @@ if [[ "$1" == "compose" ]]; then
     config) printf '%s\n' db web nginx eis-sync inquiry-sync documents-notify modem-sniffer irz-poller tcp-gateway;;
     exec)
       if [[ "$*" == *"db current"* ]]; then echo "${FAKE_DB_CURRENT:-061_irz_monitoring_dashboard} (head)"
-      elif [[ "$*" == *"db heads"* ]]; then echo "061_irz_monitoring_dashboard (head)"; fi;;
+      elif [[ "$*" == *"db heads"* ]]; then echo "061_irz_monitoring_dashboard (head)"
+      elif [[ "$*" == *"irz-meter-directory-find"* ]]; then
+        printf '%s\n' "Serial: 40191143" "ШУНО: ИП-6" "ID ШУНО: 221" \
+          "Model: Меркурий 230 ART-03 PQRSIDN" "Latitude: 58.60934796" "Longitude: 49.68161881"
+      elif [[ "$*" == *"irz-poles-find"* ]]; then
+        printf '%s\n' "Pole: 2880041" "Luminaire: MAG31-130" "Quantity: 1" "Latitude: 58.60199936" "Longitude: 49.67259864"
+      elif [[ "$*" == *"irz-deploy-check"* ]]; then echo "IRZ deploy check: OK"
+      elif [[ "$*" == *"irz-import-meter-directory"* ]]; then echo "Добавлено: 0"; echo "Ошибок: 0"
+      elif [[ "$*" == *"irz-import-poles"* ]]; then echo "Добавлено: 0"; echo "Ошибок: 0"
+      elif [[ "$*" == *"irz-match-existing"* ]]; then echo "Всего: 0, MATCH: 0"
+      fi;;
   esac
   exit 0
 fi
@@ -191,7 +209,23 @@ def _bash() -> str | None:
     return shutil.which("bash")
 
 
-def _run_deploy(tmp_path, **env):
+def test_irz_catalog_xlsx_are_not_gitignored():
+    import subprocess
+    for name in ("meters_with_cabinets.xlsx", "опоры.xlsx"):
+        assert (ROOT / name).is_file()
+        ignored = subprocess.run(["git", "check-ignore", "-q", name], cwd=ROOT)
+        assert ignored.returncode == 1
+
+
+def test_compose_exposes_irz_imports_to_web_not_image():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "${IRZ_IMPORTS_HOST_PATH:-./data/imports}:/data/imports:ro" in compose
+    assert "*.xlsx" in (ROOT / ".dockerignore").read_text(encoding="utf-8")
+    assert "/data/imports/*" in (ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert "/meters_with_cabinets.xlsx" not in (ROOT / ".gitignore").read_text(encoding="utf-8")
+
+
+def _run_deploy(tmp_path, skip_xlsx=False, **env):
     import os
     import subprocess
     bash = _bash()
@@ -200,6 +234,9 @@ def _run_deploy(tmp_path, **env):
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts" / "deploy.sh").write_bytes((ROOT / "scripts" / "deploy.sh").read_bytes().replace(b"\r\n", b"\n"))
     (tmp_path / ".env").write_text("OPORA_ENV=production\n", encoding="utf-8", newline="\n")
+    if not skip_xlsx:
+        (tmp_path / "meters_with_cabinets.xlsx").write_bytes(b"PK\x03\x04catalog")
+        (tmp_path / "опоры.xlsx").write_bytes(b"PK\x03\x04poles")
     fakebin = tmp_path / "fakebin"
     fakebin.mkdir()
     stubs = {"docker": FAKE_DOCKER, "sleep": "#!/usr/bin/env bash\nexit 0\n",
@@ -234,10 +271,16 @@ def test_deploy_builds_once_and_recreates_every_service_without_build(tmp_path):
         assert f" {service}" in recreated
     web_up = next(index for index, line in enumerate(calls) if " up " in line and line.endswith(" web"))
     current = next(index for index, line in enumerate(calls) if "flask db current" in line)
+    import_cabinets = next(index for index, line in enumerate(calls) if "irz-import-meter-directory" in line)
+    import_poles = next(index for index, line in enumerate(calls) if "irz-import-poles" in line)
+    match_existing = next(index for index, line in enumerate(calls) if "irz-match-existing-meter-directory" in line)
     others_up = next(index for index, line in enumerate(calls) if " up " in line and "tcp-gateway" in line)
-    assert calls.index(builds[0]) < web_up < current < others_up
+    assert calls.index(builds[0]) < web_up < current < import_cabinets < import_poles < match_existing < others_up
     assert "COMMIT: abc123" in output
     assert "MIGRATION HEAD: 061_irz_monitoring_dashboard" in output
+    assert "DEPLOY SUCCESS" in output
+    assert (tmp_path / "data" / "imports" / "meters_with_cabinets.xlsx").is_file()
+    assert (tmp_path / "data" / "imports" / "опоры.xlsx").is_file()
     assert "tcp-gateway row" in output and "modem-sniffer row" in output
     assert sum(1 for line in calls if line == "git reset --hard origin/main") == 2
 
@@ -251,6 +294,13 @@ def test_deploy_restarts_with_the_script_version_checked_out_by_git(tmp_path):
     assert code == 0, output
     assert "==> NEW deploy version" in output
     assert len([line for line in calls if line.startswith("docker compose") and " build " in line]) == 1
+
+
+def test_deploy_stops_when_catalog_xlsx_missing(tmp_path):
+    code, output, calls = _run_deploy(tmp_path, skip_xlsx=True)
+    assert code != 0
+    assert "FAIL: нет" in output and "meters_with_cabinets.xlsx" in output
+    assert not any(" build " in line for line in calls)
 
 
 def test_deploy_stops_when_migrations_are_not_at_head(tmp_path):

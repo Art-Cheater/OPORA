@@ -35,12 +35,16 @@ services:
       OPORA_RUN_MIGRATE: "1"
       GEO_DATA_HOST_PATH: ${GEO_DATA_HOST_PATH:-/opt/opora/data/geo}
       GEO_DATA_CONTAINER_PATH: /data/geo
+      IRZ_IMPORTS_HOST_PATH: ${IRZ_IMPORTS_HOST_PATH:-./data/imports}
+      IRZ_IMPORTS_CONTAINER_PATH: /data/imports
     expose:
       - "5000"
     volumes:
       - uploads_data:/app/instance/uploads
       # Архив ГАР и OSM PBF кладут на хост в /opt/opora/data/geo. В git их нет.
       - ${GEO_DATA_HOST_PATH:-/opt/opora/data/geo}:/data/geo:ro
+      # Справочники ШУНО и опор: deploy.sh копирует xlsx из git в data/imports.
+      - ${IRZ_IMPORTS_HOST_PATH:-./data/imports}:/data/imports:ro
     depends_on:
       db:
         condition: service_healthy

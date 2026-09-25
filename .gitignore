@@ -83,9 +83,9 @@ docker-data/
 /data/valhalla/*.sqlite
 /data/valhalla/*.bin
 
-# Import sources are copied to the server data directory, not committed
-/опоры.xlsx
-/meters_with_cabinets.xlsx
+# Working copies of IRZ catalogs on the server; the source files live in the repo root.
+/data/imports/*
+!/data/imports/.gitkeep
 ~$*
 
 # Board firmware build output

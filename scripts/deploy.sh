@@ -38,6 +38,19 @@ if ! python3 scripts/check_env.py "$ROOT/.env"; then
   exit 1
 fi
 
+CABINETS_XLSX="$ROOT/meters_with_cabinets.xlsx"
+POLES_XLSX="$ROOT/опоры.xlsx"
+IMPORTS_HOST="${IRZ_IMPORTS_HOST_PATH:-$ROOT/data/imports}"
+IMPORTS_CONTAINER="${IRZ_IMPORTS_CONTAINER_PATH:-/data/imports}"
+echo "==> справочники IRZ в репозитории"
+[[ -f "$CABINETS_XLSX" ]] || { echo "FAIL: нет $CABINETS_XLSX в git-рабочем дереве"; exit 1; }
+[[ -f "$POLES_XLSX" ]] || { echo "FAIL: нет $POLES_XLSX в git-рабочем дереве"; exit 1; }
+mkdir -p "$IMPORTS_HOST"
+cp -f "$CABINETS_XLSX" "$IMPORTS_HOST/meters_with_cabinets.xlsx"
+cp -f "$POLES_XLSX" "$IMPORTS_HOST/опоры.xlsx"
+echo "    host: $IMPORTS_HOST"
+echo "    container: $IMPORTS_CONTAINER"
+
 # Do not source .env: it can contain shell-significant passwords. Read only the
 # profile key and select an overlay; the main command remains unchanged.
 OPORA_ENV="$(awk -F= '$1 == "OPORA_ENV" { value=$2 } END { print value }' "$ROOT/.env" | tr -d '\r\"' | tr '[:upper:]' '[:lower:]')"
@@ -185,6 +198,59 @@ if [[ -z "$DB_HEADS" || "$DB_CURRENT" != "$DB_HEADS" ]]; then
   exit 1
 fi
 
+web_exec() {
+  compose exec -T web "$@"
+}
+
+echo "==> импорт справочника ШУНО и опор (после миграций, та же БД что у сайта)"
+web_exec test -f "$IMPORTS_CONTAINER/meters_with_cabinets.xlsx" \
+  || { echo "FAIL: в контейнере web нет $IMPORTS_CONTAINER/meters_with_cabinets.xlsx"; exit 1; }
+web_exec test -f "$IMPORTS_CONTAINER/опоры.xlsx" \
+  || { echo "FAIL: в контейнере web нет $IMPORTS_CONTAINER/опоры.xlsx"; exit 1; }
+if ! web_exec flask irz-import-meter-directory --file "$IMPORTS_CONTAINER/meters_with_cabinets.xlsx"; then
+  echo "FAIL: импорт справочника ШУНО"
+  exit 1
+fi
+if ! web_exec flask irz-import-poles --file "$IMPORTS_CONTAINER/опоры.xlsx"; then
+  echo "FAIL: импорт опор"
+  exit 1
+fi
+
+echo "==> контроль ШУНО 40191143"
+if ! CABINET_CHECK="$(web_exec flask irz-meter-directory-find 40191143)"; then
+  echo "FAIL: irz-meter-directory-find 40191143"
+  echo "$CABINET_CHECK"
+  exit 1
+fi
+echo "$CABINET_CHECK"
+for needle in "40191143" "ИП-6" "221" "Меркурий 230 ART-03 PQRSIDN" "58.60934796" "49.68161881"; do
+  grep -Fq -- "$needle" <<<"$CABINET_CHECK" || { echo "FAIL: в выводе find нет «$needle»"; exit 1; }
+done
+
+echo "==> сопоставление существующих IRZ со справочником (без перезаписи ручных карточек)"
+if ! web_exec flask irz-match-existing-meter-directory; then
+  echo "FAIL: irz-match-existing-meter-directory"
+  exit 1
+fi
+
+echo "==> контроль опоры 2880041"
+if ! POLE_CHECK="$(web_exec flask irz-poles-find 2880041)"; then
+  echo "FAIL: irz-poles-find 2880041"
+  echo "$POLE_CHECK"
+  exit 1
+fi
+echo "$POLE_CHECK"
+grep -Fq -- "2880041" <<<"$POLE_CHECK" || { echo "FAIL: опора 2880041 не найдена"; exit 1; }
+
+echo "==> контроль маршрутов IRZ и справочников в той же БД"
+if ! IRZ_CHECK="$(web_exec flask irz-deploy-check)"; then
+  echo "FAIL: irz-deploy-check"
+  echo "$IRZ_CHECK"
+  exit 1
+fi
+echo "$IRZ_CHECK"
+grep -Fq "IRZ deploy check: OK" <<<"$IRZ_CHECK" || { echo "FAIL: irz-deploy-check не подтвердил справочники"; exit 1; }
+
 echo "==> пересоздаём остальные сервисы без сборки: ${OTHER_SERVICES[*]}"
 if ! compose up -d --no-build --no-deps --force-recreate "${OTHER_SERVICES[@]}"; then
   for service in "${OTHER_SERVICES[@]}"; do
@@ -230,6 +296,7 @@ fi
 echo
 echo "COMMIT: $(git rev-parse HEAD)"
 echo "MIGRATION HEAD: $DB_HEADS"
+echo "IRZ IMPORTS: $IMPORTS_CONTAINER"
 printf '%-18s %-26s %-28s %-21s %-9s %-10s %s\n' SERVICE CONTAINER IMAGE CREATED STATUS HEALTH PORTS
 for service in $(compose config --services); do
   id="$(container_of "$service")"
@@ -240,3 +307,4 @@ for service in $(compose config --services); do
   docker inspect "$id" --format "{{printf \"%-18s\" \"$service\"}} {{printf \"%-26s\" (slice .Name 1)}} {{printf \"%-28s\" .Config.Image}} {{printf \"%-21s\" (slice .Created 0 19)}} {{printf \"%-9s\" .State.Status}} {{printf \"%-10s\" (or (and .State.Health .State.Health.Status) \"-\")}} {{range \$port, \$bindings := .NetworkSettings.Ports}}{{if \$bindings}}{{(index \$bindings 0).HostPort}}->{{\$port}} {{end}}{{end}}"
 done
 echo "==> Готово. Deploy занял $(( $(date +%s) - DEPLOY_STARTED )) с."
+echo "DEPLOY SUCCESS"

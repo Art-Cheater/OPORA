@@ -210,6 +210,14 @@ def get_pole(pole_id) -> LightPole | None:
     return db.session.scalar(db.select(LightPole).where(LightPole.active_filter(), LightPole.id == pole_id))
 
 
+def find_pole(number: object) -> LightPole | None:
+    pole_number = normalize_pole_number(number)
+    if pole_number is None:
+        return None
+    return db.session.scalar(db.select(LightPole).where(
+        LightPole.active_filter(), LightPole.pole_number == pole_number))
+
+
 def search_poles(query: str = "", *, page: int = 1, per_page: int = PER_PAGE) -> tuple[list[LightPole], dict]:
     stmt = db.select(LightPole).where(LightPole.active_filter())
     needle = " ".join(str(query or "").split())

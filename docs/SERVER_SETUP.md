@@ -135,6 +135,12 @@ sudo cp .env ".env.backup.$(date +%Y%m%d-%H%M%S)"
 sudo nano .env
 python3 scripts/check_env.py .env
 sudo bash scripts/deploy.sh
+```
+
+После этой команды миграции, импорт ШУНО/`опоры.xlsx` и сопоставление IRZ
+выполняются сами. Отдельные `flask irz-import-*` на сервере не нужны.
+
+```bash
 sudo docker compose ps
 sudo docker compose logs --tail=100 web
 ```
