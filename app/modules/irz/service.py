@@ -291,6 +291,7 @@ def serialize_device(device: IRZDevice, *, online: bool = False, runtime: dict |
         data_state = "STALE"
     else:
         data_state = latest.quality if latest else "GOOD"
+    directory = cabinets.directory_state(device, meter)
     return {
         "id": str(device.id),
         "name": device.name,
@@ -332,7 +333,7 @@ def serialize_device(device: IRZDevice, *, online: bool = False, runtime: dict |
         "latest": serialize_snapshot(latest, include_delta=True) if latest else None,
         "current": current,
         "meter": serialize_meter(meter) if meter else None,
-        "directory": cabinets.directory_state(device, meter),
+        "directory": directory,
         "operational": status.get_irz_operational_status(device, meter, online=online),
         "cabinet_type": status.cabinet_type(device.name),
     }
@@ -626,7 +627,7 @@ def update_meter_identity(device: IRZDevice, payload: dict, *, user_id) -> IRZMe
 
 
 def _upsert_meter(device: IRZDevice, data: dict, now: datetime, user_id) -> IRZMeter | None:
-    serial = str(data.get("serial_number") or "").strip()
+    serial = cabinets.normalize_meter_serial(data.get("serial_number"))
     if not serial:
         return None
     meter = db.session.scalar(db.select(IRZMeter).where(IRZMeter.serial_number == serial))
@@ -667,7 +668,7 @@ def _apply_results(device: IRZDevice, results: dict, errors: list, now: datetime
     for command_id, item in results.items():
         data = item.get("data") if isinstance(item, dict) else None
         if command_id == "serial_and_manufacture" and isinstance(data, dict):
-            device.serial_number = str(data.get("serial_number") or device.serial_number or "") or None
+            device.serial_number = cabinets.normalize_meter_serial(data.get("serial_number")) or device.serial_number
             raw_date = data.get("date_of_manufacture")
             if raw_date:
                 try: device.last_manufacture_date = datetime.fromisoformat(str(raw_date)).date()
@@ -696,6 +697,8 @@ def _apply_results(device: IRZDevice, results: dict, errors: list, now: datetime
         meter.latest_snapshot = merge_current(meter.latest_snapshot, results, errors, now)
         if results:
             meter.last_seen_at = now
+        if device.directory_entry_id is None:
+            cabinets.refresh_directory_match(device, meter)
     return meter
 
 

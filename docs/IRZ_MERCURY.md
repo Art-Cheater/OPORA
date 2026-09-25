@@ -218,7 +218,13 @@ Excel читается только CLI-командой, а не при опр�
 docker compose exec -T web flask irz-import-meter-directory --file - --dry-run < meters_with_cabinets.xlsx
 docker compose exec -T web flask irz-import-meter-directory --file - < meters_with_cabinets.xlsx
 docker compose exec -T web flask irz-meter-directory-find 40191143
+docker compose exec -T web flask irz-meter-directory-debug 40191143
+docker compose exec -T web flask irz-match-existing-meter-directory --dry-run
+docker compose exec -T web flask irz-match-existing-meter-directory
 ```
+
+`NOT_FOUND` не блокирует повторный lookup: после импорта Excel карточка
+и CLI `irz-match-existing-meter-directory` снова ищут серийный номер.
 
 Локально без `--file` используется `meters_with_cabinets.xlsx` в корне
 проекта. `--show-warnings` выводит все предупреждения по строкам.

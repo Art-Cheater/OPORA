@@ -718,7 +718,7 @@ def _register_cli_commands(app: Flask) -> None:
 
         entry = cabinets.find_entry(serial)
         if entry is None:
-            raise click.ClickException(f"Серийный № {cabinets.normalize_serial(serial) or serial} не найден в справочнике")
+            raise click.ClickException(f"Серийный № {cabinets.normalize_meter_serial(serial) or serial} не найден в справочнике")
         click.echo(f"Serial: {entry.meter_serial}")
         click.echo(f"ШУНО: {entry.cabinet_name or '—'}")
         click.echo(f"ID ШУНО: {entry.cabinet_external_id or '—'}")
@@ -729,6 +729,57 @@ def _register_cli_commands(app: Flask) -> None:
         click.echo(f"Longitude: {entry.longitude if entry.longitude is not None else '—'}")
         linked = db.session.scalar(db.select(IRZDevice).where(IRZDevice.active_filter(), IRZDevice.directory_entry_id == entry.id))
         click.echo(f"IRZ: {f'{linked.name} (IMEI {linked.imei})' if linked else 'не сопоставлен'}")
+
+    @app.cli.command("irz-meter-directory-debug")
+    @click.argument("serial")
+    def irz_meter_directory_debug(serial: str):
+        """Показать raw/normalized serial и точный или похожий lookup в справочнике."""
+        from app.modules.irz import cabinets
+
+        normalized = cabinets.normalize_meter_serial(serial)
+        click.echo("INPUT:")
+        click.echo(f"raw: {serial!r}")
+        click.echo(f"normalized: {normalized!r}")
+        click.echo("")
+        entry = cabinets.find_entry(serial)
+        click.echo("DATABASE:")
+        click.echo(f"exact match: {'YES' if entry else 'NO'}")
+        if entry is not None:
+            click.echo(f"meter_serial: {entry.meter_serial}")
+            click.echo(f"cabinet_name: {entry.cabinet_name or '—'}")
+            click.echo(f"cabinet_external_id: {entry.cabinet_external_id or '—'}")
+            click.echo(f"meter_model: {entry.meter_model or '—'}")
+            click.echo(f"latitude: {entry.latitude if entry.latitude is not None else '—'}")
+            click.echo(f"longitude: {entry.longitude if entry.longitude is not None else '—'}")
+            return
+        similar = cabinets.similar_serials(serial)
+        if similar:
+            click.echo("SIMILAR DATABASE VALUES:")
+            for value in similar:
+                click.echo(f"  {value!r}")
+
+    @app.cli.command("irz-match-existing-meter-directory")
+    @click.option("--dry-run", is_flag=True, help="Только показать, без записи в БД")
+    def irz_match_existing_meter_directory(dry_run: bool):
+        """Повторно сопоставить существующие IRZ со справочником, включая прежние NOT_FOUND."""
+        from app.modules.irz import cabinets
+
+        rows = cabinets.match_existing_devices(dry_run=dry_run)
+        if not rows:
+            click.echo("IRZ устройств нет")
+            return
+        for row in rows:
+            serial = row["serial"] or "—"
+            cabinet = row["cabinet"] or "—"
+            click.echo(f"{serial}")
+            click.echo(f"-> {cabinet}")
+            click.echo(f"-> {row['result']}")
+            if row.get("imei"):
+                click.echo(f"   IMEI {row['imei']}")
+        matched = sum(1 for row in rows if row["result"] == "MATCH")
+        click.echo(f"Всего: {len(rows)}, MATCH: {matched}")
+        if dry_run:
+            click.echo("Пробный запуск: изменения не сохранены")
 
     @app.cli.command("irz-import-poles")
     @click.option("--file", "path", default="", help="Путь к опоры.xlsx; «-» — читать из stdin")

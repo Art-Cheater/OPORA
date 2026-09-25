@@ -1,6 +1,7 @@
 """Mercury serial -> ШУНО directory: Excel import, auto-match after poll, manual re-apply, conflicts."""
 
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 
 import openpyxl
@@ -75,15 +76,19 @@ def _login_as(app, client, email, codes):
     client.post("/auth/login", data={"email": email, "password": "pass12345"})
 
 
-@pytest.mark.parametrize("raw", [40191143, 40191143.0, "40191143", " 40191143 ", "40 191 143", "40191143.0"])
+@pytest.mark.parametrize("raw", [
+    40191143, 40191143.0, Decimal("40191143"), "40191143", " 40191143 ",
+    "40 191 143", "40191143.0", "\u00a040191143\u00a0", "\u202f40191143\u202f",
+])
 def test_serial_numeric_and_text_cells_normalize_to_same_key(raw):
-    assert cabinets.normalize_serial(raw) == "40191143"
+    assert cabinets.normalize_meter_serial(raw) == cabinets.normalize_serial(raw) == "40191143"
 
 
 def test_serial_keeps_leading_zeros_for_short_numbers():
-    assert cabinets.normalize_serial(1234567) == cabinets.normalize_serial("01234567") == "01234567"
-    assert cabinets.normalize_serial(None) is None and cabinets.normalize_serial("  ") is None
-    assert cabinets.normalize_serial(True) is None and cabinets.normalize_serial(1.5) is None
+    assert cabinets.normalize_meter_serial(1234567) == cabinets.normalize_meter_serial("01234567") == "01234567"
+    assert cabinets.normalize_meter_serial("00123456") == "00123456"
+    assert cabinets.normalize_meter_serial(None) is None and cabinets.normalize_meter_serial("  ") is None
+    assert cabinets.normalize_meter_serial(True) is None and cabinets.normalize_meter_serial(1.5) is None
 
 
 def test_import_inserts_rows_skips_history_and_empty_and_nulls_bad_coordinates(app, tmp_path):
@@ -171,6 +176,19 @@ def test_directory_imported_later_matches_on_next_poll(app, tmp_path, monkeypatc
         _import(tmp_path)
         _poll(device, monkeypatch)
         assert device.directory_match_status == "MATCHED" and device.name == "ИП-6"
+
+
+def test_directory_state_rematches_cached_not_found_after_import(app, admin_client, tmp_path, monkeypatch):
+    with app.app_context():
+        device = _device()
+        _poll(device, monkeypatch)
+        assert device.directory_match_status == "NOT_FOUND"
+        _import(tmp_path)
+    monkeypatch.setattr(service, "get_devices", lambda: [{"imei": IMEI_A}])
+    detail = admin_client.get(f"/irz/api/devices/{IMEI_A}").get_json()
+    assert detail["directory"]["status"] == "MATCHED"
+    assert detail["directory"]["entry"]["cabinet_name"] == "ИП-6"
+    assert detail["name"] == "ИП-6"
 
 
 def test_repeated_poll_keeps_manual_name_and_coordinates(app, admin_client, tmp_path, monkeypatch):
@@ -353,3 +371,71 @@ def test_real_directory_file_imports_current_rows(app):
         entry = cabinets.find_entry("40191143")
         assert (entry.cabinet_name, entry.cabinet_external_id, entry.meter_model) == ("ИП-6", "221", "Меркурий 230 ART-03 PQRSIDN")
         assert (entry.latitude, entry.longitude) == (58.60934796, 49.68161881)
+
+
+def test_cli_debug_and_match_existing_retries_not_found(app, tmp_path, monkeypatch):
+    runner = app.test_cli_runner()
+    with app.app_context():
+        device = _device()
+        _poll(device, monkeypatch)
+        assert device.directory_match_status == "NOT_FOUND"
+        _import(tmp_path)
+    debug = runner.invoke(args=["irz-meter-directory-debug", "40191143"])
+    assert debug.exit_code == 0, debug.output
+    assert "exact match: YES" in debug.output
+    assert "cabinet_name: ИП-6" in debug.output
+    assert "cabinet_external_id: 221" in debug.output
+    dry = runner.invoke(args=["irz-match-existing-meter-directory", "--dry-run"])
+    assert dry.exit_code == 0, dry.output
+    assert "40191143" in dry.output and "ИП-6" in dry.output and "-> MATCH" in dry.output
+    applied = runner.invoke(args=["irz-match-existing-meter-directory"])
+    assert applied.exit_code == 0, applied.output
+    with app.app_context():
+        device = db.session.scalar(db.select(IRZDevice).where(IRZDevice.imei == IMEI_A))
+        assert device.name == "ИП-6" and device.directory_match_status == "MATCHED"
+        assert (device.latitude, device.longitude) == (58.60934796, 49.68161881)
+
+
+@pytest.mark.skipif(not REAL_FILE.is_file(), reason="meters_with_cabinets.xlsx is not in the working tree")
+def test_real_excel_40191143_imports_looks_up_and_matches_ip6(app):
+    workbook = openpyxl.load_workbook(REAL_FILE, data_only=True)
+    try:
+        rows = workbook["Счётчики"].iter_rows(values_only=True)
+        header = next(rows)
+        serial_idx = header.index("Серийный номер")
+        found = None
+        for number, row in enumerate(rows, start=2):
+            if cabinets.normalize_meter_serial(row[serial_idx]) == "40191143":
+                found = (number, row)
+                break
+    finally:
+        workbook.close()
+    assert found is not None
+    number, row = found
+    assert cabinets.normalize_meter_serial(row[0]) == "40191143"
+    assert (row[1], str(row[2]), row[3]) == ("ИП-6", "221", "Меркурий 230 ART-03 PQRSIDN")
+    with app.app_context():
+        report = cabinets.import_meter_directory(REAL_FILE)
+        assert report["errors"] == 0
+        entry = cabinets.find_entry(row[0])
+        assert entry is not None
+        assert (entry.meter_serial, entry.cabinet_name, entry.cabinet_external_id) == (
+            "40191143", "ИП-6", "221")
+        assert entry.meter_model == "Меркурий 230 ART-03 PQRSIDN"
+        assert (entry.latitude, entry.longitude) == (58.60934796, 49.68161881)
+        device = _device()
+        device.serial_number = "40191143"
+        device.directory_match_status = "NOT_FOUND"
+        device.directory_match_serial = "40191143"
+        db.session.add(IRZMeter(irz_device_id=device.id, serial_number="40191143"))
+        db.session.commit()
+        dry = cabinets.match_existing_devices(dry_run=True)
+        assert any(item["serial"] == "40191143" and item["cabinet"] == "ИП-6"
+                   and item["result"] == "MATCH" for item in dry)
+        cabinets.match_existing_devices(dry_run=False)
+        db.session.refresh(device)
+        meter = db.session.scalar(db.select(IRZMeter).where(IRZMeter.serial_number == "40191143"))
+        assert device.name == "ИП-6"
+        assert (device.latitude, device.longitude) == (58.60934796, 49.68161881)
+        assert meter.catalog_model == "Меркурий 230 ART-03 PQRSIDN"
+        assert number >= 2

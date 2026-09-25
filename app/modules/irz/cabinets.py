@@ -6,7 +6,9 @@ import io
 import logging
 import math
 import re
+import unicodedata
 from collections import Counter
+from decimal import Decimal
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import IO
@@ -36,22 +38,44 @@ FIELDS = ("cabinet_name", "cabinet_external_id", "meter_model", "installed_at", 
 _DATE = re.compile(r"(\d{2})\.(\d{2})\.(\d{4})")
 
 
-def normalize_serial(value: object) -> str | None:
-    """Same key for Excel text/number cells and the driver's int/str serial."""
+def normalize_meter_serial(value: object) -> str | None:
+    """Single serial key for Excel, PostgreSQL lookup, Mercury and CLI.
+
+    Strings keep leading zeros. Integer Excel/Mercury values shorter than 8 digits
+    are padded so they still match a zero-padded text cell.
+    """
     if value is None or isinstance(value, bool):
         return None
-    if isinstance(value, float):
+    if isinstance(value, Decimal):
+        if not value.is_finite() or value != value.to_integral_value():
+            return None
+        text = str(int(value))
+    elif isinstance(value, float):
         if not math.isfinite(value) or not value.is_integer():
             return None
-        value = int(value)
-    text = "".join(str(value).split())
-    if re.fullmatch(r"\d+\.0+", text):
-        text = text.split(".", 1)[0]
+        text = str(int(value))
+    elif isinstance(value, int):
+        text = str(value)
+    else:
+        text = unicodedata.normalize("NFKC", str(value))
+        text = "".join(" " if _is_space(char) else char for char in text)
+        text = "".join(text.split())
+        if re.fullmatch(r"\d+\.0+", text):
+            text = text.split(".", 1)[0]
     if not text:
         return None
     if text.isdigit() and len(text) < MERCURY_SERIAL_DIGITS:
         text = text.zfill(MERCURY_SERIAL_DIGITS)
     return text[:40]
+
+
+def normalize_serial(value: object) -> str | None:
+    """Alias kept so older call sites and tests use the same function."""
+    return normalize_meter_serial(value)
+
+
+def _is_space(char: str) -> bool:
+    return char.isspace() or unicodedata.category(char) == "Zs"
 
 
 def _header(value: object) -> str:
@@ -218,11 +242,30 @@ def import_meter_directory(source: str | Path | IO[bytes], *, user_id=None, dry_
 
 
 def find_entry(serial: object) -> MeterCabinetDirectory | None:
-    normalized = normalize_serial(serial)
+    normalized = normalize_meter_serial(serial)
     if normalized is None:
         return None
     return db.session.scalar(db.select(MeterCabinetDirectory).where(
         MeterCabinetDirectory.active_filter(), MeterCabinetDirectory.meter_serial == normalized))
+
+
+def similar_serials(serial: object, *, limit: int = 20) -> list[str]:
+    """Nearby stored keys when exact lookup misses (spaces, .0, leftover cache)."""
+    normalized = normalize_meter_serial(serial) or "".join(str(serial or "").split())
+    if not normalized:
+        return []
+    digits = re.sub(r"\D", "", normalized)
+    found: list[str] = []
+    for stored in db.session.scalars(db.select(MeterCabinetDirectory.meter_serial).where(
+            MeterCabinetDirectory.active_filter())):
+        compact = re.sub(r"\D", "", stored)
+        if stored == normalized:
+            continue
+        if normalized in stored or stored in normalized or (digits and digits in compact):
+            found.append(stored)
+        if len(found) >= limit:
+            break
+    return found
 
 
 def _entry_owner(entry: MeterCabinetDirectory, device: IRZDevice) -> IRZDevice | None:
@@ -248,10 +291,11 @@ def _has_coordinates(entry: MeterCabinetDirectory) -> bool:
 def match_irz_from_meter_serial(device: IRZDevice, serial: object, *, meter: IRZMeter | None = None) -> str | None:
     """First match after a physically read serial; an existing match is never re-applied automatically.
 
+    NOT_FOUND is not sticky: a later directory import or CLI rematch looks up again.
     Only empty fields are filled here: a default IMEI name and missing coordinates. Replacing
     operator-entered values is the explicit re-apply action.
     """
-    normalized = normalize_serial(serial)
+    normalized = normalize_meter_serial(serial)
     if normalized is None or device.directory_entry_id is not None:
         return device.directory_match_status
     device.directory_match_serial = normalized
@@ -277,7 +321,54 @@ def match_irz_from_meter_serial(device: IRZDevice, serial: object, *, meter: IRZ
 
 
 def current_serial(device: IRZDevice, meter: IRZMeter | None) -> str | None:
-    return normalize_serial(meter.serial_number if meter is not None else device.serial_number)
+    return normalize_meter_serial(meter.serial_number if meter is not None else device.serial_number)
+
+
+def _device_meter(device: IRZDevice) -> IRZMeter | None:
+    return db.session.scalar(
+        db.select(IRZMeter).where(IRZMeter.active_filter(), IRZMeter.irz_device_id == device.id)
+        .order_by(IRZMeter.last_seen_at.desc())
+    )
+
+
+def refresh_directory_match(device: IRZDevice, meter: IRZMeter | None = None) -> str | None:
+    """Retry lookup when the IRZ is not linked yet, including a previous NOT_FOUND."""
+    if meter is None:
+        meter = _device_meter(device)
+    return match_irz_from_meter_serial(device, current_serial(device, meter), meter=meter)
+
+
+def match_existing_devices(*, dry_run: bool = False) -> list[dict]:
+    """Re-check every IRZ that already has a Mercury serial, including former NOT_FOUND."""
+    rows = []
+    for device in db.session.scalars(db.select(IRZDevice).where(IRZDevice.active_filter())).all():
+        meter = _device_meter(device)
+        serial = current_serial(device, meter)
+        if serial is None:
+            rows.append({"imei": device.imei, "serial": None, "cabinet": None, "result": "NO_SERIAL"})
+            continue
+        entry = find_entry(serial)
+        if entry is None:
+            if not dry_run:
+                device.directory_match_serial = serial
+                device.directory_match_status = NOT_FOUND
+            rows.append({"imei": device.imei, "serial": serial, "cabinet": None, "result": "NOT_FOUND"})
+            continue
+        owner = _entry_owner(entry, device)
+        if device.directory_entry_id == entry.id:
+            result = "MATCH"
+        elif owner is not None:
+            result = "CONFLICT"
+        else:
+            result = "MATCH"
+            if not dry_run:
+                match_irz_from_meter_serial(device, serial, meter=meter)
+                result = "MATCH" if device.directory_match_status == MATCHED else (device.directory_match_status or "MATCH")
+        rows.append({"imei": device.imei, "serial": serial, "cabinet": entry.cabinet_name,
+                     "cabinet_external_id": entry.cabinet_external_id, "result": result})
+    if not dry_run:
+        db.session.commit()
+    return rows
 
 
 def serialize_entry(entry: MeterCabinetDirectory) -> dict:
@@ -291,11 +382,17 @@ def serialize_entry(entry: MeterCabinetDirectory) -> dict:
 
 
 def directory_state(device: IRZDevice, meter: IRZMeter | None) -> dict:
+    """Live lookup: cached NOT_FOUND is rematched if the directory now has the serial."""
+    if device.directory_entry_id is None:
+        before = (device.directory_match_status, device.directory_entry_id)
+        refresh_directory_match(device, meter)
+        if (device.directory_match_status, device.directory_entry_id) != before:
+            db.session.commit()
     entry = db.session.get(MeterCabinetDirectory, device.directory_entry_id) if device.directory_entry_id else None
     serial = current_serial(device, meter)
     return {
         "status": device.directory_match_status,
-        "matched_serial": device.directory_match_serial,
+        "matched_serial": device.directory_match_serial or serial,
         "matched_at": device.directory_matched_at.isoformat() if device.directory_matched_at else None,
         "current_serial": serial,
         "serial_changed": bool(entry and serial and serial != entry.meter_serial),
