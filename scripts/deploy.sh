@@ -101,8 +101,8 @@ legacy_redirect_enabled() {
   local value
   value="$(awk -F= '$1 == "OPORA_LEGACY_REDIRECT" { value=$2 } END { print value }' "$ROOT/.env" | tr -d '\r\"' | tr '[:upper:]' '[:lower:]')"
   case "$value" in
-    1|true|yes|on) return 0 ;;
-    *) return 1 ;;
+    0|false|no|off) return 1 ;;
+    *) return 0 ;;
   esac
 }
 

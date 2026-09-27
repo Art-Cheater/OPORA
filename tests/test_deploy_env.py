@@ -331,42 +331,42 @@ def test_deploy_names_the_actually_failing_service(tmp_path):
     assert "FAIL: сервис web" not in output
 
 
-def test_deploy_issues_new_certificate_and_keeps_legacy_site(tmp_path):
+def test_deploy_issues_new_certificate_and_redirects_legacy_host(tmp_path):
     code, output, calls = _run_deploy(tmp_path)
     assert code == 0, output
     legacy = (tmp_path / "data" / "nginx" / "legacy-site.conf").read_text(encoding="utf-8")
     public = (tmp_path / "data" / "nginx" / "public-https.conf").read_text(encoding="utf-8")
-    assert "include /etc/nginx/proxy-locations.conf;" in legacy
+    assert "return 301 https://opora.truthqwark.ru$request_uri;" in legacy
     assert "live/opora.zheleznogame.ru/fullchain.pem" in legacy
-    assert "return 301 https://opora.truthqwark.ru" not in legacy
     assert "server_name opora.truthqwark.ru" in public
     assert any("certbot certonly" in line and "--webroot" in line and "--cert-name opora.truthqwark.ru" in line for line in calls)
     assert any("nginx -s reload" in line for line in calls)
     assert not any("certbot delete" in line or "--nginx" in line for line in calls)
     hook = tmp_path / "data" / "letsencrypt" / "renewal-hooks" / "deploy" / "opora-nginx-reload.sh"
     assert "nginx -s reload" in hook.read_text(encoding="utf-8")
-    assert "продолжает открывать сайт" in output
+    assert "будет перенаправляться" in output
     assert "резервная копия конфигурации nginx" in output
 
 
-def test_deploy_redirects_legacy_host_only_after_explicit_request(tmp_path):
+def test_deploy_can_keep_legacy_host_without_redirect(tmp_path):
     def before(path):
         live = path / "data" / "letsencrypt" / "live" / "opora.truthqwark.ru"
         live.mkdir(parents=True)
         (live / "fullchain.pem").write_text("fake-cert", encoding="utf-8")
         (live / "privkey.pem").write_text("fake-key", encoding="utf-8")
         env_file = path / ".env"
-        env_file.write_text(env_file.read_text(encoding="utf-8") + "OPORA_LEGACY_REDIRECT=1\n", encoding="utf-8", newline="\n")
+        env_file.write_text(env_file.read_text(encoding="utf-8") + "OPORA_LEGACY_REDIRECT=0\n", encoding="utf-8", newline="\n")
 
     code, output, calls = _run_deploy(tmp_path, before_run=before)
     assert code == 0, output
     legacy = (tmp_path / "data" / "nginx" / "legacy-site.conf").read_text(encoding="utf-8")
     mapping = (tmp_path / "data" / "nginx" / "legacy-redirect-map.conf").read_text(encoding="utf-8")
-    assert "return 301 https://opora.truthqwark.ru$request_uri;" in legacy
+    assert "include /etc/nginx/proxy-locations.conf;" in legacy
     assert "live/opora.zheleznogame.ru/fullchain.pem" in legacy
-    assert "opora.zheleznogame.ru opora.truthqwark.ru;" in mapping
+    assert "return 301 https://opora.truthqwark.ru" not in legacy
+    assert "legacy redirect off" in mapping
     assert not any(line.startswith("certbot ") for line in calls)
-    assert "будет перенаправляться" in output
+    assert "продолжает открывать сайт" in output
 
 
 def test_check_env_accepts_staging_without_timeweb_tls(tmp_path):

@@ -8,10 +8,9 @@
 | Staging | Проверка изменений | `20.42.0.122` | Отдельные PostgreSQL и uploads; нет команд production-платам и production DB. |
 | Production | Рабочая система | `46.19.66.5` | Реальные пользователи, uploads, интеграции и будущие устройства. |
 
-Production URL: `https://opora.truthqwark.ru`. На переходный период
-`https://opora.zheleznogame.ru` открывает тот же сайт. Постоянный редирект
-включается отдельно: `OPORA_LEGACY_REDIRECT=1` в `.env` и обычный deploy,
-только после проверки нового адреса.
+Production URL: `https://opora.truthqwark.ru`. `opora.zheleznogame.ru`
+перенаправляется на него с сохранением пути и query. Чтобы временно открывать
+старый адрес как отдельный сайт, в `.env` поставьте `OPORA_LEGACY_REDIRECT=0`.
 
 Платы подключаются raw TCP без TLS к `tcp.truthqwark.ru:5000`. Прежние
 `tcp.zheleznogame.ru:5000` и IP сервера продолжают работать. Счётчики ATM21
