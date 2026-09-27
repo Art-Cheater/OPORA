@@ -13,6 +13,17 @@ PIN_PHASES = ("A", "B", "C", "A", "B", "C")
 CONNECTOR_MASKS = (("C9", "CON9"), ("C10", "CON10"), ("C11", "CON11"))
 CONNECTORS = ("CON9", "CON10", "CON11")
 RAW_BANKS = ("U2", "U3")
+# Passport groups. Several connector pins share one U3 bit. Names are not phases A/B/C.
+U3_GROUPS = (
+    (7, "REF", "CON9 pin 1"),
+    (0, "AUX0", "CON9 pin 2 и 3"),
+    (1, "G1", "CON9 pin 4, 5 и 6"),
+    (2, "G2", "CON10 pin 1, 2 и 3"),
+    (3, "G3", "CON10 pin 4, 5 и 6"),
+    (4, "G4", "CON11 pin 1, 2 и 3"),
+    (5, "G5", "CON11 pin 4, 5 и 6"),
+    (6, "AUX6", "в паспорте не привязан"),
+)
 _STATE_KEYS = {
     "outputs", "phases", "inputs", "raw", "connectors", "phase_summary",
     "raw_bits", "raw_bit_changes", *OUTPUT_RELAYS, *PHASES,
@@ -410,6 +421,35 @@ def phase_view_from_map(actual: dict[str, Any] | None, mapping: dict[str, Any] |
                     entry["active"] = int(raw_value) == int(item["active_level"])
             view[connector][pin] = entry
     return view
+
+
+def u3_groups_view(actual: dict[str, Any] | None) -> tuple[list[dict[str, Any]], str]:
+    """Show each U3 group as 0 or 1. A zero is not labelled as a phase."""
+    state = normalize_actual_state(actual)
+    raw = state.get("raw") if isinstance(state.get("raw"), dict) else {}
+    bits = (state.get("raw_bits") or {}).get("U3") if isinstance(state.get("raw_bits"), dict) else None
+    if not isinstance(bits, dict):
+        bits = decode_raw_bank(raw.get("U3") if isinstance(raw.get("U3"), str) else None) or {}
+    changes = (state.get("raw_bit_changes") or {}).get("U3") if isinstance(state.get("raw_bit_changes"), dict) else {}
+    if not isinstance(changes, dict):
+        changes = {}
+    rows: list[dict[str, Any]] = []
+    for bit, name, contacts in U3_GROUPS:
+        value = bits.get(str(bit))
+        change = changes.get(str(bit))
+        rows.append({
+            "bit": bit,
+            "name": name,
+            "contacts": contacts,
+            "value": None if value is None else int(value),
+            "change": change if isinstance(change, dict) else None,
+        })
+    if all(row["value"] is None for row in rows):
+        return rows, "Нет байта U3."
+    low = [row["name"] for row in rows if row["value"] == 0]
+    high = [row["name"] for row in rows if row["value"] == 1]
+    summary = f"В нуле: {', '.join(low) or '—'}. В единице: {', '.join(high) or '—'}."
+    return rows, summary
 
 
 def normalize_actual_state(actual: dict[str, Any] | None) -> dict[str, Any]:

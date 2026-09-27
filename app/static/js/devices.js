@@ -115,15 +115,33 @@
             const hex = device.actual_state?.raw?.[bank];
             live.textContent = stale || !hex ? '—' : String(hex);
         });
-        card.querySelectorAll('[data-phase-pin]').forEach((row) => {
-            const [name, pin] = row.dataset.phasePin.split('.');
-            const item = device.phase_view?.[name]?.[pin] || {};
-            const cell = row.querySelector('[data-phase-state]');
-            if (!item.configured) cell.innerHTML = '<span class="badge text-bg-light">Не откалибровано</span>';
-            else if (stale || item.active === null || item.active === undefined) cell.innerHTML = '<span class="text-muted">Нет данных</span>';
-            else if (item.active) cell.innerHTML = '<span class="badge text-bg-success">Есть</span>';
-            else cell.innerHTML = '<span class="badge text-bg-danger">Нет</span>';
+        const groups = new Map((device.u3_groups || []).map((row) => [String(row.bit), row]));
+        card.querySelectorAll('[data-u3-group]').forEach((row) => {
+            const item = groups.get(row.dataset.u3Group) || {};
+            const cell = row.querySelector('[data-u3-value]');
+            const changeCell = row.querySelector('[data-u3-change]');
+            if (!cell || !changeCell) return;
+            const key = `U3.${row.dataset.u3Group}`;
+            if (stale || item.value === null || item.value === undefined) {
+                cell.textContent = '—';
+                changeCell.textContent = '';
+                row.classList.remove('is-changed');
+                return;
+            }
+            const value = Number(item.value);
+            next[key] = value;
+            cell.textContent = String(value);
+            const change = item.change;
+            changeCell.textContent = change ? `${change.from}→${change.to}` : '';
+            const highlightKey = `${deviceKey}:${key}`;
+            if (known && previous[key] !== undefined && previous[key] !== value) {
+                changedUntil.set(highlightKey, Date.now() + 2500);
+            }
+            if ((changedUntil.get(highlightKey) || 0) > Date.now()) row.classList.add('is-changed');
+            else row.classList.remove('is-changed');
         });
+        const summary = card.querySelector('[data-u3-summary]');
+        if (summary) summary.textContent = stale ? 'Нет свежих данных.' : (device.u3_summary || '');
     }
 
     function renderInputTest(card, device) {
@@ -183,37 +201,56 @@
         ].filter(Boolean).join('\n');
     }
 
-    function renderCard(card, device, commandsEnabled, canManage) {
-        const stale = Boolean(device.state_stale);
-        const outputs = device.actual_state?.outputs || {};
-        const desired = device.desired_state?.outputs || {};
-        const online = card.querySelector('[data-device-online]');
-        online.textContent = device.connection_state === 'online' ? 'ONLINE' : 'OFFLINE';
-        online.className = `badge ${device.connection_state === 'online' ? 'text-bg-success' : 'text-bg-secondary'}`;
-        card.querySelector('[data-last-seen]').textContent = formatDate(device.last_seen_at);
-        card.querySelector('[data-last-state]').textContent = formatDate(device.last_state_at);
-        card.querySelector('[data-last-ip]').textContent = device.last_ip || '—';
-        ['C6', 'C7', 'C8'].forEach((relay) => {
-            card.querySelector(`[data-output="${relay}"]`).innerHTML = valueBadge(outputs[relay], stale);
-            card.querySelector(`[data-desired="${relay}"]`).textContent = desired[relay] ?? '—';
-        });
-        renderTelemetry(card.querySelector('[data-telemetry]'), device.telemetry);
-        renderValues(card.querySelector('[data-raw-inputs-list]'), device.actual_state);
-        renderDiagnostics(card, device);
-        renderInputTest(card, device);
-
-        const status = card.querySelector('[data-command-status]');
-        status.innerHTML = commandMessage(device.active_command, device.latest_command);
-        status.className = `alert py-2 mt-3 mb-3 ${device.active_command ? 'alert-warning' : device.latest_command?.confirmation === 'mismatch' || device.latest_command?.status === 'failed' || device.latest_command?.status === 'timeout' ? 'alert-danger' : 'alert-light'}`;
-
+    function applyCommandLock(card, device, canManage) {
         if (!canManage) return;
         const locked = !device.can_send_command;
+        const controls = card.querySelector('[data-device-controls]');
+        if (controls) {
+            if (locked) controls.setAttribute('data-locked', '1');
+            else controls.removeAttribute('data-locked');
+        }
         const reason = card.querySelector('[data-command-block-reason]');
-        reason.textContent = device.command_block_reason || '';
-        reason.hidden = !device.command_block_reason;
+        if (reason) {
+            reason.textContent = device.command_block_reason || '';
+            reason.hidden = !device.command_block_reason;
+        }
         card.querySelectorAll('[data-device-command-form] button').forEach((button) => {
             button.disabled = locked;
+            if (locked) button.setAttribute('disabled', 'disabled');
+            else button.removeAttribute('disabled');
         });
+    }
+
+    function renderCard(card, device, commandsEnabled, canManage) {
+        try {
+            const stale = Boolean(device.state_stale);
+            const outputs = device.actual_state?.outputs || {};
+            const desired = device.desired_state?.outputs || {};
+            const online = card.querySelector('[data-device-online]');
+            online.textContent = device.connection_state === 'online' ? 'ONLINE' : 'OFFLINE';
+            online.className = `badge ${device.connection_state === 'online' ? 'text-bg-success' : 'text-bg-secondary'}`;
+            card.querySelector('[data-last-seen]').textContent = formatDate(device.last_seen_at);
+            card.querySelector('[data-last-state]').textContent = formatDate(device.last_state_at);
+            card.querySelector('[data-last-ip]').textContent = device.last_ip || '—';
+            ['C6', 'C7', 'C8'].forEach((relay) => {
+                const output = card.querySelector(`[data-output="${relay}"]`);
+                const wanted = card.querySelector(`[data-desired="${relay}"]`);
+                if (output) output.innerHTML = valueBadge(outputs[relay], stale);
+                if (wanted) wanted.textContent = desired[relay] ?? '—';
+            });
+            renderTelemetry(card.querySelector('[data-telemetry]'), device.telemetry);
+            renderValues(card.querySelector('[data-raw-inputs-list]'), device.actual_state);
+            renderDiagnostics(card, device);
+            renderInputTest(card, device);
+
+            const status = card.querySelector('[data-command-status]');
+            if (status) {
+                status.innerHTML = commandMessage(device.active_command, device.latest_command);
+                status.className = `alert py-2 mt-3 mb-3 ${device.active_command ? 'alert-warning' : device.latest_command?.confirmation === 'mismatch' || device.latest_command?.status === 'failed' || device.latest_command?.status === 'timeout' ? 'alert-danger' : 'alert-light'}`;
+            }
+        } finally {
+            applyCommandLock(card, device, canManage);
+        }
     }
 
     function boot() {

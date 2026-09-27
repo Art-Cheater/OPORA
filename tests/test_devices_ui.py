@@ -94,33 +94,36 @@ def test_switch_commands_serialize_and_keep_actual_state_unchanged(app, admin_cl
         device.last_state_at = utcnow()
         db.session.commit()
 
-    all_on = admin_client.post(
+    night = admin_client.post(
         f"/devices/{device_id}/commands",
-        data={"action": "all_on"},
+        data={"action": "night"},
         headers={"X-Requested-With": "XMLHttpRequest"},
     )
-    assert all_on.status_code == 201
+    assert night.status_code == 201
     with app.app_context():
         device = db.session.get(Device, device_id)
         command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.device_id == device.id))
-        assert command.payload == {"C6": 1, "C7": 1, "C8": 1}
+        assert command.payload == {"C6": 1, "C7": 1}
         assert device.actual_state["outputs"] == {"C6": 0, "C7": 0, "C8": 0}
-        assert device.desired_state["outputs"] == {"C6": 1, "C7": 1, "C8": 1}
+        assert device.desired_state["outputs"] == {"C6": 1, "C7": 1}
     page = admin_client.get("/devices/")
-    assert 'data-locked="1"' in page.get_data(as_text=True)
+    html = page.get_data(as_text=True)
+    assert 'data-locked="1"' in html
+    assert "Ночной режим" in html and "Дневной режим" in html
+    assert "Включить всё" not in html and "Выключить всё" not in html
 
-    assert admin_client.post(f"/devices/{device_id}/commands", data={"action": "all_off"}).status_code == 409
+    assert admin_client.post(f"/devices/{device_id}/commands", data={"action": "day"}).status_code == 409
     with app.app_context():
         command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.device_id == device_id))
         command.status = "acknowledged"
         command.acknowledged_at = utcnow()
         command.state_confirmed_at = utcnow()
         db.session.commit()
-    all_off = admin_client.post(f"/devices/{device_id}/commands", data={"action": "all_off"})
-    assert all_off.status_code == 302
+    day = admin_client.post(f"/devices/{device_id}/commands", data={"action": "day"})
+    assert day.status_code == 302
     with app.app_context():
         commands = db.session.scalars(db.select(DeviceCommand).order_by(DeviceCommand.created_at)).all()
-        assert commands[-1].payload == {"C6": 0, "C7": 0, "C8": 0}
+        assert commands[-1].payload == {"C6": 0, "C7": 0}
 
 
 def test_terminal_command_statuses_release_device_queue(app, admin_client):

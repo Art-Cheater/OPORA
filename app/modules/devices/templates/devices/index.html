@@ -65,9 +65,10 @@
                     </tbody></table>
                     {% if current_user.has_permission('devices.manage') and device.enabled %}
                     <div class="d-flex flex-wrap gap-2 mt-2">
-                        <form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" data-device-command-form data-confirm-message="Включить все три выхода?" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="all_on"><button class="btn btn-sm btn-primary" {% if not status.can_send_command %}disabled{% endif %}>Включить всё</button></form>
-                        <form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" data-device-command-form class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="all_off"><button class="btn btn-sm btn-outline-danger" {% if not status.can_send_command %}disabled{% endif %}>Выключить всё</button></form>
+                        <form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" data-device-command-form class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="night"><button class="btn btn-sm btn-primary" {% if not status.can_send_command %}disabled{% endif %}>Ночной режим</button></form>
+                        <form method="post" action="{{ url_for('devices.create_command', device_id=device.id) }}" data-device-command-form class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="day"><button class="btn btn-sm btn-outline-secondary" {% if not status.can_send_command %}disabled{% endif %}>Дневной режим</button></form>
                     </div>
+                    <p class="small text-muted mb-0 mt-1">Ночной включает CON6 и CON7. Дневной выключает CON6 и CON7. CON8 эти кнопки не меняют.</p>
                     {% endif %}
                 </div>
                 <div class="col-lg-5">
@@ -80,22 +81,21 @@
                 </div>
             </div>
 
-            <div class="mt-3" data-phase-root>
-                <h6>Фазы / входы</h6>
-                <p class="small text-muted mb-2">Калиброванный вход обновляется с каждым STATE. «Нет» — сигнал пропал. «Не откалибровано» — mapping ещё не задан, это не авария.</p>
-                {% for name in ['CON9', 'CON10', 'CON11'] %}
-                <div class="fw-semibold">{{ name }}</div>
-                <table class="table table-sm mb-2"><tbody>
-                    {% for n in ['1','2','3','4','5','6'] %}
-                    {% set pin = (status.phase_view or {}).get(name, {}).get(n, {}) %}
-                    <tr data-phase-pin="{{ name }}.{{ n }}">
-                        <td>Pin {{ n }}</td>
-                        <td>Фаза {{ pin.get('phase', 'ABCABC'[loop.index0]) }}</td>
-                        <td data-phase-state>{% if not pin.get('configured') %}<span class="badge text-bg-light">Не откалибровано</span>{% elif pin.get('active') is none or status.state_stale %}<span class="text-muted">Нет данных</span>{% elif pin.get('active') %}<span class="badge text-bg-success">Есть</span>{% else %}<span class="badge text-bg-danger">Нет</span>{% endif %}</td>
+            <div class="mt-3" data-u3-root>
+                <h6>Группы U3</h6>
+                <p class="small text-muted mb-2">Сырые группы платы. Несколько контактов сидят на одном бите. 0 и 1 — это уровень бита, не имя фазы. Включите фазы по одной и смотрите, какая строка сменилась.</p>
+                <p class="small mb-2" data-u3-summary>{% if status.state_stale %}Нет свежих данных.{% else %}{{ status.u3_summary }}{% endif %}</p>
+                <table class="table table-sm mb-0"><thead><tr><th>Группа</th><th>Бит</th><th>Контакты</th><th>Сейчас</th><th>Смена</th></tr></thead><tbody>
+                    {% for row in status.u3_groups %}
+                    <tr data-u3-group="{{ row.bit }}">
+                        <td>{{ row.name }}</td>
+                        <td>bit{{ row.bit }}</td>
+                        <td>{{ row.contacts }}</td>
+                        <td data-u3-value>{% if status.state_stale or row.value is none %}—{% else %}{{ row.value }}{% endif %}</td>
+                        <td data-u3-change class="raw-bit-history">{% if row.change and not status.state_stale %}{{ row.change['from'] }}→{{ row.change['to'] }}{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody></table>
-                {% endfor %}
             </div>
             <div class="alert {{ 'alert-warning' if status.active_command else 'alert-light' }} py-2 mt-3 mb-2" data-command-status aria-live="polite">
                 {% if status.active_command %}<span class="spinner-border spinner-border-sm me-2"></span>Выполняется команда…

@@ -27,6 +27,8 @@ class Gateway:
         self.connections: dict[str, asyncio.StreamWriter] = {}
         self.connection_protocols: dict[str, str] = {}
         self.last_diagnostic_get: dict[str, float] = {}
+        self.command_steps: dict[str, list[str]] = {}
+        self.followups: dict[str, str] = {}
         self.stopping = asyncio.Event()
 
     def _get_authenticated_device_secret(self, device_id: str) -> str | None:
@@ -148,6 +150,9 @@ class Gateway:
                 if protocol_version == "2":
                     verb, args = decode_v2_frame(raw, self.app.config["DEVICE_MAX_FRAME_BYTES"])
                     self._handle_v2_frame(device_id, peer_ip, verb, args)
+                    follow = self.followups.pop(device_id, None)
+                    if follow:
+                        await self._send_v2(writer, follow)
                 else:
                     frame = decode_frame(raw, self.app.config["DEVICE_MAX_FRAME_BYTES"])
                     kind = frame.get("type")
@@ -195,6 +200,16 @@ class Gateway:
                 ).order_by(DeviceCommand.sent_at.desc())
             )
             command_id = command.command_id if command else ""
+        remaining = self.command_steps.get(command_id) or []
+        if success and command_id and remaining:
+            nxt = remaining.pop(0)
+            if remaining:
+                self.command_steps[command_id] = remaining
+            else:
+                self.command_steps.pop(command_id, None)
+            self.followups[device_id] = nxt
+            return
+        self.command_steps.pop(command_id, None)
         self._ack(device_id, command_id, success, error, protocol_version="2")
 
     def _ack(self, device_id: str, command_id: str, success: bool, error: str, *, protocol_version: str = "1") -> None:
@@ -236,7 +251,9 @@ class Gateway:
                     continue
                 try:
                     if protocol_version == "2":
-                        await self._send_v2(writer, self._v2_command(command_type, payload or {}))
+                        steps = self._v2_steps(command_type, payload or {})
+                        self.command_steps[command_id] = steps[1:]
+                        await self._send_v2(writer, steps[0])
                     else:
                         await self._send(writer, {"type": "command", "command_id": command_id, "command": command_type, "payload": payload or {}})
                     with self.app.app_context():
@@ -261,18 +278,21 @@ class Gateway:
             await asyncio.sleep(self.app.config["DEVICE_COMMAND_POLL_SECONDS"])
 
     @staticmethod
-    def _v2_command(command_type: str, payload: dict[str, Any]) -> str:
-        """Translate only validated OPORA switch commands into v2 wire text."""
+    def _v2_steps(command_type: str, payload: dict[str, Any]) -> list[str]:
+        """One wire line, or SET 6 then SET 7 when only those two relays change."""
         if command_type != "switch":
             raise ValueError("unsupported v2 command")
         values = {key: int(value) for key, value in payload.items()}
-        if set(values) == {"C6", "C7", "C8"} and len(set(values.values())) == 1 and next(iter(values.values())) in {0, 1}:
-            return f"SETALL {next(iter(values.values()))}"
-        if len(values) == 1:
-            relay, value = next(iter(values.items()))
-            if relay in {"C6", "C7", "C8"} and value in {0, 1}:
-                return f"SET {relay[1:]} {value}"
-        raise ValueError("invalid v2 switch payload")
+        if not values or any(key not in {"C6", "C7", "C8"} or value not in {0, 1} for key, value in values.items()):
+            raise ValueError("invalid v2 switch payload")
+        if set(values) == {"C6", "C7", "C8"} and len(set(values.values())) == 1:
+            return [f"SETALL {next(iter(values.values()))}"]
+        return [f"SET {key[1:]} {values[key]}" for key in ("C6", "C7", "C8") if key in values]
+
+    @staticmethod
+    def _v2_command(command_type: str, payload: dict[str, Any]) -> str:
+        """Translate only validated OPORA switch commands into v2 wire text."""
+        return Gateway._v2_steps(command_type, payload)[0]
 
     async def health(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         writer.write(b"ok\n")

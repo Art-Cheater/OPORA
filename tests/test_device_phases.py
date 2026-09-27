@@ -18,6 +18,7 @@ from app.models.devices.state import (
     observe_raw_bits,
     phase_summary_from_connectors,
     phase_view_from_map,
+    u3_groups_view,
     start_input_test,
 )
 from app.tcp_gateway.protocol import parse_v2_state
@@ -92,13 +93,12 @@ def test_status_api_returns_connectors_and_page_renders_pins(app, admin_client):
     assert payload["actual_state"]["phase_summary"]["A"] == {"active": 4, "total": 6}
 
     page = admin_client.get("/devices/").get_data(as_text=True)
-    assert "Фазы / входы" in page
-    for name in ("CON9", "CON10", "CON11"):
-        assert name in page
-    assert 'data-phase-pin="CON9.1"' in page
-    assert "Pin 1" in page and "Не откалибровано" in page
+    assert "Группы U3" in page
+    assert 'data-u3-group="1"' in page
+    assert "G1" in page and "G3" in page and "REF" in page
     assert "RAW INPUT MAP" in page
     assert "Включить" in page
+    assert "Ночной режим" in page
 
 
 def test_missing_connector_data_does_not_break_the_boards_page(app, admin_client):
@@ -110,8 +110,8 @@ def test_missing_connector_data_does_not_break_the_boards_page(app, admin_client
         device.actual_state = {"outputs": {"C6": 1, "C7": 0, "C8": 1}, "inputs": {"SW2": 0}, "raw": {"U2": "01"}}
         db.session.commit()
     page = admin_client.get("/devices/").get_data(as_text=True)
-    assert "Фазы / входы" in page
-    assert "Не откалибровано" in page
+    assert "Группы U3" in page
+    assert "Нет байта U3." in page
     assert "C6" in page and "C7" in page and "C8" in page
     payload = admin_client.get("/devices/status").get_json()["devices"][0]
     assert "connectors" not in payload["actual_state"]
@@ -122,7 +122,8 @@ def test_phase_ui_updates_from_the_existing_status_poll():
     assert "function renderDiagnostics(" in script
     assert "renderDiagnostics(card, device);" in script
     assert "root.dataset.statusUrl" in script
-    assert "dataset.phasePin" in script
+    assert "dataset.u3Group" in script
+    assert "applyCommandLock" in script
     assert "is-changed" in script
     assert "location.reload" not in script
 
@@ -186,7 +187,7 @@ def test_saved_phase_map_drives_the_boards_page(app, admin_client):
     assert status["phase_view"]["CON9"]["1"]["active"] is True
     assert status["phase_view"]["CON9"]["4"]["source"] == "U2"
     page = admin_client.get("/devices/").get_data(as_text=True)
-    assert 'data-phase-pin="CON9.1"' in page and "Не откалибровано" in page
+    assert 'data-u3-group="3"' in page and "Группы U3" in page
 
 
 def _feed(session, u2, u3, count, stamp):
@@ -267,8 +268,8 @@ def test_pilot_board_status_shows_con10_phase_a(app, admin_client):
     assert body["phase_view"]["CON10"]["5"]["configured"] is False
     page = admin_client.get("/devices/").get_data(as_text=True)
     assert "Включить" in page and "Выключить" in page
-    assert "Есть" in page
-    assert "Не откалибровано" in page
+    assert "В нуле: REF, G1, G3." in page
+    assert "Ночной режим" in page and "Дневной режим" in page
 
 
 def test_pilot_board_keeps_only_the_measured_con10_pin():
@@ -282,3 +283,12 @@ def test_pilot_board_keeps_only_the_measured_con10_pin():
     assert view["CON10"]["5"]["configured"] is False
     lost = phase_view_from_map({"raw": {"U2": "EF", "U3": "7D"}}, mapping)
     assert lost["CON10"]["4"]["active"] is False
+
+
+def test_u3_groups_show_bits_without_naming_phases():
+    rows, summary = u3_groups_view({"raw": {"U2": "EF", "U3": "75"}})
+    by_name = {row["name"]: row["value"] for row in rows}
+    assert by_name == {"REF": 0, "AUX0": 1, "G1": 0, "G2": 1, "G3": 0, "G4": 1, "G5": 1, "AUX6": 1}
+    assert summary == "В нуле: REF, G1, G3. В единице: AUX0, G2, G4, G5, AUX6."
+    changed, _summary = u3_groups_view({"raw": {"U3": "7D"}, "raw_bit_changes": {"U3": {"3": {"from": 0, "to": 1, "at": "t"}}}})
+    assert next(row for row in changed if row["name"] == "G3")["change"]["to"] == 1

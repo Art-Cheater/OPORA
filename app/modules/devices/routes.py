@@ -27,6 +27,7 @@ from app.models.devices.state import (
     payload_matches_actual,
     phase_view_from_map,
     start_input_test,
+    u3_groups_view,
 )
 from app.modules.devices.blueprint import devices_bp
 from app.modules.devices.command_service import active_command_query, expire_state_confirmation_timeouts
@@ -119,6 +120,7 @@ def _serialize_device(device: Device, active_command: DeviceCommand | None, late
         )
     else:
         block_reason = None
+    u3_groups, u3_summary = u3_groups_view(actual)
     return {
         "device_id": str(device.id),
         "external_device_id": device.device_id,
@@ -130,6 +132,8 @@ def _serialize_device(device: Device, active_command: DeviceCommand | None, late
         "actual_state": actual,
         "phase_input_map": apply_pilot_phase_map(device.device_id, device.phase_input_map),
         "phase_view": phase_view_from_map(actual, apply_pilot_phase_map(device.device_id, device.phase_input_map)),
+        "u3_groups": u3_groups,
+        "u3_summary": u3_summary,
         "input_test": _input_test_payload(device),
         "desired_state": normalize_actual_state(device.desired_state),
         "telemetry": device.telemetry or {},
@@ -180,10 +184,10 @@ def _candidate_from_active_or_log(device: Device) -> dict | None:
 
 def _switch_payload_from_form() -> dict[str, int]:
     action = request.form.get("action")
-    if action == "all_on":
-        return {relay: 1 for relay in OUTPUT_RELAYS}
-    if action == "all_off":
-        return {relay: 0 for relay in OUTPUT_RELAYS}
+    if action == "night":
+        return {"C6": 1, "C7": 1}
+    if action == "day":
+        return {"C6": 0, "C7": 0}
     relay, value = (request.form.get("relay") or "").upper(), request.form.get("value")
     if relay not in OUTPUT_RELAYS or value not in {"0", "1"}:
         abort(400)

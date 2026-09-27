@@ -293,6 +293,33 @@ def test_v2_gateway_state_and_ok_complete_command_without_changing_actual(app):
         assert device.telemetry == {"csq": 20}
 
 
+def test_v2_night_and_day_are_two_set_lines_and_the_second_waits_for_ok(app):
+    assert Gateway._v2_steps("switch", {"C6": 1, "C7": 1}) == ["SET 6 1", "SET 7 1"]
+    assert Gateway._v2_steps("switch", {"C6": 0, "C7": 0}) == ["SET 6 0", "SET 7 0"]
+    assert Gateway._v2_steps("switch", {"C6": 1, "C7": 1, "C8": 1}) == ["SETALL 1"]
+    assert Gateway._v2_command("switch", {"C8": 0}) == "SET 8 0"
+
+    _gateway_device(app)
+    gateway = Gateway(app)
+    with app.app_context():
+        device = db.session.scalar(db.select(Device).where(Device.device_id == "board-01"))
+        command = DeviceCommand(device_id=device.id, command_type="switch", payload={"C6": 1, "C7": 1}, status="sent")
+        db.session.add(command)
+        db.session.commit()
+        command_id = command.command_id
+    gateway.command_steps[command_id] = ["SET 7 1"]
+    gateway._handle_v2_frame("board-01", None, "OK", ["6", "1"])
+    assert gateway.followups["board-01"] == "SET 7 1"
+    with app.app_context():
+        command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.command_id == command_id))
+        assert command.status == "sent"
+    gateway.followups.pop("board-01")
+    gateway._handle_v2_frame("board-01", None, "OK", ["7", "1"])
+    with app.app_context():
+        command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.command_id == command_id))
+        assert command.status == "completed"
+
+
 def test_v2_gateway_dispatches_setall_as_one_ascii_command(app):
     _gateway_device(app)
     gateway = Gateway(app)
