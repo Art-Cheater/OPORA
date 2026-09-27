@@ -225,31 +225,45 @@ def test_compose_exposes_irz_imports_to_web_not_image():
     assert "/meters_with_cabinets.xlsx" not in (ROOT / ".gitignore").read_text(encoding="utf-8")
 
 
-def _run_deploy(tmp_path, skip_xlsx=False, **env):
+def _run_deploy(tmp_path, skip_xlsx=False, before_run=None, **env):
     import os
+    import shutil
     import subprocess
     bash = _bash()
     if bash is None:
         pytest.skip("bash is not available")
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts" / "deploy.sh").write_bytes((ROOT / "scripts" / "deploy.sh").read_bytes().replace(b"\r\n", b"\n"))
+    shutil.copytree(ROOT / "docker", tmp_path / "docker")
     (tmp_path / ".env").write_text("OPORA_ENV=production\n", encoding="utf-8", newline="\n")
     if not skip_xlsx:
         (tmp_path / "meters_with_cabinets.xlsx").write_bytes(b"PK\x03\x04catalog")
         (tmp_path / "опоры.xlsx").write_bytes(b"PK\x03\x04poles")
+    if before_run is not None:
+        before_run(tmp_path)
     fakebin = tmp_path / "fakebin"
     fakebin.mkdir()
+    certbot = (
+        "#!/usr/bin/env bash\n"
+        "echo \"certbot $*\" >> \"$PWD/calls.log\"\n"
+        "mkdir -p \"$PWD/data/letsencrypt/live/opora.truthqwark.ru\"\n"
+        "printf '%s\\n' fake-cert > \"$PWD/data/letsencrypt/live/opora.truthqwark.ru/fullchain.pem\"\n"
+        "printf '%s\\n' fake-key > \"$PWD/data/letsencrypt/live/opora.truthqwark.ru/privkey.pem\"\n"
+        "exit 0\n"
+    )
     stubs = {"docker": FAKE_DOCKER, "sleep": "#!/usr/bin/env bash\nexit 0\n",
              "git": '#!/usr/bin/env bash\necho "git $*" >> "$PWD/calls.log"\n[[ "$1" == rev-parse ]] && echo abc123\n'
                     '[[ "$1" == reset && -n "${FAKE_NEW_DEPLOY:-}" && ! -f "$PWD/.replaced" ]] && '
                     '{ cp "$FAKE_NEW_DEPLOY" scripts/deploy.new; mv scripts/deploy.new scripts/deploy.sh; touch "$PWD/.replaced"; }\nexit 0\n',
-             "python3": '#!/usr/bin/env bash\necho "python3 $*" >> "$PWD/calls.log"\nexit 0\n'}
+             "python3": '#!/usr/bin/env bash\necho "python3 $*" >> "$PWD/calls.log"\nexit 0\n',
+             "certbot": certbot}
     for name, content in stubs.items():
         path = fakebin / name
         path.write_text(content, encoding="utf-8", newline="\n")
         path.chmod(0o755)
+    run_env = {**os.environ, "OPORA_ACME_WEBROOT": "acme", **env}
     process = subprocess.run([bash, "-c", 'export PATH="$PWD/fakebin:$PATH"; bash scripts/deploy.sh'],
-                             cwd=tmp_path, env={**os.environ, **env}, capture_output=True, timeout=120)
+                             cwd=tmp_path, env=run_env, capture_output=True, timeout=120)
     output = process.stdout.decode("utf-8", "replace") + process.stderr.decode("utf-8", "replace")
     calls = (tmp_path / "calls.log").read_text(encoding="utf-8").splitlines() if (tmp_path / "calls.log").exists() else []
     return process.returncode, output, calls
@@ -315,6 +329,44 @@ def test_deploy_names_the_actually_failing_service(tmp_path):
     assert code != 0
     assert "FAIL: сервис tcp-gateway" in output
     assert "FAIL: сервис web" not in output
+
+
+def test_deploy_issues_new_certificate_and_keeps_legacy_site(tmp_path):
+    code, output, calls = _run_deploy(tmp_path)
+    assert code == 0, output
+    legacy = (tmp_path / "data" / "nginx" / "legacy-site.conf").read_text(encoding="utf-8")
+    public = (tmp_path / "data" / "nginx" / "public-https.conf").read_text(encoding="utf-8")
+    assert "include /etc/nginx/proxy-locations.conf;" in legacy
+    assert "live/opora.zheleznogame.ru/fullchain.pem" in legacy
+    assert "return 301 https://opora.truthqwark.ru" not in legacy
+    assert "server_name opora.truthqwark.ru" in public
+    assert any("certbot certonly" in line and "--webroot" in line and "--cert-name opora.truthqwark.ru" in line for line in calls)
+    assert any("nginx -s reload" in line for line in calls)
+    assert not any("certbot delete" in line or "--nginx" in line for line in calls)
+    hook = tmp_path / "data" / "letsencrypt" / "renewal-hooks" / "deploy" / "opora-nginx-reload.sh"
+    assert "nginx -s reload" in hook.read_text(encoding="utf-8")
+    assert "продолжает открывать сайт" in output
+    assert "резервная копия конфигурации nginx" in output
+
+
+def test_deploy_redirects_legacy_host_only_after_explicit_request(tmp_path):
+    def before(path):
+        live = path / "data" / "letsencrypt" / "live" / "opora.truthqwark.ru"
+        live.mkdir(parents=True)
+        (live / "fullchain.pem").write_text("fake-cert", encoding="utf-8")
+        (live / "privkey.pem").write_text("fake-key", encoding="utf-8")
+        env_file = path / ".env"
+        env_file.write_text(env_file.read_text(encoding="utf-8") + "OPORA_LEGACY_REDIRECT=1\n", encoding="utf-8", newline="\n")
+
+    code, output, calls = _run_deploy(tmp_path, before_run=before)
+    assert code == 0, output
+    legacy = (tmp_path / "data" / "nginx" / "legacy-site.conf").read_text(encoding="utf-8")
+    mapping = (tmp_path / "data" / "nginx" / "legacy-redirect-map.conf").read_text(encoding="utf-8")
+    assert "return 301 https://opora.truthqwark.ru$request_uri;" in legacy
+    assert "live/opora.zheleznogame.ru/fullchain.pem" in legacy
+    assert "opora.zheleznogame.ru opora.truthqwark.ru;" in mapping
+    assert not any(line.startswith("certbot ") for line in calls)
+    assert "будет перенаправляться" in output
 
 
 def test_check_env_accepts_staging_without_timeweb_tls(tmp_path):

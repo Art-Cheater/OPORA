@@ -85,6 +85,127 @@ compose() {
   COMPOSE_BAKE=false docker compose "${COMPOSE_FILES[@]}" "$@"
 }
 
+PUBLIC_DOMAIN="opora.truthqwark.ru"
+LEGACY_DOMAIN="opora.zheleznogame.ru"
+
+load_tls_paths() {
+  certs_dir="$(awk -F= '$1 == "TLS_CERTS_DIR" { value=$2 } END { print value }' "$ROOT/.env" | tr -d '\r\"')"
+  if [[ -z "$certs_dir" ]]; then
+    certs_dir="$ROOT/data/letsencrypt"
+  fi
+  state_dir="$ROOT/data/nginx"
+  webroot="${OPORA_ACME_WEBROOT:-/var/www/certbot}"
+}
+
+legacy_redirect_enabled() {
+  local value
+  value="$(awk -F= '$1 == "OPORA_LEGACY_REDIRECT" { value=$2 } END { print value }' "$ROOT/.env" | tr -d '\r\"' | tr '[:upper:]' '[:lower:]')"
+  case "$value" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+public_certificate_ready() {
+  [[ -f "$certs_dir/live/$PUBLIC_DOMAIN/fullchain.pem" && -f "$certs_dir/live/$PUBLIC_DOMAIN/privkey.pem" ]]
+}
+
+install_renew_hook() {
+  local hook="$certs_dir/renewal-hooks/deploy/opora-nginx-reload.sh"
+  mkdir -p "$(dirname "$hook")"
+  cat > "$hook" << 'EOF'
+#!/bin/sh
+# Certbot renews files in place. Reload nginx; do not recreate TCP listeners.
+docker exec opora_nginx nginx -s reload
+EOF
+  chmod +x "$hook"
+}
+
+install_site_file() {
+  local src="$1" dest="$2"
+  cp "$src" "$dest.tmp"
+  mv -f "$dest.tmp" "$dest"
+}
+
+write_site_enabled_files() {
+  mkdir -p "$state_dir"
+  if public_certificate_ready; then
+    install_site_file "$ROOT/docker/nginx.public-https.conf" "$state_dir/public-https.conf"
+  else
+    printf '# %s: сертификат ещё не выпущен, HTTPS-сервер не включаем.\n' "$PUBLIC_DOMAIN" > "$state_dir/public-https.conf.tmp"
+    mv -f "$state_dir/public-https.conf.tmp" "$state_dir/public-https.conf"
+  fi
+  if public_certificate_ready && legacy_redirect_enabled; then
+    install_site_file "$ROOT/docker/nginx.legacy-redirect.conf" "$state_dir/legacy-site.conf"
+    install_site_file "$ROOT/docker/nginx.legacy-redirect-map.conf" "$state_dir/legacy-redirect-map.conf"
+    echo "==> старый домен будет перенаправляться на https://$PUBLIC_DOMAIN"
+  else
+    install_site_file "$ROOT/docker/nginx.legacy-serve.conf" "$state_dir/legacy-site.conf"
+    printf '# legacy redirect off\n' > "$state_dir/legacy-redirect-map.conf.tmp"
+    mv -f "$state_dir/legacy-redirect-map.conf.tmp" "$state_dir/legacy-redirect-map.conf"
+    if legacy_redirect_enabled; then
+      echo "==> редирект со старого домена не включён: нет сертификата $PUBLIC_DOMAIN"
+    else
+      echo "==> старый домен $LEGACY_DOMAIN продолжает открывать сайт"
+    fi
+  fi
+}
+
+prepare_public_nginx_files() {
+  load_tls_paths
+  mkdir -p "$state_dir" "$webroot" "$certs_dir/renewal-hooks/deploy"
+  local backup="$ROOT/data/nginx-backups/$(date +%Y%m%d%H%M%S)"
+  mkdir -p "$backup/site-enabled"
+  cp -a "$state_dir/." "$backup/site-enabled/" || true
+  cp "$ROOT/docker/nginx.timeweb.conf" "$backup/nginx.timeweb.conf"
+  echo "==> резервная копия конфигурации nginx: $backup"
+  install_renew_hook
+  write_site_enabled_files
+}
+
+finish_public_certificate() {
+  load_tls_paths
+  if public_certificate_ready; then
+    echo "==> TLS: сертификат $PUBLIC_DOMAIN уже установлен"
+    return 0
+  fi
+  echo "==> TLS: выпускаем сертификат $PUBLIC_DOMAIN, старый сертификат не изменяется"
+  if ! command -v certbot >/dev/null 2>&1; then
+    echo "FAIL: на сервере нет certbot. Новый HTTPS не включён."
+    exit 1
+  fi
+  if ! certbot certonly --webroot -w "$webroot" \
+      --cert-name "$PUBLIC_DOMAIN" \
+      -d "$PUBLIC_DOMAIN" \
+      --non-interactive \
+      --agree-tos \
+      --keep-until-expiring \
+      --no-eff-email; then
+    echo "FAIL: не удалось выпустить сертификат $PUBLIC_DOMAIN. Старый сайт оставлен без редиректа."
+    exit 1
+  fi
+  if ! public_certificate_ready; then
+    echo "FAIL: certbot завершился, но сертификат $PUBLIC_DOMAIN не появился в $certs_dir/live."
+    exit 1
+  fi
+  write_site_enabled_files
+  echo "==> TLS: проверяем nginx и подключаем сертификат без перезапуска TCP"
+  if ! docker exec opora_nginx nginx -t; then
+    printf '# %s: nginx -t не принял HTTPS-блок, сервер не включаем.\n' "$PUBLIC_DOMAIN" > "$state_dir/public-https.conf.tmp"
+    mv -f "$state_dir/public-https.conf.tmp" "$state_dir/public-https.conf"
+    install_site_file "$ROOT/docker/nginx.legacy-serve.conf" "$state_dir/legacy-site.conf"
+    printf '# legacy redirect off\n' > "$state_dir/legacy-redirect-map.conf.tmp"
+    mv -f "$state_dir/legacy-redirect-map.conf.tmp" "$state_dir/legacy-redirect-map.conf"
+    echo "FAIL: nginx -t не принял конфигурацию нового домена. HTTPS нового домена не включён."
+    exit 1
+  fi
+  docker exec opora_nginx nginx -s reload
+  if command -v openssl >/dev/null 2>&1; then
+    openssl x509 -in "$certs_dir/live/$PUBLIC_DOMAIN/fullchain.pem" -noout -subject -issuer -dates || true
+  fi
+  echo "==> TLS: сертификат $PUBLIC_DOMAIN подключён"
+}
+
 container_of() { compose ps -a -q "$1" 2>/dev/null | head -n1; }
 
 container_state() {
@@ -251,6 +372,11 @@ fi
 echo "$IRZ_CHECK"
 grep -Fq "IRZ deploy check: OK" <<<"$IRZ_CHECK" || { echo "FAIL: irz-deploy-check не подтвердил справочники"; exit 1; }
 
+if [[ "$OPORA_ENV" == "production" ]]; then
+  echo "==> nginx: файлы нового домена до пересоздания контейнера"
+  prepare_public_nginx_files
+fi
+
 echo "==> пересоздаём остальные сервисы без сборки: ${OTHER_SERVICES[*]}"
 if ! compose up -d --no-build --no-deps --force-recreate "${OTHER_SERVICES[@]}"; then
   for service in "${OTHER_SERVICES[@]}"; do
@@ -291,6 +417,7 @@ if [[ "$OPORA_ENV" == "production" ]]; then
     echo "FAIL: порты 5000 и 5009 перепутаны между tcp-gateway и modem-sniffer"
     exit 1
   fi
+  finish_public_certificate
 fi
 
 echo

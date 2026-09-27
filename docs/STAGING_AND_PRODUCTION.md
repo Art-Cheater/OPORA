@@ -8,9 +8,16 @@
 | Staging | Проверка изменений | `20.42.0.122` | Отдельные PostgreSQL и uploads; нет команд production-платам и production DB. |
 | Production | Рабочая система | `46.19.66.5` | Реальные пользователи, uploads, интеграции и будущие устройства. |
 
-Production URL: `https://opora.zheleznogame.ru`. Устройства подключаются только
-к `tcp.zheleznogame.ru:5000` в production. На staging `tcp-gateway` отсутствует
-из Compose-стека; реальные device secrets туда не переносятся.
+Production URL: `https://opora.truthqwark.ru`. На переходный период
+`https://opora.zheleznogame.ru` открывает тот же сайт. Постоянный редирект
+включается отдельно: `OPORA_LEGACY_REDIRECT=1` в `.env` и обычный deploy,
+только после проверки нового адреса.
+
+Платы подключаются raw TCP без TLS к `tcp.truthqwark.ru:5000`. Прежние
+`tcp.zheleznogame.ru:5000` и IP сервера продолжают работать. Счётчики ATM21
+используют порт `5009` на тех же именах. Внутренний API модема `5010` наружу
+не публикуется. На staging `tcp-gateway` отсутствует из Compose-стека;
+реальные device secrets туда не переносятся.
 
 ## Deploy
 
@@ -45,5 +52,9 @@ production deploy. Скрипт не source-ит `.env`, выбирает overla
 Timeweb overlay объявляет существующий восстановленный `uploads_data` как
 external volume, поэтому Compose не пытается создать или удалить его. Base
 compose не менялся и на новой/локальной установке создаёт volume сам.
-`TLS_CERTS_DIR=/etc/letsencrypt` монтируется в nginx read-only. После Certbot
-renew: `docker exec opora_nginx nginx -s reload`.
+`TLS_CERTS_DIR=/etc/letsencrypt` монтируется в nginx read-only. `deploy.sh`
+выпускает отдельный сертификат `opora.truthqwark.ru` через webroot, не удаляя
+сертификат `opora.zheleznogame.ru`. Если сертификата ещё нет, nginx сначала
+поднимается со старым сайтом, затем Certbot и `nginx -s reload` — без второго
+перезапуска TCP. Hook `renewal-hooks/deploy/opora-nginx-reload.sh` делает тот
+же reload после автоматического продления.

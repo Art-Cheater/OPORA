@@ -4,8 +4,10 @@
 совместимости с существующей платой. Для BGS2T/IPP/другой firmware **ТРЕБУЕТСЯ
 ПРОТОКОЛ ПЛАТЫ** и отдельная проверка до подключения к production.
 
-Транспорт — raw TCP `tcp.zheleznogame.ru:5000`; кадр — один JSON-объект UTF-8,
-заканчивающийся `\n`, не больше `DEVICE_MAX_FRAME_BYTES`.
+Транспорт — raw TCP без TLS. Рекомендуемый адрес: `tcp.truthqwark.ru:5000`.
+Прежние `tcp.zheleznogame.ru:5000` и подключение по IP сервера продолжают
+работать; порт, AUTH и формат кадров не меняются. Кадр — один JSON-объект
+UTF-8, заканчивающийся `\n`, не больше `DEVICE_MAX_FRAME_BYTES`.
 
 1. Gateway отправляет `{"type":"challenge","version":"1","nonce":"..."}`.
 2. Устройство отвечает `{"type":"auth","version":"1","device_id":"...","hmac":"..."}`.

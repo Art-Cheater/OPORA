@@ -86,6 +86,10 @@ docker-data/
 # Working copies of IRZ catalogs on the server; the source files live in the repo root.
 /data/imports/*
 !/data/imports/.gitkeep
+
+# Generated on the server by deploy.sh. Templates live in docker/.
+/data/nginx/
+/data/nginx-backups/
 ~$*
 
 # Board firmware build output

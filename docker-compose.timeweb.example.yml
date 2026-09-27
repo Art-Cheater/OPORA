@@ -7,7 +7,12 @@ services:
       - "443:443"
     volumes:
       - ./docker/nginx.timeweb.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx.proxy-locations.conf:/etc/nginx/proxy-locations.conf:ro
+      # deploy.sh writes these before nginx starts. Mount the directory, not
+      # single files: certbot reload must see the updated server block.
+      - ./data/nginx:/etc/nginx/site-enabled:ro
       - ${TLS_CERTS_DIR:-./data/certbot}:/etc/letsencrypt:ro
+      - ${OPORA_ACME_WEBROOT:-/var/www/certbot}:/var/www/certbot:ro
 
   tcp-gateway:
     # Runs the web image; a separate build would overwrite opora-web:latest

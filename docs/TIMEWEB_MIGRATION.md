@@ -1,5 +1,10 @@
 # Переезд OPORA на Timeweb Cloud
 
+Текущие публичные имена: сайт `opora.truthqwark.ru`, устройства
+`tcp.truthqwark.ru` (порт `5000` — платы, порт `5009` — ATM21). Текст ниже
+описывает исходный переезд на Timeweb. Старые имена `opora.zheleznogame.ru` и
+`tcp.zheleznogame.ru` пока тоже указывают на этот сервер.
+
 Этот документ — runbook, а не команда deploy. До cutover старый production не
 изменять. Использовать новый сервер только после тестового restore и пилота с
 одной платой.
