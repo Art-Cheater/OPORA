@@ -30,7 +30,12 @@ from app.models.devices.state import (
     u3_groups_view,
 )
 from app.modules.devices.blueprint import devices_bp
-from app.modules.devices.command_service import active_command_query, expire_state_confirmation_timeouts
+from app.modules.devices.command_service import (
+    active_command_query,
+    expire_sent_command_timeouts,
+    expire_state_confirmation_timeouts,
+    release_sent_commands_matching_state,
+)
 from app.modules.devices.forms import DeviceForm
 from app.tcp_gateway.secrets import encrypt_device_secret
 
@@ -233,12 +238,19 @@ def _queue_switch_command(device_id: uuid.UUID, payload: dict[str, int]) -> Devi
     return command
 
 
+def _settle_command_queue() -> None:
+    changed = expire_state_confirmation_timeouts()
+    changed += expire_sent_command_timeouts()
+    changed += release_sent_commands_matching_state()
+    if changed:
+        db.session.commit()
+
+
 @devices_bp.route("/")
 @login_required
 @permission_required("devices.view")
 def index():
-    if expire_state_confirmation_timeouts():
-        db.session.commit()
+    _settle_command_queue()
     devices = db.session.scalars(db.select(Device).where(Device.active_filter()).order_by(Device.name)).all()
     commands_by_device = _commands_by_device(devices)
     active_by_device = _active_commands_by_device(devices)
@@ -262,8 +274,7 @@ def index():
 @login_required
 @permission_required("devices.view")
 def status():
-    if expire_state_confirmation_timeouts():
-        db.session.commit()
+    _settle_command_queue()
     devices = db.session.scalars(db.select(Device).where(Device.active_filter()).order_by(Device.name)).all()
     commands_by_device = _commands_by_device(devices)
     active_by_device = _active_commands_by_device(devices)

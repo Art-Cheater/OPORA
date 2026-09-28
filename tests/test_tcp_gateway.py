@@ -303,18 +303,23 @@ def test_v2_night_and_day_are_two_set_lines_and_the_second_waits_for_ok(app):
     gateway = Gateway(app)
     with app.app_context():
         device = db.session.scalar(db.select(Device).where(Device.device_id == "board-01"))
+        device.protocol_version = "2"
+        device.actual_state = {"outputs": {"C6": 0, "C7": 0, "C8": 0}}
         command = DeviceCommand(device_id=device.id, command_type="switch", payload={"C6": 1, "C7": 1}, status="sent")
         db.session.add(command)
         db.session.commit()
         command_id = command.command_id
     gateway.command_steps[command_id] = ["SET 7 1"]
     gateway._handle_v2_frame("board-01", None, "OK", ["6", "1"])
+    assert gateway.follow_after_state["board-01"] == "SET 7 1"
+    assert "board-01" not in gateway.followups
+    gateway._handle_v2_frame("board-01", None, "STATE", "O=4 U2=00 U3=00".split())
     assert gateway.followups["board-01"] == "SET 7 1"
     with app.app_context():
         command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.command_id == command_id))
         assert command.status == "sent"
     gateway.followups.pop("board-01")
-    gateway._handle_v2_frame("board-01", None, "OK", ["7", "1"])
+    gateway._handle_v2_frame("board-01", None, "STATE", "O=6 U2=00 U3=00".split())
     with app.app_context():
         command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.command_id == command_id))
         assert command.status == "completed"

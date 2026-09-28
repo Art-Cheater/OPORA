@@ -218,6 +218,28 @@ def test_status_contract_blocks_offline_and_frontend_uses_backend_decision(app, 
     assert "waitingForState" not in script
 
 
+def test_sent_command_unlocks_when_board_already_reports_the_relay(app, admin_client):
+    device_id = _device(app)
+    with app.app_context():
+        device = db.session.get(Device, device_id)
+        device.protocol_version = "2"
+        device.connection_state = "online"
+        device.last_state_at = utcnow()
+        device.actual_state = {"outputs": {"C6": 1, "C7": 0, "C8": 0}}
+        db.session.add(DeviceCommand(
+            device_id=device.id,
+            command_type="switch",
+            payload={"C6": 1},
+            status="sent",
+            sent_at=utcnow(),
+        ))
+        db.session.commit()
+    payload = admin_client.get("/devices/status").get_json()["devices"][0]
+    assert payload["can_send_command"] is True
+    assert payload["active_command"] is None
+    assert 'data-locked="1"' not in admin_client.get("/devices/").get_data(as_text=True)
+
+
 def test_v2_completed_command_releases_status_controls(app, admin_client):
     device_id = _device(app)
     with app.app_context():

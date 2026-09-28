@@ -28,6 +28,7 @@ class Gateway:
         self.connection_protocols: dict[str, str] = {}
         self.last_diagnostic_get: dict[str, float] = {}
         self.command_steps: dict[str, list[str]] = {}
+        self.follow_after_state: dict[str, str] = {}
         self.followups: dict[str, str] = {}
         self.stopping = asyncio.Event()
 
@@ -87,6 +88,23 @@ class Gateway:
                             command.status = "failed"
                             command.failed_at = now
                             command.error = "State does not match requested outputs"
+                    if device.protocol_version == "2":
+                        sent_commands = db.session.scalars(
+                            db.select(DeviceCommand).where(
+                                DeviceCommand.device_id == device.id,
+                                DeviceCommand.status == "sent",
+                                DeviceCommand.active_filter(),
+                            )
+                        ).all()
+                        for command in sent_commands:
+                            if not payload_matches_actual(command.payload, device.actual_state):
+                                continue
+                            command.status = "completed"
+                            command.acknowledged_at = command.acknowledged_at or now
+                            command.state_confirmed_at = now
+                            command.error = None
+                            self.command_steps.pop(command.command_id, None)
+                            self.follow_after_state.pop(device_id, None)
                 if actual is not None or telemetry is not None:
                     device.last_state_at = now
                 if isinstance(telemetry, dict):
@@ -183,6 +201,10 @@ class Gateway:
         elif verb == "STATE":
             actual, telemetry = parse_v2_state(args)
             self._set_connection(device_id, "online", peer_ip, actual, telemetry)
+            # The board has finished the previous SET and is reading again.
+            nxt = self.follow_after_state.pop(device_id, None)
+            if nxt:
+                self.followups[device_id] = nxt
         elif verb == "OK":
             self._ack_latest(device_id, True, "")
         elif verb == "ERR":
@@ -207,7 +229,7 @@ class Gateway:
                 self.command_steps[command_id] = remaining
             else:
                 self.command_steps.pop(command_id, None)
-            self.followups[device_id] = nxt
+            self.follow_after_state[device_id] = nxt
             return
         self.command_steps.pop(command_id, None)
         self._ack(device_id, command_id, success, error, protocol_version="2")
@@ -243,25 +265,32 @@ class Gateway:
                 outbound = [(item.device_id, item.command_id, item.command_type, item.payload) for item in pending]
                 diagnostic = [(item.id, item.device_id) for item in db.session.scalars(db.select(Device).where(Device.diagnostic_mode.is_(True), Device.protocol_version == "2", Device.connection_state == "online", Device.active_filter())).all()]
             for device_pk, command_id, command_type, payload in outbound:
+                line: str | None = None
                 with self.app.app_context():
                     device = db.session.get(Device, device_pk)
                     writer = self.connections.get(device.device_id) if device else None
                     protocol_version = device.protocol_version if device else "1"
-                if not writer or writer.is_closing():
-                    continue
-                try:
+                    command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.command_id == command_id))
+                    if not writer or writer.is_closing() or command is None or command.status != "pending":
+                        continue
                     if protocol_version == "2":
                         steps = self._v2_steps(command_type, payload or {})
                         self.command_steps[command_id] = steps[1:]
-                        await self._send_v2(writer, steps[0])
+                        line = steps[0]
+                    command.status, command.sent_at = "sent", utcnow()
+                    db.session.commit()
+                try:
+                    if protocol_version == "2":
+                        await self._send_v2(writer, line or "")
                     else:
                         await self._send(writer, {"type": "command", "command_id": command_id, "command": command_type, "payload": payload or {}})
+                except ConnectionError:
+                    self.command_steps.pop(command_id, None)
                     with self.app.app_context():
                         command = db.session.scalar(db.select(DeviceCommand).where(DeviceCommand.command_id == command_id))
-                        if command and command.status == "pending":
-                            command.status, command.sent_at = "sent", utcnow()
+                        if command and command.status == "sent":
+                            command.status, command.sent_at = "pending", None
                             db.session.commit()
-                except ConnectionError:
                     continue
             now_loop = asyncio.get_running_loop().time()
             busy_ids = {device_pk for device_pk, *_ in outbound}
