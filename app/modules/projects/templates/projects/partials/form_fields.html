@@ -17,6 +17,11 @@
     {{ modal_field(form.poles_count, col=3, module='projects') }}
     {{ modal_field(form.lights_count, col=3, module='projects') }}
     {{ modal_field(form.shuno_count, col=3, module='projects') }}
+    {% if form.survey_poles_hint %}
+    <div class="col-12">
+        <p class="form-text mb-0">{{ form.survey_poles_hint }}</p>
+    </div>
+    {% endif %}
     {{ modal_field(form.sip_meters_fact, col=3, module='projects') }}
     {{ modal_field(form.cable_meters_fact, col=3, module='projects') }}
     {{ modal_field(form.poles_count_fact, col=3, module='projects') }}

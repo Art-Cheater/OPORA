@@ -10,7 +10,7 @@ from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
 
 from app.core.decorators import admin_required, permission_required
-from app.core.exceptions import ValidationError
+from app.core.exceptions import NotFoundError, ValidationError
 from app.extensions import db
 from app.core.field_permissions import FieldPermissionService
 from app.core.forms_utils import form_errors_message
@@ -31,6 +31,7 @@ from app.modules.objects.forms import (
 )
 from app.modules.objects.repositories import ObjectFilter, ObjectRepository
 from app.modules.objects.services import ObjectPayload, ObjectService
+from app.modules.objects.survey_service import KIND_LABELS, TYPE_LABELS, ObjectSurveyService
 
 
 def _payload(form: ObjectForm, obj=None) -> ObjectPayload:
@@ -383,6 +384,7 @@ def detail(object_id: uuid.UUID):
         "archived",
     )
     can_create_contract = ObjectService.can_create_contract_from_plan(obj) and linked_contract is None
+    survey_summary = ObjectSurveyService.summary(obj.id)
     ctx = {
         "obj": obj,
         "status_labels": OBJECT_STATUS_LABELS,
@@ -390,6 +392,10 @@ def detail(object_id: uuid.UUID):
         "suggested_project_status": suggested,
         "can_create_project": can_create_project,
         "can_create_contract": can_create_contract,
+        "can_edit_survey": current_user.has_permission(PERM_OBJECTS_EDIT),
+        "survey_summary": survey_summary,
+        "survey_kind_labels": KIND_LABELS,
+        "survey_type_labels": TYPE_LABELS,
         "linked_project": linked_project,
         "linked_projects": linked_projects,
         "linked_tender": linked_tender,
@@ -482,3 +488,101 @@ def delete(object_id: uuid.UUID):
         flash(str(exc), "danger")
         return redirect(url_for("objects.detail", object_id=object_id))
     return redirect(url_for("objects.index"))
+
+
+def _survey_payload():
+    if request.is_json:
+        return request.get_json(silent=True) or {}
+    return request.form.to_dict()
+
+
+@objects_bp.route("/<uuid:object_id>/survey/poles.json")
+@login_required
+@permission_required(PERM_OBJECTS_VIEW)
+def survey_poles(object_id: uuid.UUID):
+    obj = ObjectRepository.get_by_id(object_id)
+    if obj is None:
+        return ajax_error("Объект не найден.", status=404)
+    poles = ObjectSurveyService.list_poles(obj)
+    summary = ObjectSurveyService.summary(obj.id)
+    return ajax_ok(
+        poles=[ObjectSurveyService.to_dict(item) for item in poles],
+        summary=summary,
+        kinds=KIND_LABELS,
+        types=TYPE_LABELS,
+        can_edit=current_user.has_permission(PERM_OBJECTS_EDIT),
+    )
+
+
+@objects_bp.route("/<uuid:object_id>/survey/poles.json", methods=["POST"])
+@login_required
+@permission_required(PERM_OBJECTS_EDIT)
+def survey_create_pole(object_id: uuid.UUID):
+    obj = ObjectRepository.get_by_id(object_id)
+    if obj is None:
+        return ajax_error("Объект не найден.", status=404)
+    try:
+        pole = ObjectSurveyService.create_pole(obj, _survey_payload(), current_user.id)
+    except ValidationError as exc:
+        return ajax_error(str(exc))
+    return ajax_ok(
+        "Опора добавлена.",
+        pole=ObjectSurveyService.to_dict(pole),
+        summary=ObjectSurveyService.summary(obj.id),
+    )
+
+
+@objects_bp.route("/<uuid:object_id>/survey/poles/<uuid:pole_id>.json", methods=["PATCH", "POST"])
+@login_required
+@permission_required(PERM_OBJECTS_EDIT)
+def survey_update_pole(object_id: uuid.UUID, pole_id: uuid.UUID):
+    obj = ObjectRepository.get_by_id(object_id)
+    if obj is None:
+        return ajax_error("Объект не найден.", status=404)
+    try:
+        pole = ObjectSurveyService.get_pole(obj, pole_id)
+        pole = ObjectSurveyService.update_pole(obj, pole, _survey_payload(), current_user.id)
+    except NotFoundError as exc:
+        return ajax_error(str(exc), status=404)
+    except ValidationError as exc:
+        return ajax_error(str(exc))
+    return ajax_ok(
+        "Опора обновлена.",
+        pole=ObjectSurveyService.to_dict(pole),
+        summary=ObjectSurveyService.summary(obj.id),
+    )
+
+
+@objects_bp.route("/<uuid:object_id>/survey/poles/<uuid:pole_id>/delete", methods=["POST"])
+@login_required
+@permission_required(PERM_OBJECTS_EDIT)
+def survey_delete_pole(object_id: uuid.UUID, pole_id: uuid.UUID):
+    obj = ObjectRepository.get_by_id(object_id)
+    if obj is None:
+        return ajax_error("Объект не найден.", status=404)
+    try:
+        pole = ObjectSurveyService.get_pole(obj, pole_id)
+        ObjectSurveyService.delete_pole(obj, pole, current_user.id)
+    except NotFoundError as exc:
+        return ajax_error(str(exc), status=404)
+    return ajax_ok("Опора удалена.", summary=ObjectSurveyService.summary(obj.id))
+
+
+@objects_bp.route("/<uuid:object_id>/survey/city-poles.json")
+@login_required
+@permission_required(PERM_OBJECTS_VIEW)
+def survey_city_poles(object_id: uuid.UUID):
+    """Подложка городских опор мониторинга. Точки объекта сюда не пишутся."""
+    obj = ObjectRepository.get_by_id(object_id)
+    if obj is None:
+        return ajax_error("Объект не найден.", status=404)
+    from app.core.geo.bbox import BboxError
+    from app.modules.irz import poles
+
+    try:
+        bbox = poles.parse_map_bbox(request.args)
+    except BboxError as exc:
+        return jsonify({"ok": False, "message": str(exc), "type": "FeatureCollection", "features": []}), 400
+    payload = poles.poles_geojson(bbox, limit=min(poles.MAP_LIMIT, 1500))
+    payload["ok"] = True
+    return jsonify(payload)

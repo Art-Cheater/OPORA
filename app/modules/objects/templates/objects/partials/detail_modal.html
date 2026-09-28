@@ -101,6 +101,13 @@
         <div>{{ obj.result_text or "—" }}</div>
     </div>
     <div class="col-12">
+        <small class="text-muted">Обследование</small>
+        <div>
+            Существующих: {{ survey_summary.existing }} · Новых: {{ survey_summary.planned }} · Всего: {{ survey_summary.total }}
+            <a class="ms-2" href="{{ url_for('objects.detail', object_id=obj.id, full=1) }}">Карта обследования</a>
+        </div>
+    </div>
+    <div class="col-12">
         <small class="text-muted">Основание для проведения работ</small>
         <div>{{ obj.notes or "—" }}</div>
     </div>

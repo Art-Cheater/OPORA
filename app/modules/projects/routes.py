@@ -207,6 +207,15 @@ def _apply_project_create_defaults(form: ProjectForm) -> None:
                 form.status.data = suggested
             if form.status.data == ProjectStatus.ACTIVE.value:
                 form.progress_percent.data = 10
+            from app.modules.objects.survey_service import ObjectSurveyService
+
+            survey = ObjectSurveyService.summary(obj.id)
+            if survey["total"]:
+                form.poles_count.data = survey["total"]
+                form.survey_poles_hint = (
+                    f"С карты обследования: {survey['total']} опор "
+                    f"(существующих {survey['existing']}, новых {survey['planned']})."
+                )
 
 
 @projects_bp.route("/")

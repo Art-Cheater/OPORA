@@ -764,6 +764,13 @@ tr[data-phase-pin].is-changed { background: var(--status-in-progress-bg); box-sh
 }
 .opora-coordinate-map { height: 420px; border-radius: 10px; overflow: hidden; background: #edf2f5; }
 .opora-map-frame { height: 420px; width: 100%; background: #edf2f5; }
+.object-survey-map { height: 420px; }
+.object-survey-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
 .maplibregl-ctrl-group { border-radius: 8px; overflow: hidden; }
 .workbench__map-status {
   padding: 0.45rem 0.85rem 0.7rem;
@@ -1182,7 +1189,8 @@ html[data-theme="dark"] .table-row-done { background: rgba(46, 125, 50, 0.14) !i
     .opora-map-frame,
     .opora-coordinate-map,
     .workbench__map #opsMap,
-    .agreement-map { height: 280px; }
+    .agreement-map,
+    .object-survey-map { height: 320px; }
 }
 
 @media (max-width: 575.98px) {

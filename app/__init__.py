@@ -295,7 +295,10 @@ def _register_security_hooks(app: Flask) -> None:
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+        response.headers.setdefault(
+            "Permissions-Policy",
+            "geolocation=(self), microphone=(), camera=()",
+        )
         # Базовый CSP: приложение — server-rendered + inline scripts в шаблонах.
         response.headers.setdefault(
             "Content-Security-Policy",

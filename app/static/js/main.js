@@ -675,6 +675,7 @@ function initInstantNav(sidebar, closeSidebar) {
         if (document.getElementById("requestMap")) {
             window.OporaRequestDetail?.init?.();
         }
+        window.OporaObjectSurvey?.init?.();
         window.OporaOpsMap?.init?.();
         window.OporaRequestsJournal?.init?.();
         window.OporaWorkOrders?.init?.();
@@ -695,6 +696,7 @@ function initInstantNav(sidebar, closeSidebar) {
         window.OporaWorkOrders?.destroy?.();
         window.OporaWorkPlanNew?.destroy?.();
         window.OporaWorkPlanDetail?.destroy?.();
+        window.OporaObjectSurvey?.destroy?.();
         window.OporaRequestsForm?.destroy?.();
         window.OporaRequestsJournal?.destroy?.();
         window.OporaOpsMap?.destroy?.();

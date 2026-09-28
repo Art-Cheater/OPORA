@@ -42,6 +42,69 @@
         <div id="requestMapStatus" class="small text-muted mt-2">{% if obj.latitude is none %}Координаты не заданы.{% endif %}</div>
     </div>
 </div>
+
+<div class="card mb-4" data-object-survey
+     data-poles-url="{{ url_for('objects.survey_poles', object_id=obj.id) }}"
+     data-city-url="{{ url_for('objects.survey_city_poles', object_id=obj.id) }}"
+     data-can-edit="{{ '1' if can_edit_survey else '0' }}"
+     data-lat="{{ obj.latitude if obj.latitude is not none else '' }}"
+     data-lng="{{ obj.longitude if obj.longitude is not none else '' }}">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span><i class="bi bi-geo-alt"></i> Обследование объекта</span>
+        <span class="small text-muted" data-survey-summary>
+            Существующих: {{ survey_summary.existing }} · Новых: {{ survey_summary.planned }} · Всего: {{ survey_summary.total }}
+        </span>
+    </div>
+    <div class="card-body">
+        <p class="small text-muted mb-3">
+            Ставьте все опоры, на которые пойдут работы: и новые, и уже стоящие
+            (в том числе те, где сейчас только кабель, а светильник ещё поставят).
+            Городские опоры мониторинга видны серым — это ориентир, в мониторинг точки объекта не попадают.
+        </p>
+        {% if can_edit_survey %}
+        <div class="object-survey-toolbar">
+            <div class="btn-group" role="group" aria-label="Вид опоры">
+                <input type="radio" class="btn-check" name="surveyKind" id="surveyKindExisting" value="existing" checked>
+                <label class="btn btn-outline-secondary" for="surveyKindExisting">Существующая</label>
+                <input type="radio" class="btn-check" name="surveyKind" id="surveyKindPlanned" value="planned">
+                <label class="btn btn-outline-success" for="surveyKindPlanned">Новая</label>
+            </div>
+            <div class="btn-group" role="group" aria-label="Тип опоры">
+                <input type="radio" class="btn-check" name="surveyType" id="surveyTypeConcrete" value="concrete">
+                <label class="btn btn-outline-secondary" for="surveyTypeConcrete">ЖБ</label>
+                <input type="radio" class="btn-check" name="surveyType" id="surveyTypeMetal" value="metal" checked>
+                <label class="btn btn-outline-secondary" for="surveyTypeMetal">Металлическая</label>
+                <input type="radio" class="btn-check" name="surveyType" id="surveyTypeOther" value="other">
+                <label class="btn btn-outline-secondary" for="surveyTypeOther">Другое</label>
+            </div>
+            <button type="button" class="btn btn-primary" data-survey-gps>
+                <i class="bi bi-crosshair"></i> Поставить по GPS
+            </button>
+        </div>
+        <p class="small text-muted mt-2 mb-2">Клик по карте ставит опору. Маркер можно подвинуть руками.</p>
+        {% else %}
+        <p class="small text-muted mb-2">Просмотр. Чтобы ставить опоры, нужно право редактировать объекты.</p>
+        {% endif %}
+        <div id="objectSurveyMap" class="opora-map-frame object-survey-map"></div>
+        <div class="small text-muted mt-2" data-survey-status></div>
+        <div class="table-responsive mt-3">
+            <table class="table table-sm table-opora mb-0">
+                <thead>
+                    <tr>
+                        <th>№</th>
+                        <th>Вид</th>
+                        <th>Тип</th>
+                        <th>Координаты</th>
+                        {% if can_edit_survey %}<th></th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody data-survey-list>
+                    <tr><td colspan="{% if can_edit_survey %}5{% else %}4{% endif %}" class="text-muted">Загрузка…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 <div class="card mb-4">
     <div class="card-header">Карточка объекта</div>
     <div class="card-body row g-3">
@@ -184,4 +247,9 @@
     </div>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script src="{{ static_url('js/object-survey.js') }}"></script>
 {% endblock %}

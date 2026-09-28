@@ -76,6 +76,7 @@ from app.models.irz import (
     LightPole,
     MeterCabinetDirectory,
 )
+from app.models.work_objects.object_survey_pole import ObjectSurveyPole
 from app.models.work_objects.work_object import WorkObject
 
 __all__ = [
@@ -117,6 +118,7 @@ __all__ = [
     "WorkPlanHistory",
     "WorkPlanItem",
     "WorkObject",
+    "ObjectSurveyPole",
     "Project",
     "ProjectMember",
     "ProjectDocument",

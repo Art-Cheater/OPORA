@@ -28,6 +28,21 @@ class WorkObjectKind(str, Enum):
   OTHER = "other"
 
 
+class SurveyPoleKind(str, Enum):
+  """Опора на обследовании объекта: уже стоит или будет установлена."""
+
+  EXISTING = "existing"
+  PLANNED = "planned"
+
+
+class SurveyPoleType(str, Enum):
+  """Укрупнённый тип опоры для полевого обследования."""
+
+  CONCRETE = "concrete"
+  METAL = "metal"
+  OTHER = "other"
+
+
 class ProjectStatus(str, Enum):
   DRAFT = "draft"
   ACTIVE = "active"

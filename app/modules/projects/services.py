@@ -271,6 +271,15 @@ class ProjectService:
         if exists is not None:
             raise ValidationError("Проект с таким кодом уже существует.")
 
+        work_object = db.session.get(WorkObject, payload.object_id) if payload.object_id else None
+        poles_count = payload.poles_count
+        if poles_count is None and payload.object_id is not None:
+            from app.modules.objects.survey_service import ObjectSurveyService
+
+            survey_total = ObjectSurveyService.count_for_object(payload.object_id)
+            if survey_total:
+                poles_count = survey_total
+
         project = Project(
             code=payload.code.strip(),
             name=payload.name.strip(),
@@ -283,7 +292,7 @@ class ProjectService:
             object_id=payload.object_id,
             sip_meters=payload.sip_meters,
             cable_meters=payload.cable_meters,
-            poles_count=payload.poles_count,
+            poles_count=poles_count,
             lights_count=payload.lights_count,
             shuno_count=payload.shuno_count,
             sip_meters_fact=payload.sip_meters_fact,
@@ -296,7 +305,6 @@ class ProjectService:
         )
         db.session.add(project)
         db.session.flush()
-        work_object = db.session.get(WorkObject, payload.object_id)
         if work_object is not None:
             work_object.status = WorkObjectStatus.IN_PROJECT.value
             work_object.updated_by = user_id

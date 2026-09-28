@@ -76,6 +76,7 @@ class ProjectFilterForm(FlaskForm):
 
 
 class ProjectForm(FlaskForm):
+    survey_poles_hint = ""
     code = StringField("Код", validators=[DataRequired(), Length(max=50)])
     name = StringField("Название", validators=[DataRequired(), Length(max=500)])
     object_id = SelectField(

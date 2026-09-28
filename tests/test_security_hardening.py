@@ -144,6 +144,10 @@ def test_security_headers_present(admin_client):
     assert resp.headers.get("X-Content-Type-Options") == "nosniff"
     assert resp.headers.get("X-Frame-Options") == "SAMEORIGIN"
     assert "frame-ancestors" in (resp.headers.get("Content-Security-Policy") or "")
+    policy = resp.headers.get("Permissions-Policy") or ""
+    assert "geolocation=(self)" in policy
+    assert "microphone=()" in policy
+    assert "camera=()" in policy
 
 
 def test_admin_can_still_create_employee(admin_client, app):
