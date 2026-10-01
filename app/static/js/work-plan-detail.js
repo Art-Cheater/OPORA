@@ -76,6 +76,32 @@ window.OporaWorkPlanDetail = {
       box.style.color = ok === false ? "#DC3545" : "var(--opora-text-muted)";
     }
 
+    function openOrder(message) {
+      const modal = document.getElementById("planOrderModal");
+      const hint = document.getElementById("planOrderHint");
+      if (hint && message) hint.textContent = message;
+      if (modal) modal.hidden = false;
+    }
+
+    function paintOrderWorks(plan) {
+      const body = document.getElementById("planOrderWorks");
+      if (!body || !plan) return;
+      const rows = plan.items || [];
+      body.innerHTML = rows.map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(item.number)}</td><td>${escapeHtml(item.pp || "—")}</td><td>${escapeHtml(item.address || "—")}</td><td>${escapeHtml(item.description || "—")}</td></tr>`).join("");
+    }
+
+    function showOrderActions(downloadUrl) {
+      const printLink = document.getElementById("planOrderPrint");
+      const label = document.getElementById("planOrderOpenLabel");
+      if (printLink) {
+        if (downloadUrl) printLink.href = downloadUrl;
+        printLink.hidden = false;
+      }
+      if (label) label.textContent = "Изменить бланк-распоряжение";
+      root.dataset.orderSaved = "1";
+      root.dataset.orderStale = "0";
+    }
+
     function closeModals() {
       const completeModal = document.getElementById("deskCompleteModal");
       const excludeModal = document.getElementById("deskExcludeModal");
@@ -181,10 +207,14 @@ window.OporaWorkPlanDetail = {
             return;
           }
           applyPlan(body.plan);
-          // В режиме «Добавить работы» показывается только явный поиск:
-          // рекомендации относятся к карте рабочего места, не к этому списку.
+          paintOrderWorks(body.plan);
           toast(body.message || "Работа добавлена в план.");
           searchAvailable();
+          if (body.plan?.order?.saved) {
+            openOrder("В план добавлена работа. Проверьте бланк-распоряжение и сохраните его заново.");
+          } else if (root.dataset.saveOrderUrl) {
+            openOrder("Работа добавлена. Заполните бланк-распоряжение, чтобы он совпадал с планом.");
+          }
         })
         .catch(() => toast("Не удалось добавить работу.", false))
         .finally(() => {
@@ -243,8 +273,35 @@ window.OporaWorkPlanDetail = {
     });
 
     document.getElementById("planOrderOpen")?.addEventListener("click", () => {
-      const modal = document.getElementById("planOrderModal");
-      if (modal) modal.hidden = false;
+      openOrder("Номер можно не указывать. После сохранения бланк можно распечатать или изменить.");
+    });
+
+    document.getElementById("planOrderForm")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector("[type=submit]");
+      if (button) button.disabled = true;
+      const data = Object.fromEntries(new FormData(form).entries());
+      fetch(root.dataset.saveOrderUrl || form.action, {
+        method: "POST",
+        headers: headers(true),
+        body: JSON.stringify(data),
+      })
+        .then((res) => res.json())
+        .then((body) => {
+          if (!body.ok) {
+            toast(body.message || "Не удалось сохранить бланк.", false);
+            return;
+          }
+          closeModals();
+          showOrderActions(body.download_url);
+          paintOrderWorks(body.plan);
+          toast(body.message || "Бланк-распоряжение сохранён.");
+        })
+        .catch(() => toast("Не удалось сохранить бланк.", false))
+        .finally(() => {
+          if (button) button.disabled = false;
+        });
     });
 
     document.getElementById("planReportSend")?.addEventListener("click", () => {
@@ -319,6 +376,14 @@ window.OporaWorkPlanDetail = {
     });
 
     document.querySelectorAll("[data-close-modal]").forEach((btn) => btn.addEventListener("click", closeModals));
+
+    if (root.dataset.fillOrder === "1" || root.dataset.orderStale === "1") {
+      openOrder(
+        root.dataset.orderStale === "1"
+          ? "Состав плана изменился. Проверьте бланк-распоряжение и сохраните его."
+          : "План сохранён. Заполните бланк-распоряжение: номер можно оставить пустым."
+      );
+    }
   },
 };
 

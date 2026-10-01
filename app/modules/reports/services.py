@@ -49,6 +49,7 @@ class MasterStat:
     user_id: str
     full_name: str
     completed: int
+    defects_closed: int
     assigned_open: int
 
 
@@ -242,24 +243,37 @@ class ReportsService:
             else:
                 median_hours = round((ordered[mid - 1] + ordered[mid]) / 2, 2)
 
-        # Нагрузка по мастерам: выполнено за период + сейчас открытых на них
+        # Кто фактически закрыл заявки за период, а не на кого они были назначены.
         completed_by_master = (
             select(
-                Request.responsible_id.label("user_id"),
-                func.count(func.distinct(RequestHistory.request_id)).label("completed"),
+                Request.completion_by_id.label("user_id"),
+                func.count(Request.id).label("completed"),
             )
-            .select_from(RequestHistory)
-            .join(RequestStatus, RequestStatus.id == RequestHistory.status_id)
-            .join(Request, Request.id == RequestHistory.request_id)
             .where(
-                RequestHistory.active_filter(),
                 Request.active_filter(),
-                RequestStatus.code == STATUS_COMPLETED,
-                RequestHistory.created_at >= period.dt_from,
-                RequestHistory.created_at <= period.dt_to,
-                Request.responsible_id.is_not(None),
+                Request.completion_by_id.is_not(None),
+                Request.completion_at >= period.dt_from,
+                Request.completion_at <= period.dt_to,
             )
-            .group_by(Request.responsible_id)
+            .group_by(Request.completion_by_id)
+            .subquery()
+        )
+        from app.models.work_plans.work_plan_item import WorkPlanItem
+
+        defects_by_master = (
+            select(
+                WorkPlanItem.completed_by.label("user_id"),
+                func.count(WorkPlanItem.id).label("defects_closed"),
+            )
+            .where(
+                WorkPlanItem.active_filter(),
+                WorkPlanItem.defect_id.is_not(None),
+                WorkPlanItem.result == "completed",
+                WorkPlanItem.completed_by.is_not(None),
+                WorkPlanItem.completed_at >= period.dt_from,
+                WorkPlanItem.completed_at <= period.dt_to,
+            )
+            .group_by(WorkPlanItem.completed_by)
             .subquery()
         )
         open_by_master = (
@@ -281,20 +295,24 @@ class ReportsService:
                 User.id,
                 User.full_name,
                 func.coalesce(completed_by_master.c.completed, 0),
+                func.coalesce(defects_by_master.c.defects_closed, 0),
                 func.coalesce(open_by_master.c.assigned_open, 0),
             )
             .select_from(User)
             .outerjoin(completed_by_master, completed_by_master.c.user_id == User.id)
+            .outerjoin(defects_by_master, defects_by_master.c.user_id == User.id)
             .outerjoin(open_by_master, open_by_master.c.user_id == User.id)
             .where(
                 User.active_filter(),
                 or_(
                     completed_by_master.c.completed.is_not(None),
+                    defects_by_master.c.defects_closed.is_not(None),
                     open_by_master.c.assigned_open.is_not(None),
                 ),
             )
             .order_by(
                 func.coalesce(completed_by_master.c.completed, 0).desc(),
+                func.coalesce(defects_by_master.c.defects_closed, 0).desc(),
                 User.full_name.asc(),
             )
         ).all()
@@ -304,9 +322,10 @@ class ReportsService:
                 user_id=str(uid),
                 full_name=name,
                 completed=int(completed or 0),
+                defects_closed=int(defects_closed or 0),
                 assigned_open=int(open_cnt or 0),
             )
-            for uid, name, completed, open_cnt in master_rows
+            for uid, name, completed, defects_closed, open_cnt in master_rows
         ]
 
         return RequestsReport(
@@ -347,9 +366,9 @@ class ReportsService:
         ]
         for item in report.by_status:
             rows.append([item.name, str(item.count)])
-        rows.extend([[], ["Мастер", "Выполнено за период", "Открыто сейчас"]])
+        rows.extend([[], ["Мастер", "Закрыто заявок", "Закрыто дефектов", "Открыто сейчас"]])
         for m in report.by_master:
-            rows.append([m.full_name, str(m.completed), str(m.assigned_open)])
+            rows.append([m.full_name, str(m.completed), str(m.defects_closed), str(m.assigned_open)])
         return rows
 
     @staticmethod

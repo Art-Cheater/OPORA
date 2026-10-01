@@ -520,7 +520,7 @@ def test_work_plans_journals_related_complete_and_auto_close(client, app):
     assert saved_plan["number"].startswith("ПР-")
     assert saved_plan["status"] == "in_progress"
     assert "draft" not in saved_plan["status"]
-    assert body["redirect"].endswith(f"/work-orders/plans/{plan_id}")
+    assert body["redirect"].split("?")[0].endswith(f"/work-orders/plans/{plan_id}")
     page = client.get(body["redirect"])
     assert page.status_code == 200
     page_html = page.get_data(as_text=True)
@@ -797,6 +797,82 @@ def test_request_detail_shows_only_active_master_plan(client, app):
         db.session.commit()
     detail = client.get(f"/requests/{request_id}")
     assert "С этой заявкой работает мастер" not in detail.get_data(as_text=True)
+
+
+def test_order_blank_is_saved_without_number_and_counted_for_master(client, app):
+    request_id, _, defect_id, _, _ = _seed_work(app, suffix="81")
+    _login(client, "master@test.local")
+    created = client.post(
+        "/work-orders/plans/",
+        json={
+            "items": [
+                {"entity_type": "request", "entity_id": request_id},
+                {"entity_type": "defect", "entity_id": defect_id},
+            ]
+        },
+    )
+    assert created.status_code == 200
+    body = created.get_json()
+    assert "fill_order=1" in body["redirect"]
+    plan_id = body["plan"]["id"]
+
+    page = client.get(body["redirect"])
+    html = page.get_data(as_text=True)
+    assert page.status_code == 200
+    assert "Заполнить бланк-распоряжение" in html
+    assert 'id="planOrderForm"' in html
+    assert "Сохранить" in html
+
+    saved = client.post(
+        f"/work-orders/plans/{plan_id}/order",
+        json={"order_number": "", "producer": "Мастер QA", "issued_on": "2026-09-25", "crew_count": "2"},
+    )
+    assert saved.status_code == 200, saved.get_data(as_text=True)
+    saved_body = saved.get_json()
+    assert saved_body["ok"] is True
+    assert saved_body["order"]["number"] == ""
+    download_url = saved_body["download_url"]
+
+    again = client.get(f"/work-orders/plans/{plan_id}")
+    again_html = again.get_data(as_text=True)
+    assert "Распечатать бланк" in again_html
+    assert "Изменить бланк-распоряжение" in again_html
+
+    plan = client.get(f"/work-orders/plans/{plan_id}.json").get_json()
+    request_item = next(item for item in plan["items"] if item["entity_type"] == "request")
+    defect_item = next(item for item in plan["items"] if item["entity_type"] == "defect")
+    done = client.post(
+        f"/work-orders/plans/{plan_id}/items/{request_item['id']}/complete",
+        data={"comment": "Светильник заменён"},
+    )
+    assert done.status_code == 200, done.get_data(as_text=True)
+    done_defect = client.post(
+        f"/work-orders/plans/{plan_id}/items/{defect_item['id']}/complete",
+        data={"comment": "Дефект устранён"},
+    )
+    assert done_defect.status_code == 200, done_defect.get_data(as_text=True)
+
+    request_page = client.get(f"/requests/{request_id}").get_data(as_text=True)
+    assert "Согласно бланку-распоряжению от 25.09.2026" in request_page
+    assert "закрыта мастером Мастер QA" in request_page
+    assert "Скачать бланк-распоряжение" in request_page
+    defect_page = client.get(f"/defects/{defect_id}").get_data(as_text=True)
+    assert "дефект закрыт мастером Мастер QA" in defect_page
+
+    workbook = client.get(download_url)
+    assert workbook.status_code == 200
+    sheet = load_workbook(BytesIO(workbook.data), data_only=False)["табель"]
+    assert sheet["D4"].value == "Бланк-распоряжение №_____________"
+
+    from app.models.auth.user import User
+    from app.modules.reports.services import ReportsService, resolve_period
+
+    with app.app_context():
+        master = db.session.scalar(db.select(User).where(User.email == "master@test.local"))
+        report = ReportsService.requests_report(resolve_period("week"))
+        row = next(item for item in report.by_master if item.user_id == str(master.id))
+        assert row.completed >= 1
+        assert row.defects_closed >= 1
 
 
 

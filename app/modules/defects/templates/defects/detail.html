@@ -37,6 +37,17 @@
         </section>
     </div>
     {% endif %}
+    {% if completion_blank %}
+    <div class="col-12">
+        <section class="card border-success mb-0" aria-label="Бланк-распоряжение">
+            <div class="card-header text-success"><i class="bi bi-file-earmark-spreadsheet"></i> Закрытие по бланку</div>
+            <div class="card-body py-3">
+                <div class="fw-medium">{{ completion_blank.text }}</div>
+                <a class="btn btn-sm btn-outline-success mt-2" href="{{ completion_blank.download_url }}">Скачать бланк-распоряжение</a>
+            </div>
+        </section>
+    </div>
+    {% endif %}
     <div class="col-xl-8">
         <div class="card mb-4">
             <div class="card-header">Основные данные</div>

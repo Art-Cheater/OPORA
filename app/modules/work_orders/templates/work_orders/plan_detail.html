@@ -19,6 +19,10 @@
      {% if can_manage_plans %}data-search-url="{{ url_for('work_orders.plan_available_items', plan_id=plan.id) }}"
      data-add-url="{{ url_for('work_orders.plan_add_item', plan_id=plan.id) }}"
      data-related-url="{{ url_for('work_orders.related_json', plan_id=plan.id) }}"{% endif %}
+     data-save-order-url="{{ url_for('work_orders.save_plan_order', plan_id=plan.id) }}"
+     data-fill-order="{{ '1' if fill_order else '0' }}"
+     data-order-saved="{{ '1' if order_blank else '0' }}"
+     data-order-stale="{{ '1' if order_blank and order_blank.needs_update else '0' }}"
      {% if can_use_report %}data-report-url="{{ url_for('work_orders.send_plan_report', plan_id=plan.id) }}"{% endif %}>
 
     <a class="plan-page__back" href="{{ url_for('work_orders.plans_index') }}">← Мои планы</a>
@@ -43,8 +47,12 @@
             </button>
             {% endif %}
             {% if can_create_order %}
+            <a class="plan-btn plan-btn--save" id="planOrderPrint" {% if order_blank %}href="{{ url_for('work_orders.download_saved_order', blank_id=order_blank.id) }}"{% else %}hidden{% endif %}>
+                <i class="bi bi-printer"></i> Распечатать бланк
+            </a>
             <button type="button" class="plan-btn plan-btn--ghost" id="planOrderOpen">
-                <i class="bi bi-file-earmark-spreadsheet"></i> Создать бланк-распоряжение
+                <i class="bi bi-file-earmark-spreadsheet"></i>
+                <span id="planOrderOpenLabel">{% if order_blank %}Изменить бланк-распоряжение{% else %}Заполнить бланк-распоряжение{% endif %}</span>
             </button>
             {% endif %}
         </div>
@@ -147,16 +155,36 @@
 
 {% if can_create_order %}
 <div class="desk-modal" id="planOrderModal" hidden>
-    <form class="desk-modal__card" method="POST" action="{{ url_for('work_orders.download_plan_order', plan_id=plan.id) }}">
+    <form class="desk-modal__card desk-modal__card--order" id="planOrderForm" method="POST" action="{{ url_for('work_orders.save_plan_order', plan_id=plan.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <h3>Бланк-распоряжение</h3>
-        <p class="desk-modal__hint">Проверьте данные перед выгрузкой: номер можно оставить пустым для заполнения на бумаге.</p>
-        <fieldset class="order-preview"><legend>Общие сведения</legend><label>Номер распоряжения <input name="order_number" maxlength="100" autocomplete="off"></label><label>Производитель работ <input name="producer" value="{{ plan.master }}" maxlength="255"></label><label>Количество человек в бригаде <input name="crew_count" type="number" min="1" value="2"></label><label>Член бригады / машинист <input name="crew_lead" maxlength="255"></label><label>Состав бригады <input name="crew_members" maxlength="500"></label><label>Ответственный за автоподъёмник <input name="lift_responsible" maxlength="255"></label></fieldset>
-        <fieldset class="order-preview"><legend>Поручается выполнить работы</legend><table><thead><tr><th>№</th><th>ПП</th><th>Адрес</th><th>Характер повреждения</th></tr></thead><tbody>{% for item in works %}<tr><td>{{ loop.index }}</td><td>{{ item.pp or '—' }}</td><td>{{ item.address or '—' }}</td><td>{{ item.description or '—' }}</td></tr>{% endfor %}</tbody></table></fieldset>
-        <fieldset class="order-preview"><legend>Служебные отметки</legend><label>Бланк-распоряжение выдал <input name="issuer" value="{{ master_initials }}" maxlength="255"></label><label>Целевой инструктаж провёл <input name="briefing_conductor" value="{{ master_initials }}" maxlength="255"></label></fieldset>
+        <p class="desk-modal__hint" id="planOrderHint">Номер можно не указывать. После сохранения бланк можно распечатать или изменить.</p>
+        <div class="order-form__body">
+        <fieldset class="order-preview"><legend>Общие сведения</legend>
+            <label>Номер распоряжения <input name="order_number" maxlength="100" autocomplete="off" value="{{ order_fields.order_number }}" placeholder="Можно оставить пустым"></label>
+            <label>Дата бланка <input name="issued_on" type="date" value="{{ order_issued_on }}"></label>
+            <label>Производитель работ <input name="producer" value="{{ order_fields.producer or plan.master }}" maxlength="255"></label>
+            <label>Количество человек в бригаде <input name="crew_count" inputmode="numeric" value="{{ order_fields.crew_count or '2' }}" maxlength="20"></label>
+            <label>Член бригады / машинист <input name="crew_lead" value="{{ order_fields.crew_lead }}" maxlength="255"></label>
+            <label>Состав бригады <input name="crew_members" value="{{ order_fields.crew_members }}" maxlength="500"></label>
+            <label>Ответственный за автоподъёмник <input name="lift_responsible" value="{{ order_fields.lift_responsible }}" maxlength="255"></label>
+        </fieldset>
+        <fieldset class="order-preview"><legend>Поручается выполнить работы</legend>
+            <div class="order-preview__table">
+            <table>
+                <thead><tr><th>№</th><th>Работа</th><th>ПП</th><th>Адрес</th><th>Характер повреждения</th></tr></thead>
+                <tbody id="planOrderWorks">{% for item in works %}<tr><td>{{ loop.index }}</td><td>{{ item.number }}</td><td>{{ item.pp or '—' }}</td><td>{{ item.address or '—' }}</td><td>{{ item.description or '—' }}</td></tr>{% endfor %}</tbody>
+            </table>
+            </div>
+        </fieldset>
+        <fieldset class="order-preview"><legend>Служебные отметки</legend>
+            <label>Бланк-распоряжение выдал <input name="issuer" value="{{ order_fields.issuer or master_initials }}" maxlength="255"></label>
+            <label>Целевой инструктаж провёл <input name="briefing_conductor" value="{{ order_fields.briefing_conductor or master_initials }}" maxlength="255"></label>
+        </fieldset>
+        </div>
         <div class="desk-modal__actions">
             <button type="button" class="desk-btn" data-close-modal>Отмена</button>
-            <button type="submit" class="desk-btn desk-btn--done">Скачать XLSX</button>
+            <button type="submit" class="desk-btn desk-btn--done">Сохранить</button>
         </div>
     </form>
 </div>

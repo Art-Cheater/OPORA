@@ -884,8 +884,10 @@ def detail(request_id: uuid.UUID):
     dispatcher = db.session.get(User, req.created_by) if req.created_by else None
     lifecycle = lifecycle_progress(req.status.code if req.status else None)
     back_url, back_label = back_navigation(fallback="/requests/")
+    from app.modules.work_orders.blank_service import OrderBlankService
     from app.modules.work_orders.plan_service import ENTITY_REQUEST, WorkPlanService
     active_assignments = WorkPlanService.active_assignments(ENTITY_REQUEST, req.id)
+    completion_blank = OrderBlankService.citation_for_request(req.id) if req.completion_at else None
     map_points = list(
         db.session.scalars(
             db.select(WorkMapPoint)
@@ -940,6 +942,7 @@ def detail(request_id: uuid.UUID):
             dispatcher=dispatcher,
             lifecycle=lifecycle,
             active_assignments=active_assignments,
+            completion_blank=completion_blank,
             map_points=map_points,
             comment_form=comment_form,
             completion_form=completion_form,
@@ -958,6 +961,7 @@ def detail(request_id: uuid.UUID):
         material_form=material_form,
         attachment_form=attachment_form,
         active_assignments=active_assignments,
+        completion_blank=completion_blank,
         map_points=map_points,
         assign_form=assign_form,
         completion_form=completion_form,
@@ -1149,6 +1153,27 @@ def complete_request(request_id: uuid.UUID):
             completion_by_id=_uuid_or_none(form.completion_by_id.data),
             completion_form_number=form.completion_form_number.data,
             completion_description=form.completion_description.data,
+        )
+        from app.models.auth.user import User
+        from app.modules.work_orders.blank_service import OrderBlankService
+
+        performer_id = _uuid_or_none(form.completion_by_id.data)
+        performer = db.session.get(User, performer_id) if performer_id else None
+        OrderBlankService.save_request(
+            req.id,
+            current_user.id,
+            {
+                "order_number": form.completion_form_number.data or "",
+                "producer": (form.order_producer.data or "") or (performer.full_name if performer else ""),
+                "crew_count": form.order_crew_count.data or "",
+                "crew_lead": form.order_crew_lead.data or "",
+                "crew_members": form.order_crew_members.data or "",
+                "lift_responsible": form.order_lift_responsible.data or "",
+                "issuer": form.order_issuer.data or "",
+                "briefing_conductor": form.order_briefing.data or "",
+            },
+            issued_on=form.completion_date.data,
+            closed_by_id=performer_id,
         )
         if is_ajax():
             return ajax_ok("Заявка завершена.", id=str(req.id), status_code=req.status.code if req.status else "")

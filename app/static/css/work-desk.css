@@ -536,13 +536,16 @@ body:has(#workDesk) .app-footer { flex-shrink: 0; }
   z-index: 2700;
   background: rgba(8, 10, 14, 0.72);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: 1rem;
+  overflow: auto;
 }
 .desk-modal[hidden] { display: none !important; }
 .desk-modal__card {
   width: min(32rem, 100%);
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
   background: var(--opora-card);
   border: 1px solid var(--opora-border);
   border-radius: 16px;
@@ -550,11 +553,24 @@ body:has(#workDesk) .app-footer { flex-shrink: 0; }
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
+  overflow: hidden;
 }
-.desk-modal__card h3 { margin: 0; }
-.desk-modal__hint { margin: 0; color: var(--opora-text-muted); font-size: 0.88rem; }
+.desk-modal__card--order {
+  width: min(56rem, 100%);
+}
+.order-form__body {
+  overflow: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding-right: 0.15rem;
+}
+.desk-modal__card h3 { margin: 0; flex-shrink: 0; }
+.desk-modal__hint { margin: 0; color: var(--opora-text-muted); font-size: 0.88rem; flex-shrink: 0; }
 .desk-modal__card textarea,
-.desk-modal__card select {
+.desk-modal__card select,
+.desk-modal__card input {
   width: 100%;
   border-radius: 10px;
   border: 1px solid var(--opora-input-border);
@@ -562,5 +578,27 @@ body:has(#workDesk) .app-footer { flex-shrink: 0; }
   color: var(--opora-text);
   padding: 0.6rem 0.75rem;
 }
+.order-preview {
+  border: 1px solid var(--opora-border);
+  border-radius: 12px;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.55rem;
+}
+.order-preview legend { font-size: 0.82rem; font-weight: 700; padding: 0 0.25rem; }
+.order-preview label { display: grid; gap: 0.25rem; font-size: 0.82rem; color: var(--opora-text-muted); }
+.order-preview__table { overflow: auto; max-height: 16rem; }
+.order-preview table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.order-preview th,
+.order-preview td { border-bottom: 1px solid var(--opora-border); padding: 0.35rem 0.4rem; text-align: left; vertical-align: top; }
 .desk-modal__files { font-size: 0.86rem; color: var(--opora-text-muted); }
-.desk-modal__actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.desk-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  background: var(--opora-card);
+  padding-top: 0.35rem;
+}

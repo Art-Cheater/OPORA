@@ -15,6 +15,12 @@
     </a>
     <span class="text-muted small ms-2">Полная карточка: действия, файлы, история</span>
 </div>
+{% if completion_blank %}
+<div class="alert alert-success">
+    {{ completion_blank.text }}
+    <a class="alert-link ms-2" href="{{ completion_blank.download_url }}">Скачать бланк</a>
+</div>
+{% endif %}
 
 <div class="row g-4">
     <div class="col-lg-7">

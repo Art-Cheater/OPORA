@@ -299,6 +299,9 @@ class WorkPlanService:
             details={"entity_type": entity_type, "entity_id": str(entity.id), "number": entity.number},
         )
         plan.updated_by = user.id
+        from app.modules.work_orders.blank_service import OrderBlankService
+
+        OrderBlankService.mark_plan_stale(plan.id)
         if plan.status == PLAN_IN_PROGRESS:
             item.previous_status_code = entity.status.code if entity.status else None
             if entity_type == ENTITY_REQUEST:
@@ -524,7 +527,16 @@ class WorkPlanService:
                 raise NotFoundError("Заявка не найдена.")
             if uploads:
                 RequestService.add_attachments(req, file_storages=uploads, user_id=user.id)
-            RequestService.complete_request(item.request_id, user.id, comment=text, commit=False)
+            from app.modules.work_orders.blank_service import OrderBlankService
+
+            blank = OrderBlankService.for_plan(plan.id)
+            RequestService.complete_request(
+                item.request_id,
+                user.id,
+                comment=text,
+                completion_form_number=blank.order_number if blank else None,
+                commit=False,
+            )
         else:
             defect = db.session.get(Defect, item.defect_id)
             if defect is None:
@@ -848,11 +860,14 @@ class WorkPlanService:
                     "created_at": cls._fmt_dt(entry.created_at),
                 }
             )
+        from app.modules.work_orders.blank_service import OrderBlankService
+
         summary.update(
             {
                 "items": [cls.serialize_item(item, plan_status=plan.status) for item in items],
                 "history": history,
                 "readonly": plan.status == PLAN_COMPLETED,
+                "order": OrderBlankService.summary(OrderBlankService.for_plan(plan.id)),
             }
         )
         return summary

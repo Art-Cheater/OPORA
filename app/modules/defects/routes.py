@@ -257,8 +257,10 @@ def detail(defect_id: uuid.UUID):
     ]
     history = list(item.history)[:50]
     back_url, back_label = back_navigation(fallback="/requests/?tab=defects")
+    from app.modules.work_orders.blank_service import OrderBlankService
     from app.modules.work_orders.plan_service import ENTITY_DEFECT, WorkPlanService
     active_assignments = WorkPlanService.active_assignments(ENTITY_DEFECT, item.id)
+    completion_blank = OrderBlankService.citation_for_defect(item.id)
     map_points = list(
         db.session.scalars(
             db.select(WorkMapPoint)
@@ -282,6 +284,7 @@ def detail(defect_id: uuid.UUID):
         back_url=back_url,
         back_label=back_label,
         active_assignments=active_assignments,
+        completion_blank=completion_blank,
         map_points=map_points,
     )
 

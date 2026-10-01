@@ -57,6 +57,7 @@ from app.models.waybills.waybill import Waybill
 from app.models.waybills.waybill_history import WaybillHistory
 from app.models.waybills.waybill_member import WaybillMember
 from app.models.waybills.waybill_stop import WaybillStop
+from app.models.work_plans.work_order_blank import WorkOrderBlank
 from app.models.work_plans.work_plan import WorkPlan
 from app.models.work_plans.work_plan_history import WorkPlanHistory
 from app.models.work_plans.work_plan_item import WorkPlanItem
@@ -114,6 +115,7 @@ __all__ = [
     "WaybillHistory",
     "WaybillMember",
     "WaybillStop",
+    "WorkOrderBlank",
     "WorkPlan",
     "WorkPlanHistory",
     "WorkPlanItem",

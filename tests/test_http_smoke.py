@@ -68,6 +68,8 @@ def test_request_completion_requires_form_and_persists_details(admin_client, app
     detail = admin_client.get(f"/requests/{request_id}").get_data(as_text=True)
     assert "Выполнение заявки" in detail
     assert "Заменён светильник" in detail
+    assert "Согласно бланку-распоряжению №123" in detail
+    assert "Скачать бланк-распоряжение" in detail
 
 
 def test_admin_pages(admin_client):

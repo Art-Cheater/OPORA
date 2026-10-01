@@ -61,8 +61,14 @@
                 <div class="row g-3">
                     <div class="col-md-4"><small class="text-muted">Дата и время</small><div class="fw-medium">{{ req.completion_at|local_dt }}</div></div>
                     <div class="col-md-4"><small class="text-muted">Кто выполнил</small><div class="fw-medium">{{ req.completion_by.full_name if req.completion_by else "—" }}</div></div>
-                    <div class="col-md-4"><small class="text-muted">Номер бланка</small><div class="fw-medium">{{ req.completion_form_number or "—" }}</div></div>
+                    <div class="col-md-4"><small class="text-muted">Номер бланка</small><div class="fw-medium">{{ req.completion_form_number or "без номера" }}</div></div>
                     <div class="col-12"><small class="text-muted">Описание</small><div class="mt-1">{{ req.completion_description }}</div></div>
+                    {% if completion_blank %}
+                    <div class="col-12">
+                        <div class="fw-medium">{{ completion_blank.text }}</div>
+                        <a class="btn btn-sm btn-outline-success mt-2" href="{{ completion_blank.download_url }}">Скачать бланк-распоряжение</a>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </section>
@@ -236,7 +242,35 @@
                     </div>
                     <div class="col-md-6">
                         <label class="form-label" for="{{ completion_form.completion_form_number.id }}">{{ completion_form.completion_form_number.label.text }}</label>
-                        {{ completion_form.completion_form_number(class="form-control", placeholder="Необязательно") }}
+                        {{ completion_form.completion_form_number(class="form-control", placeholder="Можно оставить пустым") }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="{{ completion_form.order_producer.id }}">{{ completion_form.order_producer.label.text }}</label>
+                        {{ completion_form.order_producer(class="form-control", placeholder="Мастер, если отличается от исполнителя") }}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="{{ completion_form.order_crew_count.id }}">{{ completion_form.order_crew_count.label.text }}</label>
+                        {{ completion_form.order_crew_count(class="form-control") }}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="{{ completion_form.order_crew_lead.id }}">{{ completion_form.order_crew_lead.label.text }}</label>
+                        {{ completion_form.order_crew_lead(class="form-control") }}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="{{ completion_form.order_lift_responsible.id }}">{{ completion_form.order_lift_responsible.label.text }}</label>
+                        {{ completion_form.order_lift_responsible(class="form-control") }}
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" for="{{ completion_form.order_crew_members.id }}">{{ completion_form.order_crew_members.label.text }}</label>
+                        {{ completion_form.order_crew_members(class="form-control") }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="{{ completion_form.order_issuer.id }}">{{ completion_form.order_issuer.label.text }}</label>
+                        {{ completion_form.order_issuer(class="form-control") }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="{{ completion_form.order_briefing.id }}">{{ completion_form.order_briefing.label.text }}</label>
+                        {{ completion_form.order_briefing(class="form-control") }}
                     </div>
                     <div class="col-12">
                         <label class="form-label" for="{{ completion_form.completion_description.id }}">{{ completion_form.completion_description.label.text }}</label>

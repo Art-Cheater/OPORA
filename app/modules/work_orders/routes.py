@@ -31,6 +31,7 @@ from app.models.auth.constants import (
 from app.models.enums import EntityType
 from app.models.files.attachment import Attachment
 from app.models.maps.work_map_point import WorkMapPoint
+from app.models.work_plans.work_plan import WorkPlan
 from app.models.work_plans.work_plan_item import WorkPlanItem
 from app.modules.defects.services import DefectService
 from app.modules.defects.workflow import STATUS_FIXED
@@ -40,7 +41,8 @@ from app.modules.waybills.services import WaybillService
 from app.modules.work_orders.blueprint import work_orders_bp
 from app.modules.work_orders.plan_service import EXCLUDE_REASONS, PLAN_COMPLETED, WorkPlanService
 from app.modules.work_orders.report_service import DOCX_MIME, build_work_plan_report, report_filename
-from app.modules.work_orders.order_service import XLSX_MIME, build_order_workbook, master_initials, order_filename
+from app.modules.work_orders.blank_service import ORDER_FIELDS, OrderBlankService
+from app.modules.work_orders.order_service import XLSX_MIME, master_initials, order_filename
 from app.modules.work_orders.services import WorkOrderFilter, WorkOrderService
 
 
@@ -316,7 +318,7 @@ def plans_create():
         return ajax_ok(
             f"План {plan.number} сохранён. Работы переведены «В работе».",
             plan=WorkPlanService.serialize_plan(plan, current_user),
-            redirect=url_for("work_orders.plan_page", plan_id=plan.id),
+            redirect=url_for("work_orders.plan_page", plan_id=plan.id, fill_order=1),
         )
     except ValidationError as exc:
         return ajax_error(str(exc))
@@ -388,6 +390,7 @@ def plan_page(plan_id: uuid.UUID):
     except ValidationError:
         abort(403)
     payload = WorkPlanService.serialize_plan(plan, current_user)
+    order_blank = OrderBlankService.for_plan(plan.id)
     percent = int(round((payload["done"] + payload["excluded"]) * 100 / payload["total"])) if payload["total"] else 0
     report_recipients = []
     can_use_report = current_user.has_permission(PERM_MESSENGER_USE)
@@ -408,6 +411,10 @@ def plan_page(plan_id: uuid.UUID):
         can_manage_plans=current_user.has_permission(PERM_WAYBILLS_EDIT) and payload["status"] == "in_progress",
         can_create_order=current_user.has_permission(PERM_WAYBILLS_EDIT) and payload["status"] in {"in_progress", "completed"},
         can_use_report=can_use_report,
+        order_blank=order_blank,
+        order_fields=OrderBlankService.fields_of(order_blank),
+        order_issued_on=(order_blank.issued_on if order_blank else OrderBlankService.today()).isoformat(),
+        fill_order=request.args.get("fill_order") == "1",
         master_initials=master_initials(current_user.full_name),
         report_recipients=report_recipients,
         districts=district_choices(empty_label="Все районы"),
@@ -417,26 +424,64 @@ def plan_page(plan_id: uuid.UUID):
 @work_orders_bp.route("/plans/<uuid:plan_id>/order", methods=["POST"])
 @login_required
 @permission_required(PERM_WAYBILLS_EDIT)
-def download_plan_order(plan_id: uuid.UUID):
+def save_plan_order(plan_id: uuid.UUID):
     try:
         plan = WorkPlanService.get_owned(plan_id, current_user)
     except NotFoundError as exc:
-        abort(404, str(exc))
-    except ValidationError:
-        abort(403)
+        return ajax_error(str(exc), status=404)
+    except ValidationError as exc:
+        return ajax_error(str(exc), status=403)
     if plan.status not in {"in_progress", PLAN_COMPLETED}:
         return ajax_error("Бланк доступен после формирования плана.", status=400)
-    payload = WorkPlanService.serialize_plan(plan, current_user)
-    fields = {key: (request.form.get(key) or "") for key in ("order_number", "producer", "crew_count", "crew_lead", "crew_members", "lift_responsible", "issuer", "briefing_conductor")}
+    payload = request.get_json(silent=True) or request.form
+    fields = {key: (payload.get(key) or "") for key in ORDER_FIELDS}
+    issued_on = OrderBlankService.parse_issued_on(payload.get("issued_on"))
+    if not (fields.get("producer") or "").strip():
+        fields["producer"] = plan.master.full_name if plan.master else ""
+    blank = OrderBlankService.save_plan(plan, current_user, fields, issued_on=issued_on)
+    plan = WorkPlanService.get_owned(plan_id, current_user)
+    return ajax_ok(
+        "Бланк-распоряжение сохранён.",
+        order=OrderBlankService.summary(blank),
+        plan=WorkPlanService.serialize_plan(plan, current_user),
+        download_url=url_for("work_orders.download_saved_order", blank_id=blank.id),
+    )
+
+
+@work_orders_bp.route("/orders/<uuid:blank_id>.xlsx")
+@login_required
+@any_permission_required(PERM_WAYBILLS_VIEW, PERM_REQUESTS_VIEW, PERM_DEFECTS_VIEW)
+def download_saved_order(blank_id: uuid.UUID):
+    from app.models.work_plans.work_order_blank import WorkOrderBlank
+
+    blank = db.session.scalar(
+        db.select(WorkOrderBlank).where(WorkOrderBlank.id == blank_id, WorkOrderBlank.active_filter())
+    )
+    if blank is None:
+        abort(404)
     try:
-        content = build_order_workbook(payload, fields)
+        if blank.plan_id:
+            plan = db.session.get(WorkPlan, blank.plan_id)
+            if plan is None or plan.deleted_at is not None:
+                abort(404)
+            payload = WorkPlanService.serialize_plan(plan, current_user)
+            content = OrderBlankService.workbook_for_plan(plan, blank, payload["items"])
+        elif blank.request_id:
+            req = RequestRepository.get_by_id(blank.request_id)
+            if req is None:
+                abort(404)
+            content = OrderBlankService.workbook_for_request(blank, req)
+        else:
+            abort(404)
     except ValueError as exc:
-        return ajax_error(str(exc), status=500)
+        abort(500, str(exc))
+    except ValidationError:
+        abort(403)
     return send_file(
         BytesIO(content),
         mimetype=XLSX_MIME,
         as_attachment=True,
-        download_name=order_filename(fields["order_number"]),
+        download_name=order_filename(blank.order_number),
     )
 
 

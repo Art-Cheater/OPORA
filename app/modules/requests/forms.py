@@ -185,7 +185,14 @@ class RequestCompletionForm(FlaskForm):
         validators=[DataRequired(message="Выберите исполнителя")],
         validate_choice=False,
     )
-    completion_form_number = StringField("Номер бланка", validators=[Optional(), Length(max=100)])
+    completion_form_number = StringField("Номер бланка-распоряжения", validators=[Optional(), Length(max=100)])
+    order_producer = StringField("Производитель работ", validators=[Optional(), Length(max=255)])
+    order_crew_count = StringField("Количество человек в бригаде", validators=[Optional(), Length(max=20)])
+    order_crew_lead = StringField("Член бригады / машинист", validators=[Optional(), Length(max=255)])
+    order_crew_members = StringField("Состав бригады", validators=[Optional(), Length(max=500)])
+    order_lift_responsible = StringField("Ответственный за автоподъёмник", validators=[Optional(), Length(max=255)])
+    order_issuer = StringField("Бланк-распоряжение выдал", validators=[Optional(), Length(max=255)])
+    order_briefing = StringField("Целевой инструктаж провёл", validators=[Optional(), Length(max=255)])
     completion_description = TextAreaField(
         "Описание выполнения",
         validators=[DataRequired(message="Опишите выполненные работы"), Length(max=10000)],
