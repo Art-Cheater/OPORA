@@ -1,0 +1,42 @@
+---
+// «Чей это фонарь» — три карточки с иллюстрациями (GPT Image, прозрачный фон).
+import { Image } from 'astro:assets';
+import { OWNERS } from '../data/site';
+import Icon from './Icon.astro';
+import street from '../assets/img/owner-street.png';
+import yard from '../assets/img/owner-yard.png';
+import traffic from '../assets/img/owner-traffic.png';
+
+const images = { 'owner-street': street, 'owner-yard': yard, 'owner-traffic': traffic } as const;
+---
+
+<ul class="owners">
+  {OWNERS.map((o) => (
+    <li class:list={['owner', `owner--${o.id}`]} id={`owner-${o.id}`}>
+      <div class="owner__art">
+        <Image src={images[o.image]} alt="" widths={[360, 540, 720]} sizes="(min-width: 1000px) 380px, (min-width: 760px) 30vw, 90vw" loading="lazy" />
+      </div>
+      <div class="owner__body">
+        <p class:list={['owner__who', { 'owner__who--ours': o.id === 'street' }]}>{o.who}</p>
+        <h3>{o.title}</h3>
+        <p class="owner__text">{o.text}</p>
+        <a class="link-arrow" href={o.action.href}>{o.action.label} <Icon name="arrow-right" /></a>
+      </div>
+    </li>
+  ))}
+</ul>
+
+<style>
+  .owners { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+  @media (min-width: 760px) { .owners { grid-template-columns: repeat(3, 1fr); } }
+  .owner { background: var(--surface); border-radius: var(--r-xl); overflow: hidden; display: flex; flex-direction: column; }
+  .owner__art { position: relative; background: radial-gradient(120% 90% at 50% 100%, #22345c 0%, #14213d 70%); aspect-ratio: 16 / 10; overflow: hidden; }
+  .owner__art img { position: absolute; left: 12px; right: 12px; top: 12px; bottom: 0; width: calc(100% - 24px); height: calc(100% - 12px); object-fit: contain; object-position: bottom; }
+  .owner__body { padding: 18px 20px 12px; display: flex; flex-direction: column; flex: 1; }
+  .owner__who { align-self: flex-start; margin: 0 0 8px; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); font-weight: 600; font-size: 0.75rem; }
+  .owner__who--ours { background: var(--sodium); color: #14213d; }
+  .owner h3 { font-size: 1.125rem; margin: 0 0 4px; }
+  .owner__text { color: var(--muted); font-size: 0.9375rem; }
+  .owner .link-arrow { margin-top: auto; }
+  :global(html[data-scheme]) .owner { outline: 2px solid var(--fg); }
+</style>

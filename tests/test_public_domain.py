@@ -16,6 +16,7 @@ def test_nginx_accepts_new_host_and_keeps_old_certificate_path():
     assert "return 301 https://$public_https_host$request_uri;" in conf
     assert "include /etc/nginx/site-enabled/legacy-site.conf;" in conf
     assert "include /etc/nginx/site-enabled/public-https.conf;" in conf
+    assert "include /etc/nginx/site-enabled/public-site.conf;" in conf
     assert "client_max_body_size 64m;" in conf
 
     legacy = _text("docker/nginx.legacy-serve.conf")
@@ -55,6 +56,10 @@ def test_tcp_listeners_stay_on_their_ports_and_modem_api_is_private():
     assert "/var/www/certbot" in production
     assert "./data/nginx:/etc/nginx/site-enabled:ro" in production
     assert "listen 443" not in base
+    assert "opora-public-site:latest" in base
+    assert "127.0.0.1:8090:80" in base
+    assert "public-site" in deploy
+    assert "svet.progwebs.ru" in deploy
     assert "--webroot" in deploy and '--cert-name "$PUBLIC_DOMAIN"' in deploy
     assert "certbot delete" not in deploy
     assert "nginx.legacy-serve.conf" in deploy

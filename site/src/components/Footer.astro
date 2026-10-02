@@ -1,0 +1,104 @@
+---
+import Logo from './Logo.astro';
+import Icon from './Icon.astro';
+import { CONTACTS, NAV, SITE } from '../data/site';
+const year = new Date().getFullYear();
+const c = CONTACTS;
+---
+
+<!-- Помощь на каждой странице в одном и том же месте (WCAG 3.2.6 Consistent Help) -->
+<section class="help" aria-labelledby="help-title">
+  <div class="wrap">
+    <div class="help__card">
+      <span class="icon-dot help__icon"><Icon name="phone" /></span>
+      <div class="help__text">
+        <h2 id="help-title">Не получается отправить заявку?</h2>
+        <p>Позвоните — диспетчер оформит её за вас. Круглосуточно, без выходных.</p>
+      </div>
+      <a class="help__phone num" href={`tel:${c.dispatcher.tel}`}>{c.dispatcher.phone}</a>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="wrap footer__grid">
+    <div class="footer__brand">
+      <Logo height={28} />
+      <p class="footer__descr">{SITE.descriptor}</p>
+      <p class="footer__slogan">{SITE.slogan}</p>
+    </div>
+
+    <div>
+      <h2 class="footer__h">Связаться</h2>
+      <ul class="footer__list">
+        <li>
+          <a class="footer__big num" href={`tel:${c.dispatcher.tel}`}>{c.dispatcher.phone}</a>
+          <span>Диспетчер, круглосуточно</span>
+        </li>
+        <li><a class="num" href={`tel:${c.reception.tel}`}>{c.reception.phone}</a> <span>— приёмная</span></li>
+        <li><a href={`mailto:${c.email}`}>{c.email}</a></li>
+        <li><span>{c.address}</span></li>
+      </ul>
+    </div>
+
+    <nav aria-label="Разделы сайта">
+      <h2 class="footer__h">Разделы</h2>
+      <ul class="footer__list footer__list--cols">
+        <li><a href="/soobshit/">Сообщить о неисправности</a></li>
+        <li><a href="/zayavka/">Проверить заявку</a></li>
+        {NAV.map((n) => <li><a href={n.href}>{n.label}</a></li>)}
+      </ul>
+    </nav>
+
+    <div>
+      <h2 class="footer__h">Документы</h2>
+      <ul class="footer__list">
+        <li><a href="/o-sluzhbe/#rekvizity">Реквизиты</a></li>
+        <li><a href="/politika/">Обработка персональных данных</a></li>
+        <li><a href={SITE.adminUrl} rel="noopener" target="_blank">Администрация города Кирова <Icon name="external" size={12} class="ext" /></a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <hr class="lights footer__lights" aria-hidden="true" />
+    <div class="footer__bottom">
+      <span>© {year} {SITE.name}</span>
+      {SITE.demo && <span>Демонстрационная версия сайта: телефоны, цифры и заявки вымышлены.</span>}
+      <a href="#top">Наверх</a>
+    </div>
+  </div>
+</footer>
+
+<style>
+  .help { padding: 8px 0 40px; }
+  .help__card { display: grid; gap: 14px 20px; align-items: center; padding: 22px 24px; border-radius: var(--r-xl); background: var(--surface); }
+  @media (min-width: 860px) { .help__card { grid-template-columns: auto 1fr auto; padding: 24px 28px; } }
+  .help__text h2 { font-size: 1.25rem; margin-bottom: 2px; }
+  .help__text p { margin: 0; color: var(--muted); font-size: 0.9375rem; }
+  .help__phone {
+    display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 22px; border-radius: 999px;
+    background: #1d1d1f; color: #fff; font-weight: 600; font-size: 1rem; text-decoration: none; white-space: nowrap;
+  }
+  .help__phone:hover { background: #3a3a3c; }
+  @media (prefers-color-scheme: dark) { :global(:root:not([data-scheme])) .help__phone { background: #f5f5f7; color: #1d1d1f; } }
+
+  .footer { padding: 32px 0 104px; margin-top: auto; border-top: 1px solid var(--line); font-size: 0.8125rem; color: var(--muted); }
+  @media (min-width: 900px) { .footer { padding: 40px 0 28px; } }
+  .footer__grid { display: grid; gap: 28px; }
+  @media (min-width: 760px) { .footer__grid { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 1100px) { .footer__grid { grid-template-columns: 1fr 1fr 1.5fr 1fr; gap: 40px; } }
+  .footer__descr { margin: 12px 0 2px; max-width: 16rem; }
+  .footer__slogan { font-weight: 600; color: var(--text); }
+  .footer__h { font-family: var(--font-body); font-size: 0.8125rem; font-weight: 600; color: var(--text); margin-bottom: 10px; letter-spacing: 0; }
+  .footer__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .footer__list--cols { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; }
+  .footer__list a { color: var(--muted); text-decoration: none; }
+  .footer__list a:hover { color: var(--text); text-decoration: underline; }
+  .footer__list span { color: var(--muted); }
+  .footer__big { display: block; font-weight: 600; font-size: 1rem; color: var(--text) !important; white-space: nowrap; }
+  .footer :global(.ext) { display: inline; vertical-align: -1px; }
+  .footer__lights { margin: 28px 0 16px; opacity: 0.8; }
+  .footer__bottom { display: flex; flex-wrap: wrap; gap: 6px 24px; justify-content: space-between; }
+  .footer__bottom a { color: var(--muted); }
+</style>

@@ -1,0 +1,107 @@
+---
+import Base from '../../layouts/Base.astro';
+import PageHero from '../../components/PageHero.astro';
+import Icon from '../../components/Icon.astro';
+import { PLAN_2026 } from '../../data/site';
+import construction from '../../assets/img/construction.jpg';
+
+const done = PLAN_2026.filter((p) => p.status === 'Готово');
+const statusClass = (s: string) => (s === 'Готово' ? 'chip--done' : s === 'Строится' ? 'chip--working' : 'chip--planned');
+---
+
+<Base title="Строительство и планы" description="Где в Кирове строят новое уличное освещение: план на год, готовые объекты, как попасть в программу.">
+  <PageHero
+    image={construction}
+    imagePosition="60% 55%"
+    eyebrow="Строительство и планы"
+    title="Новые линии освещения"
+    lead="Новые фонари ставят по муниципальной программе. Здесь — план на год, готовые объекты и как попросить свет на своей улице."
+  />
+
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>План на 2026 год</h2>
+        <p class="small muted">Демо-данные для макета</p>
+      </div>
+      <div class="table-wrap">
+        <table class="table table--stack" role="table">
+          <thead role="rowgroup">
+            <tr role="row"><th role="columnheader" scope="col">Улица</th><th role="columnheader" scope="col">Работы</th><th role="columnheader" scope="col">Опор</th><th role="columnheader" scope="col">Длина</th><th role="columnheader" scope="col">Сумма</th><th role="columnheader" scope="col">Статус</th></tr>
+          </thead>
+          <tbody role="rowgroup">
+            {PLAN_2026.map((p) => (
+              <tr role="row">
+                <td role="cell" data-label="Улица"><b>{p.street}</b></td>
+                <td role="cell" data-label="Работы">{p.work}</td>
+                <td role="cell" class="num" data-label="Опор">{p.poles}</td>
+                <td role="cell" class="num" data-label="Длина">{p.length}</td>
+                <td role="cell" class="num" data-label="Сумма">{p.sum}</td>
+                <td role="cell" data-label="Статус"><span class:list={['chip', statusClass(p.status)]}>{p.status}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="wrap">
+      <h2>Готовые объекты</h2>
+      <div class="grid grid--3">
+        {done.map((p) => (
+          <article class="card obj">
+            <span class="chip chip--done">Готово</span>
+            <h3>{p.street}</h3>
+            <p>{p.work}</p>
+            <dl>
+              <div><dt>Опор</dt><dd class="num">{p.poles}</dd></div>
+              <div><dt>Длина</dt><dd class="num">{p.length}</dd></div>
+              <div><dt>Сумма</dt><dd class="num">{p.sum}</dd></div>
+            </dl>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap how">
+      <div>
+        <p class="eyebrow">Для старост и ТОС</p>
+        <h2>Как попасть в программу</h2>
+        <p class="muted">Если на улице фонарей нет совсем, ремонт не поможет — нужна новая линия. Её строят по муниципальной программе.</p>
+      </div>
+      <ol class="how__steps">
+        <li><b>Соберите обращение.</b> Укажите улицу и участок, приложите фото. Лучше — от старосты, ТОС или нескольких жителей.</li>
+        <li><b>Направьте в администрацию города.</b> Письмом, через приёмную или электронную приёмную администрации.</li>
+        <li><b>Обследование.</b> Специалисты выезжают на место, оценивают, можно ли подключиться к сетям, и считают стоимость.</li>
+        <li><b>Включение в план.</b> Участок попадает в список на следующий год — он публикуется на этой странице.</li>
+      </ol>
+    </div>
+    <div class="wrap">
+      <a class="link-arrow" href="/kontakty/">Контакты приёмной <Icon name="arrow-right" /></a>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .muted { color: var(--muted); }
+  .obj h3 { margin: 12px 0 4px; }
+  .obj p { color: var(--muted); }
+  .obj dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; padding-top: 14px; border-top: 1px solid var(--line); }
+  .obj dt { font-size: 0.8125rem; color: var(--muted); }
+  .obj dd { margin: 0; font-family: var(--font-head); font-weight: 700; font-size: 1.125rem; }
+  .how { display: grid; gap: 32px; margin-bottom: 24px; }
+  @media (min-width: 1000px) { .how { grid-template-columns: 1fr 1.4fr; } }
+  .how__steps { list-style: none; counter-reset: s; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .how__steps li {
+    counter-increment: s; position: relative; padding: 18px 20px 18px 68px; background: var(--surface);
+    box-shadow: var(--shadow-2); border-radius: var(--r-lg);
+  }
+  .how__steps li::before {
+    content: counter(s); position: absolute; left: 18px; top: 16px; width: 34px; height: 34px; border-radius: 50%;
+    display: grid; place-items: center; background: var(--night); color: var(--sodium); font-family: var(--font-head); font-weight: 700;
+  }
+</style>

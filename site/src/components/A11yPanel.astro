@@ -1,0 +1,108 @@
+---
+// Версия для слабовидящих по ГОСТ Р 52872-2019: размер шрифта, цветовые схемы, изображения, интервал.
+// Настройки применяются до отрисовки скриптом в <head> (Base.astro), здесь — панель управления.
+---
+
+<section class="a11y" id="a11y-panel" hidden aria-label="Настройки для слабовидящих">
+  <div class="wrap a11y__inner">
+    <fieldset>
+      <legend>Размер шрифта</legend>
+      <div class="a11y__opts">
+        <button type="button" data-set="fs" data-value="1" style="font-size:1rem">А</button>
+        <button type="button" data-set="fs" data-value="2" style="font-size:1.25rem">А</button>
+        <button type="button" data-set="fs" data-value="3" style="font-size:1.5rem">А</button>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Цвета</legend>
+      <div class="a11y__opts">
+        <button type="button" data-set="scheme" data-value="" title="Обычные цвета сайта">Цвет</button>
+        <button type="button" data-set="scheme" data-value="bw" class="sw sw--bw">Ч/Б</button>
+        <button type="button" data-set="scheme" data-value="wb" class="sw sw--wb">Б/Ч</button>
+        <button type="button" data-set="scheme" data-value="blue" class="sw sw--blue">Синий</button>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Изображения</legend>
+      <div class="a11y__opts">
+        <button type="button" data-set="noimg" data-value="">Показать</button>
+        <button type="button" data-set="noimg" data-value="1">Скрыть</button>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Интервал</legend>
+      <div class="a11y__opts">
+        <button type="button" data-set="spacing" data-value="">Обычный</button>
+        <button type="button" data-set="spacing" data-value="wide">Большой</button>
+      </div>
+    </fieldset>
+    <div class="a11y__end">
+      <button type="button" data-a11y-reset>Сбросить</button>
+      <button type="button" data-a11y-close>Закрыть</button>
+    </div>
+  </div>
+</section>
+
+<script>
+  const KEY = 'ks-a11y';
+  type Settings = Record<string, string>;
+  const root = document.documentElement;
+  const panel = document.getElementById('a11y-panel');
+  const toggles = document.querySelectorAll<HTMLButtonElement>('[data-a11y-toggle]');
+
+  const read = (): Settings => {
+    try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; }
+  };
+  const DEFAULTS: Settings = { fs: '1', scheme: '', noimg: '', spacing: '' };
+  const apply = (s: Settings) => {
+    const v = { ...DEFAULTS, ...s };
+    for (const k of Object.keys(DEFAULTS)) {
+      if (v[k] && v[k] !== DEFAULTS[k]) root.setAttribute(`data-${k}`, v[k]);
+      else root.removeAttribute(`data-${k}`);
+    }
+    panel?.querySelectorAll<HTMLButtonElement>('[data-set]').forEach((b) => {
+      b.setAttribute('aria-pressed', String(v[b.dataset.set!] === b.dataset.value));
+    });
+  };
+  const save = (s: Settings) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* приватный режим */ } };
+
+  let state = read();
+  apply(state);
+
+  toggles.forEach((t) => t.addEventListener('click', () => {
+    const open = !panel!.hidden;
+    panel!.hidden = open;
+    toggles.forEach((x) => x.setAttribute('aria-expanded', String(!open)));
+    if (!open) panel!.querySelector('button')?.focus();
+  }));
+  const close = () => {
+    if (!panel || panel.hidden) return;
+    panel.hidden = true;
+    toggles.forEach((x) => x.setAttribute('aria-expanded', 'false'));
+    toggles[0]?.focus();
+  };
+  panel?.querySelector('[data-a11y-close]')?.addEventListener('click', close);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  panel?.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-set]');
+    if (b) { state = { ...state, [b.dataset.set!]: b.dataset.value! }; apply(state); save(state); }
+    if ((e.target as HTMLElement).closest('[data-a11y-reset]')) { state = {}; apply(state); save(state); }
+  });
+</script>
+
+<style>
+  .a11y { background: var(--surface); border-bottom: 1px solid var(--line); }
+  .a11y__inner { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: end; padding-top: 14px; padding-bottom: 14px; }
+  fieldset { border: 0; margin: 0; padding: 0; }
+  legend { font-size: 0.875rem; font-weight: 600; margin-bottom: 6px; color: var(--muted); }
+  .a11y__opts { display: flex; gap: 6px; }
+  .a11y button {
+    min-width: 48px; min-height: 44px; padding: 6px 12px; border-radius: var(--r); cursor: pointer;
+    border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); font: 600 0.9375rem var(--font-body);
+  }
+  .a11y button[aria-pressed='true'] { outline: 3px solid var(--sodium); outline-offset: 1px; border-color: var(--text); }
+  .sw--bw { background: #fff !important; color: #000 !important; border-color: #000 !important; }
+  .sw--wb { background: #000 !important; color: #fff !important; border-color: #000 !important; }
+  .sw--blue { background: #9dd1ff !important; color: #063462 !important; border-color: #063462 !important; }
+  .a11y__end { margin-left: auto; display: flex; gap: 6px; }
+</style>

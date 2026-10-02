@@ -1,0 +1,54 @@
+---
+// «Служба в цифрах»: тёмная скруглённая панель с видом города сверху (линия огней).
+import { Image } from 'astro:assets';
+import { STATS } from '../data/site';
+import aerial from '../assets/img/aerial-lines.jpg';
+
+interface Props {
+  title?: string;
+  limit?: number;
+}
+const { title = 'Служба в цифрах', limit } = Astro.props;
+const items = limit ? STATS.slice(0, limit) : STATS;
+---
+
+<section class="section section--tight" aria-labelledby="stats-title">
+  <div class="wrap">
+    <div class="stats night">
+      <Image class="stats__bg deco" src={aerial} alt="" widths={[1280, 1920, 2560]} sizes="100vw" loading="lazy" />
+      <div class="stats__inner">
+        <div class="stats__head">
+          <h2 id="stats-title">{title}</h2>
+          <p class="stats__note">Демо-данные за 2025 год. В рабочей версии цифры обновляются из журнала заявок.</p>
+        </div>
+        <dl class="stats__grid">
+          {items.map((s) => (
+            <div class="stat">
+              <dt class="stat__label">{s.label}</dt>
+              <dd class="stat__value num">
+                {s.value}{s.unit && <span class="stat__unit">&nbsp;{s.unit}</span>}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .stats { position: relative; overflow: hidden; border-radius: var(--r-xl); padding: 28px 24px; isolation: isolate; }
+  @media (min-width: 900px) { .stats { padding: 40px; } }
+  .stats__bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.45; z-index: -2; }
+  .stats::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, var(--night) 0%, rgba(20, 33, 61, 0.6) 55%, rgba(20, 33, 61, 0.3) 100%); }
+  .stats__inner { display: grid; gap: 24px; }
+  @media (min-width: 1000px) { .stats__inner { grid-template-columns: 1fr 2.4fr; align-items: start; } }
+  .stats__head h2 { font-size: 1.5rem; }
+  .stats__note { color: var(--on-night-muted); max-width: 20rem; margin: 0; font-size: 0.875rem; }
+  .stats__grid { margin: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+  @media (min-width: 700px) { .stats__grid { grid-template-columns: repeat(4, 1fr); } }
+  .stat { display: flex; flex-direction: column-reverse; justify-content: flex-end; gap: 4px; border-top: 1px solid rgba(255, 184, 28, 0.45); padding-top: 12px; }
+  .stat__value { margin: 0; font-family: var(--font-head); font-weight: 700; font-size: clamp(1.5rem, 1.2rem + 1vw, 2rem); letter-spacing: -0.035em; line-height: 1.05; color: #fff; }
+  .stat__unit { font-size: 0.6em; color: var(--sodium); }
+  .stat__label { color: var(--on-night-muted); font-size: 0.8125rem; line-height: 1.35; }
+</style>

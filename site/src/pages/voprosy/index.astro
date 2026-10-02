@@ -1,0 +1,84 @@
+---
+import { Image } from 'astro:assets';
+import Base from '../../layouts/Base.astro';
+import PageHero from '../../components/PageHero.astro';
+import Icon from '../../components/Icon.astro';
+import { FAQ, REPAIR_TERMS } from '../../data/site';
+import sticker from '../../assets/img/sticker.jpg';
+
+const faqLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: FAQ.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
+};
+---
+
+<Base title="Вопросы и ответы" description="Сроки ремонта уличного освещения, кто отвечает за фонари во дворах, как узнать номер опоры и попросить новый фонарь.">
+  <script type="application/ld+json" slot="head" set:html={JSON.stringify(faqLd)} />
+  <PageHero compact eyebrow="Вопросы и ответы" title="Частые вопросы" lead="Коротко и по делу. Не нашли ответ — позвоните в приёмную или отправьте заявку." />
+
+  <section class="section">
+    <div class="wrap faq-layout">
+      <div class="faq">
+        {FAQ.map((f, i) => (
+          <details class="faq__item" open={i === 0}>
+            <summary><span>{f.q}</span><Icon name="plus" class="faq__icon" /></summary>
+            <p>{f.a}</p>
+          </details>
+        ))}
+      </div>
+
+      <aside class="terms" id="sroki" aria-labelledby="sroki-title">
+        <h2 id="sroki-title">Сроки ремонта</h2>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th scope="col">Неисправность</th><th scope="col">Срок</th></tr></thead>
+            <tbody>
+              {REPAIR_TERMS.map((t) => (
+                <tr>
+                  <td>{t.what}{t.emergency && <span class="chip chip--alarm tag">авария</span>}</td>
+                  <td><b>{t.term}</b></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="section section--tight" id="qr">
+    <div class="wrap qr">
+      <div class="qr__img media">
+        <Image src={sticker} alt="Наклейка на опоре: QR-код, номер опоры и надпись «Не горит? Наведите камеру»" widths={[400, 800]} sizes="(min-width: 900px) 360px, 80vw" loading="lazy" />
+      </div>
+      <div>
+        <p class="eyebrow">Наклейки на опорах</p>
+        <h2>Не горит? Наведите камеру</h2>
+        <p>На опорах появляются наклейки с номером и QR-кодом. Камера телефона откроет форму, в которой место и номер опоры уже заполнены. Остаётся выбрать, что случилось, и нажать «Отправить».</p>
+        <p class="small muted">Попробуйте, как это работает: <a href="/soobshit/?pole=17-034&lat=58.59874&lon=49.66633">форма по QR-коду опоры 17-034</a>.</p>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .faq-layout { display: grid; gap: 40px; }
+  @media (min-width: 1000px) { .faq-layout { grid-template-columns: 1.3fr 1fr; align-items: start; } .terms { position: sticky; top: calc(var(--header-h) + 24px); } }
+  .faq { display: grid; gap: 10px; }
+  .faq__item { background: var(--surface); box-shadow: var(--shadow-2); border-radius: var(--r-lg); }
+  .faq__item summary {
+    list-style: none; display: flex; justify-content: space-between; gap: 16px; align-items: center; cursor: pointer;
+    padding: 18px 20px; font-weight: 600; font-size: 1.0625rem;
+  }
+  .faq__item summary::-webkit-details-marker { display: none; }
+  .faq__item :global(.faq__icon) { flex: none; transition: transform 0.2s; color: var(--muted); }
+  .faq__item[open] :global(.faq__icon) { transform: rotate(45deg); }
+  .faq__item[open] summary { padding-bottom: 6px; }
+  .faq__item p { margin: 0; padding: 0 20px 20px; color: var(--muted); }
+  .tag { margin-left: 8px; font-size: 0.75rem; padding: 2px 8px; vertical-align: 1px; }
+  .qr { display: grid; gap: 32px; align-items: center; }
+  @media (min-width: 900px) { .qr { grid-template-columns: 360px 1fr; gap: 56px; } }
+  .qr__img { border-radius: var(--r-lg); overflow: hidden; max-width: 360px; }
+  .muted { color: var(--muted); }
+</style>

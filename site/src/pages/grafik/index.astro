@@ -1,0 +1,144 @@
+---
+import Base from '../../layouts/Base.astro';
+import PageHero from '../../components/PageHero.astro';
+import Icon from '../../components/Icon.astro';
+import panorama from '../../assets/img/panorama.jpg';
+import { kirovToday, schedule, fmtTime, fmtDay, fmtWeekday, fmtDuration, sunTimes, ON_AFTER_SUNSET, OFF_BEFORE_SUNRISE } from '../../lib/sun';
+
+const { y, m, d } = kirovToday();
+const rows = schedule(y, m, d, 14);
+const today = rows[0];
+
+// Часы горения в сутки по месяцам (на 15-е число) — для графика.
+const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+const hours = MONTHS.map((label, i) => {
+  const [r] = schedule(y, i + 1, 15, 1);
+  return { label, h: (r.off.getTime() - r.on.getTime()) / 3_600_000 };
+});
+const maxH = Math.max(...hours.map((h) => h.h));
+const sun = sunTimes(y, m, d);
+---
+
+<Base title="График включения" description="Во сколько включается и выключается уличное освещение в Кирове сегодня и на две недели вперёд.">
+  <PageHero
+    image={panorama}
+    imagePosition="50% 60%"
+    eyebrow="График включения"
+    title="Когда загорается свет на улицах"
+    lead="Освещение включается после заката и выключается перед рассветом. Время меняется каждый день."
+  />
+
+  <section class="section section--tight today-big-wrap">
+    <div class="wrap">
+      <div class="today-big">
+        <div class="today-big__col">
+          <span class="today-big__label">Сегодня, <span data-g-date>{fmtDay(today.date)}</span></span>
+          <p class="today-big__row"><Icon name="lamp-on" size={32} /> <span>Включение</span> <strong class="num" data-g-on>{fmtTime(today.on)}</strong></p>
+          <p class="today-big__row"><Icon name="sun" size={32} /> <span>Отключение утром</span> <strong class="num" data-g-off>{fmtTime(today.off)}</strong></p>
+        </div>
+        <div class="today-big__col today-big__col--muted">
+          <p>Закат <b class="num">{fmtTime(sun.sunset)}</b> · восход <b class="num">{fmtTime(sun.sunrise)}</b></p>
+          <p>Горит <b data-g-dur>{fmtDuration(today.on, today.off)}</b></p>
+          <p class="small">Свет включается через {ON_AFTER_SUNSET} минут после заката и выключается за {OFF_BEFORE_SUNRISE} минут до восхода. В пасмурную погоду диспетчер может включить свет раньше графика.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="wrap grid-2">
+      <div>
+        <h2>На две недели</h2>
+        <div class="table-wrap">
+          <table class="table num">
+            <thead><tr><th scope="col">Дата</th><th scope="col">Включение</th><th scope="col">Отключение</th><th scope="col">Горит</th></tr></thead>
+            <tbody data-g-rows>
+              {rows.map((r, i) => (
+                <tr class:list={{ 'is-today': i === 0 }}>
+                  <td>{fmtDay(r.date)}, {fmtWeekday(r.date)}</td>
+                  <td>{fmtTime(r.on)}</td>
+                  <td>{fmtTime(r.off)}</td>
+                  <td>{fmtDuration(r.on, r.off)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted">Отключение — утром следующего дня.</p>
+      </div>
+
+      <div>
+        <h2>Часов горения в сутки</h2>
+        <figure class="bars" aria-label="Сколько часов в сутки горит освещение, по месяцам">
+          <ol>
+            {hours.map((h, i) => (
+              <li class:list={{ 'is-now': i === m - 1 }} style={`--v:${(h.h / maxH).toFixed(3)}`}>
+                <span class="bars__val num">{h.h.toFixed(1).replace('.', ',')}</span>
+                <span class="bars__bar" aria-hidden="true"></span>
+                <span class="bars__label">{h.label}</span>
+              </li>
+            ))}
+          </ol>
+          <figcaption class="small muted">Зимой свет горит больше 17 часов, в июне — около 5. Значения на 15-е число месяца.</figcaption>
+        </figure>
+
+        <div class="card why">
+          <h3>Почему фонарь горит днём?</h3>
+          <p>Иногда бригада включает линию, чтобы найти неисправность. Если свет горит днём больше суток — это поломка.</p>
+          <a class="link-arrow" href="/soobshit/">Сообщить <Icon name="arrow-right" /></a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<script>
+  import { kirovToday, schedule, fmtTime, fmtDay, fmtWeekday, fmtDuration } from '../../lib/sun';
+  // Страница собрана заранее — пересчитываем график на сегодняшнюю дату в браузере.
+  const { y, m, d } = kirovToday();
+  const rows = schedule(y, m, d, 14);
+  const set = (s: string, v: string) => { const el = document.querySelector(s); if (el) el.textContent = v; };
+  set('[data-g-date]', fmtDay(rows[0].date));
+  set('[data-g-on]', fmtTime(rows[0].on));
+  set('[data-g-off]', fmtTime(rows[0].off));
+  set('[data-g-dur]', fmtDuration(rows[0].on, rows[0].off));
+  const tbody = document.querySelector('[data-g-rows]');
+  if (tbody) {
+    tbody.innerHTML = rows
+      .map((r, i) => `<tr${i === 0 ? ' class="is-today"' : ''}><td>${fmtDay(r.date)}, ${fmtWeekday(r.date)}</td><td>${fmtTime(r.on)}</td><td>${fmtTime(r.off)}</td><td>${fmtDuration(r.on, r.off)}</td></tr>`)
+      .join('');
+  }
+</script>
+
+<style>
+  .today-big-wrap { padding-top: 24px; }
+  .today-big { display: grid; gap: 1px; background: var(--line); box-shadow: var(--shadow-2); border-radius: var(--r-xl); overflow: hidden; }
+  @media (min-width: 860px) { .today-big { grid-template-columns: 1.2fr 1fr; } }
+  .today-big__col { background: var(--surface); padding: 28px 32px; }
+  .today-big__label { font-weight: 600; font-size: 1.0625rem; color: var(--muted); }
+  .today-big__row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; margin: 14px 0 0; font-size: 1.0625rem; }
+  .today-big__row strong { font-family: var(--font-head); font-size: clamp(2rem, 1.5rem + 2vw, 2.75rem); line-height: 1; }
+  .today-big__col--muted { color: var(--muted); }
+  .today-big__col--muted p { margin: 0 0 8px; }
+  .today-big__col--muted b { color: var(--text); }
+  .grid-2 { display: grid; gap: 40px; }
+  .grid-2 > * { min-width: 0; }
+  @media (min-width: 1000px) { .grid-2 { grid-template-columns: 1.1fr 1fr; } }
+  .muted { color: var(--muted); }
+  .bars { margin: 0 0 24px; }
+  .bars ol { list-style: none; margin: 0; padding: 16px 12px 12px; display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; align-items: end; height: 260px; background: var(--surface); box-shadow: var(--shadow-2); border-radius: var(--r-lg); }
+  .bars li { display: grid; grid-template-rows: auto 1fr auto; align-items: end; justify-items: center; height: 100%; gap: 4px; }
+  .bars__bar { width: 100%; max-width: 28px; height: calc(var(--v) * 100%); background: var(--dusk); border-radius: 4px 4px 0 0; align-self: end; }
+  .bars li.is-now .bars__bar { background: var(--sodium); }
+  .bars__val { font-size: 0.75rem; color: var(--muted); }
+  .bars ol { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+  /* На узком экране цифры над столбиками не помещаются: прячем визуально, скринридер их читает */
+  @media (max-width: 480px) {
+    .bars ol { gap: 4px; padding: 12px 8px 10px; height: 220px; }
+    .bars__val { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  }
+  .bars__label { font-size: 0.75rem; color: var(--muted); }
+  .bars li.is-now .bars__label, .bars li.is-now .bars__val { color: var(--text); font-weight: 600; }
+  .bars figcaption { margin-top: 8px; }
+  .why { margin-top: 8px; }
+</style>

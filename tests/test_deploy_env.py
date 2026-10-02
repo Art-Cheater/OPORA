@@ -273,7 +273,9 @@ def test_deploy_builds_once_and_recreates_every_service_without_build(tmp_path):
     code, output, calls = _run_deploy(tmp_path)
     assert code == 0, output
     builds = [line for line in calls if line.startswith("docker compose") and " build " in line]
-    assert len(builds) == 1
+    assert len(builds) == 2
+    assert "public-site" not in builds[0]
+    assert " public-site" in builds[1]
     for service in ("web", "nginx", "inquiry-sync", "eis-sync", "documents-notify", "modem-sniffer", "irz-poller"):
         assert f" {service}" in builds[0]
     assert "tcp-gateway" not in builds[0]
@@ -307,7 +309,8 @@ def test_deploy_restarts_with_the_script_version_checked_out_by_git(tmp_path):
     code, output, calls = _run_deploy(tmp_path, FAKE_NEW_DEPLOY="new_deploy.sh")
     assert code == 0, output
     assert "==> NEW deploy version" in output
-    assert len([line for line in calls if line.startswith("docker compose") and " build " in line]) == 1
+    builds = [line for line in calls if line.startswith("docker compose") and " build " in line]
+    assert len(builds) == 2 and " public-site" in builds[1]
 
 
 def test_deploy_stops_when_catalog_xlsx_missing(tmp_path):
@@ -344,6 +347,10 @@ def test_deploy_issues_new_certificate_and_redirects_legacy_host(tmp_path):
     assert not any("certbot delete" in line or "--nginx" in line for line in calls)
     hook = tmp_path / "data" / "letsencrypt" / "renewal-hooks" / "deploy" / "opora-nginx-reload.sh"
     assert "nginx -s reload" in hook.read_text(encoding="utf-8")
+    site = (tmp_path / "data" / "nginx" / "public-site.conf").read_text(encoding="utf-8")
+    assert "server_name svet.progwebs.ru;" in site
+    assert "proxy_pass http://$public_site_upstream;" in site
+    assert "listen 443" not in site
     assert "будет перенаправляться" in output
     assert "резервная копия конфигурации nginx" in output
 
@@ -365,7 +372,7 @@ def test_deploy_can_keep_legacy_host_without_redirect(tmp_path):
     assert "live/opora.zheleznogame.ru/fullchain.pem" in legacy
     assert "return 301 https://opora.truthqwark.ru" not in legacy
     assert "legacy redirect off" in mapping
-    assert not any(line.startswith("certbot ") for line in calls)
+    assert not any("--cert-name opora.truthqwark.ru" in line for line in calls)
     assert "продолжает открывать сайт" in output
 
 

@@ -1,0 +1,148 @@
+---
+import '@fontsource/montserrat/600.css';
+import '@fontsource/montserrat/700.css';
+import '@fontsource/golos-text/400.css';
+import '@fontsource/golos-text/500.css';
+import '@fontsource/golos-text/600.css';
+import '../styles/global.css';
+// Предзагрузка только критичных шрифтов первого экрана (ui-ux-pro-max: font-preload).
+import fontHeading from '@fontsource/montserrat/files/montserrat-cyrillic-700-normal.woff2?url';
+import fontBody from '@fontsource/golos-text/files/golos-text-cyrillic-400-normal.woff2?url';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import A11yPanel from '../components/A11yPanel.astro';
+import Icon from '../components/Icon.astro';
+import { CONTACTS, SITE } from '../data/site';
+
+interface Props {
+  title: string;
+  description?: string;
+  /** Стиль кнопки «Сообщить» в шапке. */
+  headerCta?: 'primary' | 'ghost' | 'none';
+  /** Нижняя панель на телефоне: always, after-hero (появляется, когда главная кнопка ушла с экрана) или none. */
+  mobileBar?: 'always' | 'after-hero' | 'none';
+  noindex?: boolean;
+  image?: string;
+}
+
+const {
+  title,
+  description = `${SITE.descriptor}. Сообщите о неисправном фонаре за минуту — без регистрации. Диспетчер работает круглосуточно.`,
+  headerCta = 'primary',
+  mobileBar = 'always',
+  noindex = SITE.demo,
+  image = '/og.jpg',
+} = Astro.props;
+
+const fullTitle = title === SITE.name ? `${SITE.name} — ${SITE.descriptor.toLowerCase()}` : `${title} — ${SITE.name}`;
+const canonical = new URL(Astro.url.pathname, SITE.url).href;
+const ogImage = new URL(image, SITE.url).href;
+const d = CONTACTS.dispatcher;
+---
+
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
+    <meta name="theme-color" content="#14213D" />
+    <link rel="preload" href={fontHeading} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={fontBody} as="font" type="font/woff2" crossorigin />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="ru_RU" />
+    <meta property="og:site_name" content={SITE.name} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- Настройки версии для слабовидящих применяются до отрисовки, чтобы страница не мигала. -->
+    <script is:inline>
+      try {
+        var s = JSON.parse(localStorage.getItem('ks-a11y') || '{}');
+        var r = document.documentElement;
+        if (s.fs && s.fs !== '1') r.setAttribute('data-fs', s.fs);
+        if (s.scheme) r.setAttribute('data-scheme', s.scheme);
+        if (s.noimg) r.setAttribute('data-noimg', s.noimg);
+        if (s.spacing) r.setAttribute('data-spacing', s.spacing);
+      } catch (e) {}
+    </script>
+    <slot name="head" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Перейти к содержанию</a>
+    {SITE.demo && (
+      <aside class="demo-bar" aria-label="Демо-версия">
+        <div class="wrap">
+          <Icon name="info" size={18} />
+          <span>Демо-версия сайта: данные вымышлены, заявки не уходят в службу. При опасности звоните <a href="tel:112">112</a>.</span>
+        </div>
+      </aside>
+    )}
+    <Header cta={headerCta} />
+    <A11yPanel />
+    <main id="main" tabindex="-1">
+      <slot />
+    </main>
+    <Footer />
+
+    {mobileBar !== 'none' && (
+      <nav class="mobile-bar" aria-label="Быстрые действия" data-mode={mobileBar} data-visible={mobileBar === 'always' ? 'true' : 'false'}>
+        <a class="mobile-bar__call" href={`tel:${d.tel}`} aria-label={`Позвонить диспетчеру ${d.phone}`}>
+          <Icon name="phone" />
+          <span>Позвонить</span>
+        </a>
+        <a class="btn btn--primary btn--block mobile-bar__cta" href="/soobshit/">Сообщить о неисправности</a>
+      </nav>
+    )}
+
+    <script>
+      // Нижняя панель на главной: появляется, когда кнопка первого экрана уходит из вида (жёлтая кнопка на экране одна).
+      const bar = document.querySelector<HTMLElement>('.mobile-bar[data-mode="after-hero"]');
+      const heroCta = document.querySelector('[data-hero-cta]');
+      if (bar && heroCta && 'IntersectionObserver' in window) {
+        new IntersectionObserver(([entry]) => {
+          bar.dataset.visible = String(!entry.isIntersecting && entry.boundingClientRect.top < 0);
+        }).observe(heroCta);
+      } else if (bar) {
+        bar.dataset.visible = 'true';
+      }
+    </script>
+
+    <style>
+      .demo-bar { background: var(--sodium-soft); color: #6b4700; font-size: 0.8125rem; line-height: 1.4; }
+      .demo-bar .wrap { display: flex; gap: 8px; align-items: center; padding-top: 6px; padding-bottom: 6px; }
+      .demo-bar svg { flex: none; width: 15px; height: 15px; }
+      .demo-bar a { color: inherit; font-weight: 700; }
+      @media (prefers-color-scheme: dark) { :root:not([data-scheme]) .demo-bar { background: #241d0c; color: #ffd98a; } }
+      main:focus { outline: none; box-shadow: none; }
+
+      .mobile-bar {
+        position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; display: flex; gap: 8px;
+        padding: 8px var(--gutter) calc(8px + env(safe-area-inset-bottom));
+        background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: saturate(1.8) blur(20px); -webkit-backdrop-filter: saturate(1.8) blur(20px);
+        border-top: 1px solid var(--line); transition: transform 0.25s ease;
+      }
+      .mobile-bar[data-visible='false'] { transform: translateY(115%); }
+      .mobile-bar__call {
+        flex: none; width: 52px; height: 48px; border-radius: 999px; display: grid; place-items: center;
+        background: #1d1d1f; color: #fff; text-decoration: none;
+      }
+      .mobile-bar__call span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      .mobile-bar__call svg { width: 20px; height: 20px; }
+      .mobile-bar__cta { min-height: 48px; }
+      @media (prefers-color-scheme: dark) { :root:not([data-scheme]) .mobile-bar__call { background: #f5f5f7; color: #1d1d1f; } }
+      @media (min-width: 900px) { .mobile-bar { display: none; } }
+    </style>
+  </body>
+</html>

@@ -82,6 +82,22 @@ services:
       retries: 5
       start_period: 5s
 
+  public-site:
+    image: opora-public-site:latest
+    build:
+      context: ./site
+      dockerfile: Dockerfile
+    container_name: opora_public_site
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8090:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
   eis-sync:
     build: .
     container_name: opora_eis_sync

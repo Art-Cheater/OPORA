@@ -1,0 +1,56 @@
+---
+// Шапка внутренней страницы: светлая, «хлебные крошки», крупный заголовок, фото — в скруглённой карточке сбоку.
+import { Image } from 'astro:assets';
+
+interface Props {
+  title: string;
+  lead?: string;
+  /** Название раздела для «хлебных крошек». */
+  eyebrow?: string;
+  image?: ImageMetadata;
+  imagePosition?: string;
+  compact?: boolean;
+}
+const { title, lead, eyebrow, image, imagePosition = 'center' } = Astro.props;
+const crumb = eyebrow ?? title;
+---
+
+<section class:list={['phero', { 'phero--image': image }]}>
+  <div class="wrap phero__grid">
+    <div class="phero__text reveal" style="--d:0">
+      <nav class="crumbs" aria-label="Вы здесь">
+        <a href="/">Главная</a>
+        <span aria-hidden="true">/</span>
+        <span aria-current="page">{crumb}</span>
+      </nav>
+      <h1>{title}</h1>
+      {lead && <p class="lead phero__lead">{lead}</p>}
+      <div class="phero__slot"><slot /></div>
+    </div>
+    {image && (
+      <div class="phero__media media reveal" style="--d:2">
+        <Image class="hero__bg" src={image} alt="" widths={[640, 960, 1280]} sizes="(min-width: 900px) 520px, 92vw" loading="eager" fetchpriority="high" style={`object-position:${imagePosition}`} />
+        <div class="phero__glow ignite" aria-hidden="true"></div>
+      </div>
+    )}
+  </div>
+</section>
+
+<style>
+  .phero { padding: 28px 0 8px; }
+  @media (min-width: 900px) { .phero { padding: 44px 0 12px; } }
+  .phero__grid { display: grid; gap: 24px; align-items: center; }
+  @media (min-width: 900px) { .phero--image .phero__grid { grid-template-columns: 1.1fr 0.9fr; gap: 40px; } }
+  .crumbs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 14px; font-size: 0.8125rem; color: var(--muted); }
+  .crumbs a { color: var(--muted); text-decoration: none; min-height: 24px; display: inline-flex; align-items: center; }
+  .crumbs a:hover { color: var(--text); text-decoration: underline; }
+  .crumbs [aria-current] { color: var(--text); font-weight: 600; }
+  .phero h1 { max-width: 20ch; margin-bottom: 12px; font-size: clamp(2rem, 1.5rem + 2vw, 3rem); }
+  .phero__lead { margin: 0; font-size: 1.0625rem; }
+  .phero__slot:empty { display: none; }
+  .phero__slot { margin-top: 22px; }
+  .phero__media { position: relative; border-radius: var(--r-xl); overflow: hidden; aspect-ratio: 16 / 10; background: var(--night); }
+  @media (min-width: 900px) { .phero__media { aspect-ratio: 4 / 3; } }
+  .phero__media :global(img) { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .phero__glow { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(55% 45% at 72% 16%, rgba(255, 184, 28, 0.2), rgba(255, 184, 28, 0) 70%); }
+</style>

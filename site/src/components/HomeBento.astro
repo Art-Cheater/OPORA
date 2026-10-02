@@ -1,0 +1,160 @@
+---
+// Главная сетка плиток «Бенто» (ui-ux-pro-max: Bento Box Grid). Плитки разного размера,
+// каждая — одна задача: сообщить, узнать время включения, проверить заявку, увидеть аварии, понять, чей фонарь.
+import { Image } from 'astro:assets';
+import Icon from './Icon.astro';
+import { INCIDENTS, STATS } from '../data/site';
+import { kirovToday, schedule, fmtTime, fmtDay } from '../lib/sun';
+import heroWide from '../assets/img/hero-desktop.jpg';
+import aerial from '../assets/img/aerial-lines.jpg';
+import ownerYard from '../assets/img/owner-yard.png';
+import crew from '../assets/img/about-crew.jpg';
+
+const { y, m, d } = kirovToday();
+const [today] = schedule(y, m, d, 1);
+const stat = (label: string) => STATS.find((s) => s.label.startsWith(label));
+const inTime = stat('выполнено');
+const avg = stat('средний');
+const lamps = stat('светильников');
+const n = INCIDENTS.length;
+const plural = (k: number, one: string, few: string, many: string) =>
+  k % 10 === 1 && k % 100 !== 11 ? one : k % 10 >= 2 && k % 10 <= 4 && (k % 100 < 10 || k % 100 >= 20) ? few : many;
+---
+
+<div class="bento">
+  <a class="tile tile--hero" href="/soobshit/">
+    <Image class="tile__img" src={heroWide} alt="Вечерняя улица Кирова, вдоль тротуара горят фонари" widths={[640, 960, 1280]} sizes="(min-width: 900px) 580px, 92vw" loading="eager" fetchpriority="high" />
+    <div class="tile__over">
+      <span class="tile__badge">Без регистрации</span>
+      <h2 class="tile__h">Отметьте место&nbsp;— бригада приедет</h2>
+      <span class="tile__go">Сообщить о неисправности <Icon name="arrow-right" size={16} /></span>
+    </div>
+  </a>
+
+  <div class="tile tile--night" role="group" aria-label="Освещение сегодня">
+    <span class="tile__cap">Сегодня, <span data-today-date>{fmtDay(today.date)}</span></span>
+    <div>
+      <strong class="tile__big num" data-today-on>{fmtTime(today.on)}</strong>
+      <span class="tile__cap">включение · отключение в <b class="num" data-today-off>{fmtTime(today.off)}</b></span>
+    </div>
+    <div class="tile__lights" aria-hidden="true">{Array.from({ length: 10 }, (_, i) => <i style={`--i:${i}`}></i>)}</div>
+  </div>
+
+  <div class="tile tile--check">
+    <label class="tile__cap" for="bento-check">Проверить заявку</label>
+    <form class="check-pill" action="/zayavka/" method="get" role="search" aria-label="Проверить заявку">
+      <input id="bento-check" type="text" name="n" inputmode="numeric" autocomplete="off" placeholder="004812" aria-describedby="bento-check-hint" required />
+      <button type="submit" aria-label="Проверить"><Icon name="arrow-right" size={18} /></button>
+    </form>
+    <span class="tile__hint" id="bento-check-hint">Достаточно цифр из номера КС-26-…</span>
+  </div>
+
+  <a class="tile tile--map" href="/karta/">
+    <Image class="tile__img" src={aerial} alt="" widths={[480, 800]} sizes="(min-width: 900px) 280px, 45vw" loading="lazy" />
+    <div class="tile__over">
+      <strong class="tile__big num">{n}</strong>
+      <span>{plural(n, 'адрес', 'адреса', 'адресов')} с авариями и работами</span>
+    </div>
+  </a>
+
+  <a class="tile tile--art" href="/chey-fonar/">
+    <span class="tile__cap">Чей это фонарь</span>
+    <h3 class="tile__h tile__h--dark">Двор&nbsp;— это УК</h3>
+    <Image class="tile__art" src={ownerYard} alt="" widths={[360, 540]} sizes="200px" loading="lazy" />
+  </a>
+
+  <div class="tile tile--stats">
+    {[inTime, avg, lamps].filter(Boolean).map((s) => (
+      <div>
+        <strong class="num">{s!.value}{s!.unit ? (s!.unit === '%' ? '%' : ` ${s!.unit}`) : ''}</strong>
+        <span>{s!.label}</span>
+      </div>
+    ))}
+  </div>
+
+  <a class="tile tile--photo" href="/o-sluzhbe/">
+    <Image class="tile__img" src={crew} alt="" widths={[640, 960]} sizes="(min-width: 900px) 580px, 92vw" loading="lazy" />
+    <div class="tile__over">
+      <h3 class="tile__h">9 бригад и 11 автовышек</h3>
+      <span class="tile__sub">О службе <Icon name="arrow-right" size={14} /></span>
+    </div>
+  </a>
+</div>
+
+<script>
+  import { kirovToday, schedule, fmtTime, fmtDay } from '../lib/sun';
+  // Страница собрана заранее — пересчитываем «Сегодня» по часам посетителя
+  const { y, m, d } = kirovToday();
+  const [row] = schedule(y, m, d, 1);
+  document.querySelectorAll('[data-today-date]').forEach((el) => (el.textContent = fmtDay(row.date)));
+  document.querySelectorAll('[data-today-on]').forEach((el) => (el.textContent = fmtTime(row.on)));
+  document.querySelectorAll('[data-today-off]').forEach((el) => (el.textContent = fmtTime(row.off)));
+</script>
+
+<style>
+  .bento { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+  @media (min-width: 900px) { .bento { grid-template-columns: repeat(4, 1fr); grid-auto-rows: 210px; gap: 14px; } }
+
+  .tile {
+    position: relative; overflow: hidden; isolation: isolate; border-radius: var(--r-xl); background: var(--surface);
+    padding: 20px; display: flex; flex-direction: column; gap: 6px; min-height: 170px; color: var(--text); text-decoration: none;
+    transition: transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  a.tile:hover { transform: scale(1.012); }
+  a.tile:active { transform: scale(0.99); }
+  @media (prefers-reduced-motion: reduce) { a.tile:hover, a.tile:active { transform: none; } }
+  .tile__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
+  .tile__over { margin-top: auto; display: grid; gap: 6px; justify-items: start; color: #fff; }
+  .tile__h { font-size: clamp(1.25rem, 1.1rem + 0.7vw, 1.5rem); letter-spacing: -0.02em; line-height: 1.15; margin: 0; color: #fff; }
+  .tile__h--dark { color: var(--text); }
+  .tile__cap { font-size: 0.8125rem; color: var(--muted); }
+  .tile__big { font-family: var(--font-head); font-weight: 700; font-size: clamp(2.5rem, 2rem + 1.6vw, 3.25rem); letter-spacing: -0.045em; line-height: 1; display: block; }
+  .tile__badge { font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.22); backdrop-filter: blur(8px); }
+  .tile__go { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; padding: 9px 16px; border-radius: 999px; background: rgba(255, 255, 255, 0.92); color: #1d1d1f; font-weight: 600; font-size: 0.875rem; }
+  .tile__sub { display: inline-flex; align-items: center; gap: 4px; font-size: 0.875rem; color: rgba(255, 255, 255, 0.85); }
+  .tile__hint { font-size: 0.75rem; color: var(--muted); }
+
+  .tile--hero { grid-column: 1 / -1; min-height: 340px; }
+  @media (min-width: 900px) { .tile--hero { grid-column: span 2; grid-row: span 2; } }
+  .tile--hero::after, .tile--photo::after, .tile--map::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.62)); }
+
+  .tile--night { background: #14213d; color: #fff; justify-content: space-between; }
+  .tile--night .tile__cap { color: #aab4ca; }
+  .tile--night b { color: #fff; }
+  .tile__lights { display: flex; justify-content: space-between; }
+  .tile__lights i { width: 6px; height: 6px; border-radius: 50%; background: var(--sodium); box-shadow: 0 0 8px rgba(255, 184, 28, 0.8); }
+  @media (prefers-reduced-motion: no-preference) {
+    .tile__lights i { animation: lamp-on 0.6s ease-out both; animation-delay: calc(var(--i) * 70ms + 400ms); }
+    @keyframes lamp-on { from { opacity: 0.15; box-shadow: none; } }
+  }
+
+  .tile--check { justify-content: space-between; }
+  .check-pill { display: flex; margin-top: auto; background: var(--surface-2); border-radius: 14px; padding: 4px; border: 1.5px solid transparent; transition: border-color 0.15s; }
+  .check-pill:focus-within { border-color: var(--text); box-shadow: 0 0 0 4px var(--focus-halo); }
+  .check-pill input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 0 10px; font: 600 1.25rem var(--font-head); height: 44px; color: var(--text); }
+  .check-pill input:focus { outline: none; }
+  .check-pill input::placeholder { color: var(--muted); opacity: 0.6; }
+  .check-pill button { width: 44px; height: 44px; border: 0; border-radius: 11px; background: #1d1d1f; color: #fff; display: grid; place-items: center; }
+  .check-pill button:hover { background: #3a3a3c; }
+  @media (prefers-color-scheme: dark) { :global(:root:not([data-scheme])) .check-pill button { background: #f5f5f7; color: #1d1d1f; } }
+
+  .tile--map { background: #14213d; }
+  .tile--map .tile__over span { font-size: 0.875rem; color: #d7deea; }
+
+  .tile--art { background: linear-gradient(180deg, var(--surface) 0%, #eef2f8 100%); }
+  @media (prefers-color-scheme: dark) { :global(:root:not([data-scheme])) .tile--art { background: linear-gradient(180deg, #1c1c1e 0%, #1a2238 100%); } }
+  .tile__art { position: absolute; right: -8px; bottom: -6px; width: 62%; height: auto; z-index: -1; }
+
+  .tile--stats { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: end; }
+  @media (min-width: 900px) { .tile--stats { grid-column: span 2; } }
+  .tile--stats div { display: grid; gap: 4px; }
+  .tile--stats strong { font-family: var(--font-head); font-size: clamp(1.375rem, 1rem + 1.4vw, 2rem); letter-spacing: -0.035em; line-height: 1.1; }
+  .tile--stats span { font-size: 0.8125rem; color: var(--muted); line-height: 1.3; }
+
+  .tile--photo { grid-column: 1 / -1; min-height: 200px; }
+  @media (min-width: 900px) { .tile--photo { grid-column: span 2; } }
+
+  :global(html[data-scheme]) .tile { outline: 2px solid var(--fg); }
+  :global(html[data-scheme]) .tile--night, :global(html[data-scheme]) .tile--map { background: var(--bgc); }
+  :global(html[data-scheme]) .tile::after { display: none; }
+</style>

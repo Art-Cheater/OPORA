@@ -1,0 +1,45 @@
+---
+// Логотип «Линия фонарей» (сгенерирован в GPT Image, прозрачный фон).
+// tone="auto": тёмно-синий на светлом фоне, белый — в тёмной теме и в схеме «белым по чёрному».
+import { Image } from 'astro:assets';
+import logoDark from '../assets/img/logo-horizontal-dark-t.png';
+import logoLight from '../assets/img/logo-horizontal-t.png';
+import { SITE } from '../data/site';
+
+interface Props {
+  /** on-dark — белые опоры, on-light — тёмно-синие, auto — по теме. */
+  tone?: 'on-dark' | 'on-light' | 'auto';
+  height?: number;
+  href?: string | null;
+}
+const { tone = 'auto', height = 40, href = '/' } = Astro.props;
+const alt = `${SITE.name} — ${SITE.descriptor.toLowerCase()}`;
+const Tag = href ? 'a' : 'span';
+const w = (img: ImageMetadata) => Math.round((img.width / img.height) * height);
+const showLight = tone !== 'on-dark';
+const showDark = tone !== 'on-light';
+---
+
+<Tag class:list={['logo', `logo--${tone}`]} href={href ?? undefined} aria-label={href ? `${alt}. На главную` : undefined}>
+  {showLight && (
+    <Image src={logoLight} alt={href ? '' : alt} width={w(logoLight)} height={height} densities={[1, 2]} loading="eager" class="keep logo__img logo__img--light" />
+  )}
+  {showDark && (
+    <Image src={logoDark} alt={href || showLight ? '' : alt} width={w(logoDark)} height={height} densities={[1, 2]} loading="eager" class="keep logo__img logo__img--dark" />
+  )}
+</Tag>
+
+<style>
+  .logo { display: inline-flex; align-items: center; flex: none; }
+  .logo img { width: auto; height: var(--logo-h, 40px); }
+  .logo--auto .logo__img--dark { display: none; }
+  @media (prefers-color-scheme: dark) {
+    :global(:root:not([data-scheme])) .logo--auto .logo__img--light { display: none; }
+    :global(:root:not([data-scheme])) .logo--auto .logo__img--dark { display: block; }
+  }
+  :global(html[data-scheme='wb']) .logo--auto .logo__img--light { display: none; }
+  :global(html[data-scheme='wb']) .logo--auto .logo__img--dark { display: block; }
+  /* На тёмных блоках в светлых схемах ГОСТ фон становится светлым — показываем тёмно-синий логотип */
+  :global(html[data-scheme='bw']) .logo--on-dark,
+  :global(html[data-scheme='blue']) .logo--on-dark { filter: brightness(0); }
+</style>

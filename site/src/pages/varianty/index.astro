@@ -1,0 +1,565 @@
+---
+// Сравнение дизайн-направлений (служебная страница, не индексируется).
+// Стили из ui-ux-pro-max: A — Minimalism & Swiss, B — Glassmorphism/Spatial на тёмном, C — Bento Box Grid, D — Neo-brutalism.
+import '@fontsource/montserrat/500.css';
+import '@fontsource/montserrat/600.css';
+import '@fontsource/montserrat/700.css';
+import '@fontsource/montserrat/800.css';
+import '@fontsource/golos-text/400.css';
+import '@fontsource/golos-text/500.css';
+import '@fontsource/golos-text/600.css';
+import { Image } from 'astro:assets';
+import Icon from '../../components/Icon.astro';
+import { CONTACTS, INCIDENTS, formatEta } from '../../data/site';
+import { kirovToday, schedule, fmtTime, fmtDay } from '../../lib/sun';
+import logoLight from '../../assets/img/logo-horizontal-t.png';
+import logoDark from '../../assets/img/logo-horizontal-dark-t.png';
+import heroWide from '../../assets/img/hero-desktop.jpg';
+import heroTall from '../../assets/img/hero-mobile.jpg';
+import crew from '../../assets/img/about-crew.jpg';
+import aerial from '../../assets/img/aerial-lines.jpg';
+import ownerYard from '../../assets/img/owner-yard.png';
+import ownerStreet from '../../assets/img/owner-street.png';
+
+const d = CONTACTS.dispatcher;
+const { y, m, d: day } = kirovToday();
+const [today] = schedule(y, m, day, 1);
+const ON = fmtTime(today.on);
+const OFF = fmtTime(today.off);
+const DAY = fmtDay(today.date);
+const NAV = ['Карта работ', 'График', 'Чей фонарь', 'Вопросы', 'Контакты'];
+const INC = INCIDENTS.slice(0, 3);
+const TASKS = [
+  { t: 'Сообщить о неисправности', s: 'Заявка за минуту, без регистрации', i: 'lamp-off' },
+  { t: 'Проверить заявку', s: 'Статус по номеру КС-26-…', i: 'search' },
+  { t: 'Где сейчас нет света', s: `${INCIDENTS.length} адреса с работами`, i: 'map' },
+  { t: 'Когда включат свет', s: `Сегодня в ${ON}`, i: 'clock' },
+  { t: 'Чей это фонарь', s: 'Улица, двор или светофор', i: 'users' },
+] as const;
+const VARIANTS = [
+  { id: 'a', name: 'Минимализм' },
+  { id: 'b', name: 'Ночное стекло' },
+  { id: 'c', name: 'Бенто' },
+  { id: 'd', name: 'Необрутализм' },
+];
+---
+
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Варианты дизайна — Кировсвет</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <!-- ================= A · Швейцарский минимализм ================= -->
+    <section class="variant va" data-variant="a">
+      <header class="va-h">
+        <div class="va-w va-h__in">
+          <Image src={logoLight} alt="Кировсвет" height={30} width={Math.round((logoLight.width / logoLight.height) * 30)} densities={[1, 2]} />
+          <nav class="va-nav" aria-label="Меню варианта A">{NAV.map((n) => <a href="#">{n}</a>)}</nav>
+          <div class="va-h__r">
+            <a class="va-phone num" href={`tel:${d.tel}`}>{d.phone}</a>
+            <a class="va-btn va-btn--y" href="/soobshit/">Сообщить</a>
+          </div>
+        </div>
+      </header>
+      <div class="va-w va-hero">
+        <div class="va-hero__txt">
+          <p class="va-kick"><span class="num">01</span> Служба наружного освещения Кирова</p>
+          <h1>Не горит фонарь? Сообщите&nbsp;— мы&nbsp;приедем.</h1>
+          <p class="va-sub">Заявка за минуту, без регистрации. Отметьте место на карте, приложите фото, следите за ремонтом по номеру.</p>
+          <div class="va-actions">
+            <a class="va-btn va-btn--y va-btn--lg" href="/soobshit/">Сообщить о неисправности <Icon name="arrow-right" size={18} /></a>
+            <a class="va-btn va-btn--ghost va-btn--lg" href="/zayavka/">Проверить заявку</a>
+          </div>
+        </div>
+        <figure class="va-fig">
+          <Image src={heroTall} alt="" widths={[480, 800]} sizes="420px" />
+          <figcaption><span class="num">58.60° N, 49.67° E</span> — Киров, вечер. Свет включился в {ON}.</figcaption>
+        </figure>
+      </div>
+      <div class="va-w">
+        <dl class="va-facts">
+          <div><dt>Включение сегодня</dt><dd class="num">{ON}</dd></div>
+          <div><dt>Отключение утром</dt><dd class="num">{OFF}</dd></div>
+          <div><dt>Заявок в работе</dt><dd class="num">37</dd></div>
+          <div><dt>Выполнено в срок</dt><dd class="num">94%</dd></div>
+        </dl>
+      </div>
+      <section class="va-w va-sec">
+        <header class="va-sec__h"><span class="num">02</span><h2>Что вы хотите сделать</h2></header>
+        <ol class="va-rows">
+          {TASKS.map((t, i) => (
+            <li><a href="#"><span class="num va-rows__n">0{i + 1}</span><b>{t.t}</b><span class="va-rows__s">{t.s}</span><Icon name="arrow-right" size={20} /></a></li>
+          ))}
+        </ol>
+      </section>
+      <section class="va-w va-sec">
+        <header class="va-sec__h"><span class="num">03</span><h2>Где сейчас нет света</h2></header>
+        <div class="va-table">
+          {INC.map((i) => (
+            <div class="va-tr"><b>{i.address}</b><span>{i.what}</span><span class="va-st">{i.status}</span><span class="num">{formatEta(i)}</span></div>
+          ))}
+        </div>
+      </section>
+      <footer class="va-f"><div class="va-w va-f__in"><span>© Кировсвет</span><span>Светло в каждом квартале</span><a class="num" href={`tel:${d.tel}`}>{d.phone}</a></div></footer>
+    </section>
+
+    <!-- ================= B · Ночное стекло ================= -->
+    <section class="variant vb" data-variant="b" hidden>
+      <div class="vb-aurora" aria-hidden="true"></div>
+      <Image class="vb-city" src={heroWide} alt="" widths={[1280, 1920]} sizes="100vw" />
+      <header class="vb-h">
+        <div class="vb-pill">
+          <Image src={logoDark} alt="Кировсвет" height={28} width={Math.round((logoDark.width / logoDark.height) * 28)} densities={[1, 2]} />
+          <nav class="vb-nav" aria-label="Меню варианта B">{NAV.map((n) => <a href="#">{n}</a>)}</nav>
+          <a class="vb-btn vb-btn--y" href="/soobshit/">Сообщить</a>
+        </div>
+      </header>
+      <div class="vb-hero">
+        <p class="vb-tag"><span class="vb-live"></span> Диспетчер на связи · 24/7</p>
+        <h1>Не горит фонарь?<br /><span class="vb-grad">Сообщите — мы приедем</span></h1>
+        <p class="vb-sub">Заявка за минуту, без регистрации. Метка на карте, фото, статус ремонта по номеру.</p>
+        <div class="vb-actions">
+          <a class="vb-btn vb-btn--y vb-btn--lg" href="/soobshit/">Сообщить о неисправности</a>
+          <a class="vb-btn vb-btn--glass vb-btn--lg" href={`tel:${d.tel}`}><Icon name="phone" size={18} /> {d.phone}</a>
+        </div>
+        <div class="vb-panel glass">
+          <div class="vb-panel__cell"><span>Сегодня, {DAY}</span><strong class="num">{ON}</strong><em>включение</em></div>
+          <div class="vb-panel__cell"><span>Утром</span><strong class="num">{OFF}</strong><em>отключение</em></div>
+          <div class="vb-panel__cell"><span>Сейчас</span><strong class="num">37</strong><em>заявок в работе</em></div>
+          <div class="vb-lights" aria-hidden="true">{Array.from({ length: 18 }, (_, i) => <i style={`--i:${i}`}></i>)}</div>
+        </div>
+      </div>
+      <section class="vb-w vb-bento">
+        <div class="glass vb-card vb-card--wide">
+          <span class="vb-ico"><Icon name="search" /></span>
+          <h3>Проверить заявку</h3>
+          <form class="vb-check" action="/zayavka/"><input type="text" name="n" inputmode="numeric" placeholder="Номер, например 004812" aria-label="Номер заявки" /><button type="submit">Проверить</button></form>
+        </div>
+        <a class="glass vb-card vb-card--map" href="#">
+          <Image class="vb-card__bg" src={aerial} alt="" widths={[640]} sizes="400px" />
+          <span class="vb-ico"><Icon name="map" /></span>
+          <h3>Где нет света</h3><p>{INCIDENTS.length} адреса с работами</p>
+        </a>
+        <a class="glass vb-card" href="#"><span class="vb-ico"><Icon name="clock" /></span><h3>Когда включат</h3><p>Сегодня в <b class="num">{ON}</b></p></a>
+        <a class="glass vb-card" href="#"><span class="vb-ico"><Icon name="users" /></span><h3>Чей это фонарь</h3><p>Улица, двор или светофор</p></a>
+        <a class="glass vb-card" href="#"><span class="vb-ico"><Icon name="info" /></span><h3>Частые вопросы</h3><p>Сроки ремонта, номер опоры</p></a>
+        <a class="glass vb-card vb-card--wide vb-card--art" href="#">
+          <Image class="vb-card__art" src={ownerStreet} alt="" widths={[480]} sizes="260px" />
+          <span class="vb-ico"><Icon name="lamp-on" /></span><h3>Попросить новый фонарь</h3><p>Как улица попадает в план строительства</p>
+        </a>
+      </section>
+      <section class="vb-w vb-sec">
+        <h2>Где сейчас нет света</h2>
+        <div class="glass vb-list">
+          {INC.map((i) => (
+            <div class="vb-row"><span class="vb-dot"></span><div><b>{i.address}</b><span>{i.what}</span></div><span class="vb-chip">{i.status}</span><span class="num vb-eta">{formatEta(i)}</span></div>
+          ))}
+        </div>
+      </section>
+      <footer class="vb-f"><span>© Кировсвет · Светло в каждом квартале</span><a class="num" href={`tel:${d.tel}`}>{d.phone}</a></footer>
+    </section>
+
+    <!-- ================= C · Бенто ================= -->
+    <section class="variant vc" data-variant="c" hidden>
+      <header class="vc-h">
+        <div class="vc-w vc-h__in">
+          <Image src={logoLight} alt="Кировсвет" height={28} width={Math.round((logoLight.width / logoLight.height) * 28)} densities={[1, 2]} />
+          <nav class="vc-nav" aria-label="Меню варианта C">{NAV.map((n) => <a href="#">{n}</a>)}</nav>
+          <a class="vc-btn vc-btn--y" href="/soobshit/">Сообщить</a>
+        </div>
+      </header>
+      <div class="vc-w vc-top">
+        <h1>Не горит фонарь?<br /><span>Сообщите — мы приедем.</span></h1>
+        <div class="vc-top__r">
+          <p>Заявка за минуту, без регистрации. Диспетчер — круглосуточно.</p>
+          <a class="vc-btn vc-btn--y vc-btn--lg" href="/soobshit/">Сообщить о неисправности</a>
+        </div>
+      </div>
+      <div class="vc-w vc-bento">
+        <a class="vc-tile vc-tile--hero" href="/soobshit/">
+          <Image src={heroWide} alt="" widths={[800, 1280]} sizes="(min-width: 900px) 640px, 92vw" />
+          <div class="vc-tile__over"><span class="vc-badge">Без регистрации</span><h3>Отметьте место — бригада приедет</h3><span class="vc-link">Начать <Icon name="arrow-right" size={16} /></span></div>
+        </a>
+        <div class="vc-tile vc-tile--night">
+          <span class="vc-cap">Сегодня, {DAY}</span>
+          <strong class="num vc-big">{ON}</strong><span class="vc-cap">включение · отключение в <b class="num">{OFF}</b></span>
+          <div class="vc-lights" aria-hidden="true">{Array.from({ length: 10 }, () => <i></i>)}</div>
+        </div>
+        <div class="vc-tile">
+          <span class="vc-cap">Проверить заявку</span>
+          <form class="vc-check" action="/zayavka/"><input type="text" name="n" inputmode="numeric" placeholder="004812" aria-label="Номер заявки" /><button type="submit" aria-label="Проверить"><Icon name="arrow-right" size={18} /></button></form>
+          <span class="vc-hint">Достаточно цифр из номера</span>
+        </div>
+        <a class="vc-tile vc-tile--map" href="#">
+          <Image src={aerial} alt="" widths={[640]} sizes="320px" />
+          <div class="vc-tile__over vc-tile__over--dark"><strong class="num vc-big">{INCIDENTS.length}</strong><span>адреса без света сейчас</span></div>
+        </a>
+        <a class="vc-tile vc-tile--art" href="#">
+          <span class="vc-cap">Чей это фонарь</span><h3>Двор — это УК</h3>
+          <Image src={ownerYard} alt="" widths={[360]} sizes="220px" />
+        </a>
+        <div class="vc-tile vc-tile--stats">
+          <div><strong class="num">94%</strong><span>заявок выполнено в срок</span></div>
+          <div><strong class="num">1,9 дня</strong><span>средний ремонт фонаря</span></div>
+          <div><strong class="num">31 400</strong><span>светильников в городе</span></div>
+        </div>
+        <a class="vc-tile vc-tile--photo" href="#">
+          <Image src={crew} alt="" widths={[640]} sizes="420px" />
+          <div class="vc-tile__over"><h3>9 бригад на связи</h3></div>
+        </a>
+      </div>
+      <section class="vc-w vc-sec">
+        <h2>Где сейчас нет света</h2>
+        <div class="vc-list">
+          {INC.map((i) => (
+            <div class="vc-row"><div><b>{i.address}</b><span>{i.what}</span></div><span class="vc-chip">{i.status}</span><span class="num">{formatEta(i)}</span></div>
+          ))}
+        </div>
+      </section>
+      <footer class="vc-f"><div class="vc-w vc-f__in"><span>© Кировсвет</span><a class="num" href={`tel:${d.tel}`}>{d.phone}</a></div></footer>
+    </section>
+
+    <!-- ================= D · Необрутализм ================= -->
+    <section class="variant vd" data-variant="d" hidden>
+      <header class="vd-h">
+        <div class="vd-w vd-h__in">
+          <Image src={logoLight} alt="Кировсвет" height={30} width={Math.round((logoLight.width / logoLight.height) * 30)} densities={[1, 2]} />
+          <nav class="vd-nav" aria-label="Меню варианта D">{NAV.map((n) => <a href="#">{n}</a>)}</nav>
+          <a class="vd-btn vd-btn--y" href="/soobshit/">Сообщить</a>
+        </div>
+      </header>
+      <div class="vd-w vd-hero">
+        <div>
+          <span class="vd-sticker">Киров · 24/7</span>
+          <h1>Не горит фонарь? <mark>Сообщите</mark> — мы приедем</h1>
+          <p class="vd-sub">Заявка за минуту, без регистрации. С фото, меткой на карте и номером, по которому видно ремонт.</p>
+          <div class="vd-actions">
+            <a class="vd-btn vd-btn--y vd-btn--lg" href="/soobshit/">Сообщить о неисправности <Icon name="arrow-right" size={18} /></a>
+            <a class="vd-btn vd-btn--lg" href={`tel:${d.tel}`}><Icon name="phone" size={18} /> {d.phone}</a>
+          </div>
+        </div>
+        <div class="vd-photo">
+          <Image src={heroTall} alt="" widths={[480, 800]} sizes="400px" />
+          <span class="vd-stamp">Светло в каждом квартале</span>
+          <div class="vd-today"><span>Сегодня</span><strong class="num">{ON}</strong><span>включение</span></div>
+        </div>
+      </div>
+      <div class="vd-strip" aria-hidden="true"><span>Не горит</span>✦<span>Мигает</span>✦<span>Горит днём</span>✦<span>Оборван провод</span>✦<span>Наклонилась опора</span>✦<span>Открыт щит</span></div>
+      <section class="vd-w vd-sec">
+        <h2>Что нужно сделать?</h2>
+        <div class="vd-cards">
+          {TASKS.slice(1).map((t, i) => (
+            <a class:list={['vd-card', `vd-card--${i}`]} href="#"><Icon name={t.i} size={28} /><h3>{t.t}</h3><p>{t.s}</p><span class="vd-go"><Icon name="arrow-right" size={20} /></span></a>
+          ))}
+        </div>
+      </section>
+      <section class="vd-w vd-sec">
+        <h2>Где сейчас нет света</h2>
+        <div class="vd-list">
+          {INC.map((i) => (
+            <div class="vd-row"><div><b>{i.address}</b><span>{i.what}</span></div><span class="vd-chip">{i.status}</span><span class="num vd-eta">{formatEta(i)}</span></div>
+          ))}
+        </div>
+      </section>
+      <footer class="vd-f"><div class="vd-w vd-f__in"><span>© Кировсвет</span><a class="num" href={`tel:${d.tel}`}>{d.phone}</a></div></footer>
+    </section>
+
+    <!-- Переключатель вариантов -->
+    <nav class="switch" aria-label="Варианты дизайна">
+      {VARIANTS.map((v) => <button type="button" data-show={v.id} aria-pressed={v.id === 'a' ? 'true' : 'false'}><b>{v.id.toUpperCase()}</b> {v.name}</button>)}
+    </nav>
+
+    <script>
+      const show = (id: string) => {
+        document.querySelectorAll<HTMLElement>('[data-variant]').forEach((s) => (s.hidden = s.dataset.variant !== id));
+        document.querySelectorAll<HTMLButtonElement>('[data-show]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.show === id)));
+        history.replaceState(null, '', `#${id}`);
+        window.scrollTo(0, 0);
+      };
+      document.querySelectorAll<HTMLButtonElement>('[data-show]').forEach((b) => b.addEventListener('click', () => show(b.dataset.show!)));
+      const initial = location.hash.slice(1);
+      if (['a', 'b', 'c', 'd'].includes(initial)) show(initial);
+      document.querySelectorAll('.variant a[href="#"]').forEach((a) => a.addEventListener('click', (e) => e.preventDefault()));
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; font-family: 'Golos Text', system-ui, sans-serif; font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  img { display: block; max-width: 100%; height: auto; }
+  h1, h2, h3 { margin: 0; font-family: Montserrat, sans-serif; text-wrap: balance; }
+  p { margin: 0; }
+  .num { font-variant-numeric: tabular-nums; }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid #ffb81c; outline-offset: 3px; border-radius: 4px; }
+
+  .switch {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 100; display: flex; gap: 4px; padding: 6px;
+    background: rgba(20, 20, 24, 0.86); backdrop-filter: blur(16px); border-radius: 999px; box-shadow: 0 12px 40px -10px rgba(0, 0, 0, 0.5);
+    max-width: calc(100vw - 24px); overflow-x: auto;
+  }
+  .switch button {
+    border: 0; background: transparent; color: #c9ccd4; padding: 10px 16px; border-radius: 999px; font: 500 14px 'Golos Text', sans-serif; cursor: pointer; white-space: nowrap;
+  }
+  .switch button b { color: #ffb81c; margin-right: 4px; }
+  .switch button[aria-pressed='true'] { background: #fff; color: #14213d; }
+  .variant { min-height: 100vh; padding-bottom: 96px; }
+
+  /* =============== A · Swiss =============== */
+  .va { background: #fff; color: #0b1220; }
+  .va-w { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+  .va-h { border-bottom: 1px solid #e8eaee; position: sticky; top: 0; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); z-index: 10; }
+  .va-h__in { display: flex; align-items: center; gap: 32px; height: 64px; }
+  .va-h__in img { height: 30px; width: auto; }
+  .va-nav { display: flex; gap: 24px; font-size: 14px; color: #5c6475; }
+  .va-nav a { text-decoration: none; }
+  .va-nav a:hover { color: #0b1220; }
+  .va-h__r { margin-left: auto; display: flex; align-items: center; gap: 20px; font-size: 14px; }
+  .va-phone { text-decoration: none; font-weight: 600; }
+  .va-btn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 6px; font-weight: 600; font-size: 14px; text-decoration: none; border: 1px solid #0b1220; }
+  .va-btn--y { background: #ffb81c; border-color: #ffb81c; color: #0b1220; }
+  .va-btn--y:hover { background: #ffc53d; }
+  .va-btn--ghost:hover { background: #0b1220; color: #fff; }
+  .va-btn--lg { height: 48px; padding: 0 22px; font-size: 15px; }
+  .va-hero { display: grid; grid-template-columns: 1fr; gap: 48px; padding-top: 72px; padding-bottom: 56px; }
+  @media (min-width: 900px) { .va-hero { grid-template-columns: 7fr 5fr; align-items: end; } }
+  .va-kick { font-size: 13px; color: #5c6475; letter-spacing: 0.02em; margin-bottom: 28px; display: flex; gap: 12px; align-items: center; }
+  .va-kick span { color: #0b1220; font-weight: 600; }
+  .va-kick span::after { content: ''; display: inline-block; width: 32px; height: 1px; background: #0b1220; margin-left: 12px; vertical-align: middle; }
+  .va h1 { font-size: clamp(40px, 5.2vw, 68px); font-weight: 600; letter-spacing: -0.045em; line-height: 1.02; }
+  .va-sub { font-size: 17px; color: #5c6475; max-width: 480px; margin: 24px 0 32px; }
+  .va-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+  .va-fig { margin: 0; }
+  .va-fig img { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 4px; filter: saturate(0.9); }
+  .va-fig figcaption { font-size: 12px; color: #5c6475; margin-top: 10px; }
+  .va-facts { display: grid; grid-template-columns: repeat(2, 1fr); margin: 0; border-top: 1px solid #0b1220; }
+  @media (min-width: 800px) { .va-facts { grid-template-columns: repeat(4, 1fr); } }
+  .va-facts div { padding: 20px 20px 24px 0; border-bottom: 1px solid #e8eaee; }
+  @media (min-width: 800px) { .va-facts div + div { padding-left: 20px; border-left: 1px solid #e8eaee; } }
+  .va-facts dt { font-size: 13px; color: #5c6475; }
+  .va-facts dd { margin: 6px 0 0; font-family: Montserrat; font-weight: 500; font-size: 40px; letter-spacing: -0.03em; }
+  .va-sec { padding-top: 80px; }
+  .va-sec__h { display: flex; gap: 16px; align-items: baseline; border-bottom: 1px solid #0b1220; padding-bottom: 16px; }
+  .va-sec__h span { font-size: 13px; font-weight: 600; }
+  .va-sec__h h2 { font-size: 28px; font-weight: 600; letter-spacing: -0.03em; }
+  .va-rows { list-style: none; margin: 0; padding: 0; }
+  .va-rows a { display: grid; grid-template-columns: 48px 1fr 24px; gap: 4px 16px; align-items: center; padding: 20px 0; border-bottom: 1px solid #e8eaee; text-decoration: none; transition: padding 0.2s, background 0.2s; }
+  @media (min-width: 800px) { .va-rows a { grid-template-columns: 48px 1.2fr 1fr 24px; } }
+  .va-rows a:hover { background: #fafafa; padding-left: 12px; padding-right: 12px; }
+  .va-rows__n { font-size: 13px; color: #5c6475; }
+  .va-rows b { font-weight: 600; font-size: 18px; letter-spacing: -0.01em; }
+  .va-rows__s { color: #5c6475; font-size: 15px; grid-column: 2; }
+  @media (min-width: 800px) { .va-rows__s { grid-column: auto; } }
+  .va-rows svg { grid-column: -2; grid-row: 1; color: #0b1220; }
+  .va-table { font-size: 15px; }
+  .va-tr { display: grid; gap: 4px 16px; padding: 18px 0; border-bottom: 1px solid #e8eaee; }
+  @media (min-width: 800px) { .va-tr { grid-template-columns: 1.3fr 1.2fr 0.8fr 0.9fr; align-items: center; } }
+  .va-tr span { color: #5c6475; }
+  .va-st::before { content: ''; display: inline-block; width: 8px; height: 8px; background: #ffb81c; margin-right: 8px; }
+  .va-f { margin-top: 96px; border-top: 1px solid #e8eaee; font-size: 13px; color: #5c6475; }
+  .va-f__in { display: flex; justify-content: space-between; gap: 16px; padding: 24px; flex-wrap: wrap; }
+  @media (max-width: 899px) { .va-nav, .va-phone { display: none; } }
+
+  /* =============== B · Night glass =============== */
+  .vb { position: relative; overflow: hidden; background: #060b17; color: #eef2fa; isolation: isolate; }
+  .vb-aurora {
+    position: absolute; inset: -20% -10% auto; height: 110vh; z-index: -1; filter: blur(60px); opacity: 0.9;
+    background: radial-gradient(40% 35% at 25% 30%, rgba(255, 184, 28, 0.35), transparent 70%),
+      radial-gradient(35% 30% at 75% 20%, rgba(61, 90, 128, 0.7), transparent 70%),
+      radial-gradient(30% 30% at 55% 60%, rgba(120, 80, 200, 0.25), transparent 70%);
+  }
+  .vb-city { position: absolute; top: 0; left: 0; width: 100%; height: 100vh; object-fit: cover; z-index: -2; opacity: 0.28;
+    mask-image: linear-gradient(180deg, transparent 0%, #000 30%, #000 55%, transparent 90%); -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 30%, #000 55%, transparent 90%); }
+  .glass { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 20px 50px -20px rgba(0, 0, 0, 0.6); }
+  .vb-h { position: sticky; top: 12px; z-index: 10; padding: 12px 16px 0; }
+  .vb-pill { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 28px; padding: 8px 8px 8px 20px; border-radius: 999px;
+    background: rgba(12, 18, 34, 0.55); border: 1px solid rgba(255, 255, 255, 0.12); backdrop-filter: blur(18px); }
+  .vb-pill img { height: 28px; width: auto; }
+  .vb-nav { display: flex; gap: 22px; font-size: 14px; color: #aab4c8; margin-right: auto; }
+  .vb-nav a { text-decoration: none; }
+  .vb-nav a:hover { color: #fff; }
+  .vb-btn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px; border-radius: 999px; font-weight: 600; font-size: 14px; text-decoration: none; border: 0; }
+  .vb-btn--y { background: #ffb81c; color: #14213d; box-shadow: 0 0 0 1px rgba(255, 184, 28, 0.5), 0 10px 30px -8px rgba(255, 184, 28, 0.6); }
+  .vb-btn--y:hover { background: #ffc53d; }
+  .vb-btn--glass { background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.16); color: #fff; }
+  .vb-btn--lg { height: 50px; padding: 0 24px; font-size: 15px; }
+  .vb-hero { max-width: 900px; margin: 0 auto; padding: 96px 24px 64px; text-align: center; }
+  .vb-tag { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: #c8d0e0; padding: 6px 14px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); }
+  .vb-live { width: 8px; height: 8px; border-radius: 50%; background: #4cc795; box-shadow: 0 0 12px #4cc795; }
+  .vb h1 { font-size: clamp(40px, 6vw, 72px); font-weight: 700; letter-spacing: -0.045em; line-height: 1.02; margin: 24px 0 20px; }
+  .vb-grad { background: linear-gradient(90deg, #ffd27a 0%, #ffb81c 40%, #fff 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .vb-sub { color: #aab4c8; font-size: 17px; max-width: 520px; margin: 0 auto 32px; }
+  .vb-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+  .vb-panel { position: relative; margin: 56px auto 0; max-width: 760px; border-radius: 24px; display: grid; grid-template-columns: repeat(3, 1fr); text-align: left; padding: 8px 8px 28px; }
+  .vb-panel__cell { padding: 18px 20px; display: grid; }
+  .vb-panel__cell + .vb-panel__cell { border-left: 1px solid rgba(255, 255, 255, 0.1); }
+  .vb-panel__cell span { font-size: 12px; color: #8c97ad; }
+  .vb-panel__cell strong { font-family: Montserrat; font-size: clamp(28px, 4vw, 40px); font-weight: 600; letter-spacing: -0.03em; }
+  .vb-panel__cell em { font-style: normal; font-size: 13px; color: #aab4c8; }
+  .vb-lights { position: absolute; left: 28px; right: 28px; bottom: 14px; display: flex; justify-content: space-between; }
+  .vb-lights i { width: 5px; height: 5px; border-radius: 50%; background: #ffb81c; opacity: 0.25; }
+  @media (prefers-reduced-motion: no-preference) {
+    .vb-lights i { animation: vb-on 3.6s ease-in-out infinite; animation-delay: calc(var(--i) * 120ms); }
+    @keyframes vb-on { 0%, 100% { opacity: 0.25; box-shadow: none; } 40%, 60% { opacity: 1; box-shadow: 0 0 10px #ffb81c; } }
+  }
+  .vb-w { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .vb-bento { display: grid; gap: 14px; grid-template-columns: 1fr; }
+  @media (min-width: 800px) { .vb-bento { grid-template-columns: repeat(4, 1fr); } .vb-card--wide { grid-column: span 2; } }
+  .vb-card { position: relative; overflow: hidden; border-radius: 22px; padding: 22px; min-height: 180px; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; text-decoration: none; color: #fff; transition: border-color 0.2s, transform 0.2s; }
+  a.vb-card:hover { border-color: rgba(255, 184, 28, 0.5); transform: translateY(-2px); }
+  .vb-card h3 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  .vb-card p { color: #aab4c8; font-size: 14px; }
+  .vb-card b { color: #ffb81c; }
+  .vb-ico { position: absolute; top: 18px; left: 18px; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: rgba(255, 184, 28, 0.12); color: #ffb81c; }
+  .vb-ico svg { width: 20px; height: 20px; }
+  .vb-card__bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.5; z-index: -1; }
+  .vb-card__art { position: absolute; right: 12px; bottom: 0; width: 38%; max-width: 240px; opacity: 0.95; z-index: -1; }
+  .vb-check { display: flex; gap: 8px; margin-top: 12px; }
+  .vb-check input { flex: 1; min-width: 0; height: 46px; padding: 0 16px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(0, 0, 0, 0.25); color: #fff; font: 15px 'Golos Text'; }
+  .vb-check input::placeholder { color: #8c97ad; }
+  .vb-check button { height: 46px; padding: 0 18px; border-radius: 12px; border: 0; background: #fff; color: #14213d; font: 600 14px 'Golos Text'; cursor: pointer; }
+  .vb-sec { padding-top: 72px; }
+  .vb-sec h2 { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 20px; }
+  .vb-list { border-radius: 22px; padding: 6px 20px; }
+  .vb-row { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; padding: 16px 0; font-size: 15px; }
+  .vb-row + .vb-row { border-top: 1px solid rgba(255, 255, 255, 0.08); }
+  @media (min-width: 800px) { .vb-row { grid-template-columns: auto 1fr auto 200px; } }
+  .vb-row div { display: grid; }
+  .vb-row div span { color: #8c97ad; font-size: 14px; }
+  .vb-dot { width: 10px; height: 10px; border-radius: 50%; background: #ffb81c; box-shadow: 0 0 14px #ffb81c; }
+  .vb-chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(255, 184, 28, 0.12); color: #ffd27a; justify-self: start; }
+  .vb-eta { color: #eef2fa; text-align: right; }
+  .vb-f { max-width: 1100px; margin: 80px auto 0; padding: 24px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; color: #8c97ad; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+  .vb-f a { text-decoration: none; color: #fff; }
+  @media (max-width: 899px) { .vb-nav { display: none; } .vb-pill { justify-content: space-between; } .vb-panel { grid-template-columns: 1fr; } .vb-panel__cell + .vb-panel__cell { border-left: 0; border-top: 1px solid rgba(255, 255, 255, 0.1); } }
+
+  /* =============== C · Bento =============== */
+  .vc { background: #f5f5f7; color: #1d1d1f; }
+  .vc-w { max-width: 1160px; margin: 0 auto; padding: 0 20px; }
+  .vc-h { position: sticky; top: 0; z-index: 10; background: rgba(245, 245, 247, 0.8); backdrop-filter: saturate(1.8) blur(20px); border-bottom: 1px solid rgba(0, 0, 0, 0.06); }
+  .vc-h__in { display: flex; align-items: center; gap: 28px; height: 56px; }
+  .vc-h__in img { height: 28px; width: auto; }
+  .vc-nav { display: flex; gap: 26px; font-size: 13px; color: #424245; margin: 0 auto; }
+  .vc-nav a { text-decoration: none; }
+  .vc-nav a:hover { color: #000; }
+  .vc-btn { display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 999px; font-size: 13px; font-weight: 600; text-decoration: none; }
+  .vc-btn--y { background: #ffb81c; color: #14213d; }
+  .vc-btn--lg { height: 46px; padding: 0 22px; font-size: 15px; }
+  .vc-top { display: grid; gap: 20px; padding-top: 56px; padding-bottom: 28px; align-items: end; }
+  @media (min-width: 900px) { .vc-top { grid-template-columns: 1.4fr 1fr; } }
+  .vc h1 { font-size: clamp(36px, 4.6vw, 56px); font-weight: 700; letter-spacing: -0.04em; line-height: 1.05; }
+  .vc h1 span { color: #86868b; }
+  .vc-top__r { display: grid; gap: 16px; justify-items: start; }
+  .vc-top__r p { color: #424245; font-size: 17px; }
+  .vc-bento { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
+  @media (min-width: 900px) { .vc-bento { grid-template-columns: repeat(4, 1fr); grid-auto-rows: 210px; } }
+  .vc-tile { position: relative; overflow: hidden; border-radius: 26px; background: #fff; padding: 22px; display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit; min-height: 180px; transition: transform 0.25s; }
+  a.vc-tile:hover { transform: scale(1.01); }
+  .vc-tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .vc-tile__over { position: relative; margin-top: auto; color: #fff; display: grid; gap: 6px; justify-items: start; }
+  .vc-tile--hero { grid-column: 1 / -1; min-height: 320px; }
+  @media (min-width: 900px) { .vc-tile--hero { grid-column: span 2; grid-row: span 2; } }
+  .vc-tile--hero::after, .vc-tile--photo::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(0, 0, 0, 0.6)); }
+  .vc-tile--hero .vc-tile__over, .vc-tile--photo .vc-tile__over { z-index: 1; }
+  .vc-tile h3 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+  .vc-badge { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.22); backdrop-filter: blur(8px); }
+  .vc-link { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; background: #ffb81c; color: #14213d; padding: 8px 14px; border-radius: 999px; margin-top: 6px; }
+  .vc-tile--night { background: #14213d; color: #fff; justify-content: space-between; }
+  .vc-cap { font-size: 13px; color: #86868b; }
+  .vc-tile--night .vc-cap { color: #9aa6c0; }
+  .vc-tile--night b { color: #fff; }
+  .vc-big { font-family: Montserrat; font-size: 52px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; }
+  .vc-lights { display: flex; justify-content: space-between; }
+  .vc-lights i { width: 6px; height: 6px; border-radius: 50%; background: #ffb81c; box-shadow: 0 0 8px rgba(255, 184, 28, 0.8); }
+  .vc-check { display: flex; margin-top: auto; background: #f5f5f7; border-radius: 14px; padding: 4px; }
+  .vc-check input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 0 12px; font: 600 20px Montserrat; height: 44px; color: #1d1d1f; }
+  .vc-check button { width: 44px; height: 44px; border: 0; border-radius: 11px; background: #1d1d1f; color: #fff; display: grid; place-items: center; cursor: pointer; }
+  .vc-hint { font-size: 12px; color: #86868b; }
+  .vc-tile--map { background: #14213d; }
+  .vc-tile__over--dark { color: #fff; }
+  .vc-tile__over--dark span { font-size: 14px; color: #c9d2e6; }
+  .vc-tile--art { background: linear-gradient(180deg, #fff 0%, #eef2f8 100%); }
+  .vc-tile--art img { position: absolute; inset: auto -10px -8px auto; width: 62%; height: auto; }
+  .vc-tile--stats { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: end; }
+  @media (min-width: 900px) { .vc-tile--stats { grid-column: span 2; } }
+  .vc-tile--stats div { display: grid; gap: 4px; }
+  .vc-tile--stats strong { font-family: Montserrat; font-size: clamp(22px, 2.6vw, 32px); letter-spacing: -0.03em; }
+  .vc-tile--stats span { font-size: 13px; color: #86868b; line-height: 1.3; }
+  .vc-tile--photo { grid-column: 1 / -1; }
+  @media (min-width: 900px) { .vc-tile--photo { grid-column: span 2; } }
+  .vc-sec { padding-top: 56px; }
+  .vc-sec h2 { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 16px; }
+  .vc-list { background: #fff; border-radius: 26px; padding: 4px 22px; }
+  .vc-row { display: grid; gap: 6px 16px; padding: 16px 0; font-size: 15px; }
+  .vc-row + .vc-row { border-top: 1px solid #ececf0; }
+  @media (min-width: 800px) { .vc-row { grid-template-columns: 1fr auto 200px; align-items: center; } .vc-row > span:last-child { text-align: right; } }
+  .vc-row div { display: grid; }
+  .vc-row div span { color: #86868b; font-size: 14px; }
+  .vc-chip { justify-self: start; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #fff3d1; color: #6b4700; }
+  .vc-f { margin-top: 64px; font-size: 12px; color: #86868b; border-top: 1px solid #e3e3e8; }
+  .vc-f__in { display: flex; justify-content: space-between; padding: 20px; }
+  .vc-f a { text-decoration: none; }
+  @media (max-width: 899px) { .vc-nav { display: none; } .vc-h__in .vc-btn { margin-left: auto; } }
+
+  /* =============== D · Neo-brutalism =============== */
+  .vd { background: #fbf6ea; color: #14213d; --bd: 2.5px solid #14213d; --sh: 5px 5px 0 #14213d; }
+  .vd-w { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+  .vd-h { border-bottom: var(--bd); background: #fff; position: sticky; top: 0; z-index: 10; }
+  .vd-h__in { display: flex; align-items: center; gap: 28px; height: 68px; }
+  .vd-h__in img { height: 30px; width: auto; }
+  .vd-nav { display: flex; gap: 20px; font-weight: 600; font-size: 14px; margin-right: auto; }
+  .vd-nav a { text-decoration: none; }
+  .vd-nav a:hover { text-decoration: underline; text-decoration-thickness: 3px; text-decoration-color: #ffb81c; }
+  .vd-btn { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px; border: var(--bd); border-radius: 12px; background: #fff; font-weight: 700; font-size: 14px; text-decoration: none; box-shadow: 3px 3px 0 #14213d; transition: transform 0.12s, box-shadow 0.12s; }
+  .vd-btn:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 #14213d; }
+  .vd-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #14213d; }
+  .vd-btn--y { background: #ffb81c; }
+  .vd-btn--lg { height: 52px; padding: 0 22px; font-size: 15px; }
+  .vd-hero { display: grid; gap: 40px; padding-top: 56px; padding-bottom: 48px; align-items: center; }
+  @media (min-width: 900px) { .vd-hero { grid-template-columns: 1.2fr 1fr; } }
+  .vd-sticker { display: inline-block; transform: rotate(-3deg); background: #9fd6c2; border: var(--bd); border-radius: 10px; padding: 4px 12px; font-weight: 700; font-size: 13px; box-shadow: 3px 3px 0 #14213d; margin-bottom: 20px; }
+  .vd h1 { font-size: clamp(40px, 5.4vw, 70px); font-weight: 800; letter-spacing: -0.045em; line-height: 1; }
+  .vd mark { background: #ffb81c; color: inherit; padding: 0 8px; border: var(--bd); border-radius: 12px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  .vd-sub { font-size: 17px; max-width: 480px; margin: 24px 0 28px; }
+  .vd-actions { display: flex; gap: 14px; flex-wrap: wrap; }
+  .vd-photo { position: relative; border: var(--bd); border-radius: 22px; box-shadow: 8px 8px 0 #14213d; overflow: visible; }
+  .vd-photo img { width: 100%; aspect-ratio: 4 / 4.4; object-fit: cover; border-radius: 19px; }
+  .vd-stamp { position: absolute; top: -18px; right: -14px; transform: rotate(6deg); background: #ffb81c; border: var(--bd); border-radius: 999px; padding: 10px 18px; font-weight: 800; font-size: 14px; box-shadow: var(--sh); }
+  .vd-today { position: absolute; left: -18px; bottom: 24px; transform: rotate(-4deg); background: #fff; border: var(--bd); border-radius: 16px; padding: 10px 16px; box-shadow: var(--sh); display: grid; }
+  .vd-today span { font-size: 12px; font-weight: 600; }
+  .vd-today strong { font-family: Montserrat; font-size: 34px; font-weight: 800; line-height: 1; }
+  .vd-strip { display: flex; gap: 22px; align-items: center; overflow: hidden; white-space: nowrap; background: #14213d; color: #ffb81c; border-block: var(--bd); padding: 14px 24px; font-family: Montserrat; font-weight: 800; font-size: 20px; }
+  .vd-strip span { color: #fff; }
+  .vd-sec { padding-top: 64px; }
+  .vd-sec h2 { font-size: clamp(28px, 3vw, 38px); font-weight: 800; letter-spacing: -0.03em; margin-bottom: 24px; }
+  .vd-cards { display: grid; gap: 18px; }
+  @media (min-width: 700px) { .vd-cards { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 1000px) { .vd-cards { grid-template-columns: repeat(4, 1fr); } }
+  .vd-card { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 22px; min-height: 190px; border: var(--bd); border-radius: 18px; box-shadow: var(--sh); text-decoration: none; transition: transform 0.12s, box-shadow 0.12s; }
+  .vd-card:hover { transform: translate(-3px, -3px); box-shadow: 8px 8px 0 #14213d; }
+  .vd-card h3 { font-size: 19px; font-weight: 800; margin-top: auto; }
+  .vd-card p { font-size: 14px; }
+  .vd-card--0 { background: #ffb81c; }
+  .vd-card--1 { background: #fff; }
+  .vd-card--2 { background: #c9dcf5; }
+  .vd-card--3 { background: #9fd6c2; }
+  .vd-go { position: absolute; top: 18px; right: 18px; width: 36px; height: 36px; border: var(--bd); border-radius: 50%; display: grid; place-items: center; background: #fff; }
+  .vd-list { display: grid; gap: 12px; }
+  .vd-row { display: grid; gap: 6px 16px; padding: 16px 20px; background: #fff; border: var(--bd); border-radius: 14px; font-size: 15px; }
+  @media (min-width: 800px) { .vd-row { grid-template-columns: 1fr auto 200px; align-items: center; } .vd-eta { text-align: right; } }
+  .vd-row div { display: grid; }
+  .vd-row div span { font-size: 14px; color: #3d4a66; }
+  .vd-chip { justify-self: start; font-size: 12px; font-weight: 800; padding: 4px 10px; border: 2px solid #14213d; border-radius: 999px; background: #ffb81c; }
+  .vd-eta { font-weight: 800; font-family: Montserrat; }
+  .vd-f { margin-top: 72px; background: #14213d; color: #fff; border-top: var(--bd); }
+  .vd-f__in { display: flex; justify-content: space-between; padding: 22px 24px; font-weight: 600; font-size: 14px; }
+  .vd-f a { color: #ffb81c; text-decoration: none; }
+  @media (max-width: 899px) { .vd-nav { display: none; } .vd-h__in .vd-btn { margin-left: auto; } .vd-today { left: 10px; } .vd-stamp { right: 6px; } }
+</style>

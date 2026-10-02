@@ -1,0 +1,204 @@
+---
+import Base from '../../layouts/Base.astro';
+import Icon from '../../components/Icon.astro';
+import { STATUSES } from '../../data/site';
+---
+
+<Base title="Проверить заявку" description="Статус заявки на ремонт уличного освещения по номеру вида КС-26-004812.">
+  <section class="status-page">
+    <div class="wrap">
+      <p class="eyebrow">Статус ремонта</p>
+      <h1>Проверить заявку</h1>
+
+      <form class="lookup" data-lookup>
+        <label for="n" class="label">Номер заявки</label>
+        <div class="lookup__row">
+          <input class="input num" type="text" id="n" name="n" inputmode="numeric" autocomplete="off" placeholder="Например, 004812" required />
+          <button class="btn btn--night" type="submit"><Icon name="search" /> Проверить</button>
+        </div>
+        <p class="small muted">Номер пришёл в СМС или показан после отправки заявки. Для примера откройте <a href="/zayavka/?n=%D0%9A%D0%A1-26-004812&k=demo4812">заявку КС-26-004812</a>.</p>
+      </form>
+
+      <div class="notice" data-notfound hidden role="alert">
+        <Icon name="info" />
+        <p>Заявка <b data-nf-number></b> не найдена. Проверьте номер — он выглядит так: КС-26-004812. Если отправляли давно, позвоните диспетчеру.</p>
+      </div>
+
+      <article class="ticket" data-ticket hidden aria-live="polite">
+        <header class="ticket__head">
+          <div>
+            <p class="ticket__label">Заявка</p>
+            <h2 class="ticket__number num" data-t-number>Заявка</h2>
+          </div>
+          <span class="chip" data-t-chip></span>
+        </header>
+        <dl class="ticket__facts">
+          <div><dt>Что</dt><dd data-t-type></dd></div>
+          <div><dt>Где</dt><dd data-t-where></dd></div>
+          <div><dt>Срок</dt><dd data-t-term></dd></div>
+        </dl>
+
+        <ol class="cells" data-cells aria-label="Ход работ">
+          {(['accepted', 'assigned', 'working', 'done'] as const).map((s, i) => (
+            <li class="cell" data-cell={i + 1}>
+              <span class="cell__box" aria-hidden="true"></span>
+              <span class="cell__label">{STATUSES[s].title}</span>
+            </li>
+          ))}
+        </ol>
+
+        <div class="feedback" data-feedback hidden>
+          <p><b>Свет восстановлен?</b> Проверьте вечером и отметьте — так мы видим реальное качество ремонта.</p>
+          <div class="feedback__actions">
+            <button class="btn btn--night" type="button" data-fb="ok"><Icon name="thumbs-up" /> Спасибо, горит</button>
+            <button class="btn" type="button" data-fb="broken"><Icon name="lamp-off" /> Всё ещё не горит</button>
+          </div>
+        </div>
+        <p class="notice notice--ok" data-fb-thanks hidden><Icon name="check" /> <span></span></p>
+
+        <h3 class="ticket__h">История</h3>
+        <ol class="timeline" data-timeline></ol>
+
+        <div class="ticket__private" data-private hidden>
+          <h3 class="ticket__h">Ваши фото и комментарий</h3>
+          <p data-t-comment></p>
+          <div class="ticket__photos" data-t-photos></div>
+        </div>
+        <p class="small muted" data-nokey hidden>
+          Фото, комментарий и кнопки «Спасибо, горит» / «Всё ещё не горит» видны только по ссылке из СМС или со страницы после отправки.
+        </p>
+      </article>
+    </div>
+  </section>
+</Base>
+
+<script>
+  import { getTicket, normalizeNumber, faultTitle, statusTitle, fmtDateTime, feedback, escapeHtml, type Ticket } from '../../lib/tickets';
+  import { STATUSES } from '../../data/site';
+
+  const $ = <T extends HTMLElement = HTMLElement>(s: string) => document.querySelector<T>(s)!;
+  const params = new URLSearchParams(location.search);
+  const key = params.get('k') ?? '';
+  const input = $<HTMLInputElement>('#n');
+
+  function render(t: Ticket) {
+    const own = key && key === t.key;
+    $('[data-t-number]').textContent = t.number;
+    const chip = $('[data-t-chip]');
+    chip.className = `chip chip--${t.status}${t.emergency && t.status !== 'done' ? ' chip--alarm' : ''}`;
+    chip.textContent = `${t.emergency && t.status !== 'done' ? 'Аварийная · ' : ''}${statusTitle(t.status)}`;
+    $('[data-t-type]').textContent = faultTitle(t.type);
+    $('[data-t-where]').textContent = [t.address, t.pole ? `опора № ${t.pole}` : ''].filter(Boolean).join(', ');
+    $('[data-t-term]').textContent = t.term;
+
+    // Ячейки «загораются» от «Принята» к «Выполнена»
+    const step = STATUSES[t.status].step;
+    document.querySelectorAll<HTMLElement>('[data-cell]').forEach((c) => {
+      const i = Number(c.dataset.cell);
+      c.dataset.on = String(i <= step);
+      c.dataset.kind = i === step ? t.status : '';
+      const label = c.querySelector('.cell__label')!;
+      if (i === 3) label.textContent = t.status === 'planned' ? STATUSES.planned.title : STATUSES.working.title;
+      if (i === 4) label.textContent = t.status === 'foreign' ? STATUSES.foreign.title : STATUSES.done.title;
+      if (i === step) c.setAttribute('aria-current', 'step'); else c.removeAttribute('aria-current');
+    });
+
+    $('[data-timeline]').innerHTML = [...t.history]
+      .reverse()
+      .map((h) => `<li class="timeline__item timeline__item--${h.status}"><time>${fmtDateTime(h.at)}</time><b>${statusTitle(h.status)}</b><span>${escapeHtml(h.comment)}</span></li>`)
+      .join('');
+
+    const lastIsConfirm = t.history.at(-1)?.comment.startsWith('Заявитель подтвердил');
+    $('[data-feedback]').hidden = !(own && t.status === 'done' && !lastIsConfirm);
+    $('[data-nokey]').hidden = Boolean(own);
+    const priv = $('[data-private]');
+    priv.hidden = !(own && (t.comment || t.photos?.length));
+    $('[data-t-comment]').textContent = t.comment ?? '';
+    $('[data-t-photos]').innerHTML = (own && t.photos?.length ? t.photos : [])
+      .filter((src) => src.startsWith('data:image/'))
+      .map((src, i) => `<img src="${src}" alt="Фото ${i + 1}" />`)
+      .join('');
+    $('[data-ticket]').hidden = false;
+    $('[data-notfound]').hidden = true;
+  }
+
+  function lookup(raw: string) {
+    const number = normalizeNumber(raw);
+    const t = number ? getTicket(number) : null;
+    if (t) { render(t); input.value = t.number; }
+    else {
+      $('[data-ticket]').hidden = true;
+      $('[data-nf-number]').textContent = raw;
+      $('[data-notfound]').hidden = false;
+    }
+  }
+
+  $('[data-lookup]').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const n = normalizeNumber(input.value) ?? input.value;
+    history.replaceState(null, '', `?n=${encodeURIComponent(n)}${key ? `&k=${encodeURIComponent(key)}` : ''}`);
+    lookup(input.value);
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('[data-fb]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const broken = b.dataset.fb === 'broken';
+      const t = feedback($('[data-t-number]').textContent!, key, broken);
+      if (!t) return;
+      render(t);
+      const thanks = $('[data-fb-thanks]');
+      thanks.querySelector('span')!.textContent = broken
+        ? 'Заявка снова в работе. Диспетчер увидит, что ремонт не помог.'
+        : 'Спасибо! Рады, что светло.';
+      thanks.hidden = false;
+    }),
+  );
+
+  const n = params.get('n');
+  if (n) { input.value = n; lookup(n); }
+</script>
+
+<style>
+  .status-page { padding: 40px 0 88px; }
+  .lookup { max-width: 560px; display: grid; gap: 8px; margin: 12px 0 32px; }
+  .lookup__row { display: flex; gap: 8px; }
+  .lookup__row .input { flex: 1; min-width: 0; font-size: 1.1875rem; }
+  .muted { color: var(--muted); }
+
+  .ticket { background: var(--surface); box-shadow: var(--shadow-2); border-radius: var(--r-xl); padding: 28px; max-width: 920px; }
+  @media (min-width: 760px) { .ticket { padding: 36px 40px; } }
+  .ticket__head { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: flex-start; }
+  .ticket__label { margin: 0; color: var(--muted); font-size: 0.875rem; }
+  .ticket__number { font-size: clamp(1.75rem, 1.3rem + 2vw, 2.5rem); margin: 0; letter-spacing: 0.02em; }
+  .ticket__facts { display: grid; gap: 12px; margin: 20px 0 28px; }
+  @media (min-width: 700px) { .ticket__facts { grid-template-columns: 1fr 1.6fr 1fr; } }
+  .ticket__facts dt { font-size: 0.875rem; color: var(--muted); }
+  .ticket__facts dd { margin: 0; font-weight: 600; }
+  .ticket__h { font-size: 1.125rem; margin: 28px 0 12px; }
+
+  /* Ячейки сетки «Пиксель К» загораются по мере продвижения заявки */
+  .cells { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .cell { display: grid; gap: 8px; }
+  .cell__box { height: 36px; border-radius: 4px; background: var(--cell-off); transition: background-color 0.3s; }
+  .cell[data-on='true'] .cell__box { background: var(--sodium); }
+  .cell[data-kind='done'] .cell__box { background: var(--ok); }
+  .cell[data-kind='planned'] .cell__box { background: var(--dusk); }
+  .cell[data-kind='foreign'] .cell__box { background: var(--asphalt); }
+  .cell__label { font-size: 0.8125rem; line-height: 1.3; color: var(--muted); }
+  .cell[aria-current='step'] .cell__label { color: var(--text); font-weight: 600; }
+
+  .feedback { margin-top: 24px; padding: 18px; border-radius: var(--r); background: var(--surface-2); }
+  .feedback p { margin-bottom: 12px; }
+  .feedback__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  [data-fb-thanks] { margin-top: 16px; }
+
+  .timeline { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--line); }
+  :global(.timeline__item) { position: relative; display: grid; gap: 2px; padding: 0 0 18px 20px; }
+  :global(.timeline__item::before) { content: ''; position: absolute; left: -7px; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: var(--line-strong); border: 2px solid var(--surface); }
+  :global(.timeline__item:first-child::before) { background: var(--sodium); }
+  :global(.timeline__item--done:first-child::before) { background: var(--ok); }
+  :global(.timeline__item time) { font-size: 0.875rem; color: var(--muted); }
+  :global(.timeline__item span) { color: var(--muted); }
+  .ticket__photos { display: flex; gap: 8px; flex-wrap: wrap; }
+  :global(.ticket__photos img) { width: 120px; height: 120px; object-fit: cover; border-radius: var(--r); }
+</style>

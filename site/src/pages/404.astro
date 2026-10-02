@@ -1,0 +1,19 @@
+---
+import Base from '../layouts/Base.astro';
+import PageHero from '../components/PageHero.astro';
+import Icon from '../components/Icon.astro';
+import notFound from '../assets/img/not-found.jpg';
+---
+
+<Base title="Страница не найдена" noindex>
+  <PageHero image={notFound} imagePosition="70% 50%" eyebrow="Ошибка 404" title="Здесь темно — такой страницы нет" lead="Возможно, ссылка устарела. А если на улице не горит фонарь — сообщите, мы приедем.">
+    <div class="actions">
+      <a class="btn btn--primary btn--lg" href="/soobshit/"><Icon name="lamp-off" /> Сообщить о неисправности</a>
+      <a class="btn btn--lg" href="/">На главную</a>
+    </div>
+  </PageHero>
+</Base>
+
+<style>
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; }
+</style>

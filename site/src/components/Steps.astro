@@ -1,0 +1,37 @@
+---
+// «Как это работает» — три шага крупно. Снимает страх «не разберусь» у старших пользователей.
+const STEPS = [
+  { title: 'Отметьте место', text: 'Нажмите на карту или напишите адрес. Можно кнопкой «Я здесь».' },
+  { title: 'Выберите, что случилось', text: 'Одна плитка: не горит, мигает, оборван провод. Фото — по желанию.' },
+  { title: 'Следите за ремонтом', text: 'Получите номер заявки. По нему видно, когда приедет бригада.' },
+];
+---
+
+<ol class="steps">
+  {STEPS.map((s, i) => (
+    <li class="steps__item">
+      <span class="steps__num num" aria-hidden="true">{i + 1}</span>
+      <h3>{s.title}</h3>
+      <p>{s.text}</p>
+    </li>
+  ))}
+</ol>
+
+<style>
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  @media (min-width: 860px) { .steps { grid-template-columns: repeat(3, 1fr); gap: 14px; } }
+  .steps__item { position: relative; padding: 22px; border-radius: var(--r-xl); background: var(--surface); }
+  .steps__num {
+    display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; margin-bottom: 14px;
+    background: var(--sodium); color: #14213d; font-family: var(--font-head); font-weight: 700; font-size: 1rem;
+  }
+  .steps__item h3 { font-size: 1.125rem; margin-bottom: 4px; }
+  .steps__item p { margin: 0; color: var(--muted); font-size: 0.9375rem; }
+  @media (min-width: 860px) {
+    .steps__item:not(:last-child)::after {
+      content: ''; position: absolute; top: 39px; left: calc(22px + 36px + 12px); right: 16px; height: 6px;
+      background: radial-gradient(circle, var(--sodium) 0 2px, transparent 2.5px) 0 50% / 14px 6px repeat-x; opacity: 0.8;
+    }
+  }
+  :global(html[data-scheme]) .steps__item { outline: 2px solid var(--fg); }
+</style>

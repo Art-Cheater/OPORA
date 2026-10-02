@@ -1,0 +1,78 @@
+---
+import Base from '../../layouts/Base.astro';
+import PageHero from '../../components/PageHero.astro';
+import Icon from '../../components/Icon.astro';
+import { CONTACTS } from '../../data/site';
+
+const c = CONTACTS;
+const phones = [c.dispatcher, c.reception, c.tech, c.edds];
+---
+
+<Base title="Контакты" description="Телефон диспетчера уличного освещения Кирова (круглосуточно), приёмная, технический отдел, адрес.">
+  <PageHero compact eyebrow="Контакты" title="Как с нами связаться" lead="Не горит фонарь — быстрее всего отправить заявку на сайте. Авария или опасность — звоните диспетчеру." />
+
+  <section class="section">
+    <div class="wrap">
+      <ul class="phones">
+        {phones.map((p, i) => (
+          <li class:list={['phone-card', { 'phone-card--main': i === 0 }]}>
+            <p class="phone-card__title">{p.title}</p>
+            <a class="phone-card__num num" href={`tel:${p.tel}`}>{p.phone}</a>
+            <p class="phone-card__note">{p.note}</p>
+            <p class="phone-card__hours"><Icon name="clock" size={18} /> {p.hours}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="wrap addr">
+      <div class="addr__info">
+        <h2>Адрес и почта</h2>
+        <p class="addr__line"><Icon name="pin" /> <span>{c.address}</span></p>
+        <p class="addr__line"><Icon name="mail" /> <a href={`mailto:${c.email}`}>{c.email}</a></p>
+        <h3>Письменное обращение</h3>
+        <p class="muted">Письмо на почту или в приёмную. Ответ — в течение 30 дней по закону о порядке рассмотрения обращений граждан (59-ФЗ).</p>
+        <h3>Подрядчикам</h3>
+        <p class="muted">Работы рядом с сетями освещения, согласования и допуск — через технический отдел: <a class="num" href={`tel:${c.tech.tel}`}>{c.tech.phone}</a>.</p>
+      </div>
+      <div class="map addr__map" data-map role="region" aria-label={`Карта: ${c.address}`}></div>
+    </div>
+  </section>
+</Base>
+
+<script>
+  import { createMap, addMarker } from '../../lib/map';
+  import { CONTACTS } from '../../data/site';
+  const el = document.querySelector<HTMLElement>('[data-map]');
+  if (el) {
+    const { lat, lon } = CONTACTS.addressGeo;
+    const { L, map } = await createMap(el, { center: [lat, lon], zoom: 15 });
+    addMarker(L, map, lat, lon, 'office', `<b>Кировсвет</b><br>${CONTACTS.address}`).openPopup();
+  }
+</script>
+
+<style>
+  .phones { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; }
+  @media (min-width: 1000px) {
+    .phones { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .phone-card--main { grid-column: 1 / -1; grid-template-columns: 1fr auto; align-items: center; column-gap: 32px; }
+    .phone-card--main .phone-card__num { grid-column: 2; grid-row: 1 / span 3; }
+  }
+  .phone-card { background: var(--surface); box-shadow: var(--shadow-2); border-radius: var(--r-lg); padding: 26px 28px; display: grid; gap: 4px; align-content: start; }
+  .phone-card--main { background: var(--night); color: #fff; border-color: var(--night); --muted: var(--on-night-muted); }
+  .phone-card__title { font-weight: 600; margin: 0; }
+  .phone-card__num { font-family: var(--font-head); font-weight: 700; font-size: 1.25rem; color: inherit; text-decoration: none; }
+  .phone-card--main .phone-card__num { font-size: clamp(1.375rem, 1rem + 1.6vw, 2.25rem); color: var(--sodium); }
+  .phones > li { min-width: 0; }
+  .phone-card__num:hover { text-decoration: underline; }
+  .phone-card__note { margin: 0; color: var(--muted); font-size: 0.9375rem; }
+  .phone-card__hours { display: flex; gap: 6px; align-items: center; margin: 8px 0 0; font-size: 0.9375rem; }
+  .addr { display: grid; gap: 32px; }
+  @media (min-width: 1000px) { .addr { grid-template-columns: 1fr 1.2fr; } }
+  .addr__line { display: flex; gap: 10px; align-items: center; font-size: 1.125rem; }
+  .addr__map { min-height: 380px; }
+  .muted { color: var(--muted); }
+  h3 { margin-top: 28px; }
+</style>

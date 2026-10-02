@@ -1,0 +1,381 @@
+---
+import { Image } from 'astro:assets';
+import Base from '../../layouts/Base.astro';
+import Icon from '../../components/Icon.astro';
+import { CONTACTS, FAULTS, STREETS } from '../../data/site';
+import poleNumber from '../../assets/img/pole-number.jpg';
+
+const d = CONTACTS.dispatcher;
+const STEPS = ['Что случилось', 'Где', 'Фото', 'Контакты'];
+---
+
+<Base
+  title="Сообщить о неисправности"
+  description="Сообщите о неисправном уличном фонаре в Кирове за минуту: без регистрации, с фото и меткой на карте."
+  headerCta="none"
+  mobileBar="none"
+>
+  <section class="report">
+    <div class="wrap report__wrap">
+      <header class="report__head">
+        <p class="eyebrow">Заявка без регистрации</p>
+        <h1>Сообщить о неисправности</h1>
+        <p class="lead">Обязательны два ответа: что случилось и где. Всё остальное — по желанию.</p>
+        <p class="report__call">
+          <Icon name="alert" size={20} />
+          <span>Опасно — искрит, оборван провод, падает опора? Звоните сразу: <a class="num" href={`tel:${d.tel}`}>{d.phone}</a> или <a href="tel:112">112</a></span>
+        </p>
+      </header>
+
+      <div class="report__main">
+        <ol class="progress" aria-label="Шаги заявки" data-progress>
+          {STEPS.map((s, i) => (
+            <li class="progress__step" data-progress-step={i + 1} aria-current={i === 0 ? 'step' : undefined}>
+              <span class="progress__bar" aria-hidden="true"><i></i></span>
+              <span class="progress__label"><span class="num">{i + 1}.</span> {s}</span>
+            </li>
+          ))}
+        </ol>
+        <p class="progress__text" aria-live="polite" data-step-text>Шаг 1 из 4</p>
+
+        <div class="notice draft-note" data-draft-note hidden>
+          <Icon name="refresh" />
+          <p>Мы восстановили ваш черновик. <button type="button" class="linklike" data-draft-reset>Начать заново</button></p>
+        </div>
+        <div class="notice" data-qr-note hidden>
+          <Icon name="qr" />
+          <p>Место заполнено по QR-коду на опоре. Осталось выбрать, что случилось.</p>
+        </div>
+
+        <form id="report" novalidate>
+          <!-- Шаг 1 -->
+          <fieldset class="step" data-step="1">
+            <legend><h2 class="step__title" tabindex="-1">Что случилось?</h2></legend>
+            <div class="tiles" role="radiogroup" aria-label="Тип неисправности" aria-required="true" aria-describedby="type-error" data-field="type">
+              {FAULTS.map((f) => (
+                <label class:list={['tile', { 'tile--danger': f.emergency === true }]}>
+                  <input type="radio" name="type" value={f.id} required />
+                  <span class="tile__icon"><Icon name={f.icon as any} size={22} /></span>
+                  <span class="tile__title">{f.title}</span>
+                  <span class="tile__hint">{f.hint}</span>
+                </label>
+              ))}
+            </div>
+
+            <p class="error-text" id="type-error" role="alert" hidden></p>
+
+            <div class="subq" data-pole-q hidden>
+              <p class="label" id="pole-q">Опора может упасть?</p>
+              <div class="seg" role="radiogroup" aria-labelledby="pole-q" aria-describedby="pole-error" data-field="poleFalling">
+                <label><input type="radio" name="poleFalling" value="yes" /> <span>Да, наклонилась или шатается</span></label>
+                <label><input type="radio" name="poleFalling" value="no" /> <span>Нет, стоит ровно</span></label>
+              </div>
+              <p class="error-text" id="pole-error" role="alert" hidden></p>
+            </div>
+
+            <div class="notice notice--alarm danger" data-danger hidden role="alert">
+              <Icon name="alert" />
+              <div>
+                <p class="danger__title">Не подходите ближе 8 метров и не подпускайте детей</p>
+                <p>Позвоните диспетчеру или в 112 — так быстрее. Заявку с сайта мы тоже примем как аварийную.</p>
+                <div class="danger__actions">
+                  <a class="btn btn--alarm" href={`tel:${d.tel}`}><Icon name="phone" /> Диспетчер</a>
+                  <a class="btn" href="tel:112">112</a>
+                </div>
+              </div>
+            </div>
+
+            <div class="subq" data-count-q>
+              <p class="label" id="count-q">Сколько фонарей? <span class="opt">необязательно</span></p>
+              <div class="seg" role="radiogroup" aria-labelledby="count-q">
+                <label><input type="radio" name="count" value="one" /> <span>Один</span></label>
+                <label><input type="radio" name="count" value="several" /> <span>Несколько подряд</span></label>
+                <label><input type="radio" name="count" value="street" /> <span>Вся улица</span></label>
+              </div>
+            </div>
+            <p class="error-text" data-error role="alert" hidden></p>
+            <div class="step__nav">
+              <button class="btn btn--night btn--lg" type="button" data-next>Далее <Icon name="arrow-right" /></button>
+            </div>
+          </fieldset>
+
+          <!-- Шаг 2 -->
+          <fieldset class="step" data-step="2" hidden>
+            <legend><h2 class="step__title" tabindex="-1">Где это?</h2></legend>
+            <p class="step__intro">Поставьте метку на карте или напишите адрес. Метку можно перетащить.</p>
+            <div class="where">
+              <div class="map where__map" data-map role="region" aria-label="Карта: нажмите, чтобы поставить метку"></div>
+              <div class="where__side">
+                <button class="btn btn--block" type="button" data-locate><Icon name="locate" /> Я здесь</button>
+                <p class="small where__coords" data-coords aria-live="polite">Метка не поставлена</p>
+                <div class="field suggest">
+                  <label for="address">Адрес или ориентир</label>
+                  <input class="input" type="text" id="address" name="address" autocomplete="off" placeholder="Например: ул. Ленина, 80, у остановки" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="address-list" aria-describedby="where-error address-hint" data-field="where" />
+                  <ul class="suggest__list" id="address-list" role="listbox" hidden></ul>
+                  <span class="hint" id="address-hint">Начните вводить улицу — появятся подсказки</span>
+                  <p class="error-text" id="where-error" role="alert" hidden></p>
+                </div>
+                <div class="field">
+                  <label for="pole">Номер опоры <span class="opt">необязательно</span></label>
+                  <input class="input num" type="text" id="pole" name="pole" autocomplete="off" inputmode="text" placeholder="17-034" maxlength="16" />
+                  <details class="pole-hint">
+                    <summary>Где найти номер?</summary>
+                    <Image src={poleNumber} alt="Табличка с номером 17-034 на опоре на высоте около 1,7 м" widths={[320, 640]} sizes="320px" loading="lazy" />
+                    <p class="small">Номер написан на табличке или краской на высоте 1,5–2 м. Если его нет — просто поставьте метку.</p>
+                  </details>
+                </div>
+              </div>
+            </div>
+
+            <div class="notice dup" data-dup hidden>
+              <Icon name="info" />
+              <div>
+                <p><b>Об этом фонаре уже сообщили.</b> <span data-dup-text></span></p>
+                <div class="dup__actions">
+                  <button class="btn btn--night" type="button" data-dup-join><Icon name="bell" /> Я тоже вижу эту проблему</button>
+                  <a class="btn" href="#" data-dup-link>Открыть заявку</a>
+                </div>
+                <p class="small dup__hint">Если это другой фонарь — просто продолжайте.</p>
+              </div>
+            </div>
+
+            <p class="error-text" data-error role="alert" hidden></p>
+            <div class="step__nav">
+              <button class="btn btn--lg" type="button" data-prev><Icon name="arrow-left" /> Назад</button>
+              <button class="btn btn--night btn--lg" type="button" data-next>Далее <Icon name="arrow-right" /></button>
+            </div>
+          </fieldset>
+
+          <!-- Шаг 3 -->
+          <fieldset class="step" data-step="3" hidden>
+            <legend><h2 class="step__title" tabindex="-1">Фото и комментарий</h2></legend>
+            <p class="step__intro">Необязательно, но помогает бригаде найти место и взять нужные детали.</p>
+            <div class="photos">
+              <div class="photos__list" data-photos></div>
+              <div class="photos__add" data-photo-add>
+                <label class="btn">
+                  <Icon name="camera" /> Сфотографировать
+                  <input class="visually-hidden" type="file" accept="image/*" capture="environment" data-photo-input />
+                </label>
+                <label class="btn">
+                  <Icon name="plus" /> Из галереи
+                  <input class="visually-hidden" type="file" accept="image/*" multiple data-photo-input />
+                </label>
+              </div>
+              <p class="small muted">До 3 фото. Сжимаем прямо на телефоне, чтобы отправка не тратила трафик.</p>
+            </div>
+            <div class="field">
+              <label for="comment">Комментарий <span class="opt">необязательно</span></label>
+              <textarea class="textarea" id="comment" name="comment" maxlength="500" placeholder="Например: не горит с понедельника, темно у пешеходного перехода"></textarea>
+              <span class="hint num" data-counter>0 / 500</span>
+            </div>
+            <div class="step__nav">
+              <button class="btn btn--lg" type="button" data-prev><Icon name="arrow-left" /> Назад</button>
+              <button class="btn btn--night btn--lg" type="button" data-next>Далее <Icon name="arrow-right" /></button>
+            </div>
+          </fieldset>
+
+          <!-- Шаг 4 -->
+          <fieldset class="step" data-step="4" hidden>
+            <legend><h2 class="step__title" tabindex="-1">Контакты</h2></legend>
+            <p class="step__intro">Оставьте, если хотите получить СМС о ремонте. Можно пропустить.</p>
+            <div class="contacts">
+              <div class="field">
+                <label for="name">Имя</label>
+                <input class="input" type="text" id="name" name="name" autocomplete="given-name" />
+              </div>
+              <div class="field">
+                <label for="phone">Телефон</label>
+                <input class="input num" id="phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="+7 900 000-00-00" aria-describedby="phone-error" data-field="phone" />
+                <p class="error-text" id="phone-error" role="alert" hidden></p>
+              </div>
+              <div class="field">
+                <label for="email">Email</label>
+                <input class="input" id="email" name="email" type="email" autocomplete="email" inputmode="email" aria-describedby="email-error" data-field="email" />
+                <p class="error-text" id="email-error" role="alert" hidden></p>
+              </div>
+            </div>
+            <div data-consent hidden>
+              <label class="consent">
+                <input type="checkbox" name="consent" aria-describedby="consent-error" data-field="consent" />
+                <span>Согласен на обработку персональных данных для работы с заявкой — <a href="/politika/" target="_blank">политика</a></span>
+              </label>
+              <p class="error-text" id="consent-error" role="alert" hidden></p>
+            </div>
+
+            <div class="summary" data-summary></div>
+            <p class="small muted captcha-note">Защищено от спама без регистрации: невидимая проверка, лимит заявок с одного устройства, проверка, что точка в границах города.</p>
+            <p class="error-text" data-error role="alert" hidden></p>
+            <div class="step__nav">
+              <button class="btn btn--lg" type="button" data-prev><Icon name="arrow-left" /> Назад</button>
+              <button class="btn btn--primary btn--lg" type="submit" data-submit><Icon name="check" /> <span data-submit-label>Отправить заявку</span></button>
+            </div>
+          </fieldset>
+        </form>
+
+        <section class="done" data-done hidden aria-labelledby="done-title">
+          <div class="done__lights" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <p class="eyebrow">Заявка принята</p>
+          <h2 id="done-title" tabindex="-1">Номер вашей заявки</h2>
+          <div class="done__number">
+            <strong class="num" data-done-number>КС-26-000000</strong>
+            <button class="btn" type="button" data-copy><Icon name="copy" /> <span>Скопировать</span></button>
+          </div>
+          <p class="done__term" data-done-term></p>
+          <div class="notice notice--alarm" data-done-alarm hidden>
+            <Icon name="alert" />
+            <p>Заявка аварийная. Если опасность рядом с людьми — позвоните диспетчеру <a class="num" href={`tel:${d.tel}`}>{d.phone}</a>.</p>
+          </div>
+          <p data-done-sms hidden>Ссылку на заявку отправим по СМС. Там же будет кнопка «Всё ещё не горит», если ремонт не помог.</p>
+          <p data-done-nosms>Сохраните номер или ссылку: по ней видно статус и можно подтвердить, что свет горит.</p>
+          <div class="done__actions">
+            <a class="btn btn--night btn--lg" href="#" data-done-link><Icon name="search" /> Страница заявки</a>
+            <a class="btn btn--lg" href="/soobshit/">Сообщить ещё об одном</a>
+          </div>
+          <p class="small muted">Демо-версия: заявка сохранена только в этом браузере и не уходит в службу.</p>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <script type="application/json" id="streets-data" set:html={JSON.stringify(STREETS)} />
+</Base>
+
+<script>
+  import '../../scripts/report';
+</script>
+
+<style>
+  .report { padding: 32px 0 80px; }
+  @media (min-width: 900px) { .report { padding: 56px 0 96px; } }
+  .report__wrap { display: grid; gap: 32px; }
+  .report__wrap > * { min-width: 0; }
+  /* Заголовок в узкой боковой колонке: «неисправности» должно помещаться целиком */
+  .report__head h1 { font-size: clamp(2rem, 1.4rem + 2.4vw, 2.75rem); }
+  @media (min-width: 1100px) { .report__head h1 { font-size: 2.125rem; } }
+  @media (min-width: 1100px) { .report__wrap { grid-template-columns: 340px 1fr; gap: 56px; align-items: start; } .report__head { position: sticky; top: calc(var(--header-h) + 24px); } }
+  .report__call {
+    display: flex; gap: 12px; align-items: flex-start; padding: 16px 18px; border-radius: var(--r);
+    background: var(--alarm-bg); box-shadow: inset 4px 0 0 var(--alarm); font-size: 1rem; margin: 24px 0 0;
+  }
+  .report__call :global(svg) { color: var(--alarm); flex: none; margin-top: 2px; }
+  .report__call a { font-weight: 600; color: var(--text); }
+
+  .progress { list-style: none; margin: 0 0 8px; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .progress__bar { display: block; height: 6px; border-radius: 3px; background: var(--cell-off); overflow: hidden; margin-bottom: 10px; }
+  .progress__bar i { display: block; height: 100%; width: 0; background: var(--sodium); border-radius: 4px; transition: width 0.3s ease; }
+  .progress__step[data-state='done'] .progress__bar i { width: 100%; }
+  .progress__step[aria-current='step'] .progress__bar i { width: 50%; }
+  .progress__label { font-size: 0.8125rem; color: var(--muted); display: none; line-height: 1.3; }
+  .progress__step[aria-current='step'] .progress__label { color: var(--text); font-weight: 700; }
+  @media (min-width: 640px) { .progress__label { display: block; } }
+  .progress__text { font-size: 0.9375rem; font-weight: 600; margin: 0 0 20px; }
+  @media (min-width: 640px) { .progress__text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } }
+  .progress + .progress__text + * { margin-top: 0; }
+  @media (min-width: 640px) { .progress { margin-bottom: 28px; } }
+
+  .draft-note, [data-qr-note] { margin-bottom: 16px; }
+  .linklike { background: none; border: 0; padding: 0; color: var(--link); font: inherit; text-decoration: underline; cursor: pointer; }
+
+  .step { border: 0; margin: 0; padding: 0; min-width: 0; }
+  .step legend { padding: 0; margin-bottom: 16px; width: 100%; }
+  .step__title { margin: 0; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); }
+  .step__title:focus { outline: none; }
+  .step__intro { color: var(--muted); margin-top: -6px; }
+  .step__nav { display: flex; gap: 12px; justify-content: space-between; margin-top: 28px; flex-wrap: wrap; }
+  .step__nav .btn:only-child { margin-left: auto; }
+  @media (max-width: 480px) { .step__nav .btn { flex: 1; } }
+  .opt { font-weight: 400; color: var(--muted); font-size: 0.875rem; }
+
+  .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  @media (min-width: 760px) { .tiles { grid-template-columns: repeat(4, 1fr); } }
+  .tile {
+    position: relative; display: grid; gap: 2px; align-content: start; padding: 16px; min-height: 124px; cursor: pointer;
+    border: 2px solid transparent; border-radius: var(--r-lg); background: var(--surface);
+    transition: border-color 0.15s, background-color 0.15s, transform 0.1s, box-shadow 0.15s;
+  }
+  .tile:hover { border-color: var(--line-strong); }
+  .tile:active { transform: scale(0.98); }
+  @media (prefers-reduced-motion: reduce) { .tile:active { transform: none; } }
+  .tile input { position: absolute; opacity: 0; pointer-events: none; }
+  .tile__icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--icon-bg); margin-bottom: 8px; transition: background-color 0.15s; }
+  .tile__title { font-weight: 600; font-size: 0.9375rem; line-height: 1.25; }
+  .tile__hint { font-size: 0.8125rem; color: var(--muted); line-height: 1.35; }
+  .tile:has(input:checked) { border-color: var(--text); background: var(--sodium-soft); }
+  .tile:has(input:checked) .tile__icon { background: var(--sodium); color: #14213d; }
+  .tile--danger:has(input:checked) { border-color: var(--alarm); background: var(--alarm-bg); }
+  .tile--danger:has(input:checked) .tile__icon { background: var(--alarm); color: #fff; }
+  .tile:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 3px; }
+  @media (prefers-color-scheme: dark) { :global(:root:not([data-scheme])) .tile:has(input:checked) { background: rgba(255, 184, 28, 0.12); } }
+
+  .subq { margin-top: 24px; }
+  .seg { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+  .seg label { position: relative; cursor: pointer; }
+  .seg input { position: absolute; opacity: 0; }
+  .seg span { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 16px; border-radius: 999px; border: 1.5px solid var(--line-strong); background: var(--surface); font-size: 0.9375rem; }
+  .seg input:checked + span { border-color: var(--text); font-weight: 700; background: var(--sodium-soft); }
+  .seg input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  .danger { margin-top: 24px; }
+  .danger__title { font-weight: 700; font-size: 1.125rem; margin-bottom: 4px; }
+  .danger__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .where { display: grid; gap: 16px; }
+  @media (min-width: 900px) { .where { grid-template-columns: 1fr 300px; } }
+  .where__map { min-height: 340px; height: 52vh; max-height: 460px; }
+  .where__side { display: grid; gap: 14px; align-content: start; }
+  .where__coords { color: var(--muted); margin: -4px 0 0; }
+  .suggest { position: relative; }
+  .suggest__list {
+    position: absolute; left: 0; right: 0; top: 100%; z-index: 20; margin: 4px 0 0; padding: 4px; list-style: none;
+    background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r); max-height: 240px; overflow-y: auto;
+  }
+  .suggest__list li { padding: 10px 12px; border-radius: 6px; cursor: pointer; }
+  .suggest__list li[aria-selected='true'], .suggest__list li:hover { background: var(--surface-2); }
+  .pole-hint summary { cursor: pointer; color: var(--link); font-size: 0.9375rem; display: inline-flex; align-items: center; min-height: 44px; }
+  .pole-hint img { border-radius: var(--r); margin: 10px 0 6px; }
+
+  .dup { margin-top: 16px; border-color: var(--sodium); background: color-mix(in srgb, var(--sodium) 10%, var(--surface)); }
+  .dup__actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 6px; }
+  .dup__hint { color: var(--muted); }
+
+  .photos { margin-bottom: 20px; }
+  .photos__list { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .photos__list:empty { display: none; }
+  .photos__add { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .photos__add .btn { cursor: pointer; }
+  .muted { color: var(--muted); }
+  :global(.thumb) { position: relative; width: 104px; height: 104px; border-radius: var(--r); overflow: hidden; border: 1px solid var(--line); }
+  :global(.thumb img) { width: 100%; height: 100%; object-fit: cover; }
+  :global(.thumb button) {
+    position: absolute; top: 4px; right: 4px; width: 32px; height: 32px; border-radius: 50%; border: 0; cursor: pointer;
+    background: rgba(20, 33, 61, 0.85); color: #fff; display: grid; place-items: center;
+  }
+
+  .contacts { display: grid; gap: 14px; }
+  @media (min-width: 760px) { .contacts { grid-template-columns: repeat(3, 1fr); } }
+  .consent { display: flex; gap: 12px; align-items: flex-start; margin-top: 16px; cursor: pointer; }
+  .consent input { width: 22px; height: 22px; margin-top: 2px; accent-color: var(--night); flex: none; }
+  .summary { margin-top: 24px; }
+  :global(.summary dl) { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; padding: 16px 18px; border-radius: var(--r-lg); background: var(--surface-2); }
+  :global(.summary dt) { color: var(--muted); font-size: 0.9375rem; }
+  :global(.summary dd) { margin: 0; font-weight: 500; }
+  .captcha-note { margin-top: 12px; }
+
+  .done { padding: 32px 24px; border-radius: var(--r-xl); background: var(--surface); box-shadow: var(--shadow-2); }
+  @media (min-width: 760px) { .done { padding: 48px; } }
+  .done h2:focus { outline: none; }
+  .done__lights { display: flex; gap: 14px; margin-bottom: 24px; }
+  .done__lights i { width: 10px; height: 10px; border-radius: 50%; background: var(--sodium); box-shadow: 0 0 0 4px color-mix(in srgb, var(--sodium) 25%, transparent); }
+  @media (prefers-reduced-motion: no-preference) {
+    .done__lights i { animation: light-on 0.5s both; }
+    .done__lights i:nth-child(2) { animation-delay: 0.04s; } .done__lights i:nth-child(3) { animation-delay: 0.08s; } .done__lights i:nth-child(4) { animation-delay: 0.12s; }
+    .done__lights i:nth-child(5) { animation-delay: 0.16s; } .done__lights i:nth-child(6) { animation-delay: 0.2s; } .done__lights i:nth-child(7) { animation-delay: 0.24s; } .done__lights i:nth-child(8) { animation-delay: 0.28s; }
+    @keyframes light-on { from { background: var(--line-strong); box-shadow: none; } }
+  }
+  .done__number { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin: 4px 0 12px; }
+  .done__number strong { font-family: var(--font-head); font-size: clamp(2rem, 1.4rem + 3vw, 3rem); letter-spacing: 0.02em; }
+  .done__term { font-size: 1.125rem; font-weight: 600; }
+  .done__actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 24px 0 16px; }
+  [data-done-alarm] { margin-bottom: 16px; }
+</style>

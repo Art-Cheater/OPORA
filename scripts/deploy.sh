@@ -87,6 +87,7 @@ compose() {
 
 PUBLIC_DOMAIN="opora.truthqwark.ru"
 LEGACY_DOMAIN="opora.zheleznogame.ru"
+PUBLIC_SITE_DOMAIN="svet.progwebs.ru"
 
 load_tls_paths() {
   certs_dir="$(awk -F= '$1 == "TLS_CERTS_DIR" { value=$2 } END { print value }' "$ROOT/.env" | tr -d '\r\"')"
@@ -108,6 +109,10 @@ legacy_redirect_enabled() {
 
 public_certificate_ready() {
   [[ -f "$certs_dir/live/$PUBLIC_DOMAIN/fullchain.pem" && -f "$certs_dir/live/$PUBLIC_DOMAIN/privkey.pem" ]]
+}
+
+public_site_certificate_ready() {
+  [[ -f "$certs_dir/live/$PUBLIC_SITE_DOMAIN/fullchain.pem" && -f "$certs_dir/live/$PUBLIC_SITE_DOMAIN/privkey.pem" ]]
 }
 
 install_renew_hook() {
@@ -148,6 +153,13 @@ write_site_enabled_files() {
     else
       echo "==> старый домен $LEGACY_DOMAIN продолжает открывать сайт"
     fi
+  fi
+  if public_site_certificate_ready; then
+    install_site_file "$ROOT/docker/nginx.public-site.conf" "$state_dir/public-site.conf"
+    echo "==> публичный сайт https://$PUBLIC_SITE_DOMAIN"
+  else
+    install_site_file "$ROOT/docker/nginx.public-site-open.conf" "$state_dir/public-site.conf"
+    echo "==> публичный сайт http://$PUBLIC_SITE_DOMAIN (сертификат ещё не выпущен)"
   fi
 }
 
@@ -204,6 +216,44 @@ finish_public_certificate() {
     openssl x509 -in "$certs_dir/live/$PUBLIC_DOMAIN/fullchain.pem" -noout -subject -issuer -dates || true
   fi
   echo "==> TLS: сертификат $PUBLIC_DOMAIN подключён"
+}
+
+finish_public_site_certificate() {
+  load_tls_paths
+  if public_site_certificate_ready; then
+    echo "==> TLS: сертификат $PUBLIC_SITE_DOMAIN уже установлен"
+    return 0
+  fi
+  echo "==> TLS: выпускаем сертификат $PUBLIC_SITE_DOMAIN"
+  if ! command -v certbot >/dev/null 2>&1; then
+    echo "WARN: на сервере нет certbot. $PUBLIC_SITE_DOMAIN остаётся на HTTP, Опора не затронута."
+    return 0
+  fi
+  if ! certbot certonly --webroot -w "$webroot" \
+      --cert-name "$PUBLIC_SITE_DOMAIN" \
+      -d "$PUBLIC_SITE_DOMAIN" \
+      --non-interactive \
+      --agree-tos \
+      --keep-until-expiring \
+      --no-eff-email; then
+    echo "WARN: сертификат $PUBLIC_SITE_DOMAIN не выпущен. Публичный сайт открыт по HTTP, Опора не затронута."
+    return 0
+  fi
+  if ! public_site_certificate_ready; then
+    echo "WARN: certbot не положил сертификат $PUBLIC_SITE_DOMAIN. Сайт остаётся на HTTP."
+    return 0
+  fi
+  install_site_file "$ROOT/docker/nginx.public-site.conf" "$state_dir/public-site.conf"
+  if ! docker exec opora_nginx nginx -t; then
+    install_site_file "$ROOT/docker/nginx.public-site-open.conf" "$state_dir/public-site.conf"
+    echo "WARN: nginx не принял HTTPS $PUBLIC_SITE_DOMAIN. Оставлен HTTP, Опора не затронута."
+    return 0
+  fi
+  docker exec opora_nginx nginx -s reload
+  if command -v openssl >/dev/null 2>&1; then
+    openssl x509 -in "$certs_dir/live/$PUBLIC_SITE_DOMAIN/fullchain.pem" -noout -subject -issuer -dates || true
+  fi
+  echo "==> TLS: сертификат $PUBLIC_SITE_DOMAIN подключён"
 }
 
 container_of() { compose ps -a -q "$1" 2>/dev/null | head -n1; }
@@ -418,6 +468,17 @@ if [[ "$OPORA_ENV" == "production" ]]; then
     exit 1
   fi
   finish_public_certificate
+fi
+
+echo "==> публичный сайт: отдельная сборка, сбой не останавливает Опору"
+if compose build --pull=false public-site && compose up -d --no-build --no-deps --force-recreate public-site; then
+  wait_ready public-site 180 || echo "WARN: public-site запущен, но проверка готовности не прошла"
+else
+  echo "WARN: публичный сайт не обновлён. Опора продолжает работу."
+fi
+
+if [[ "$OPORA_ENV" == "production" ]]; then
+  finish_public_site_certificate
 fi
 
 echo

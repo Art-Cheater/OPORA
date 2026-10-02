@@ -1,0 +1,131 @@
+---
+import { Image } from 'astro:assets';
+import Base from '../../layouts/Base.astro';
+import PageHero from '../../components/PageHero.astro';
+import StatsBand from '../../components/StatsBand.astro';
+import Icon from '../../components/Icon.astro';
+import { REQUISITES, SITE } from '../../data/site';
+import crew from '../../assets/img/about-crew.jpg';
+import dispatch from '../../assets/img/dispatch.jpg';
+import logoVertical from '../../assets/img/logo-vertical-t.png';
+
+const WORK = [
+  { icon: 'clock', title: 'Диспетчерская', text: 'Включает и выключает освещение, ведёт режимы горения, принимает заявки круглосуточно.' },
+  { icon: 'bolt', title: 'Аварийные бригады', text: 'Выезжают по звонкам и заявкам, устраняют обрывы и повреждения сетей.' },
+  { icon: 'tool', title: 'Плановое обслуживание', text: 'Замена ламп и светильников, надзор за опорами и шкафами управления.' },
+  { icon: 'lamp-on', title: 'Строительство', text: 'Новые линии по заказу города. Например, ул. Богородская: 22 опоры, 835 м провода.' },
+  { icon: 'other', title: 'Обрезка веток', text: 'Убираем ветки, которые закрывают фонари и цепляют провода.' },
+] as const;
+
+const JOBS = [
+  { title: 'Электромонтёр по ремонту воздушных линий', text: 'Работа на автовышке, допуск по электробезопасности от III группы.' },
+  { title: 'Водитель автовышки', text: 'Категория C, опыт работы со спецтехникой.' },
+  { title: 'Диспетчер', text: 'Сменный график, приём заявок и координация бригад.' },
+];
+---
+
+<Base title="О службе" description={`${SITE.descriptor}: чем занимается служба, цифры, реквизиты и вакансии.`}>
+  <PageHero
+    image={crew}
+    imagePosition="65% 18%"
+    eyebrow="О службе"
+    title="Люди, благодаря которым вечером на улице светло"
+    lead="Муниципальная служба наружного освещения: включаем, чиним и строим уличный свет в Кирове. Заказчик и учредитель — администрация города."
+  />
+
+  <section class="section">
+    <div class="wrap">
+      <h2>Чем мы занимаемся</h2>
+      <ul class="work">
+        {WORK.map((w) => (
+          <li class="card">
+            <span class="work__icon"><Icon name={w.icon} size={26} /></span>
+            <h3>{w.title}</h3>
+            <p>{w.text}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <StatsBand />
+
+  <section class="section">
+    <div class="wrap split">
+      <div class="split__media media">
+        <Image src={dispatch} alt="Диспетчер за пультом со схемой городских сетей освещения" widths={[640, 960, 1280]} sizes="(min-width: 1000px) 560px, 92vw" loading="lazy" />
+      </div>
+      <div>
+        <p class="eyebrow">Как устроена работа</p>
+        <h2>Все обращения — в одном месте</h2>
+        <p>Заявки с сайта и по телефону диспетчер заводит в одну систему. Аварийные — сверху списка, дубли объединяются, бригада получает адрес и фото.</p>
+        <p>Когда ремонт закончен, заявитель может нажать «Всё ещё не горит» — заявка откроется снова. Так видно реальное качество работы, а не только отчёт.</p>
+        <a class="link-arrow" href="/dispetcher/">Посмотреть панель диспетчера (демо) <Icon name="arrow-right" /></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt">
+    <div class="wrap brand">
+      <div class="brand__logo">
+        <Image src={logoVertical} alt="Логотип «Кировсвет»: линия фонарей над рекой Вяткой" widths={[360, 720]} sizes="320px" loading="lazy" class="keep" />
+      </div>
+      <div>
+        <p class="eyebrow">Фирменный стиль</p>
+        <h2>{SITE.slogan}</h2>
+        <p>Опоры разной высоты с жёлтыми светильниками складываются в силуэт города, волна внизу — река Вятка. Тёмно-синий — «Вятская ночь», жёлтый — «Натриевый свет».</p>
+        <p class="small muted">Машины и автовышки службы — белые с тёмно-синей полосой и жёлтым конусом света, спецодежда — тёмно-синяя со светоотражающими полосами.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="vakansii">
+    <div class="wrap">
+      <h2>Вакансии</h2>
+      <div class="grid grid--3">
+        {JOBS.map((j) => (
+          <article class="card">
+            <h3>{j.title}</h3>
+            <p class="muted">{j.text}</p>
+            <a class="link-arrow" href="/kontakty/">Откликнуться <Icon name="arrow-right" /></a>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--tight" id="rekvizity">
+    <div class="wrap">
+      <h2>Реквизиты</h2>
+      <div class="table-wrap">
+        <table class="table">
+          <tbody>
+            {REQUISITES.map(([k, v]) => (
+              <tr><th scope="row">{k}</th><td class="num">{v}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p class="small muted note">Реквизиты — заглушка для макета. Уточнить: под каким юрлицом работает служба и от чьего имени будет сайт.</p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .muted { color: var(--muted); }
+  .work { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; }
+  @media (min-width: 700px) { .work { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 1100px) { .work { grid-template-columns: repeat(5, 1fr); } }
+  .work__icon { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: var(--night); color: var(--sodium); margin-bottom: 14px; }
+  .work h3 { font-size: 1.125rem; }
+  .work p { color: var(--muted); margin: 0; font-size: 0.9375rem; }
+  .split { display: grid; gap: 32px; align-items: center; }
+  @media (min-width: 1000px) { .split { grid-template-columns: 1fr 1fr; gap: 56px; } }
+  .split__media { border-radius: var(--r-lg); overflow: hidden; }
+  .section--alt { background: var(--surface-2); }
+  .brand { display: grid; gap: 32px; align-items: center; }
+  @media (min-width: 900px) { .brand { grid-template-columns: 360px 1fr; gap: 56px; } }
+  .brand__logo { background: #fff; border-radius: var(--r-lg); padding: 32px; box-shadow: var(--shadow-2); }
+  .table th[scope='row'] { width: 40%; color: var(--muted); font-weight: 500; background: transparent; white-space: normal; }
+  .note { margin-top: 10px; }
+</style>

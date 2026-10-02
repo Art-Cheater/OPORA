@@ -1,0 +1,186 @@
+---
+import Base from '../../layouts/Base.astro';
+import Icon from '../../components/Icon.astro';
+import { STATUSES } from '../../data/site';
+---
+
+<Base title="Панель диспетчера" noindex headerCta="ghost" mobileBar="none">
+  <section class="panel">
+    <div class="wrap">
+      <div class="panel__head">
+        <div>
+          <p class="eyebrow">Закрытая часть · демо</p>
+          <h1>Панель диспетчера</h1>
+          <p class="muted">В рабочей версии — вход по паролю. Здесь видны демо-заявки и те, что вы отправили с этого браузера.</p>
+        </div>
+        <div class="panel__tools">
+          <button class="btn" type="button" data-export><Icon name="download" /> Выгрузка для Excel</button>
+          <button class="btn" type="button" data-reset><Icon name="refresh" /> Сбросить демо</button>
+        </div>
+      </div>
+
+      <dl class="kpi" data-kpi></dl>
+
+      <div class="panel__filters">
+        <div class="field">
+          <label for="f-status">Статус</label>
+          <select class="select" id="f-status" data-f="status">
+            <option value="open">Все открытые</option>
+            <option value="">Все</option>
+            {Object.entries(STATUSES).map(([id, s]) => <option value={id}>{s.title}</option>)}
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-district">Район</label>
+          <select class="select" id="f-district" data-f="district">
+            <option value="">Все районы</option>
+            <option>Ленинский</option><option>Октябрьский</option><option>Первомайский</option><option>Нововятский</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-q">Поиск</label>
+          <input class="input" type="search" id="f-q" data-f="q" placeholder="Номер или адрес" />
+        </div>
+      </div>
+
+      <div class="panel__body">
+        <div class="panel__list" data-list aria-live="polite"></div>
+        <div class="map panel__map" data-map role="region" aria-label="Карта заявок"></div>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<script>
+  import { listTickets, OPEN, setStatus, setShowOnHome, resetDemo, faultTitle, statusTitle, fmtDateTime, escapeHtml, ticketUrl, type Ticket } from '../../lib/tickets';
+  import { STATUSES, type StatusId } from '../../data/site';
+  import { createMap, addMarker } from '../../lib/map';
+  import type { LayerGroup } from 'leaflet';
+
+  const $ = <T extends HTMLElement = HTMLElement>(s: string) => document.querySelector<T>(s)!;
+  const filters = { status: 'open', district: '', q: '' };
+  let layer: LayerGroup | null = null;
+  let mapApi: Awaited<ReturnType<typeof createMap>> | null = null;
+
+  const statusOptions = (cur: StatusId) =>
+    Object.entries(STATUSES).map(([id, s]) => `<option value="${id}"${id === cur ? ' selected' : ''}>${s.title}</option>`).join('');
+
+  function filtered(): Ticket[] {
+    const q = filters.q.toLowerCase();
+    return listTickets()
+      .filter((t) => (filters.status === 'open' ? OPEN.includes(t.status) : !filters.status || t.status === filters.status))
+      .filter((t) => !filters.district || t.district === filters.district)
+      .filter((t) => !q || t.number.toLowerCase().includes(q) || t.address.toLowerCase().includes(q))
+      .sort((a, b) => Number(b.emergency && OPEN.includes(b.status)) - Number(a.emergency && OPEN.includes(a.status)) || b.createdAt.localeCompare(a.createdAt));
+  }
+
+  function render() {
+    const all = listTickets();
+    const open = all.filter((t) => OPEN.includes(t.status));
+    const alarms = open.filter((t) => t.emergency).length;
+    const done = all.filter((t) => t.status === 'done');
+    const avgH = done.length
+      ? done.reduce((s, t) => s + (Date.parse(t.history.find((h) => h.status === 'done')?.at ?? t.createdAt) - Date.parse(t.createdAt)), 0) / done.length / 3_600_000
+      : 0;
+    $('[data-kpi]').innerHTML = [
+      ['Открытых', open.length], ['Аварийных', alarms], ['Выполнено', done.length], ['Средний срок', `${avgH.toFixed(1).replace('.', ',')} ч`],
+    ].map(([k, v]) => `<div><dt>${k}</dt><dd class="num">${v}</dd></div>`).join('');
+
+    const items = filtered();
+    $('[data-list]').innerHTML = items.length
+      ? items.map((t) => `
+        <article class="row${t.emergency && OPEN.includes(t.status) ? ' row--alarm' : ''}" data-number="${t.number}">
+          <header class="row__head">
+            <a class="row__num num" href="${ticketUrl(t)}" target="_blank" rel="noopener">${t.number}</a>
+            ${t.emergency && OPEN.includes(t.status) ? '<span class="chip chip--alarm">Авария</span>' : ''}
+            <span class="chip chip--${t.status}">${statusTitle(t.status)}</span>
+          </header>
+          <p class="row__what"><b>${escapeHtml(faultTitle(t.type))}</b> · ${escapeHtml(t.address)}${t.pole ? ` · опора ${escapeHtml(t.pole)}` : ''}</p>
+          <p class="row__meta">${escapeHtml(t.district)} р-н · ${fmtDateTime(t.createdAt)} · ${t.source === 'site' ? 'сайт' : 'телефон'}${t.alsoSeen ? ` · ещё ${t.alsoSeen} сообщили` : ''}${t.contact?.phone ? ' · ждёт СМС' : ''}</p>
+          <div class="row__actions">
+            <select class="select" aria-label="Новый статус заявки ${t.number}" data-new-status>${statusOptions(t.status)}</select>
+            <input class="input" placeholder="Комментарий для заявителя" aria-label="Комментарий" data-comment />
+            <button class="btn btn--night" type="button" data-save>Сохранить</button>
+          </div>
+          <label class="row__home"><input type="checkbox" data-home ${t.showOnHome ? 'checked' : ''}/> Показать в «Известных авариях» на главной</label>
+        </article>`).join('')
+      : '<p class="muted">Заявок по фильтру нет.</p>';
+
+    if (mapApi) {
+      const { L, map } = mapApi;
+      layer?.remove();
+      layer = L.layerGroup().addTo(map);
+      items.filter((t) => t.lat != null).forEach((t) => {
+        const kind = t.emergency && OPEN.includes(t.status) ? 'alarm' : t.status === 'done' ? 'done' : t.status === 'planned' ? 'planned' : 'ticket';
+        const m = addMarker(L, map, t.lat!, t.lon!, kind, `<b>${t.number}</b><br>${escapeHtml(faultTitle(t.type))}<br>${escapeHtml(t.address)}`);
+        m.remove();
+        layer!.addLayer(m);
+      });
+    }
+  }
+
+  document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-f]').forEach((el) =>
+    el.addEventListener('input', () => { filters[el.dataset.f as keyof typeof filters] = el.value; render(); }),
+  );
+
+  $('[data-list]').addEventListener('click', (e) => {
+    const t = e.target as HTMLElement;
+    const row = t.closest<HTMLElement>('[data-number]');
+    if (!row) return;
+    if (t.closest('[data-save]')) {
+      const status = row.querySelector<HTMLSelectElement>('[data-new-status]')!.value as StatusId;
+      const comment = row.querySelector<HTMLInputElement>('[data-comment]')!.value.trim();
+      setStatus(row.dataset.number!, status, comment);
+      render();
+    }
+  });
+  $('[data-list]').addEventListener('change', (e) => {
+    const cb = (e.target as HTMLElement).closest<HTMLInputElement>('[data-home]');
+    const row = cb?.closest<HTMLElement>('[data-number]');
+    if (cb && row) setShowOnHome(row.dataset.number!, cb.checked);
+  });
+
+  $('[data-reset]').addEventListener('click', () => {
+    if (confirm('Сбросить демо-заявки к исходным?')) { resetDemo(); render(); }
+  });
+
+  $('[data-export]').addEventListener('click', () => {
+    const head = ['Номер', 'Тип', 'Адрес', 'Опора', 'Район', 'Статус', 'Аварийная', 'Создана', 'Срок'];
+    const rows = filtered().map((t) => [t.number, faultTitle(t.type), t.address, t.pole ?? '', t.district, statusTitle(t.status), t.emergency ? 'да' : 'нет', fmtDateTime(t.createdAt), t.term]);
+    const csv = [head, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\r\n');
+    const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: `zayavki-${new Date().toISOString().slice(0, 10)}.csv` });
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  render();
+  createMap($('[data-map]'), { zoom: 12, scrollWheel: true }).then((api) => { mapApi = api; render(); });
+</script>
+
+<style>
+  .panel { padding: 40px 0 80px; }
+  .muted { color: var(--muted); }
+  .panel__head { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: end; }
+  .panel__tools { display: flex; gap: 8px; flex-wrap: wrap; }
+  .kpi { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; margin: 24px 0; background: var(--line); box-shadow: var(--shadow-2); border-radius: var(--r-lg); overflow: hidden; }
+  @media (min-width: 760px) { .kpi { grid-template-columns: repeat(4, 1fr); } }
+  :global(.kpi div) { background: var(--surface); padding: 16px 20px; }
+  :global(.kpi dt) { font-size: 0.875rem; color: var(--muted); }
+  :global(.kpi dd) { margin: 0; font-family: var(--font-head); font-weight: 700; font-size: 1.75rem; }
+  .panel__filters { display: grid; gap: 12px; margin-bottom: 20px; }
+  @media (min-width: 760px) { .panel__filters { grid-template-columns: 1fr 1fr 2fr; } }
+  .panel__body { display: grid; gap: 20px; }
+  @media (min-width: 1100px) { .panel__body { grid-template-columns: 1.3fr 1fr; align-items: start; } .panel__map { position: sticky; top: calc(var(--header-h) + 16px); } }
+  .panel__list { display: grid; gap: 10px; }
+  .panel__map { height: 60vh; min-height: 360px; }
+  :global(.row) { background: var(--surface); box-shadow: var(--shadow-2); border-radius: var(--r-lg); padding: 20px 22px; }
+  :global(.row--alarm) { border-color: var(--alarm); box-shadow: inset 4px 0 0 var(--alarm); }
+  :global(.row__head) { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  :global(.row__num) { font-family: var(--font-head); font-weight: 700; font-size: 1.125rem; margin-right: auto; }
+  :global(.row__what) { margin: 8px 0 2px; }
+  :global(.row__meta) { margin: 0 0 12px; color: var(--muted); font-size: 0.875rem; }
+  :global(.row__actions) { display: grid; gap: 8px; }
+  @media (min-width: 700px) { :global(.row__actions) { grid-template-columns: 200px 1fr auto; } }
+  :global(.row__home) { display: flex; gap: 8px; align-items: center; margin-top: 10px; font-size: 0.875rem; color: var(--muted); cursor: pointer; }
+</style>

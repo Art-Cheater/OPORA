@@ -1,0 +1,35 @@
+---
+// Поле «Проверить заявку»: ведёт на /zayavka/?n=номер. Достаточно цифр — открывается цифровая клавиатура.
+import Icon from './Icon.astro';
+
+interface Props {
+  tone?: 'light' | 'night';
+  id?: string;
+  /** Скрыть подпись визуально (если рядом уже есть заголовок). */
+  hideLabel?: boolean;
+}
+const { tone = 'light', id = 'check-number', hideLabel = false } = Astro.props;
+---
+
+<form class:list={['check', `check--${tone}`]} action="/zayavka/" method="get" role="search" aria-label="Проверить заявку">
+  <label for={id} class:list={['check__label', { 'visually-hidden': hideLabel }]}>Номер заявки</label>
+  <div class="check__row">
+    <input class="input num" type="text" id={id} name="n" inputmode="numeric" autocomplete="off" placeholder="Например, 004812" aria-describedby={`${id}-hint`} required />
+    <button class="btn check__btn" type="submit"><Icon name="search" /><span class="check__btn-text">Проверить</span></button>
+  </div>
+  <span class="check__hint" id={`${id}-hint`}>Номер вида КС-26-004812 — достаточно цифр</span>
+</form>
+
+<style>
+  .check { display: grid; gap: 6px; max-width: 460px; }
+  .check__label { font-weight: 600; font-size: 0.9375rem; }
+  .check__hint { font-size: 0.8125rem; color: var(--muted); }
+  .check__row { display: flex; gap: 8px; }
+  .check__row .input { flex: 1; min-width: 0; }
+  .check__btn { flex: none; }
+  .check--night .check__label, .check--night .check__hint { color: var(--on-night-muted); }
+  .check--night .input { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.3); color: #fff; }
+  .check--night .input::placeholder { color: rgba(255, 255, 255, 0.6); }
+  .check--night .check__btn { --btn-bg: #fff; --btn-fg: #14213d; --btn-bd: #fff; }
+  @media (max-width: 420px) { .check__btn-text { display: none; } }
+</style>

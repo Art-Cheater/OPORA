@@ -1,0 +1,64 @@
+---
+// Известные аварии и работы: одна панель со строками — адрес, что случилось, статус, когда будет свет.
+import { INCIDENTS, formatEta, type Incident } from '../data/site';
+import Icon from './Icon.astro';
+
+interface Props {
+  items?: Incident[];
+  limit?: number;
+}
+const { items = INCIDENTS, limit } = Astro.props;
+const list = limit ? items.slice(0, limit) : items;
+const chipClass = (i: Incident) => (i.kind === 'fault' ? `chip--${i.statusId ?? 'working'}` : 'chip--planned');
+const etaLabel = (i: Incident) => (i.kind === 'planned' ? 'Когда' : i.kind === 'construction' ? 'Срок' : 'Свет будет');
+---
+
+<ul class="incidents" data-incidents>
+  {list.map((i) => (
+    <li class:list={['incident', `incident--${i.kind}`]}>
+      <span class="icon-dot incident__icon" aria-hidden="true">
+        <Icon name={i.kind === 'planned' ? 'calendar' : i.kind === 'construction' ? 'tool' : 'bolt'} />
+      </span>
+      <div class="incident__body">
+        <h3 class="incident__addr">{i.address}</h3>
+        <p class="incident__what">{i.what}</p>
+      </div>
+      <span class:list={['chip', chipClass(i), 'incident__chip']}>{i.status}</span>
+      <div class="incident__eta">
+        <span>{etaLabel(i)}</span>
+        <strong data-eta={JSON.stringify({ etaDays: i.etaDays, etaTime: i.etaTime, etaTo: i.etaTo, etaPrefix: i.etaPrefix, etaText: i.etaText })}>{formatEta(i)}</strong>
+      </div>
+    </li>
+  ))}
+</ul>
+
+<script>
+  import { formatEta } from '../data/site';
+  // Сроки считаются от сегодняшнего дня посетителя — страница собрана заранее, а даты не должны устаревать
+  document.querySelectorAll<HTMLElement>('[data-eta]').forEach((el) => {
+    try { el.textContent = formatEta(JSON.parse(el.dataset.eta!)); } catch { /* оставляем текст из сборки */ }
+  });
+</script>
+
+<style is:global>
+  .incidents { list-style: none; margin: 0; padding: 4px 20px; background: var(--surface); border-radius: var(--r-xl); }
+  .incident { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: start; padding: 16px 0; }
+  .incident + .incident { border-top: 1px solid var(--line); }
+  .incident__icon { width: 38px; height: 38px; border-radius: 11px; }
+  .incident__icon svg { width: 18px; height: 18px; }
+  .incident--planned .incident__icon, .incident--construction .incident__icon { background: #e8eef8; }
+  .incident__addr { font-family: var(--font-body); font-size: 1rem; font-weight: 600; letter-spacing: 0; margin: 0; }
+  .incident__what { margin: 0; color: var(--muted); font-size: 0.875rem; }
+  .incident__chip { grid-column: 2; justify-self: start; }
+  .incident__eta { grid-column: 2; display: grid; }
+  .incident__eta span { font-size: 0.75rem; color: var(--muted); }
+  .incident__eta strong { font-weight: 600; font-size: 0.9375rem; }
+  @media (min-width: 860px) {
+    .incident { grid-template-columns: auto 1fr auto 210px; align-items: center; }
+    .incident__chip, .incident__eta { grid-column: auto; }
+    .incident__eta { text-align: right; }
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-scheme]) .incident--planned .incident__icon, :root:not([data-scheme]) .incident--construction .incident__icon { background: #1f2c44; }
+  }
+</style>

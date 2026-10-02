@@ -1,0 +1,100 @@
+---
+import Base from '../layouts/Base.astro';
+import Icon from '../components/Icon.astro';
+import HomeBento from '../components/HomeBento.astro';
+import Steps from '../components/Steps.astro';
+import IncidentList from '../components/IncidentList.astro';
+import NewsCard from '../components/NewsCard.astro';
+import { CONTACTS, NEWS, SITE } from '../data/site';
+
+const d = CONTACTS.dispatcher;
+---
+
+<Base title={SITE.name} headerCta="ghost" mobileBar="after-hero">
+  <section class="top">
+    <div class="wrap top__grid">
+      <h1 class="top__title reveal" style="--d:0">Не горит фонарь?<br /><span>Сообщите&nbsp;— мы приедем.</span></h1>
+      <div class="top__side reveal" style="--d:1">
+        <p>Заявка за минуту, без регистрации. Диспетчер на связи круглосуточно: <a class="num" href={`tel:${d.tel}`}>{d.phone}</a></p>
+        <a class="btn btn--primary btn--lg" href="/soobshit/" data-hero-cta>Сообщить о неисправности</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap reveal" style="--d:2" aria-label="Главное">
+    <HomeBento />
+  </section>
+
+  <section class="section" aria-labelledby="incidents-title">
+    <div class="wrap">
+      <div class="section-head">
+        <div>
+          <h2 id="incidents-title">Где сейчас нет света</h2>
+          <p>Если ваш адрес в списке, заявку отправлять не нужно — мы уже работаем.</p>
+        </div>
+        <a class="link-arrow" href="/karta/">На карте <Icon name="arrow-right" /></a>
+      </div>
+      <IncidentList />
+    </div>
+  </section>
+
+  <section class="section section--flush" aria-labelledby="steps-title">
+    <div class="wrap">
+      <div class="section-head">
+        <div>
+          <h2 id="steps-title">Как отправить заявку</h2>
+          <p>Три шага, около минуты.</p>
+        </div>
+        <a class="link-arrow" href="/soobshit/">Начать <Icon name="arrow-right" /></a>
+      </div>
+      <Steps />
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="news-title">
+    <div class="wrap">
+      <div class="section-head">
+        <h2 id="news-title">Новости</h2>
+        <a class="link-arrow" href="/novosti/">Все новости <Icon name="arrow-right" /></a>
+      </div>
+      <div class="grid grid--3">
+        {NEWS.slice(0, 3).map((n) => <NewsCard item={n} />)}
+      </div>
+    </div>
+  </section>
+</Base>
+
+<script>
+  import { listTickets, OPEN, faultTitle, statusTitle, escapeHtml } from '../lib/tickets';
+  import { iconSvg } from '../lib/icons';
+
+  // Аварии, которые диспетчер отметил «Показать на главной» (демо: из этого браузера)
+  const list = document.querySelector('[data-incidents]');
+  const extra = listTickets().filter((t) => t.showOnHome && OPEN.includes(t.status));
+  if (list && extra.length) {
+    list.insertAdjacentHTML('afterbegin', extra.map((t) => `
+      <li class="incident incident--fault">
+        <span class="icon-dot incident__icon" aria-hidden="true">${iconSvg('bolt')}</span>
+        <div class="incident__body">
+          <h3 class="incident__addr">${escapeHtml(t.address)}</h3>
+          <p class="incident__what">${escapeHtml(faultTitle(t.type))}</p>
+        </div>
+        <span class="chip chip--${t.status} incident__chip">${statusTitle(t.status)}</span>
+        <div class="incident__eta"><span>Срок</span><strong>${escapeHtml(t.term)}</strong></div>
+      </li>`).join(''));
+  }
+</script>
+
+<style>
+  .top { padding: 40px 0 24px; }
+  @media (min-width: 900px) { .top { padding: 56px 0 28px; } }
+  .top__grid { display: grid; gap: 20px; align-items: end; }
+  @media (min-width: 900px) { .top__grid { grid-template-columns: 1.4fr 1fr; gap: 40px; } }
+  .top__title { margin: 0; font-size: clamp(2.125rem, 1.4rem + 3vw, 3.5rem); line-height: 1.04; }
+  .top__title span { color: var(--muted); }
+  .top__side { display: grid; gap: 16px; justify-items: start; }
+  .top__side p { margin: 0; color: var(--muted); font-size: 1.0625rem; max-width: 26rem; }
+  .top__side a:not(.btn) { color: var(--text); font-weight: 600; white-space: nowrap; }
+  @media (max-width: 520px) { .top__side .btn { width: 100%; } }
+  .section--flush { padding-top: 0; }
+</style>
