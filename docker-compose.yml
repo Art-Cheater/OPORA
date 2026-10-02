@@ -89,14 +89,29 @@ services:
       dockerfile: Dockerfile
     container_name: opora_public_site
     restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      DB_HOST: db
+      DB_PORT: "5432"
     ports:
       - "127.0.0.1:8090:80"
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1/health', timeout=2).read()",
+        ]
       interval: 10s
       timeout: 3s
       retries: 5
-      start_period: 5s
+      start_period: 10s
 
   eis-sync:
     build: .
