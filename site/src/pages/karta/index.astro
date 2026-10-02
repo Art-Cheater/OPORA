@@ -1,101 +1,62 @@
 ---
 import Base from '../../layouts/Base.astro';
 import PageHero from '../../components/PageHero.astro';
-import IncidentList from '../../components/IncidentList.astro';
-import { INCIDENTS, CONSTRUCTION_SITES } from '../../data/site';
-
-const items = [...INCIDENTS, ...CONSTRUCTION_SITES];
 ---
 
-<Base title="Карта работ" description="Известные неисправности уличного освещения Кирова, плановые отключения и стройки на карте.">
+<Base title="Карта работ" description="Открытые заявки на неисправное освещение в Кирове: адрес и статус, без данных заявителя.">
   <PageHero
     compact
     eyebrow="Карта работ"
-    title="Где сейчас нет света и где мы работаем"
-    lead="Аварии, заявки в работе, плановые отключения и стройки. Без личных данных — только адрес и статус."
+    title="Где сейчас нет света"
+    lead="Невыполненные заявки из службы. На карте только адрес и статус — имя, телефон и текст обращения не публикуются."
   />
 
   <section class="section section--tight">
     <div class="wrap">
-      <div class="filters" role="group" aria-label="Что показывать на карте">
-        <label><input type="checkbox" value="fault" checked /> <span><i class="dot dot--alarm"></i>Аварии</span></label>
-        <label><input type="checkbox" value="ticket" checked /> <span><i class="dot"></i>Заявки в работе</span></label>
-        <label><input type="checkbox" value="planned" checked /> <span><i class="dot dot--planned"></i>Плановые отключения</span></label>
-        <label><input type="checkbox" value="construction" checked /> <span><i class="dot dot--construction"></i>Стройки</span></label>
-      </div>
-      <div class="map map--big" data-map role="region" aria-label="Карта работ. Список тех же объектов — ниже."></div>
-      <p class="small note">Заявки показываются по состоянию на сейчас. Данные о заявителях на карту не попадают.</p>
+      <div class="map map--big" data-map role="region" aria-label="Карта открытых заявок. Тот же список — ниже."></div>
+      <p class="small note" data-map-note>Загружаем заявки…</p>
     </div>
   </section>
 
   <section class="section section--tight">
     <div class="wrap">
       <h2>Списком</h2>
-      <IncidentList items={items} />
-      <h3 class="tickets-h">Открытые заявки</h3>
       <ul class="open-list" data-open-list></ul>
     </div>
   </section>
-
-  <script type="application/json" id="incidents-data" set:html={JSON.stringify(items)} />
 </Base>
 
 <script>
-  import { createMap, addMarker, type MarkerKind } from '../../lib/map';
-  import { listTickets, OPEN, faultTitle, statusTitle, escapeHtml, ticketUrl } from '../../lib/tickets';
-  import { formatEta, type Incident } from '../../data/site';
-  import type { LayerGroup } from 'leaflet';
+  import { createMap, addMarker } from '../../lib/map';
+  import { escapeHtml, loadPublicRequests } from '../../scripts/public-requests';
 
-  const incidents: Incident[] = JSON.parse(document.getElementById('incidents-data')!.textContent!);
-  const tickets = listTickets().filter((t) => OPEN.includes(t.status) && t.lat != null);
-
-  // Список открытых заявок (для тех, кому неудобна карта)
-  document.querySelector('[data-open-list]')!.innerHTML = tickets
-    .map((t) => `<li><a href="${ticketUrl(t, false)}">${escapeHtml(t.number)}</a> · ${escapeHtml(faultTitle(t.type))} · ${escapeHtml(t.address)} — <b>${statusTitle(t.status)}</b></li>`)
-    .join('');
-
+  const note = document.querySelector('[data-map-note]')!;
+  const list = document.querySelector('[data-open-list]')!;
   const el = document.querySelector<HTMLElement>('[data-map]')!;
   const { L, map } = await createMap(el, { zoom: 12, scrollWheel: true });
-  const groups: Record<string, LayerGroup> = { fault: L.layerGroup(), ticket: L.layerGroup(), planned: L.layerGroup(), construction: L.layerGroup() };
-  Object.values(groups).forEach((g) => g.addTo(map));
 
-  const popup = (title: string, lines: string[]) => `<b>${escapeHtml(title)}</b><br>${lines.map(escapeHtml).join('<br>')}`;
-  for (const i of incidents) {
-    const kind: MarkerKind = i.kind === 'fault' ? 'alarm' : i.kind;
-    const m = addMarker(L, map, i.lat, i.lon, kind, popup(i.address, [i.what, `${i.status} · ${formatEta(i)}`]));
-    m.remove();
-    groups[i.kind].addLayer(m);
+  try {
+    const items = await loadPublicRequests();
+    const points = items.filter((item) => item.lat != null && item.lon != null);
+    note.textContent = points.length === items.length
+      ? `Открытых заявок: ${items.length}. Контакты заявителей на карту не попадают.`
+      : `Открытых заявок: ${items.length}. На карте ${points.length}: у остальных ещё нет точки.`;
+    list.innerHTML = items.length
+      ? items.map((item) => `<li>${escapeHtml(item.address)}${item.district ? ` · ${escapeHtml(item.district)}` : ''} — <b>${escapeHtml(item.status)}</b></li>`).join('')
+      : '<li>Сейчас нет открытых заявок.</li>';
+    for (const item of points) {
+      const kind = /авар/i.test(item.status) ? 'alarm' : 'ticket';
+      addMarker(L, map, item.lat!, item.lon!, kind, `<b>${escapeHtml(item.address)}</b><br>${escapeHtml(item.status)}`);
+    }
+    if (points.length) map.fitBounds(L.latLngBounds(points.map((item) => [item.lat!, item.lon!])), { padding: [30, 30], maxZoom: 14 });
+  } catch {
+    note.textContent = 'Заявки сейчас не загрузились. Позвоните диспетчеру.';
+    list.innerHTML = '';
   }
-  for (const t of tickets) {
-    const m = addMarker(L, map, t.lat!, t.lon!, t.emergency ? 'alarm' : 'ticket', popup(t.address, [faultTitle(t.type), `Статус: ${statusTitle(t.status)}`, t.number]));
-    m.remove();
-    (t.emergency ? groups.fault : groups.ticket).addLayer(m);
-  }
-  const all = [...incidents.map((i) => [i.lat, i.lon]), ...tickets.map((t) => [t.lat!, t.lon!])] as [number, number][];
-  if (all.length) map.fitBounds(L.latLngBounds(all), { padding: [30, 30], maxZoom: 14 });
-
-  document.querySelectorAll<HTMLInputElement>('.filters input').forEach((cb) =>
-    cb.addEventListener('change', () => (cb.checked ? groups[cb.value].addTo(map) : groups[cb.value].remove())),
-  );
 </script>
 
 <style>
-  .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
-  .filters label { position: relative; cursor: pointer; }
-  .filters input { position: absolute; opacity: 0; }
-  .filters span {
-    display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 14px; border-radius: 999px;
-    border: 1px solid var(--line-strong); background: var(--surface); font-weight: 500; font-size: 0.9375rem;
-  }
-  .filters input:checked + span { border-color: var(--text); background: var(--surface-2); font-weight: 600; }
-  .filters input:not(:checked) + span { opacity: 0.6; }
-  .filters input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
-  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--sodium); border: 2px solid var(--night); }
-  .dot--alarm { background: var(--alarm); border-color: var(--alarm); }
-  .dot--planned { background: var(--dusk); border-color: var(--dusk); }
-  .dot--construction { background: transparent; border: 2px dashed var(--dusk); }
   .map--big { height: 62vh; min-height: 380px; max-height: 640px; }
   .note { color: var(--muted); margin-top: 10px; }
-  .tickets-h { margin-top: 32px; }
   .open-list { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
 </style>

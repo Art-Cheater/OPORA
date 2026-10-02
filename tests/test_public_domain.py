@@ -59,7 +59,10 @@ def test_tcp_listeners_stay_on_their_ports_and_modem_api_is_private():
     assert "opora-public-site:latest" in base
     assert "127.0.0.1:8090:80" in base
     assert "public-site" in deploy
-    assert "svet.progwebs.ru" in deploy
+    assert "kirovsvet.truthqwark.ru" in deploy
+    assert "location = /api/map.json" in _text("docker/nginx.public-site.conf")
+    assert "proxy_pass http://$opora_web:5000/public/kirovsvet/map.json;" in _text("docker/nginx.public-site.conf")
+    assert "proxy_set_header Cookie \"\";" in _text("docker/nginx.public-site.conf")
     assert "--webroot" in deploy and '--cert-name "$PUBLIC_DOMAIN"' in deploy
     assert "certbot delete" not in deploy
     assert "nginx.legacy-serve.conf" in deploy

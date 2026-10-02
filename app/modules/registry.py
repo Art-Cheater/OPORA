@@ -21,6 +21,7 @@ from app.modules.roles import roles_bp
 from app.modules.messenger import messenger_bp
 from app.modules.notifications import notifications_bp
 from app.modules.projects import projects_bp
+from app.modules.public_site import public_site_bp
 from app.modules.requests import requests_bp
 from app.modules.reports import reports_bp
 from app.modules.waybills import waybills_bp
@@ -41,6 +42,7 @@ ALL_BLUEPRINTS = [
     waybills_bp,
     objects_bp,
     projects_bp,
+    public_site_bp,
     tenders_bp,
     contracts_bp,
     contractors_bp,

@@ -30,11 +30,11 @@ const d = CONTACTS.dispatcher;
       <div class="section-head">
         <div>
           <h2 id="incidents-title">Где сейчас нет света</h2>
-          <p>Если ваш адрес в списке, заявку отправлять не нужно — мы уже работаем.</p>
+          <p>Открытые заявки службы. Если ваш адрес уже в списке, повторно сообщать не нужно.</p>
         </div>
         <a class="link-arrow" href="/karta/">На карте <Icon name="arrow-right" /></a>
       </div>
-      <IncidentList />
+      <IncidentList items={[]} />
     </div>
   </section>
 
@@ -65,24 +65,31 @@ const d = CONTACTS.dispatcher;
 </Base>
 
 <script>
-  import { listTickets, OPEN, faultTitle, statusTitle, escapeHtml } from '../lib/tickets';
   import { iconSvg } from '../lib/icons';
+  import { escapeHtml, loadPublicRequests, pluralRequests } from '../scripts/public-requests';
 
-  // Аварии, которые диспетчер отметил «Показать на главной» (демо: из этого браузера)
   const list = document.querySelector('[data-incidents]');
-  const extra = listTickets().filter((t) => t.showOnHome && OPEN.includes(t.status));
-  if (list && extra.length) {
-    list.insertAdjacentHTML('afterbegin', extra.map((t) => `
-      <li class="incident incident--fault">
-        <span class="icon-dot incident__icon" aria-hidden="true">${iconSvg('bolt')}</span>
-        <div class="incident__body">
-          <h3 class="incident__addr">${escapeHtml(t.address)}</h3>
-          <p class="incident__what">${escapeHtml(faultTitle(t.type))}</p>
-        </div>
-        <span class="chip chip--${t.status} incident__chip">${statusTitle(t.status)}</span>
-        <div class="incident__eta"><span>Срок</span><strong>${escapeHtml(t.term)}</strong></div>
-      </li>`).join(''));
-  }
+  const count = document.querySelector('[data-open-count]');
+  const label = document.querySelector('[data-open-label]');
+  if (list) list.innerHTML = `<li class="incident"><p class="incident__what">Загружаем открытые заявки…</p></li>`;
+  loadPublicRequests().then((items) => {
+    if (count) count.textContent = String(items.length);
+    if (label) label.textContent = pluralRequests(items.length).replace(/^\d+\s/, '');
+    if (!list) return;
+    list.innerHTML = items.length
+      ? items.map((item) => `
+        <li class="incident incident--fault">
+          <span class="icon-dot incident__icon" aria-hidden="true">${iconSvg('bolt')}</span>
+          <div class="incident__body">
+            <h3 class="incident__addr">${escapeHtml(item.address)}</h3>
+            ${item.district ? `<p class="incident__what">${escapeHtml(item.district)}</p>` : ''}
+          </div>
+          <span class="chip chip--working incident__chip">${escapeHtml(item.status)}</span>
+        </li>`).join('')
+      : `<li class="incident"><p class="incident__what">Сейчас нет открытых заявок с адресом.</p></li>`;
+  }).catch(() => {
+    if (list) list.innerHTML = `<li class="incident"><p class="incident__what">Список заявок сейчас не загрузился. Карта по адресу «На карте» или звонок диспетчеру.</p></li>`;
+  });
 </script>
 
 <style>

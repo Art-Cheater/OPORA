@@ -8,7 +8,7 @@ export const SITE = {
   logoWords: ['КИРОВ', 'СВЕТ'],
   descriptor: 'Служба наружного освещения города Кирова',
   slogan: 'Светло в каждом квартале',
-  url: 'https://svet.progwebs.ru',
+  url: 'https://kirovsvet.truthqwark.ru',
   /** Демо-режим: плашка «демонстрационная версия», noindex, заявки хранятся только в браузере. */
   demo: true,
   ticketsInWork: 37,

@@ -3,7 +3,7 @@
 // каждая — одна задача: сообщить, узнать время включения, проверить заявку, увидеть аварии, понять, чей фонарь.
 import { Image } from 'astro:assets';
 import Icon from './Icon.astro';
-import { INCIDENTS, STATS } from '../data/site';
+import { STATS } from '../data/site';
 import { kirovToday, schedule, fmtTime, fmtDay } from '../lib/sun';
 import heroWide from '../assets/img/hero-desktop.jpg';
 import aerial from '../assets/img/aerial-lines.jpg';
@@ -16,9 +16,6 @@ const stat = (label: string) => STATS.find((s) => s.label.startsWith(label));
 const inTime = stat('выполнено');
 const avg = stat('средний');
 const lamps = stat('светильников');
-const n = INCIDENTS.length;
-const plural = (k: number, one: string, few: string, many: string) =>
-  k % 10 === 1 && k % 100 !== 11 ? one : k % 10 >= 2 && k % 10 <= 4 && (k % 100 < 10 || k % 100 >= 20) ? few : many;
 ---
 
 <div class="bento">
@@ -52,8 +49,8 @@ const plural = (k: number, one: string, few: string, many: string) =>
   <a class="tile tile--map" href="/karta/">
     <Image class="tile__img" src={aerial} alt="" widths={[480, 800]} sizes="(min-width: 900px) 280px, 45vw" loading="lazy" />
     <div class="tile__over">
-      <strong class="tile__big num">{n}</strong>
-      <span>{plural(n, 'адрес', 'адреса', 'адресов')} с авариями и работами</span>
+      <strong class="tile__big num" data-open-count>—</strong>
+      <span data-open-label>открытых заявок</span>
     </div>
   </a>
 

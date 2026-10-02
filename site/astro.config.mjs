@@ -2,7 +2,7 @@
 import { defineConfig } from 'astro/config';
 
 export default defineConfig({
-  site: 'https://svet.progwebs.ru',
+  site: 'https://kirovsvet.truthqwark.ru',
   trailingSlash: 'always',
   build: { format: 'directory' },
   compressHTML: true,

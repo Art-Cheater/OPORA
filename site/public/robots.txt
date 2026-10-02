@@ -1,6 +1,6 @@
 # Демо-версия: сайт не индексируется. При запуске заменить на:
 # User-agent: *
 # Allow: /
-# Sitemap: https://svet.progwebs.ru/sitemap.xml
+# Sitemap: https://kirovsvet.truthqwark.ru/sitemap.xml
 User-agent: *
 Disallow: /

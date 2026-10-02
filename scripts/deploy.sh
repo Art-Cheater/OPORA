@@ -87,7 +87,7 @@ compose() {
 
 PUBLIC_DOMAIN="opora.truthqwark.ru"
 LEGACY_DOMAIN="opora.zheleznogame.ru"
-PUBLIC_SITE_DOMAIN="svet.progwebs.ru"
+PUBLIC_SITE_DOMAIN="kirovsvet.truthqwark.ru"
 
 load_tls_paths() {
   certs_dir="$(awk -F= '$1 == "TLS_CERTS_DIR" { value=$2 } END { print value }' "$ROOT/.env" | tr -d '\r\"')"
