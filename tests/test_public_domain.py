@@ -62,8 +62,13 @@ def test_tcp_listeners_stay_on_their_ports_and_modem_api_is_private():
     assert "public-site" in deploy
     assert "kirovsvet.truthqwark.ru" in deploy
     site_nginx = _text("docker/nginx.public-site.conf")
+    bootstrap = _text("docker/nginx.public-site-bootstrap.conf")
     assert "proxy_pass http://$public_site_upstream;" in site_nginx
     assert "web:5000" not in site_nginx
+    assert "server_name kirovsvet.truthqwark.ru;" in bootstrap
+    assert "kirovsvet-bootstrap.crt" in bootstrap
+    assert "web:5000" not in bootstrap
+    assert "default_server" not in bootstrap
     assert "DB_HOST: db" in base
     assert "container_name: opora_public_site" in base
     assert "--webroot" in deploy and '--cert-name "$PUBLIC_DOMAIN"' in deploy

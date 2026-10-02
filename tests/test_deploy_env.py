@@ -350,7 +350,8 @@ def test_deploy_issues_new_certificate_and_redirects_legacy_host(tmp_path):
     site = (tmp_path / "data" / "nginx" / "public-site.conf").read_text(encoding="utf-8")
     assert "server_name kirovsvet.truthqwark.ru;" in site
     assert "proxy_pass http://$public_site_upstream;" in site
-    assert "listen 443" not in site
+    assert "web:5000" not in site
+    assert "opora.truthqwark.ru" not in site
     assert "будет перенаправляться" in output
     assert "резервная копия конфигурации nginx" in output
 

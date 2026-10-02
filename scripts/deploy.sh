@@ -115,6 +115,41 @@ public_site_certificate_ready() {
   [[ -f "$certs_dir/live/$PUBLIC_SITE_DOMAIN/fullchain.pem" && -f "$certs_dir/live/$PUBLIC_SITE_DOMAIN/privkey.pem" ]]
 }
 
+public_site_bootstrap_ready() {
+  [[ -f "$state_dir/kirovsvet-bootstrap.crt" && -f "$state_dir/kirovsvet-bootstrap.key" ]]
+}
+
+ensure_public_site_bootstrap_cert() {
+  # Временный сертификат только для имени Кировсвета. Пока его нет, HTTPS
+  # этого хоста обслуживает default_server CRM и открывается вход в Опору.
+  if public_site_bootstrap_ready; then
+    return 0
+  fi
+  if ! command -v openssl >/dev/null 2>&1; then
+    echo "WARN: нет openssl, временный сертификат $PUBLIC_SITE_DOMAIN не создан"
+    return 1
+  fi
+  local cnf
+  cnf="$(mktemp)"
+  cat >"$cnf" <<EOF
+[req]
+distinguished_name=req_dn
+x509_extensions=v3
+prompt=no
+[req_dn]
+CN=$PUBLIC_SITE_DOMAIN
+[v3]
+subjectAltName=DNS:$PUBLIC_SITE_DOMAIN
+keyUsage=digitalSignature,keyEncipherment
+extendedKeyUsage=serverAuth
+EOF
+  openssl req -x509 -nodes -newkey rsa:2048 -days 30 \
+    -keyout "$state_dir/kirovsvet-bootstrap.key" \
+    -out "$state_dir/kirovsvet-bootstrap.crt" \
+    -config "$cnf" || { rm -f "$cnf"; return 1; }
+  rm -f "$cnf"
+}
+
 install_renew_hook() {
   local hook="$certs_dir/renewal-hooks/deploy/opora-nginx-reload.sh"
   mkdir -p "$(dirname "$hook")"
@@ -157,6 +192,9 @@ write_site_enabled_files() {
   if public_site_certificate_ready; then
     install_site_file "$ROOT/docker/nginx.public-site.conf" "$state_dir/public-site.conf"
     echo "==> публичный сайт https://$PUBLIC_SITE_DOMAIN"
+  elif public_site_bootstrap_ready; then
+    install_site_file "$ROOT/docker/nginx.public-site-bootstrap.conf" "$state_dir/public-site.conf"
+    echo "==> публичный сайт https://$PUBLIC_SITE_DOMAIN (временный сертификат, затем Let's Encrypt)"
   else
     install_site_file "$ROOT/docker/nginx.public-site-open.conf" "$state_dir/public-site.conf"
     echo "==> публичный сайт http://$PUBLIC_SITE_DOMAIN (сертификат ещё не выпущен)"
@@ -172,6 +210,7 @@ prepare_public_nginx_files() {
   cp "$ROOT/docker/nginx.timeweb.conf" "$backup/nginx.timeweb.conf"
   echo "==> резервная копия конфигурации nginx: $backup"
   install_renew_hook
+  ensure_public_site_bootstrap_cert || echo "WARN: временный сертификат $PUBLIC_SITE_DOMAIN не создан"
   write_site_enabled_files
 }
 
@@ -245,8 +284,12 @@ finish_public_site_certificate() {
   fi
   install_site_file "$ROOT/docker/nginx.public-site.conf" "$state_dir/public-site.conf"
   if ! docker exec opora_nginx nginx -t; then
-    install_site_file "$ROOT/docker/nginx.public-site-open.conf" "$state_dir/public-site.conf"
-    echo "WARN: nginx не принял HTTPS $PUBLIC_SITE_DOMAIN. Оставлен HTTP, Опора не затронута."
+    if public_site_bootstrap_ready; then
+      install_site_file "$ROOT/docker/nginx.public-site-bootstrap.conf" "$state_dir/public-site.conf"
+    else
+      install_site_file "$ROOT/docker/nginx.public-site-open.conf" "$state_dir/public-site.conf"
+    fi
+    echo "WARN: nginx не принял сертификат $PUBLIC_SITE_DOMAIN. Опора не затронута."
     return 0
   fi
   docker exec opora_nginx nginx -s reload
@@ -422,6 +465,17 @@ fi
 echo "$IRZ_CHECK"
 grep -Fq "IRZ deploy check: OK" <<<"$IRZ_CHECK" || { echo "FAIL: irz-deploy-check не подтвердил справочники"; exit 1; }
 
+echo "==> публичный сайт: контейнер opora_public_site (отдельно от CRM)"
+if compose build --pull=false public-site || DOCKER_BUILDKIT=0 compose build --pull=false public-site; then
+  if compose up -d --no-build --no-deps --force-recreate public-site; then
+    wait_ready public-site 180 || echo "WARN: opora_public_site запущен, но проверка готовности не прошла"
+  else
+    echo "WARN: контейнер opora_public_site не запустился. Опора продолжает работу."
+  fi
+else
+  echo "WARN: образ Кировсвета не собрался. Опора продолжает работу."
+fi
+
 if [[ "$OPORA_ENV" == "production" ]]; then
   echo "==> nginx: файлы нового домена до пересоздания контейнера"
   prepare_public_nginx_files
@@ -468,13 +522,6 @@ if [[ "$OPORA_ENV" == "production" ]]; then
     exit 1
   fi
   finish_public_certificate
-fi
-
-echo "==> публичный сайт: отдельная сборка, сбой не останавливает Опору"
-if compose build --pull=false public-site && compose up -d --no-build --no-deps --force-recreate public-site; then
-  wait_ready public-site 180 || echo "WARN: public-site запущен, но проверка готовности не прошла"
-else
-  echo "WARN: публичный сайт не обновлён. Опора продолжает работу."
 fi
 
 if [[ "$OPORA_ENV" == "production" ]]; then
