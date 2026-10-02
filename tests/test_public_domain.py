@@ -24,6 +24,7 @@ def test_nginx_accepts_new_host_and_keeps_old_certificate_path():
     assert "server_name opora.zheleznogame.ru;" in legacy
     assert "/etc/letsencrypt/live/opora.zheleznogame.ru/fullchain.pem" in legacy
     assert "return 301 https://opora.truthqwark.ru" not in legacy
+    assert "listen 443 ssl default_server;" in public
     assert "server_name opora.truthqwark.ru;" in public
     assert "/etc/letsencrypt/live/opora.truthqwark.ru/fullchain.pem" in public
     assert "opora.zheleznogame.ru" not in public
