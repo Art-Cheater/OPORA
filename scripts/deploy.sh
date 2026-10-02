@@ -269,6 +269,7 @@ finish_public_site_certificate() {
     return 0
   fi
   if ! certbot certonly --webroot -w "$webroot" \
+      --config-dir "$certs_dir" \
       --cert-name "$PUBLIC_SITE_DOMAIN" \
       -d "$PUBLIC_SITE_DOMAIN" \
       --non-interactive \
@@ -468,7 +469,7 @@ grep -Fq "IRZ deploy check: OK" <<<"$IRZ_CHECK" || { echo "FAIL: irz-deploy-chec
 echo "==> публичный сайт: контейнер opora_public_site (отдельно от CRM)"
 if compose build --pull=false public-site || DOCKER_BUILDKIT=0 compose build --pull=false public-site; then
   if compose up -d --no-build --no-deps --force-recreate public-site; then
-    wait_ready public-site 180 || echo "WARN: opora_public_site запущен, но проверка готовности не прошла"
+    wait_ready public-site 180 || { echo "WARN: opora_public_site не готов"; docker logs --tail 50 opora_public_site || true; }
   else
     echo "WARN: контейнер opora_public_site не запустился. Опора продолжает работу."
   fi
