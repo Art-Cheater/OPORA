@@ -369,6 +369,13 @@ html[data-noimg] img:not(.keep), html[data-noimg] picture:not(.keep), html[data-
 .mk--done .mk__dot { background: #2a9d6f; border-color: #fff; box-shadow: none; }
 .mk--ticket .mk__dot { inset: 8px; }
 .mk--me .mk__dot, .mk--office .mk__dot { inset: 2px; background: #14213d; border: 4px solid var(--sodium); box-shadow: 0 0 0 6px rgba(20, 33, 61, 0.2); }
+.ks-card { background: var(--surface); border-radius: var(--r-xl); overflow: hidden; }
+.ks-card a { display: grid; color: inherit; text-decoration: none; }
+.ks-card img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; background: var(--night); }
+.ks-card time, .ks-card p { color: var(--muted); }
+.ks-card h2, .ks-card h3 { margin: 4px 0 6px; font-size: 1.125rem; line-height: 1.25; }
+.ks-card time, .ks-card h2, .ks-card h3, .ks-card p { margin-left: 20px; margin-right: 20px; }
+.ks-card p { margin-bottom: 20px; }
 @media (prefers-reduced-motion: no-preference) {
   /* Пульс аварии — не дольше 5 секунд (WCAG 2.2.2) */
   .mk--alarm .mk__dot { animation: pulse 1.6s ease-out 3; }

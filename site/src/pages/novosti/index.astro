@@ -10,7 +10,7 @@ const news = [...NEWS].sort((a, b) => b.date.localeCompare(a.date));
 <Base title="Новости" description="Аварии, плановые отключения и новые линии уличного освещения в Кирове.">
   <PageHero compact eyebrow="Новости" title="Новости службы" lead="Аварии и отключения, готовые объекты, изменения в работе. Дублируем во ВКонтакте и Telegram." />
   <section class="section">
-    <div class="wrap grid grid--3">
+      <div class="wrap grid grid--3" data-ks-news="list">
       {news.map((n) => <NewsCard item={n} headingLevel="h2" />)}
     </div>
   </section>

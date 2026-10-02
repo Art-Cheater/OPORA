@@ -23,7 +23,7 @@ const STEPS = ['Что случилось', 'Где', 'Фото', 'Контак�
         <p class="lead">Обязательны два ответа: что случилось и где. Всё остальное — по желанию.</p>
         <p class="report__call">
           <Icon name="alert" size={20} />
-          <span>Опасно — искрит, оборван провод, падает опора? Звоните сразу: <a class="num" href={`tel:${d.tel}`}>{d.phone}</a> или <a href="tel:112">112</a></span>
+          <span>Опасно — искрит, оборван провод, падает опора? Звоните сразу: <a class="num" data-ks-phone="dispatcher" href={`tel:${d.tel}`}>{d.phone}</a> или <a href="tel:112">112</a></span>
         </p>
       </header>
 
@@ -79,7 +79,7 @@ const STEPS = ['Что случилось', 'Где', 'Фото', 'Контак�
                 <p class="danger__title">Не подходите ближе 8 метров и не подпускайте детей</p>
                 <p>Позвоните диспетчеру или в 112 — так быстрее. Заявку с сайта мы тоже примем как аварийную.</p>
                 <div class="danger__actions">
-                  <a class="btn btn--alarm" href={`tel:${d.tel}`}><Icon name="phone" /> Диспетчер</a>
+                  <a class="btn btn--alarm" data-ks-phone="dispatcher" href={`tel:${d.tel}`}><Icon name="phone" /> Диспетчер</a>
                   <a class="btn" href="tel:112">112</a>
                 </div>
               </div>
@@ -224,7 +224,7 @@ const STEPS = ['Что случилось', 'Где', 'Фото', 'Контак�
           <p class="done__term" data-done-term></p>
           <div class="notice notice--alarm" data-done-alarm hidden>
             <Icon name="alert" />
-            <p>Заявка аварийная. Если опасность рядом с людьми — позвоните диспетчеру <a class="num" href={`tel:${d.tel}`}>{d.phone}</a>.</p>
+            <p>Заявка аварийная. Если опасность рядом с людьми — позвоните диспетчеру <a class="num" data-ks-phone="dispatcher" href={`tel:${d.tel}`}>{d.phone}</a>.</p>
           </div>
           <p data-done-sms hidden>Ссылку на заявку отправим по СМС. Там же будет кнопка «Всё ещё не горит», если ремонт не помог.</p>
           <p data-done-nosms>Сохраните номер или ссылку: по ней видно статус и можно подтвердить, что свет горит.</p>

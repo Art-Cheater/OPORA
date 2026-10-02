@@ -15,7 +15,7 @@ const c = CONTACTS;
         <h2 id="help-title">Не получается отправить заявку?</h2>
         <p>Позвоните — диспетчер оформит её за вас. Круглосуточно, без выходных.</p>
       </div>
-      <a class="help__phone num" href={`tel:${c.dispatcher.tel}`}>{c.dispatcher.phone}</a>
+      <a class="help__phone num" data-ks-phone="dispatcher" href={`tel:${c.dispatcher.tel}`}>{c.dispatcher.phone}</a>
     </div>
   </div>
 </section>
@@ -32,10 +32,10 @@ const c = CONTACTS;
       <h2 class="footer__h">Связаться</h2>
       <ul class="footer__list">
         <li>
-          <a class="footer__big num" href={`tel:${c.dispatcher.tel}`}>{c.dispatcher.phone}</a>
+          <a class="footer__big num" data-ks-phone="dispatcher" href={`tel:${c.dispatcher.tel}`}>{c.dispatcher.phone}</a>
           <span>Диспетчер, круглосуточно</span>
         </li>
-        <li><a class="num" href={`tel:${c.reception.tel}`}>{c.reception.phone}</a> <span>— приёмная</span></li>
+        <li><a class="num" data-ks-phone="reception" href={`tel:${c.reception.tel}`}>{c.reception.phone}</a> <span>— приёмная</span></li>
         <li><a href={`mailto:${c.email}`}>{c.email}</a></li>
         <li><span>{c.address}</span></li>
       </ul>

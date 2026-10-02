@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
 
+import cabinet
+import content
 import dbmap
+
+_NEWS_SLUG = re.compile(r"^/novosti/([a-z0-9-]{1,80})/?$")
+_UPLOAD = re.compile(r"^/uploads/news/([a-f0-9]{32}\.(?:jpg|png|webp))$")
 
 ROOT = Path(__file__).resolve().parent / "dist"
 PORT = 80
@@ -37,6 +43,19 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/map.json":
             self._map()
             return
+        if path == "/api/content.json":
+            self._content()
+            return
+        if path.startswith("/admin"):
+            cabinet.handle_get(self, path)
+            return
+        upload = _UPLOAD.match(path)
+        if upload:
+            self._upload(upload.group(1))
+            return
+        news = _NEWS_SLUG.match(path)
+        if news and self._news(news.group(1)):
+            return
         file_path = self._static(path)
         if file_path is None:
             missing = ROOT / "404.html"
@@ -47,6 +66,51 @@ class Handler(BaseHTTPRequestHandler):
         kind = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
         cache = "public, max-age=31536000, immutable" if "/_astro/" in path else "public, max-age=300"
         self._bytes(200, data, kind, cache=cache)
+
+    def do_POST(self):
+        path = unquote(self.path.split("?", 1)[0])
+        if path.startswith("/admin"):
+            cabinet.handle_post(self, path)
+            return
+        self._bytes(405, b"method", "text/plain; charset=utf-8", cache="no-store")
+
+    def _content(self):
+        try:
+            connection = dbmap.connect()
+            try:
+                payload = content.public_content(connection)
+            finally:
+                connection.close()
+        except Exception:
+            payload = {"phones": {}, "schedule": {"on_after_sunset": 15, "off_before_sunrise": 15, "days": []}, "news": []}
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self._bytes(200, body, "application/json; charset=utf-8", cache="public, max-age=10")
+
+    def _news(self, slug: str) -> bool:
+        try:
+            connection = dbmap.connect()
+            try:
+                article = content.news_article(connection, slug)
+            finally:
+                connection.close()
+        except Exception:
+            return False
+        if article is None:
+            return False
+        styles = []
+        folder = ROOT / "_astro"
+        if folder.is_dir():
+            styles.extend(f'<link rel="stylesheet" href="/_astro/{item.name}">' for item in sorted(folder.glob("*.css")))
+        self._bytes(200, cabinet.news_page(article, "\n".join(styles)), "text/html; charset=utf-8", cache="public, max-age=30")
+        return True
+
+    def _upload(self, name: str):
+        file_path = cabinet.UPLOADS / "news" / name
+        if not file_path.is_file():
+            self._bytes(404, b"not found", "text/plain; charset=utf-8", cache="no-store")
+            return
+        kind = mimetypes.guess_type(name)[0] or "application/octet-stream"
+        self._bytes(200, file_path.read_bytes(), kind, cache="public, max-age=86400")
 
     def _map(self):
         try:

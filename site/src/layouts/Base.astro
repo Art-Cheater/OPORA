@@ -98,7 +98,7 @@ const d = CONTACTS.dispatcher;
 
     {mobileBar !== 'none' && (
       <nav class="mobile-bar" aria-label="Быстрые действия" data-mode={mobileBar} data-visible={mobileBar === 'always' ? 'true' : 'false'}>
-        <a class="mobile-bar__call" href={`tel:${d.tel}`} aria-label={`Позвонить диспетчеру ${d.phone}`}>
+        <a class="mobile-bar__call" data-ks-phone="dispatcher" href={`tel:${d.tel}`} aria-label={`Позвонить диспетчеру ${d.phone}`}>
           <Icon name="phone" />
           <span>Позвонить</span>
         </a>
@@ -106,6 +106,10 @@ const d = CONTACTS.dispatcher;
       </nav>
     )}
 
+    <script>
+      import { applyLiveContent } from '../scripts/live-content';
+      applyLiveContent();
+    </script>
     <script>
       // Нижняя панель на главной: появляется, когда кнопка первого экрана уходит из вида (жёлтая кнопка на экране одна).
       const bar = document.querySelector<HTMLElement>('.mobile-bar[data-mode="after-hero"]');

@@ -39,7 +39,7 @@ const sun = sunTimes(y, m, d);
         <div class="today-big__col today-big__col--muted">
           <p>Закат <b class="num">{fmtTime(sun.sunset)}</b> · восход <b class="num">{fmtTime(sun.sunrise)}</b></p>
           <p>Горит <b data-g-dur>{fmtDuration(today.on, today.off)}</b></p>
-          <p class="small">Свет включается через {ON_AFTER_SUNSET} минут после заката и выключается за {OFF_BEFORE_SUNRISE} минут до восхода. В пасмурную погоду диспетчер может включить свет раньше графика.</p>
+          <p class="small">Свет включается через <span data-ks-after>{ON_AFTER_SUNSET}</span> минут после заката и выключается за <span data-ks-before>{OFF_BEFORE_SUNRISE}</span> минут до восхода. В пасмурную погоду диспетчер может включить свет раньше графика.</p>
         </div>
       </div>
     </div>
@@ -93,10 +93,18 @@ const sun = sunTimes(y, m, d);
 </Base>
 
 <script>
-  import { kirovToday, schedule, fmtTime, fmtDay, fmtWeekday, fmtDuration } from '../../lib/sun';
-  // Страница собрана заранее — пересчитываем график на сегодняшнюю дату в браузере.
+  import { kirovToday, schedule, setLightOffsets, fmtTime, fmtDay, fmtWeekday, fmtDuration } from '../../lib/sun';
+  import { loadContent } from '../../scripts/live-content';
+  // Страница собрана заранее — пересчитываем график на сегодняшнюю дату и настройки кабинета.
+  const live = await loadContent();
+  if (live?.schedule) setLightOffsets(live.schedule.on_after_sunset, live.schedule.off_before_sunrise);
+  const overrides = Object.fromEntries((live?.schedule.days ?? []).map((item) => [item.date, item]));
+  const after = document.querySelector('[data-ks-after]');
+  const before = document.querySelector('[data-ks-before]');
+  if (after) after.textContent = String(live?.schedule.on_after_sunset ?? 15);
+  if (before) before.textContent = String(live?.schedule.off_before_sunrise ?? 15);
   const { y, m, d } = kirovToday();
-  const rows = schedule(y, m, d, 14);
+  const rows = schedule(y, m, d, 14, overrides);
   const set = (s: string, v: string) => { const el = document.querySelector(s); if (el) el.textContent = v; };
   set('[data-g-date]', fmtDay(rows[0].date));
   set('[data-g-on]', fmtTime(rows[0].on));
@@ -107,6 +115,19 @@ const sun = sunTimes(y, m, d);
     tbody.innerHTML = rows
       .map((r, i) => `<tr${i === 0 ? ' class="is-today"' : ''}><td>${fmtDay(r.date)}, ${fmtWeekday(r.date)}</td><td>${fmtTime(r.on)}</td><td>${fmtTime(r.off)}</td><td>${fmtDuration(r.on, r.off)}</td></tr>`)
       .join('');
+  }
+  const bars = document.querySelectorAll<HTMLElement>('.bars li');
+  if (bars.length === 12) {
+    const hours = Array.from({ length: 12 }, (_, index) => {
+      const [row] = schedule(y, index + 1, 15, 1, overrides);
+      return (row.off.getTime() - row.on.getTime()) / 3_600_000;
+    });
+    const maxH = Math.max(...hours);
+    bars.forEach((item, index) => {
+      item.style.setProperty('--v', (hours[index] / maxH).toFixed(3));
+      const value = item.querySelector('.bars__val');
+      if (value) value.textContent = hours[index].toFixed(1).replace('.', ',');
+    });
   }
 </script>
 

@@ -5,7 +5,12 @@ import Icon from '../../components/Icon.astro';
 import { CONTACTS } from '../../data/site';
 
 const c = CONTACTS;
-const phones = [c.dispatcher, c.reception, c.tech, c.edds];
+const phones = [
+  ['dispatcher', c.dispatcher],
+  ['reception', c.reception],
+  ['tech', c.tech],
+  ['edds', c.edds],
+] as const;
 ---
 
 <Base title="Контакты" description="Телефон диспетчера уличного освещения Кирова (круглосуточно), приёмная, технический отдел, адрес.">
@@ -14,12 +19,12 @@ const phones = [c.dispatcher, c.reception, c.tech, c.edds];
   <section class="section">
     <div class="wrap">
       <ul class="phones">
-        {phones.map((p, i) => (
-          <li class:list={['phone-card', { 'phone-card--main': i === 0 }]}>
+        {phones.map(([key, p], i) => (
+          <li class:list={['phone-card', { 'phone-card--main': i === 0 }]} data-ks-phone={key}>
             <p class="phone-card__title">{p.title}</p>
             <a class="phone-card__num num" href={`tel:${p.tel}`}>{p.phone}</a>
-            <p class="phone-card__note">{p.note}</p>
-            <p class="phone-card__hours"><Icon name="clock" size={18} /> {p.hours}</p>
+            <p class="phone-card__note" data-ks-phone-note>{p.note}</p>
+            <p class="phone-card__hours"><Icon name="clock" size={18} /> <span data-ks-phone-hours>{p.hours}</span></p>
           </li>
         ))}
       </ul>
@@ -35,7 +40,7 @@ const phones = [c.dispatcher, c.reception, c.tech, c.edds];
         <h3>Письменное обращение</h3>
         <p class="muted">Письмо на почту или в приёмную. Ответ — в течение 30 дней по закону о порядке рассмотрения обращений граждан (59-ФЗ).</p>
         <h3>Подрядчикам</h3>
-        <p class="muted">Работы рядом с сетями освещения, согласования и допуск — через технический отдел: <a class="num" href={`tel:${c.tech.tel}`}>{c.tech.phone}</a>.</p>
+        <p class="muted">Работы рядом с сетями освещения, согласования и допуск — через технический отдел: <a class="num" data-ks-phone="tech" href={`tel:${c.tech.tel}`}>{c.tech.phone}</a>.</p>
       </div>
       <div class="map addr__map" data-map role="region" aria-label={`Карта: ${c.address}`}></div>
     </div>

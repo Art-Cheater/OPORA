@@ -79,10 +79,14 @@ const lamps = stat('светильников');
 </div>
 
 <script>
-  import { kirovToday, schedule, fmtTime, fmtDay } from '../lib/sun';
-  // Страница собрана заранее — пересчитываем «Сегодня» по часам посетителя
+  import { kirovToday, schedule, setLightOffsets, fmtTime, fmtDay } from '../lib/sun';
+  import { loadContent } from '../scripts/live-content';
+  // Страница собрана заранее — пересчитываем «Сегодня» по часам посетителя и графику из кабинета.
+  const live = await loadContent();
+  if (live?.schedule) setLightOffsets(live.schedule.on_after_sunset, live.schedule.off_before_sunrise);
+  const overrides = Object.fromEntries((live?.schedule.days ?? []).map((item) => [item.date, item]));
   const { y, m, d } = kirovToday();
-  const [row] = schedule(y, m, d, 1);
+  const [row] = schedule(y, m, d, 1, overrides);
   document.querySelectorAll('[data-today-date]').forEach((el) => (el.textContent = fmtDay(row.date)));
   document.querySelectorAll('[data-today-on]').forEach((el) => (el.textContent = fmtTime(row.on)));
   document.querySelectorAll('[data-today-off]').forEach((el) => (el.textContent = fmtTime(row.off)));

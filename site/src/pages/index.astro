@@ -15,7 +15,7 @@ const d = CONTACTS.dispatcher;
     <div class="wrap top__grid">
       <h1 class="top__title reveal" style="--d:0">Не горит фонарь?<br /><span>Сообщите&nbsp;— мы приедем.</span></h1>
       <div class="top__side reveal" style="--d:1">
-        <p>Заявка за минуту, без регистрации. Диспетчер на связи круглосуточно: <a class="num" href={`tel:${d.tel}`}>{d.phone}</a></p>
+        <p>Заявка за минуту, без регистрации. Диспетчер на связи круглосуточно: <a class="num" data-ks-phone="dispatcher" href={`tel:${d.tel}`}>{d.phone}</a></p>
         <a class="btn btn--primary btn--lg" href="/soobshit/" data-hero-cta>Сообщить о неисправности</a>
       </div>
     </div>
@@ -57,7 +57,7 @@ const d = CONTACTS.dispatcher;
         <h2 id="news-title">Новости</h2>
         <a class="link-arrow" href="/novosti/">Все новости <Icon name="arrow-right" /></a>
       </div>
-      <div class="grid grid--3">
+      <div class="grid grid--3" data-ks-news="home">
         {NEWS.slice(0, 3).map((n) => <NewsCard item={n} />)}
       </div>
     </div>

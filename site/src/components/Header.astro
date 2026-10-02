@@ -42,9 +42,9 @@ const moreCurrent = MORE.some((i) => isCurrent(i.href));
     </nav>
 
     <div class="header__actions">
-      <a class="header__phone num" href={`tel:${d.tel}`}>
+      <a class="header__phone num" data-ks-phone="dispatcher" href={`tel:${d.tel}`}>
         <span class="header__phone-label">Диспетчер, круглосуточно</span>
-        <span class="header__phone-num">{d.phone}</span>
+        <span class="header__phone-num" data-ks-phone-text>{d.phone}</span>
       </a>
       <button class="hbtn hbtn--a11y" type="button" data-a11y-toggle aria-controls="a11y-panel" aria-expanded="false" aria-label="Версия для слабовидящих">
         <Icon name="eye" />
@@ -72,9 +72,9 @@ const moreCurrent = MORE.some((i) => isCurrent(i.href));
           <li><a href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>{item.label} <Icon name="arrow-right" size={16} /></a></li>
         ))}
       </ul>
-      <a class="mobile-menu__phone num" href={`tel:${d.tel}`}>
+      <a class="mobile-menu__phone num" data-ks-phone="dispatcher" href={`tel:${d.tel}`}>
         <span class="icon-dot"><Icon name="phone" /></span>
-        <span><b>{d.phone}</b><br /><span class="mobile-menu__note">Диспетчер, круглосуточно</span></span>
+        <span><b data-ks-phone-text>{d.phone}</b><br /><span class="mobile-menu__note">Диспетчер, круглосуточно</span></span>
       </a>
     </nav>
   </div>

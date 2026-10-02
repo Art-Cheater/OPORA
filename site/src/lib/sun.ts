@@ -7,6 +7,20 @@ export const TZ = 'Europe/Kirov';
 export const ON_AFTER_SUNSET = 15;
 export const OFF_BEFORE_SUNRISE = 15;
 
+/** Минуты, которыми пользуется график. Кабинет может подменить их до отрисовки. */
+export let onAfterSunset = ON_AFTER_SUNSET;
+export let offBeforeSunrise = OFF_BEFORE_SUNRISE;
+
+export function setLightOffsets(afterSunset: number, beforeSunrise: number) {
+  onAfterSunset = clampMinutes(afterSunset);
+  offBeforeSunrise = clampMinutes(beforeSunrise);
+}
+
+function clampMinutes(value: number) {
+  if (!Number.isFinite(value)) return 15;
+  return Math.min(180, Math.max(0, Math.round(value)));
+}
+
 const RAD = Math.PI / 180;
 const DAY_MS = 86_400_000;
 const J2000 = 2451545.0;
@@ -44,18 +58,45 @@ export interface ScheduleRow {
   off: Date; // отключение утром следующего дня
 }
 
+export interface DayOverride {
+  on: string;
+  off: string;
+}
+
+function atKirovClock(y: number, m: number, d: number, hhmm: string): Date | null {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(hhmm);
+  if (!match) return null;
+  const iso = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${match[1]}:${match[2]}:00+03:00`;
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 /** Строки графика на `days` дней, начиная с даты (y, m, d). */
-export function schedule(y: number, m: number, d: number, days = 7): ScheduleRow[] {
+export function schedule(
+  y: number,
+  m: number,
+  d: number,
+  days = 7,
+  overrides?: Record<string, DayOverride>,
+): ScheduleRow[] {
   const rows: ScheduleRow[] = [];
   for (let i = 0; i < days; i++) {
     const day = new Date(Date.UTC(y, m - 1, d + i, 12));
     const next = new Date(Date.UTC(y, m - 1, d + i + 1, 12));
+    const key = day.toISOString().slice(0, 10);
+    const custom = overrides?.[key];
+    const manualOn = custom ? atKirovClock(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), custom.on) : null;
+    const manualOff = custom ? atKirovClock(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), custom.off) : null;
+    if (manualOn && manualOff) {
+      rows.push({ date: day, on: manualOn, off: manualOff });
+      continue;
+    }
     const today = sunTimes(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate());
     const tomorrow = sunTimes(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate());
     rows.push({
       date: day,
-      on: new Date(today.sunset.getTime() + ON_AFTER_SUNSET * 60_000),
-      off: new Date(tomorrow.sunrise.getTime() - OFF_BEFORE_SUNRISE * 60_000),
+      on: new Date(today.sunset.getTime() + onAfterSunset * 60_000),
+      off: new Date(tomorrow.sunrise.getTime() - offBeforeSunrise * 60_000),
     });
   }
   return rows;
