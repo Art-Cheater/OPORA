@@ -68,6 +68,8 @@ def test_tcp_listeners_stay_on_their_ports_and_modem_api_is_private():
     assert "location /admin" in site_nginx
     admin = site_nginx.split("location /admin", 1)[1].split("location /", 1)[0]
     assert "Set-Cookie" not in admin
+    assert "location /auth/" in site_nginx
+    assert "return 301 https://$host/;" in site_nginx
     assert "web:5000" not in site_nginx
     assert "server_name kirovsvet.truthqwark.ru;" in bootstrap
     assert "kirovsvet-bootstrap.crt" in bootstrap

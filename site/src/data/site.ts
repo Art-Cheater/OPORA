@@ -9,7 +9,7 @@ export const SITE = {
   descriptor: 'Служба наружного освещения города Кирова',
   slogan: 'Светло в каждом квартале',
   url: 'https://kirovsvet.truthqwark.ru',
-  /** Демо-режим: плашка «демонстрационная версия», noindex, заявки хранятся только в браузере. */
+  /** Демо-режим: плашка «демонстрационная версия», заявки хранятся только в браузере. */
   demo: true,
   ticketsInWork: 37,
   adminUrl: 'https://www.admkirov.ru/',

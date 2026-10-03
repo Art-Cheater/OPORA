@@ -40,6 +40,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/health":
             self._bytes(200, b"ok\n", "text/plain; charset=utf-8", cache="no-store")
             return
+        # Раньше этот хост открывал вход в Опору. Поисковики сохранили /auth/login.
+        if path == "/auth" or path.startswith("/auth/"):
+            self._redirect("/")
+            return
         if path == "/api/map.json":
             self._map()
             return
@@ -150,6 +154,13 @@ class Handler(BaseHTTPRequestHandler):
         if index is not None and index.is_file():
             return index
         return None
+
+    def _redirect(self, location: str) -> None:
+        self.send_response(301)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
 
     def _bytes(self, status: int, body: bytes, content_type: str, cache: str):
         self.send_response(status)

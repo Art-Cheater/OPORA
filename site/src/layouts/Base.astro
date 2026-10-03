@@ -34,7 +34,7 @@ const {
   image = '/og.jpg',
 } = Astro.props;
 
-const fullTitle = title === SITE.name ? `${SITE.name} — ${SITE.descriptor.toLowerCase()}` : `${title} — ${SITE.name}`;
+const fullTitle = title === SITE.name ? "Кировсвет — наружное освещение Кирова" : `${title} — ${SITE.name}`;
 const canonical = new URL(Astro.url.pathname, SITE.url).href;
 const ogImage = new URL(image, SITE.url).href;
 const d = CONTACTS.dispatcher;
