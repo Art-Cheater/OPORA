@@ -257,10 +257,30 @@ finish_public_certificate() {
   echo "==> TLS: сертификат $PUBLIC_DOMAIN подключён"
 }
 
+apply_public_site_https() {
+  install_site_file "$ROOT/docker/nginx.public-site.conf" "$state_dir/public-site.conf"
+  if ! docker exec opora_nginx nginx -t; then
+    if public_site_bootstrap_ready; then
+      install_site_file "$ROOT/docker/nginx.public-site-bootstrap.conf" "$state_dir/public-site.conf"
+    else
+      install_site_file "$ROOT/docker/nginx.public-site-open.conf" "$state_dir/public-site.conf"
+    fi
+    docker exec opora_nginx nginx -s reload || true
+    echo "WARN: nginx не принял сертификат $PUBLIC_SITE_DOMAIN. Опора не затронута."
+    return 0
+  fi
+  docker exec opora_nginx nginx -s reload
+  if command -v openssl >/dev/null 2>&1; then
+    openssl x509 -in "$certs_dir/live/$PUBLIC_SITE_DOMAIN/fullchain.pem" -noout -subject -issuer -dates || true
+  fi
+  echo "==> TLS: сертификат $PUBLIC_SITE_DOMAIN подключён"
+}
+
 finish_public_site_certificate() {
   load_tls_paths
   if public_site_certificate_ready; then
-    echo "==> TLS: сертификат $PUBLIC_SITE_DOMAIN уже установлен"
+    echo "==> TLS: сертификат $PUBLIC_SITE_DOMAIN уже есть, подключаем его к nginx"
+    apply_public_site_https
     return 0
   fi
   echo "==> TLS: выпускаем сертификат $PUBLIC_SITE_DOMAIN"
@@ -283,21 +303,7 @@ finish_public_site_certificate() {
     echo "WARN: certbot не положил сертификат $PUBLIC_SITE_DOMAIN. Сайт остаётся на HTTP."
     return 0
   fi
-  install_site_file "$ROOT/docker/nginx.public-site.conf" "$state_dir/public-site.conf"
-  if ! docker exec opora_nginx nginx -t; then
-    if public_site_bootstrap_ready; then
-      install_site_file "$ROOT/docker/nginx.public-site-bootstrap.conf" "$state_dir/public-site.conf"
-    else
-      install_site_file "$ROOT/docker/nginx.public-site-open.conf" "$state_dir/public-site.conf"
-    fi
-    echo "WARN: nginx не принял сертификат $PUBLIC_SITE_DOMAIN. Опора не затронута."
-    return 0
-  fi
-  docker exec opora_nginx nginx -s reload
-  if command -v openssl >/dev/null 2>&1; then
-    openssl x509 -in "$certs_dir/live/$PUBLIC_SITE_DOMAIN/fullchain.pem" -noout -subject -issuer -dates || true
-  fi
-  echo "==> TLS: сертификат $PUBLIC_SITE_DOMAIN подключён"
+  apply_public_site_https
 }
 
 container_of() { compose ps -a -q "$1" 2>/dev/null | head -n1; }

@@ -82,6 +82,19 @@ def test_tcp_listeners_stay_on_their_ports_and_modem_api_is_private():
     assert "OPORA_LEGACY_REDIRECT" in deploy
 
 
+def test_rebuild_public_site_recreates_only_that_container():
+    script = _text("scripts/rebuild-public-site.sh")
+    deploy = _text("scripts/deploy.sh")
+    assert "force-recreate public-site" in script
+    assert "--no-deps" in script
+    assert "force-recreate web" not in script
+    assert "down -v" not in script
+    assert "nginx.public-site.conf" in script
+    assert "nginx -s reload" in script
+    ready = deploy.split("сертификат $PUBLIC_SITE_DOMAIN уже есть", 1)[1]
+    assert "apply_public_site_https" in ready.split("выпускаем сертификат", 1)[0]
+
+
 def test_session_cookie_stays_host_only():
     config = _text("app/config.py")
     assert "SESSION_COOKIE_DOMAIN" not in config
