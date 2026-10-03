@@ -40,9 +40,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/health":
             self._bytes(200, b"ok\n", "text/plain; charset=utf-8", cache="no-store")
             return
-        # Раньше этот хост открывал вход в Опору. Поисковики сохранили /auth/login.
+        # Раньше этот хост открывал вход в Опору. Для удаления из поиска нужен 404, не редирект.
         if path == "/auth" or path.startswith("/auth/"):
-            self._redirect("/")
+            self._bytes(404, b"not found\n", "text/plain; charset=utf-8", cache="no-store", robots="noindex, nofollow")
             return
         if path == "/api/map.json":
             self._map()
@@ -155,18 +155,13 @@ class Handler(BaseHTTPRequestHandler):
             return index
         return None
 
-    def _redirect(self, location: str) -> None:
-        self.send_response(301)
-        self.send_header("Location", location)
-        self.send_header("Content-Length", "0")
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-
-    def _bytes(self, status: int, body: bytes, content_type: str, cache: str):
+    def _bytes(self, status: int, body: bytes, content_type: str, cache: str, robots: str | None = None):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", cache)
+        if robots:
+            self.send_header("X-Robots-Tag", robots)
         for name, value in _SECURITY.items():
             self.send_header(name, value)
         self.end_headers()
