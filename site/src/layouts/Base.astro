@@ -30,7 +30,7 @@ const {
   description = `${SITE.descriptor}. Сообщите о неисправном фонаре за минуту — без регистрации. Диспетчер работает круглосуточно.`,
   headerCta = 'primary',
   mobileBar = 'always',
-  noindex = SITE.demo,
+  noindex = false,
   image = '/og.jpg',
 } = Astro.props;
 
@@ -38,6 +38,17 @@ const fullTitle = title === SITE.name ? `${SITE.name} — ${SITE.descriptor.toLo
 const canonical = new URL(Astro.url.pathname, SITE.url).href;
 const ogImage = new URL(image, SITE.url).href;
 const d = CONTACTS.dispatcher;
+const orgLd = {
+  '@context': 'https://schema.org',
+  '@type': 'GovernmentOrganization',
+  name: SITE.name,
+  alternateName: SITE.descriptor,
+  url: SITE.url,
+  description: 'Наружное освещение города Кирова: уличные фонари, опоры и линии вдоль дорог. Служба МКУ «Дирекция благоустройства».',
+  areaServed: { '@type': 'City', name: 'Киров' },
+  parentOrganization: { '@type': 'GovernmentOrganization', name: 'МКУ «Дирекция благоустройства»' },
+  address: { '@type': 'PostalAddress', addressLocality: 'Киров', addressRegion: 'Кировская область', addressCountry: 'RU' },
+};
 ---
 
 <!doctype html>
@@ -48,7 +59,14 @@ const d = CONTACTS.dispatcher;
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
-    {noindex && <meta name="robots" content="noindex, nofollow" />}
+    {noindex ? (
+      <meta name="robots" content="noindex, nofollow" />
+    ) : (
+      <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
+    )}
+    <meta name="geo.region" content="RU-KIR" />
+    <meta name="geo.placename" content="Киров" />
+    {!noindex && <script type="application/ld+json" set:html={JSON.stringify(orgLd)} />}
     <meta name="theme-color" content="#14213D" />
     <link rel="preload" href={fontHeading} as="font" type="font/woff2" crossorigin />
     <link rel="preload" href={fontBody} as="font" type="font/woff2" crossorigin />

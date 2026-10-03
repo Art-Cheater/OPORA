@@ -1,6 +1,8 @@
-# Демо-версия: сайт не индексируется. При запуске заменить на:
-# User-agent: *
-# Allow: /
-# Sitemap: https://kirovsvet.truthqwark.ru/sitemap.xml
 User-agent: *
-Disallow: /
+Allow: /
+Disallow: /admin
+Disallow: /varianty
+Disallow: /dispetcher
+
+Sitemap: https://kirovsvet.truthqwark.ru/sitemap.xml
+

@@ -5,17 +5,22 @@ import HomeBento from '../components/HomeBento.astro';
 import Steps from '../components/Steps.astro';
 import IncidentList from '../components/IncidentList.astro';
 import NewsCard from '../components/NewsCard.astro';
-import { CONTACTS, NEWS, SITE } from '../data/site';
+import { CONTACTS, NEWS } from '../data/site';
 
 const d = CONTACTS.dispatcher;
 ---
 
-<Base title={SITE.name} headerCta="ghost" mobileBar="after-hero">
+<Base
+  title="Уличное освещение Кирова"
+  description="Не горит свет на улице в Кирове, мигает фонарь или оборван провод. Кировсвет — наружное освещение города, служба МКУ «Дирекция благоустройства». Заявка на сайте, диспетчер круглосуточно."
+  headerCta="ghost"
+  mobileBar="after-hero"
+>
   <section class="top">
     <div class="wrap top__grid">
       <h1 class="top__title reveal" style="--d:0">Не горит фонарь?<br /><span>Сообщите&nbsp;— мы приедем.</span></h1>
       <div class="top__side reveal" style="--d:1">
-        <p>Заявка за минуту, без регистрации. Диспетчер на связи круглосуточно: <a class="num" data-ks-phone="dispatcher" href={`tel:${d.tel}`}>{d.phone}</a></p>
+        <p>Кировсвет — служба наружного освещения МКУ «Дирекция благоустройства». Не горит свет на улице, погас целый участок или упал провод — заявка за минуту. Диспетчер круглосуточно: <a class="num" data-ks-phone="dispatcher" href={`tel:${d.tel}`}>{d.phone}</a></p>
         <a class="btn btn--primary btn--lg" href="/soobshit/" data-hero-cta>Сообщить о неисправности</a>
       </div>
     </div>
