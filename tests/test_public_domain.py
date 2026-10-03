@@ -65,6 +65,9 @@ def test_tcp_listeners_stay_on_their_ports_and_modem_api_is_private():
     bootstrap = _text("docker/nginx.public-site-bootstrap.conf")
     assert "proxy_pass http://$public_site_upstream;" in site_nginx
     assert "opora_public_site:80" in site_nginx
+    assert "location /admin" in site_nginx
+    admin = site_nginx.split("location /admin", 1)[1].split("location /", 1)[0]
+    assert "Set-Cookie" not in admin
     assert "web:5000" not in site_nginx
     assert "server_name kirovsvet.truthqwark.ru;" in bootstrap
     assert "kirovsvet-bootstrap.crt" in bootstrap

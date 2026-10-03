@@ -145,9 +145,12 @@ def _login(handler, fields: dict) -> None:
     except Exception:
         _login_page(handler, "База сейчас недоступна.")
         return
-    if user is None:
+    if user == "bad":
         _remember_fail(ip)
-        _login_page(handler, "Неверный логин или у этой учётной записи нет входа в кабинет сайта.")
+        _login_page(handler, "Неверная почта или пароль. Нужны те же, что при входе в Опору.")
+        return
+    if user == "role":
+        _login_page(handler, "Пароль подошёл, но у этой учётки нет роли администратора или директора.")
         return
     csrf = secrets.token_urlsafe(18)
     _set_cookie(handler, admin_auth.sign_session(user[0], user[1], csrf))
@@ -322,7 +325,7 @@ def _login_page(handler, error: str) -> None:
   <h1>Кабинет Кировсвета</h1>
   <p>Тот же логин, что в Опоре. Войти могут администратор и директор.</p>
   {message}
-  <label>Почта <input name="email" type="email" autocomplete="username" required></label>
+  <label>Почта, как в Опоре <input name="email" type="text" autocomplete="username" required></label>
   <label>Пароль <input name="password" type="password" autocomplete="current-password" required></label>
   <button type="submit">Войти</button>
 </form></body></html>"""

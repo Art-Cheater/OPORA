@@ -68,22 +68,26 @@ def authenticate(connection, email: str, password: str) -> tuple[str, str] | Non
         )
         row = cursor.fetchone()
         if row is None or not _password_ok(password, row[1]):
-            return None
+            return "bad"
         cursor.execute(
             """
             SELECT 1
             FROM user_roles ur
             JOIN roles r ON r.id = ur.role_id
+            LEFT JOIN role_permissions rp
+              ON rp.role_id = r.id AND rp.deleted_at IS NULL
+            LEFT JOIN permissions p
+              ON p.id = rp.permission_id AND p.deleted_at IS NULL
             WHERE ur.user_id = %s
               AND ur.deleted_at IS NULL
               AND r.deleted_at IS NULL
               AND r.is_active IS TRUE
-              AND r.code = ANY(%s)
+              AND (r.code IN ('admin', 'director') OR p.code = 'roles.manage')
             """,
-            (row[0], list(ALLOWED_ROLES)),
+            (row[0],),
         )
         if cursor.fetchone() is None:
-            return None
+            return "role"
     return row[0], row[2] or email
 
 
